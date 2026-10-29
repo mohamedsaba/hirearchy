@@ -150,6 +150,8 @@ These keys and signed caller/session values are synthetic caller assertions. The
 
 `service.mjs` exposes the same dispatcher over authenticated loopback HTTP. The complete [executor-dispatch-v1 contract](./executor-dispatch-v1.md) specifies startup, wire fields, limits, receipts, retries, and conservative reconciliation. Run its synthetic integration checks with `node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs` using disposable PostgreSQL and Docker resources. This is a development-only, single-host process; distinct-identity credential separation and production isolation remain unverified.
 
+GitHub Actions separately runs the PostgreSQL-only admission checks and the full Docker suites. The full lane requires the pinned `assess-python` image to be available to the runner; it is currently only available locally, so that lane fails until a reviewed, accessible copy of the exact image is provided. The local real-Docker checks are an interim development check, not evidence that GitHub's Docker lane passed.
+
 ## Fixed execution boundary
 
 The reviewed image is the locally available
