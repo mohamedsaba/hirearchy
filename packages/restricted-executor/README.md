@@ -112,6 +112,40 @@ issuedAtMs, expiresAtMs
 
 The executor rebuilds that object after validation and compares the MAC with `timingSafeEqual`. Missing keys, wrong caller IDs, modified or expired envelopes return `UNAUTHORIZED`. These synthetic local keys do not define the future service-authentication architecture.
 
+## Internal dispatch envelope
+
+`internal-dispatch.mjs` provides a separate in-process boundary for the three test-lane actions. It accepts no network listener or candidate route:
+
+```js
+import { createInternalDispatcher } from './internal-dispatch.mjs';
+
+const dispatcher = createInternalDispatcher({
+  pool,
+  admissionKeys,
+  dispatchKeys,
+});
+const result = await dispatcher.handle({ action, authorization, request });
+```
+
+`dispatchKeys` is an array of `{ callerId, keyId, secret }` entries. Each identifier follows the executor's bounded ASCII identifier format; `keyId` is unique, and each UTF-8 secret is 32 to 1,024 bytes. The authorization object has exactly these fields:
+
+```text
+{ version: 1, callerId, keyId, sessionRef, requestId, issuedAtMs, expiresAtMs, payloadDigest, tag }
+```
+
+`action` is `run`, `lookup`, or `reconcile`. `request` is the complete existing executor request for `run`, and exactly `null` for the other actions. `payloadDigest` is lowercase SHA-256 hex over UTF-8 `JSON.stringify(request)`. The dispatcher first verifies the HMAC envelope, then makes a bounded detached JSON snapshot and checks that snapshot's digest before continuing. The HMAC-SHA-256 input is UTF-8 JSON made from a new object in this exact property order:
+
+```text
+version, action, callerId, keyId, sessionRef, requestId, issuedAtMs,
+expiresAtMs, payloadDigest
+```
+
+`tag` is lowercase hex and is compared with `timingSafeEqual`. `issuedAtMs` cannot be in the future, `expiresAtMs` must be live, and the interval cannot exceed five minutes. The `run` action also requires the existing admission envelope and binds its `callerId`, `requestId`, and `sessionRef` to the dispatch envelope before calling `executor.run`.
+
+For `lookup` and `reconcile`, the dispatcher reads the stored request through a checked-out PostgreSQL session that passes the full runtime readiness checks. It requires both stored intent `callerId` and `sessionRef` to match. Missing and foreign requests share the same `UNAUTHORIZED` response. `lookup` returns `{ state, receipt }`, exposing the receipt only in `complete`; other states, including `active` and `unknown`, remain visible to their authenticated owner. `reconcile` then delegates to the existing conservative executor reconciliation path; it does not run a workload.
+
+These keys and signed caller/session values are synthetic caller assertions. They do not establish end-user or session authorization, do not provide key custody or attestation for production P9, and do not change the executor's single-host development-only support boundary. No production policy or service-authentication decision is implied.
+
 ## Fixed execution boundary
 
 The reviewed image is the locally available

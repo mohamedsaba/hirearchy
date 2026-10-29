@@ -1030,6 +1030,40 @@ export function createPostgresExecutionStore({ pool } = {}) {
     }
   }
 
+  async function readRequest(requestId) {
+    if (
+      typeof requestId !== 'string' ||
+      requestId.length < 1 ||
+      Buffer.byteLength(requestId, 'utf8') > 128 ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(requestId)
+    ) {
+      throw storeError('INVALID_REQUEST', 'The request identity is invalid.');
+    }
+
+    let client;
+    try {
+      client = await pool.connect();
+      await assertReady(client);
+      const result = await client.query(
+        'SELECT intent, state, receipt FROM restricted_executor.requests WHERE request_id = $1',
+        [requestId],
+      );
+      const row = result.rows[0];
+      return row
+        ? {
+            intent: row.intent,
+            state: row.state,
+            receipt: row.receipt,
+          }
+        : null;
+    } catch (error) {
+      if (error instanceof ExecutionStoreError) throw error;
+      throw unavailable();
+    } finally {
+      client?.release();
+    }
+  }
+
   async function finishReconciliation(handle, { attempt, cleanup } = {}) {
     if (!isPlainObject(attempt) || !isPlainObject(cleanup)) {
       throw storeError(
@@ -1062,6 +1096,7 @@ export function createPostgresExecutionStore({ pool } = {}) {
     updateAttempt,
     complete,
     markUnknown,
+    readRequest,
     claimReconciliation,
     finishReconciliation,
     release,
