@@ -126,10 +126,11 @@ export class DockerSandboxAdapter implements SandboxAdapter {
       else containerStatus = 'exited';
     } catch (e) {
       const err = e as { message?: string; cause?: { message?: string } };
-      const combined = `${err.message ?? ''} ${err.cause?.message ?? ''}`;
+      const combined =
+        `${err.message ?? ''} ${err.cause?.message ?? ''}`.toLowerCase();
       if (
         combined.includes('no such object') ||
-        combined.includes('No such container')
+        combined.includes('no such container')
       ) {
         containerStatus = 'missing';
       } else {
@@ -147,11 +148,9 @@ export class DockerSandboxAdapter implements SandboxAdapter {
       volumeExists = true;
     } catch (e) {
       const err = e as { message?: string; cause?: { message?: string } };
-      const combined = `${err.message ?? ''} ${err.cause?.message ?? ''}`;
-      if (
-        combined.includes('no such volume') ||
-        combined.includes('No such volume')
-      ) {
+      const combined =
+        `${err.message ?? ''} ${err.cause?.message ?? ''}`.toLowerCase();
+      if (combined.includes('no such volume')) {
         volumeExists = false;
       } else {
         throw e;
