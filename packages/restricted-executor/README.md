@@ -62,7 +62,7 @@ The executor makes a live readiness query before reservation and reconciliation,
 
 The request row stores the complete validated execution intent, its canonical digest, request identity, operation generation and fence, owner process identity and unique owner token, attempt ID and ownership labels, state, cleanup evidence, and immutable completed receipt. The operation row stores the current head. A trigger-written append-only event table records state/time, owner-token, and attempt-stage/container changes; it does not duplicate receipt output or admission keys.
 
-The same request ID and intent replay the original completed receipt, including after later generations. Reusing a request ID with changed intent returns `IDEMPOTENCY_CONFLICT`. A new generation must increase both generation and fence and is admitted only after the previous generation completed. An active, reconciling, or unknown operation blocks every later generation. Database constraints and triggers prevent identity changes, generation/fence rollback, invalid state transitions, attempt-label replacement, request/operation head mismatch, and any update to a completed receipt.
+The same request ID and intent replay the original completed receipt, including after later generations. Reusing a request ID with changed intent returns `IDEMPOTENCY_CONFLICT`. A new generation must retain the operation’s original caller and session, increase both generation and fence, and is admitted only after the previous generation completed. An active, reconciling, or unknown operation blocks every later generation. Database constraints and triggers prevent identity changes, generation/fence rollback, invalid state transitions, attempt-label replacement, request/operation head mismatch, and any update to a completed receipt.
 
 Admission takes sorted request and operation PostgreSQL session advisory locks and holds them on one checked-out connection from reservation through container cleanup and final persistence. Each transaction verifies the owner token and current state. A database error after reservation never returns success or causes a retry; the persisted incomplete row continues to block dispatch. There is no expiry or TTL takeover.
 
@@ -145,6 +145,10 @@ expiresAtMs, payloadDigest
 For `lookup` and `reconcile`, the dispatcher reads the stored request through a checked-out PostgreSQL session that passes the full runtime readiness checks. It requires both stored intent `callerId` and `sessionRef` to match. Missing and foreign requests share the same `UNAUTHORIZED` response. `lookup` returns `{ state, receipt }`, exposing the receipt only in `complete`; other states, including `active` and `unknown`, remain visible to their authenticated owner. `reconcile` then delegates to the existing conservative executor reconciliation path; it does not run a workload.
 
 These keys and signed caller/session values are synthetic caller assertions. They do not establish end-user or session authorization, do not provide key custody or attestation for production P9, and do not change the executor's single-host development-only support boundary. No production policy or service-authentication decision is implied.
+
+## Separate-process development service
+
+`service.mjs` exposes the same dispatcher over authenticated loopback HTTP. The complete [executor-dispatch-v1 contract](./executor-dispatch-v1.md) specifies startup, wire fields, limits, receipts, retries, and conservative reconciliation. Run its synthetic integration checks with `node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs` using disposable PostgreSQL and Docker resources. This is a development-only, single-host process; distinct-identity credential separation and production isolation remain unverified.
 
 ## Fixed execution boundary
 

@@ -767,15 +767,34 @@ export function createPostgresExecutionStore({ pool } = {}) {
         );
         const previousOperation = operationResult.rows[0];
         if (previousOperation) {
+          const currentResult = await state.client.query(
+            `SELECT owner, intent,
+               (SELECT intent FROM restricted_executor.requests
+                 WHERE operation_id = $2 ORDER BY generation LIMIT 1) AS original_intent
+               FROM restricted_executor.requests WHERE request_id = $1`,
+            [previousOperation.request_id, intent.operationId],
+          );
+          const current = currentResult.rows[0];
+          if (
+            !current ||
+            !isPlainObject(current.intent) ||
+            !isPlainObject(current.original_intent)
+          )
+            throw unavailable();
+          if (
+            [current.intent, current.original_intent].some(
+              (owner) =>
+                owner.callerId !== intent.callerId ||
+                owner.sessionRef !== intent.sessionRef,
+            )
+          ) {
+            throw storeError(
+              'UNAUTHORIZED',
+              'Operation authentication failed.',
+            );
+          }
           if (previousOperation.state !== 'complete') {
-            const currentResult = await state.client.query(
-              'SELECT owner FROM restricted_executor.requests WHERE request_id = $1',
-              [previousOperation.request_id],
-            );
-            const alive = await ownerAlive(
-              ownerIsAlive,
-              currentResult.rows[0]?.owner,
-            );
+            const alive = await ownerAlive(ownerIsAlive, current.owner);
             throw storeError(
               alive === true ? 'EXECUTION_IN_PROGRESS' : 'EXECUTION_UNKNOWN',
               'The prior operation is active or unknown and blocks a higher generation.',
