@@ -12,8 +12,9 @@
     "lint": "eslint .",
     "typecheck": "next typegen apps/web && tsc --project apps/web/tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:executor": "node scripts/test-restricted-executor.mjs && node scripts/test-restricted-executor-dispatch.mjs && node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs",
     "build": "next build apps/web",
-    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:executor && npm run build"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",

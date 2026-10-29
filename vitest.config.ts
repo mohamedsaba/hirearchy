@@ -14,6 +14,11 @@ import { defineConfig, configDefaults } from 'vitest/config';
 // them.
 export default defineConfig({
   test: {
-    exclude: [...configDefaults.exclude, '**/.worktrees/**', '**/.agents/**'],
+    exclude: [
+      ...configDefaults.exclude,
+      '**/.worktrees/**',
+      '**/.agents/**',
+      '**/tests/restricted-executor/**',
+    ],
   },
 });
