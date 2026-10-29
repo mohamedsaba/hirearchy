@@ -24,3 +24,6 @@ Thumbs.db
 # Regenerable from tests/browser/*.mjs; kept on disk, not in git history.
 docs/design/screenshots/
 docs/design/assets/
+
+# Local executor recovery archives and disposable test state.
+/.executor-*/
