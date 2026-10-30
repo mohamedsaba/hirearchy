@@ -61,6 +61,7 @@ function loopbackUrl(value: string, protocols: string[]): URL {
 
 export function r23IsEnabled(): boolean {
   return (
+    process.env.HIREARCHY_RUNTIME_PROFILE !== 'staging-lockdown' &&
     process.env.NODE_ENV !== 'production' &&
     (process.env.NODE_ENV === 'development' ||
       process.env.NODE_ENV === 'test') &&

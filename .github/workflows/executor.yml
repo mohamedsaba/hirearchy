@@ -38,6 +38,8 @@ jobs:
       - run: npm ci
       - name: Pull pinned PostgreSQL fixture
         run: docker pull postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+      - name: Run PostgreSQL foundation migration and privilege checks
+        run: npm run test:postgres
       - name: Run executor PostgreSQL and admission tests
         run: >-
           node --test --test-concurrency=1

@@ -6,6 +6,13 @@ import { getHealthStatus } from '../../apps/web/src/health';
 import { register } from '../../apps/web/instrumentation';
 import { r214CandidateExecutionAction } from '../../apps/web/src/r214-execution/server';
 import { r212CandidateAiAction } from '../../apps/web/src/r212-ai/server';
+import {
+  r23IsEnabled,
+  readR23Config,
+} from '../../apps/web/src/r23-auth/config';
+import { r26IsEnabled } from '../../apps/web/src/r26-candidate/config';
+import { r27IsEnabled } from '../../apps/web/src/r27-evidence/config';
+import { r23LoginPost } from '../../apps/web/src/r23-auth/server';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -44,6 +51,36 @@ describe('staging lockdown', () => {
         ai: 'disabled',
       },
     });
+  });
+
+  it('disables disposable product lanes even when their flags are set', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('HIREARCHY_R23_DISPOSABLE', '1');
+    vi.stubEnv('HIREARCHY_R26_DISPOSABLE', '1');
+    vi.stubEnv('HIREARCHY_R27_DISPOSABLE', '1');
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-lockdown');
+    expect(r23IsEnabled()).toBe(false);
+    expect(readR23Config()).toBeNull();
+    expect(r26IsEnabled()).toBe(false);
+    expect(r27IsEnabled()).toBe(false);
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', '');
+    expect(r23IsEnabled()).toBe(true);
+    expect(r26IsEnabled()).toBe(true);
+    expect(r27IsEnabled()).toBe(true);
+  });
+
+  it('rejects a direct login handler call before reading credentials', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-lockdown');
+    vi.stubEnv('HIREARCHY_R23_DISPOSABLE', '1');
+    const request = new Request('http://localhost/r23/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not json',
+    });
+    const response = await r23LoginPost(request);
+    expect(response.status).toBe(404);
+    expect(request.bodyUsed).toBe(false);
   });
 
   it('rejects execution and AI actions before configuration or admission', async () => {
