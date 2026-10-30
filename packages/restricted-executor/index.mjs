@@ -24,7 +24,12 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { RECIPE, RECIPE_DIGEST, SNAPSHOT_LOADER } from './recipes.mjs';
+import {
+  RECIPE,
+  RECIPE_DIGEST,
+  SNAPSHOT_LOADER,
+  isReviewedImageIdentity,
+} from './recipes.mjs';
 import { createPostgresExecutionStore, ExecutionStoreError } from './store.mjs';
 
 export { RECIPE, RECIPE_DIGEST };
@@ -782,9 +787,7 @@ async function preflight() {
     );
   }
   if (
-    image.Id !== `sha256:${RECIPE.image.split('@sha256:')[1]}` ||
-    !Array.isArray(image.RepoDigests) ||
-    !image.RepoDigests.includes(RECIPE.image) ||
+    !isReviewedImageIdentity(image) ||
     !Array.isArray(image.Config?.Env) ||
     image.Config.Env.length !== 5 ||
     image.Config.Env.some(

@@ -26,9 +26,33 @@ import {
   snapshotDigest,
 } from '../../packages/restricted-executor/index.mjs';
 import { createPostgresExecutionStore } from '../../packages/restricted-executor/store.mjs';
+import { isReviewedImageIdentity } from '../../packages/restricted-executor/recipes.mjs';
 import { startPostgresFixture } from './postgres-fixture.mjs';
 
 const sourceRoot = process.cwd();
+
+test('reviewed image requires its pinned registry digest and config identity', () => {
+  const manifestId = `sha256:${RECIPE.image.split('@sha256:')[1]}`;
+  const configId =
+    'sha256:0749810251d60df6b3ec0b67a29caf09697f844dbb2e01e1d3cf198e585ee087';
+  for (const Id of [manifestId, configId]) {
+    assert.equal(
+      isReviewedImageIdentity({ Id, RepoDigests: [RECIPE.image] }),
+      true,
+    );
+  }
+  assert.equal(
+    isReviewedImageIdentity({ Id: configId, RepoDigests: [] }),
+    false,
+  );
+  assert.equal(
+    isReviewedImageIdentity({
+      Id: 'sha256:' + '0'.repeat(64),
+      RepoDigests: [RECIPE.image],
+    }),
+    false,
+  );
+});
 const previousTmpdir = process.env.TMPDIR;
 const fixtureSchema = await readFile(
   new URL('../../packages/restricted-executor/schema.sql', import.meta.url),
@@ -366,6 +390,8 @@ async function rolePrivilegeSnapshot(roleName) {
 
 function executorLabels(attempt) {
   return {
+    'org.opencontainers.image.source':
+      'https://github.com/mohamedsaba/hirearchy',
     'com.hirearchy.restricted-executor.request': attempt.requestLabel,
     'com.hirearchy.restricted-executor.operation': attempt.operationLabel,
     'com.hirearchy.restricted-executor.attempt': attempt.attemptLabel,
@@ -833,7 +859,10 @@ function observeExecutorCreate(
 }
 
 function labelsFromDockerArgs(args) {
-  const labels = {};
+  const labels = {
+    'org.opencontainers.image.source':
+      'https://github.com/mohamedsaba/hirearchy',
+  };
   for (let index = 0; index < args.length - 1; index += 1) {
     if (args[index] !== '--label') continue;
     const assignment = args[index + 1];

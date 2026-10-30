@@ -76,7 +76,7 @@ export const RECIPE = Object.freeze({
   scenarioRef: 'reservation-moves',
   scenarioVersion: 'v3',
   image:
-    'assess-python@sha256:892c8fa7563e6054fb17fa6a729be7dcbeb87f9268da5533f06bde4a8e8d1b3d',
+    'ghcr.io/mohamedsaba/hirearchy-executor@sha256:c7b3f6e5c953e95b6e3fbb57c52ef4e1185705edc7a43aee5b5bfb2bc096840f',
   bootstrap: Object.freeze(['/bin/sleep', 'infinity']),
   argv: Object.freeze([
     'python3',
@@ -103,3 +103,14 @@ export const RECIPE = Object.freeze({
 export const RECIPE_DIGEST = createHash('sha256')
   .update(JSON.stringify(RECIPE), 'utf8')
   .digest('hex');
+
+export function isReviewedImageIdentity(image) {
+  return (
+    [
+      `sha256:${RECIPE.image.split('@sha256:')[1]}`,
+      'sha256:0749810251d60df6b3ec0b67a29caf09697f844dbb2e01e1d3cf198e585ee087',
+    ].includes(image?.Id) &&
+    Array.isArray(image?.RepoDigests) &&
+    image.RepoDigests.includes(RECIPE.image)
+  );
+}

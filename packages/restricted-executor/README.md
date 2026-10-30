@@ -150,15 +150,15 @@ These keys and signed caller/session values are synthetic caller assertions. The
 
 `service.mjs` exposes the same dispatcher over authenticated loopback HTTP. The complete [executor-dispatch-v1 contract](./executor-dispatch-v1.md) specifies startup, wire fields, limits, receipts, retries, and conservative reconciliation. Run its synthetic integration checks with `node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs` using disposable PostgreSQL and Docker resources. This is a development-only, single-host process; distinct-identity credential separation and production isolation remain unverified.
 
-GitHub Actions separately runs the PostgreSQL-only admission checks and the full Docker suites. The full lane requires the pinned `assess-python` image to be available to the runner; it is currently only available locally, so that lane fails until a reviewed, accessible copy of the exact image is provided. The local real-Docker checks are an interim development check, not evidence that GitHub's Docker lane passed.
+GitHub Actions separately runs the PostgreSQL-only admission checks and the full Docker suites. The full lane pulls the reviewed image by its registry manifest digest. The image definition and hash-locked Python dependencies are in `image/`; its Python and pytest versions match the previous local image. The executor overrides the image entrypoint and does not use the former local-only agent binary.
 
 ## Fixed execution boundary
 
 The reviewed image is the locally available
-`assess-python@sha256:892c8fa7563e6054fb17fa6a729be7dcbeb87f9268da5533f06bde4a8e8d1b3d`.
+`ghcr.io/mohamedsaba/hirearchy-executor@sha256:c7b3f6e5c953e95b6e3fbb57c52ef4e1185705edc7a43aee5b5bfb2bc096840f`.
 Recipe `reservation-moves.pytest`, version `3`, runs
 `python3 -B -m pytest -q -p no:cacheprovider`; its digest remains
-`1b4e9bcb678e8e83e4cbf8850e593dcd9cd300eb6f3334a53802bbb3001a373a`.
+`eeac2baaf62ce107c7511268e862657ae24bb171cd1dec6ca01797c16ffbaad8`.
 Snapshot files are bounded JSON streamed over stdin to a fixed loader. The
 container runs as UID/GID `65534:65534` with no network, a read-only root,
 dropped capabilities, `no-new-privileges`, bounded noexec/nosuid/nodev tmpfs

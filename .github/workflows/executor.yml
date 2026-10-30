@@ -57,7 +57,7 @@ jobs:
       - name: Pull pinned PostgreSQL fixture
         run: docker pull postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
       - name: Pull reviewed executor image
-        run: docker pull assess-python@sha256:892c8fa7563e6054fb17fa6a729be7dcbeb87f9268da5533f06bde4a8e8d1b3d
+        run: docker pull ghcr.io/mohamedsaba/hirearchy-executor@sha256:c7b3f6e5c953e95b6e3fbb57c52ef4e1185705edc7a43aee5b5bfb2bc096840f
       - run: node scripts/test-restricted-executor.mjs
       - run: node scripts/test-restricted-executor-dispatch.mjs
       - run: node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs
