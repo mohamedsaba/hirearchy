@@ -25,6 +25,7 @@ describe('C2 — Candidate Pre-Start Unit Tests', () => {
     serverTime: '2026-09-21T10:00:05.000Z',
     closureReason: null,
     scenarioType: 'multi_file',
+    terminalEnabled: true,
     aiCapability: { enabled: true },
   };
 
@@ -46,6 +47,37 @@ describe('C2 — Candidate Pre-Start Unit Tests', () => {
     expect(html).toContain('Technical Evaluation');
     expect(html).toContain('Pre-start');
     expect(html).toContain('Continue to orientation');
+  });
+
+  it('keeps pre-start copy truthful when command execution is disabled', () => {
+    const session = { ...dummySessionView, terminalEnabled: false };
+    const entry = renderToStaticMarkup(
+      <CandidatePrestart
+        session={session}
+        uiMode="entry"
+        setUiMode={() => {}}
+        onStartAssessment={() => {}}
+        isActivating={false}
+        provisioningError={null}
+        onRetryProvisioning={() => {}}
+      />,
+    );
+    const orientation = renderToStaticMarkup(
+      <CandidatePrestart
+        session={session}
+        uiMode="orientation"
+        setUiMode={() => {}}
+        onStartAssessment={() => {}}
+        isActivating={false}
+        provisioningError={null}
+        onRetryProvisioning={() => {}}
+      />,
+    );
+
+    expect(entry).toContain('tools available for this assessment');
+    expect(entry).not.toContain('command execution console');
+    expect(orientation).toContain('Commands:</strong> Not enabled');
+    expect(orientation).not.toContain('Run commands and tests');
   });
 
   // Requirement 2: Scenario-specific assessment content is not exposed before activation
@@ -118,7 +150,10 @@ describe('C2 — Candidate Pre-Start Unit Tests', () => {
     // 3. AI policy
     expect(html).toContain('AI Policy');
     expect(html).toContain(
-      'AI assistance is permitted as part of the environment',
+      'The integrated AI assistant is available for this assessment',
+    );
+    expect(html).toContain(
+      'this does not establish how submitted code was written',
     );
     expect(html).toContain('responsible for the accuracy, design, and quality');
     expect(html).not.toContain('cheating');
@@ -146,6 +181,25 @@ describe('C2 — Candidate Pre-Start Unit Tests', () => {
     // Navigation
     expect(html).toContain('Continue to start');
     expect(html).toContain('Back to overview');
+  });
+
+  it('describes an unavailable integrated assistant without implying an AI policy', () => {
+    const html = renderToStaticMarkup(
+      <CandidatePrestart
+        session={{ ...dummySessionView, aiCapability: { enabled: false } }}
+        uiMode="orientation"
+        setUiMode={() => {}}
+        onStartAssessment={() => {}}
+        isActivating={false}
+        provisioningError={null}
+        onRetryProvisioning={() => {}}
+      />,
+    );
+
+    expect(html).toContain(
+      'The integrated AI assistant is not available for this assessment',
+    );
+    expect(html).not.toContain('AI assistance is permitted');
   });
 
   // Requirement 6: Ready-to-start confirmation view does not start timer

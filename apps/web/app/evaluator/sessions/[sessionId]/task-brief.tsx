@@ -1,4 +1,5 @@
 import type { ContextEntry } from '../../../../src/evaluator/evaluator-briefing';
+import { IconFileDescription } from '@tabler/icons-react';
 
 type TaskBriefProps = Readonly<{
   taskContext: readonly ContextEntry[];
@@ -25,69 +26,83 @@ export const TaskBrief = ({
       className="review-section scenario-context"
       aria-labelledby="scenario-context-title"
     >
-      <header className="review-section-heading">
-        <p className="section-kicker">Scenario context</p>
-        <h3 id="scenario-context-title">What this scenario examines</h3>
-        <p>
-          This context helps organize the review. It is not evidence and does
-          not indicate that the candidate demonstrated any particular
-          capability.
-        </p>
+      <header className="review-section-heading scenario-context-heading">
+        <div className="scenario-context-heading-title">
+          <span className="evaluator-review-title-icon" aria-hidden="true">
+            <IconFileDescription size={22} stroke={1.8} />
+          </span>
+          <h3 id="scenario-context-title">What this task was about</h3>
+        </div>
+        <p>Context · not evidence</p>
       </header>
 
       {contextAvailable ? (
         <div className="task-brief-content">
           {briefEntry ? (
             <div className="task-brief-description">
-              <p className="scenario-purpose">{briefEntry.authoredText}</p>
+              <p className="scenario-purpose scenario-purpose-preview">
+                {briefEntry.authoredText}
+              </p>
+              {briefEntry.authoredText.length > 300 ? (
+                <details className="scenario-purpose-full-disclosure">
+                  <summary>Read full scenario context</summary>
+                  <p>{briefEntry.authoredText}</p>
+                </details>
+              ) : null}
             </div>
           ) : null}
 
           {showScenarioReference &&
-          (invariants.length > 0 || verificationAreas.length > 0) ? (
-            <div className="scenario-reference-grid">
-              {invariants.length > 0 ? (
-                <div className="scenario-reference-block">
-                  <h3 className="reference-subheading">
-                    Relevant system context
-                  </h3>
-                  <ul className="reference-list">
-                    {invariants.map((inv) => (
-                      <li key={inv.id}>{inv.authoredText}</li>
-                    ))}
-                  </ul>
+          (invariants.length > 0 ||
+            verificationAreas.length > 0 ||
+            warnings.length > 0) ? (
+            <details className="scenario-reference-disclosure">
+              <summary>Scenario reference and review boundaries</summary>
+              {invariants.length > 0 || verificationAreas.length > 0 ? (
+                <div className="scenario-reference-grid">
+                  {invariants.length > 0 ? (
+                    <div className="scenario-reference-block">
+                      <h3 className="reference-subheading">
+                        Relevant system context
+                      </h3>
+                      <ul className="reference-list">
+                        {invariants.map((inv) => (
+                          <li key={inv.id}>{inv.authoredText}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {verificationAreas.length > 0 ? (
+                    <div className="scenario-reference-block">
+                      <h3 className="reference-subheading">
+                        Relevant verification areas
+                      </h3>
+                      <p className="verification-area-note">
+                        These areas describe parts of the scenario that may be
+                        relevant to technical review. They are not a pass/fail
+                        checklist, and valid work may address them in different
+                        ways.
+                      </p>
+                      <ul className="reference-list">
+                        {verificationAreas.map((target) => (
+                          <li key={target.id}>{target.authoredText}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
-
-              {verificationAreas.length > 0 ? (
-                <div className="scenario-reference-block">
-                  <h3 className="reference-subheading">
-                    Relevant verification areas
-                  </h3>
-                  <p className="verification-area-note">
-                    These areas describe parts of the scenario that may be
-                    relevant to technical review. They are not a pass/fail
-                    checklist, and valid work may address them in different
-                    ways.
-                  </p>
-                  <ul className="reference-list">
-                    {verificationAreas.map((target) => (
-                      <li key={target.id}>{target.authoredText}</li>
-                    ))}
-                  </ul>
+              {warnings.length > 0 ? (
+                <div className="interpretation-warnings-block">
+                  {warnings.map((w) => (
+                    <p className="interpretation-note" key={w.id}>
+                      {w.authoredText}
+                    </p>
+                  ))}
                 </div>
               ) : null}
-            </div>
-          ) : null}
-
-          {showScenarioReference && warnings.length > 0 ? (
-            <div className="interpretation-warnings-block">
-              {warnings.map((w) => (
-                <p className="interpretation-note" key={w.id}>
-                  {w.authoredText}
-                </p>
-              ))}
-            </div>
+            </details>
           ) : null}
         </div>
       ) : (

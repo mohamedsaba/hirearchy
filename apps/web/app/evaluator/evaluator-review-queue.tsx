@@ -11,9 +11,27 @@ import type {
 
 export type QueueState =
   | Readonly<{ kind: 'loading' }>
-  | Readonly<{ kind: 'ready'; sessions: readonly EvaluatorReviewEntry[] }>
+  | Readonly<{ kind: 'ready'; sessions: readonly QueueEntryWithReviewStatus[] }>
   | Readonly<{ kind: 'access-error' }>
   | Readonly<{ kind: 'service-error' }>;
+
+type QueueEntryWithReviewStatus = EvaluatorReviewEntry &
+  Readonly<{
+    reviewProcessStatus?:
+      | 'not_started'
+      | 'in_progress'
+      | 'waiting_for_response'
+      | 'next_step_recorded';
+  }>;
+const reviewStatusLabel: Record<
+  NonNullable<QueueEntryWithReviewStatus['reviewProcessStatus']>,
+  string
+> = {
+  not_started: 'Review not started',
+  in_progress: 'Review in progress',
+  waiting_for_response: 'Waiting for candidate response',
+  next_step_recorded: 'Next step recorded',
+};
 
 const formatSubmissionTime = (submittedAt: string) =>
   new Intl.DateTimeFormat('en-US', {
@@ -61,36 +79,73 @@ export const EvaluatorReviewQueueContent = ({
   if (state.sessions.length === 0)
     return <p>No submitted assessments are available for review.</p>;
 
+  return <ReviewQueueList sessions={state.sessions} />;
+};
+
+const ReviewQueueList = ({
+  sessions,
+}: Readonly<{ sessions: readonly QueueEntryWithReviewStatus[] }>) => {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredSessions = sessions.filter((session) =>
+    `${session.scenarioTitle} ${session.sessionId}`
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
+  );
+
   return (
-    <ul className="evaluator-review-list">
-      {state.sessions.map((session) => (
-        <li key={session.sessionId}>
-          <Link
-            className="evaluator-review-link"
-            href={`/evaluator/sessions/${encodeURIComponent(session.sessionId)}`}
-            prefetch={false}
-            aria-label={`Review ${session.scenarioTitle}, session ${session.sessionId}`}
-          >
-            <span className="evaluator-review-title">
-              {session.scenarioTitle}
-            </span>
-            <span className="evaluator-review-reference">
-              Session {session.sessionId}
-            </span>
-            <span>
-              Submitted{' '}
-              <time dateTime={session.submittedAt}>
-                {formatSubmissionTime(session.submittedAt)} UTC
-              </time>
-            </span>
-            {formatDuration(session.durationSeconds) ? (
-              <span>{formatDuration(session.durationSeconds)} assessment</span>
-            ) : null}
-            <span>{formatEvaluatorClosureReason(session.closureReason)}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <>
+      <label className="evaluator-queue-search">
+        <span>Filter by task or session reference</span>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search submitted assessments"
+        />
+      </label>
+      {filteredSessions.length === 0 ? (
+        <p role="status">No submitted assessments match that search.</p>
+      ) : null}
+      <ul className="evaluator-review-list">
+        {filteredSessions.map((session) => (
+          <li key={session.sessionId}>
+            <Link
+              className="evaluator-review-link"
+              href={`/evaluator/sessions/${encodeURIComponent(session.sessionId)}`}
+              prefetch={false}
+              aria-label={`Review ${session.scenarioTitle}, session ${session.sessionId}`}
+            >
+              <span className="evaluator-review-title">
+                {session.scenarioTitle}
+              </span>
+              <span className="evaluator-review-reference">
+                Session {session.sessionId}
+              </span>
+              <span>
+                Submitted{' '}
+                <time dateTime={session.submittedAt}>
+                  {formatSubmissionTime(session.submittedAt)} UTC
+                </time>
+              </span>
+              {formatDuration(session.durationSeconds) ? (
+                <span>
+                  {formatDuration(session.durationSeconds)} assessment
+                </span>
+              ) : null}
+              <span>{formatEvaluatorClosureReason(session.closureReason)}</span>
+              <span className="evaluator-review-process-status">
+                {
+                  reviewStatusLabel[
+                    session.reviewProcessStatus ?? 'not_started'
+                  ]
+                }
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 };
 

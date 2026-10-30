@@ -1,0 +1,79 @@
+.software-product-header {
+  min-height: var(--software-header-height, 4rem);
+  padding-inline: var(--software-space-page, 2rem);
+  gap: var(--space-4, 1rem);
+}
+
+.software-product-header nav {
+  margin-left: auto;
+  gap: var(--space-2, 0.5rem);
+}
+
+.software-wordmark {
+  font-family: var(--software-sans, var(--font-dm-sans), sans-serif);
+  line-height: 1;
+}
+
+.software-product-capsule {
+  border-radius: var(--radius-pill, 999px);
+}
+
+.software-product-header nav a.software-nav-link {
+  min-height: var(--software-control-height, 2.5rem);
+  align-self: center;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--software-radius-control, 0.5rem);
+  color: rgb(255 255 255 / 78%);
+  transition:
+    background-color var(--software-transition, 180ms ease),
+    border-color var(--software-transition, 180ms ease),
+    color var(--software-transition, 180ms ease);
+}
+
+.software-product-header nav a.software-nav-link::after {
+  display: none;
+}
+
+.software-product-header nav a.software-nav-link:hover {
+  border-color: rgb(255 255 255 / 24%);
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.software-product-header nav a.software-nav-link[aria-current='page'] {
+  border-color: rgb(176 240 206 / 54%);
+  background: var(--software-mint);
+  color: var(--software-plum);
+}
+
+.software-product-header nav a.software-nav-link[aria-current='page']:hover {
+  border-color: var(--software-mint);
+  background: #c0f5d8;
+  color: var(--software-plum);
+}
+
+.software-product-header nav a.software-nav-link:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: var(--focus-offset, 2px);
+}
+
+@media (max-width: 48rem) {
+  .software-product-header {
+    min-height: var(--software-header-height, 3.75rem);
+    padding-inline: var(--software-space-page, 1.5rem);
+  }
+}
+
+@media (max-width: 30rem) {
+  .software-product-header {
+    min-height: var(--software-header-height, 3.5rem);
+    padding-inline: var(--software-space-page, 1rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .software-product-header nav a.software-nav-link {
+    transition: none;
+  }
+}

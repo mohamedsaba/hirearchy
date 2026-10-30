@@ -10,7 +10,10 @@ vi.mock('next/server', () => ({
 
 import { SqliteEventStore } from '../../apps/web/src/events/sqlite-event-store';
 import { DockerSandboxAdapter } from '../../apps/web/src/sandbox/docker-sandbox-adapter';
-import { SessionService } from '../../apps/web/src/sessions/session-service';
+import {
+  SessionReconciliationError,
+  SessionService,
+} from '../../apps/web/src/sessions/session-service';
 import { SqliteSessionStore } from '../../apps/web/src/sessions/sqlite-session-store';
 import { startSessionTimeoutSweeper } from '../../apps/web/src/sessions/session-timeout-sweeper';
 import { SqliteTransactionRunner } from '../../apps/web/src/database/sqlite-transaction-runner';
@@ -27,7 +30,7 @@ const containerPaused = (name: string): boolean => {
 const containerExists = (name: string): boolean =>
   spawnSync('docker', ['inspect', name]).status === 0;
 
-describe('T1B.2 — Restart / Reconciliation', () => {
+describe('T1B.2 — Restart / Reconciliation', { timeout: 60000 }, () => {
   let directory: string;
   let databasePath: string;
   let adapter: DockerSandboxAdapter;
@@ -73,6 +76,55 @@ describe('T1B.2 — Restart / Reconciliation', () => {
       await adapter.teardown(sid).catch(() => {});
     }
     rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('records cleanup failure when startup reconciliation retries submitted resources', async () => {
+    const { session, candidateToken } = service.createSession({
+      scenarioId: 'scenario-001',
+    });
+    const errorMessage = 'Subprocess transport error: spawn docker ENOENT';
+    store.withDatabase((db) =>
+      db
+        .prepare(
+          `UPDATE assessment_sessions
+           SET status = 'SUBMITTED', submitted_content = working_content,
+               submitted_at = ?, closure_reason = 'candidate_submission'
+           WHERE id = ?`,
+        )
+        .run(now(), session.id),
+    );
+    vi.spyOn(adapter, 'inspectResources').mockResolvedValue({
+      containerStatus: 'running',
+      volumeExists: true,
+    });
+    vi.spyOn(adapter, 'teardown').mockRejectedValueOnce(
+      new Error(errorMessage),
+    );
+
+    await expect(service.reconcileSessions(now())).rejects.toBeInstanceOf(
+      SessionReconciliationError,
+    );
+
+    const storedEvent = eventStore
+      .getEvents(session.id)
+      .find((event) => event.type === 'SANDBOX_CLEANUP_FAILED');
+    expect(storedEvent).toMatchObject({
+      type: 'SANDBOX_CLEANUP_FAILED',
+      payload: { phase: 'reconciliation', errorMessage },
+    });
+
+    const candidateEvent = service
+      .getSessionEvents(candidateToken)
+      .find((event) => event.type === 'SANDBOX_CLEANUP_FAILED');
+    expect(candidateEvent).toMatchObject({
+      type: 'SANDBOX_CLEANUP_FAILED',
+      payload: {
+        phase: 'reconciliation',
+        errorMessage: 'Sandbox cleanup failed.',
+      },
+    });
+    expect(JSON.stringify(candidateEvent)).not.toContain(errorMessage);
+    expect(store.findById(session.id)?.status).toBe('SUBMITTED');
   });
 
   it('R1: overdue ACTIVE + running container -> timeout finalization', async () => {
@@ -163,7 +215,9 @@ describe('T1B.2 — Restart / Reconciliation', () => {
     store.admitFinalization(session.id, 'candidate_submission');
     spawnSync('docker', ['rm', '-f', adapter.getContainerName(session.id)]);
 
-    await service.reconcileSessions(now());
+    await expect(service.reconcileSessions(now())).rejects.toBeInstanceOf(
+      SessionReconciliationError,
+    );
 
     expect(store.findById(session.id)).toMatchObject({
       status: 'ACTIVE',
@@ -195,7 +249,9 @@ describe('T1B.2 — Restart / Reconciliation', () => {
 
     mockTime += (session.durationSeconds! + 10) * 1000;
 
-    await service.reconcileSessions(now());
+    await expect(service.reconcileSessions(now())).rejects.toBeInstanceOf(
+      SessionReconciliationError,
+    );
 
     const reloaded = store.findById(session.id);
     expect(reloaded?.status).toBe('ACTIVE'); // Fails closed
@@ -223,13 +279,15 @@ describe('T1B.2 — Restart / Reconciliation', () => {
     });
 
     mockTime += (session.durationSeconds! + 10) * 1000;
-    await service.reconcileSessions(now());
+    await expect(service.reconcileSessions(now())).rejects.toBeInstanceOf(
+      SessionReconciliationError,
+    );
 
     const reloaded = store.findById(session.id);
     expect(reloaded?.status).toBe('ACTIVE');
 
     spy.mockRestore();
-  });
+  }, 30000);
 
   it('R5: SUBMITTED + leaked container -> cleanup only', async () => {
     const { session, candidateToken } = service.createSession({
@@ -363,14 +421,18 @@ describe('T1B.2 — Restart / Reconciliation', () => {
     mockTime += (session.durationSeconds! + 10) * 1000;
 
     // First reconciliation
-    await service.reconcileSessions(now());
+    await expect(service.reconcileSessions(now())).rejects.toBeInstanceOf(
+      SessionReconciliationError,
+    );
     const firstState = store.findById(session.id);
     expect(firstState?.status).toBe('ACTIVE');
     expect(volumeExists(adapter.getVolumeName(session.id))).toBe(true);
     expect(containerExists(adapter.getContainerName(session.id))).toBe(false);
 
     // Second reconciliation
-    await service.reconcileSessions(now());
+    await expect(service.reconcileSessions(now())).rejects.toBeInstanceOf(
+      SessionReconciliationError,
+    );
     const secondState = store.findById(session.id);
     expect(secondState?.status).toBe('ACTIVE');
     expect(volumeExists(adapter.getVolumeName(session.id))).toBe(true);

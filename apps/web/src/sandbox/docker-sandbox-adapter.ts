@@ -105,6 +105,15 @@ export class DockerSandboxAdapter implements SandboxAdapter {
     return `hirearchy-ws-${sanitized}`;
   }
 
+  /**
+   * Derives a deterministic Docker volume name for session evidence.
+   * Persists baseline and evidence records across container restarts.
+   */
+  getEvidenceVolumeName(sessionId: string): string {
+    const sanitized = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `hirearchy-ev-${sanitized}`;
+  }
+
   async inspectResources(sessionId: string): Promise<{
     containerStatus: 'running' | 'paused' | 'exited' | 'missing';
     volumeExists: boolean;
@@ -126,10 +135,11 @@ export class DockerSandboxAdapter implements SandboxAdapter {
       else containerStatus = 'exited';
     } catch (e) {
       const err = e as { message?: string; cause?: { message?: string } };
-      const combined = `${err.message ?? ''} ${err.cause?.message ?? ''}`;
+      const combined =
+        `${err.message ?? ''} ${err.cause?.message ?? ''}`.toLowerCase();
       if (
         combined.includes('no such object') ||
-        combined.includes('No such container')
+        combined.includes('no such container')
       ) {
         containerStatus = 'missing';
       } else {
@@ -147,11 +157,9 @@ export class DockerSandboxAdapter implements SandboxAdapter {
       volumeExists = true;
     } catch (e) {
       const err = e as { message?: string; cause?: { message?: string } };
-      const combined = `${err.message ?? ''} ${err.cause?.message ?? ''}`;
-      if (
-        combined.includes('no such volume') ||
-        combined.includes('No such volume')
-      ) {
+      const combined =
+        `${err.message ?? ''} ${err.cause?.message ?? ''}`.toLowerCase();
+      if (combined.includes('no such volume')) {
         volumeExists = false;
       } else {
         throw e;
@@ -167,6 +175,7 @@ export class DockerSandboxAdapter implements SandboxAdapter {
   ): Promise<void> {
     const containerName = this.getContainerName(sessionId);
     const volumeName = this.getVolumeName(sessionId);
+    const evidenceVolumeName = this.getEvidenceVolumeName(sessionId);
 
     // Clean up any stale container with the same name first
     await this.runProcess('docker', ['rm', '-f', containerName], {
@@ -179,7 +188,8 @@ export class DockerSandboxAdapter implements SandboxAdapter {
       options !== undefined &&
       (('scenarioType' in options && options.scenarioType !== undefined) ||
         ('imageName' in options && options.imageName !== undefined) ||
-        ('initialFiles' in options && options.initialFiles !== undefined));
+        ('initialFiles' in options && options.initialFiles !== undefined) ||
+        ('generatedWorkspace' in options && options.generatedWorkspace));
 
     const initialFiles: Readonly<Record<string, string>> = isOptionsObject
       ? ((options as SandboxCreateOptions).initialFiles ?? {})
@@ -189,6 +199,11 @@ export class DockerSandboxAdapter implements SandboxAdapter {
       isOptionsObject && (options as SandboxCreateOptions).imageName
         ? (options as SandboxCreateOptions).imageName!
         : this.imageName;
+    const usesBookingNotificationReadiness =
+      imageName === 'hirearchy-scenario-002:v1.0.0';
+    const isGeneratedWorkspace =
+      isOptionsObject &&
+      (options as SandboxCreateOptions).generatedWorkspace === true;
 
     const isMultiFile =
       (isOptionsObject &&
@@ -217,6 +232,32 @@ export class DockerSandboxAdapter implements SandboxAdapter {
       );
     }
 
+    if (isGeneratedWorkspace) {
+      try {
+        await this.runProcess(
+          'docker',
+          ['volume', 'create', evidenceVolumeName],
+          {
+            timeoutMs: 15_000,
+            maxStdoutBytes: 4 * 1024,
+            maxStderrBytes: 64 * 1024,
+          },
+        );
+      } catch (error) {
+        await this.runProcess('docker', ['volume', 'rm', volumeName], {
+          timeoutMs: 15_000,
+          maxStdoutBytes: 4 * 1024,
+          maxStderrBytes: 64 * 1024,
+        }).catch(() => {});
+        if (error instanceof SandboxError) throw error;
+        throw new SandboxError(
+          'SANDBOX_CREATION_FAILED',
+          'Failed to create session evidence volume.',
+          error,
+        );
+      }
+    }
+
     // Step 2: Start sandbox with volume mounted at /workspace (rw).
     // All other security constraints (read-only rootfs, network none,
     // resource limits, cap-drop, no-new-privileges) are preserved.
@@ -229,13 +270,23 @@ export class DockerSandboxAdapter implements SandboxAdapter {
             '-d',
             '--name',
             containerName,
+            ...(isGeneratedWorkspace
+              ? ['--label', 'hirearchy.workspace.type=generated']
+              : []),
             '--read-only',
             '--tmpfs',
             '/tmp:rw,exec,nosuid,size=256m,uid=1000,gid=1000',
             '--mount',
             `type=volume,source=${volumeName},target=/workspace`,
-            '--tmpfs',
-            '/run/hirearchy-evidence:rw,noexec,nosuid,size=64m,mode=0700,uid=0,gid=0',
+            ...(isGeneratedWorkspace
+              ? [
+                  '--mount',
+                  `type=volume,source=${evidenceVolumeName},target=/run/hirearchy-evidence`,
+                ]
+              : [
+                  '--tmpfs',
+                  '/run/hirearchy-evidence:rw,noexec,nosuid,size=64m,mode=0700,uid=0,gid=0',
+                ]),
             '--network',
             'none',
             '--memory=1024m',
@@ -250,6 +301,8 @@ export class DockerSandboxAdapter implements SandboxAdapter {
             '-w',
             '/workspace',
             imageName,
+            'sleep',
+            'infinity',
           ],
           {
             timeoutMs: 30_000,
@@ -338,6 +391,37 @@ export class DockerSandboxAdapter implements SandboxAdapter {
         error,
       );
     }
+    // Ensure evidence volume permissions are restricted to root (0700)
+    // before seeding initial files or permitting any candidate access.
+    if (isGeneratedWorkspace) {
+      try {
+        await this.runProcess(
+          'docker',
+          [
+            'exec',
+            '-u',
+            '0:0',
+            containerName,
+            'chmod',
+            '700',
+            '/run/hirearchy-evidence',
+          ],
+          {
+            timeoutMs: 10_000,
+            maxStdoutBytes: 4 * 1024,
+            maxStderrBytes: 16 * 1024,
+          },
+        );
+      } catch (error) {
+        await this.teardown(sessionId).catch(() => {});
+        if (error instanceof SandboxError) throw error;
+        throw new SandboxError(
+          'SANDBOX_CREATION_FAILED',
+          'Failed to initialize evidence volume permissions.',
+          error,
+        );
+      }
+    }
 
     // Populate initial files if any
     try {
@@ -386,8 +470,63 @@ export class DockerSandboxAdapter implements SandboxAdapter {
         );
       }
 
+      if (isMultiFile && !isGeneratedWorkspace) {
+        await this.runProcess(
+          'docker',
+          [
+            'exec',
+            '-d',
+            containerName,
+            'sh',
+            '-c',
+            '/usr/local/bin/start_services.sh > /tmp/scenario-startup.log 2>&1',
+          ],
+          {
+            timeoutMs: 10_000,
+            maxStdoutBytes: 4 * 1024,
+            maxStderrBytes: 16 * 1024,
+          },
+        );
+      }
+
       // Readiness check
-      if (isMultiFile) {
+      if (isGeneratedWorkspace) {
+        const baseline = await this.runProcess(
+          'docker',
+          [
+            'exec',
+            '-u',
+            '0:0',
+            containerName,
+            'sh',
+            '-c',
+            'chmod 700 /run/hirearchy-evidence && HIREARCHY_CAPTURE_WORK_TREE=/workspace /usr/local/bin/hirearchy-capture-tree.sh > /run/hirearchy-evidence/generated-baseline && chmod 600 /run/hirearchy-evidence/generated-baseline && cat /run/hirearchy-evidence/generated-baseline',
+          ],
+          {
+            timeoutMs: 30_000,
+            maxStdoutBytes: 4 * 1024,
+            maxStderrBytes: 64 * 1024,
+          },
+        );
+        if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})\n?$/.test(baseline.stdout)) {
+          throw new Error('Generated starter baseline capture failed.');
+        }
+      }
+
+      if (isGeneratedWorkspace) {
+        const readyCheck = await this.runProcess(
+          'docker',
+          ['exec', containerName, 'sh', '-c', 'echo hirearchy-ready'],
+          {
+            timeoutMs: 10_000,
+            maxStdoutBytes: 4 * 1024,
+            maxStderrBytes: 64 * 1024,
+          },
+        );
+        if (!readyCheck.stdout.includes('hirearchy-ready')) {
+          throw new Error('Generated workspace readiness check failed.');
+        }
+      } else if (isMultiFile && !usesBookingNotificationReadiness) {
         const readyCheck = await this.runProcess(
           'docker',
           [
@@ -407,6 +546,28 @@ export class DockerSandboxAdapter implements SandboxAdapter {
         if (!readyCheck.stdout.includes('hirearchy-ready')) {
           throw new Error(
             `Multi-service readiness probe returned unexpected output: ${readyCheck.stdout}`,
+          );
+        }
+      } else if (isMultiFile) {
+        const readyCheck = await this.runProcess(
+          'docker',
+          [
+            'exec',
+            containerName,
+            'sh',
+            '-c',
+            'for i in $(seq 1 100); do if [ -f /tmp/scenario_ready ]; then echo hirearchy-ready; exit 0; fi; sleep 0.1; done; echo not-ready; exit 1',
+          ],
+          {
+            timeoutMs: 25_000,
+            maxStdoutBytes: 16 * 1024,
+            maxStderrBytes: 16 * 1024,
+          },
+        );
+
+        if (!readyCheck.stdout.includes('hirearchy-ready')) {
+          throw new Error(
+            `Multi-file readiness probe returned unexpected output: ${readyCheck.stdout}`,
           );
         }
       } else {
@@ -903,9 +1064,66 @@ export class DockerSandboxAdapter implements SandboxAdapter {
     }
   }
 
+  private async isGeneratedWorkspaceContainer(
+    sessionId: string,
+  ): Promise<boolean> {
+    const containerName = this.getContainerName(sessionId);
+    const inspect = await this.runProcess(
+      'docker',
+      [
+        'inspect',
+        '-f',
+        '{{index .Config.Labels "hirearchy.workspace.type"}}',
+        containerName,
+      ],
+      {
+        timeoutMs: 10_000,
+        maxStdoutBytes: 4 * 1024,
+        maxStderrBytes: 16 * 1024,
+      },
+    );
+    return inspect.stdout.trim() === 'generated';
+  }
+
   async getBaselineTree(sessionId: string): Promise<string> {
     const containerName = this.getContainerName(sessionId);
     try {
+      const generated = await this.runProcess(
+        'docker',
+        [
+          'exec',
+          '-u',
+          '0:0',
+          containerName,
+          'sh',
+          '-c',
+          'if [ -f /run/hirearchy-evidence/generated-baseline ]; then cat /run/hirearchy-evidence/generated-baseline; else exit 1; fi',
+        ],
+        {
+          timeoutMs: 10_000,
+          maxStdoutBytes: 4 * 1024,
+          maxStderrBytes: 16 * 1024,
+        },
+      ).catch(() => null);
+      if (generated) {
+        const raw = generated.stdout.trim();
+        if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(raw)) {
+          throw new SandboxError(
+            'SANDBOX_EXECUTION_FAILED',
+            'Persisted generated baseline format is invalid or corrupt.',
+          );
+        }
+        return raw;
+      }
+
+      const isGenerated = await this.isGeneratedWorkspaceContainer(sessionId);
+      if (isGenerated) {
+        throw new SandboxError(
+          'SANDBOX_EXECUTION_FAILED',
+          'Generated starter baseline is unavailable and cannot fall back to static template baseline.',
+        );
+      }
+
       const res = await this.runProcess(
         'docker',
         [
@@ -1156,6 +1374,7 @@ export class DockerSandboxAdapter implements SandboxAdapter {
   async captureFrozenEvidence(
     sessionId: string,
     baselineTree?: string,
+    generatedStarterFiles?: Readonly<Record<string, string>>,
   ): Promise<{ currentTree: string; rawDiff: string }> {
     const containerName = this.getContainerName(sessionId);
     const helperName = `${containerName}-frozen-capture`;
@@ -1204,50 +1423,78 @@ export class DockerSandboxAdapter implements SandboxAdapter {
         maxStdoutBytes: 4 * 1024,
         maxStderrBytes: 64 * 1024,
       }).catch(() => {});
-      const captureResult = await this.runProcess(
-        'docker',
-        [
-          'run',
-          '--rm',
-          '--name',
-          helperName,
-          '--network',
-          'none',
-          '--read-only',
-          '--mount',
-          `type=volume,source=${volumeName},target=/workspace,readonly`,
-          '--tmpfs',
-          '/tmp:rw,exec,nosuid,size=64m',
-          '--tmpfs',
-          '/run/hirearchy-evidence:rw,noexec,nosuid,size=64m,mode=0700,uid=0,gid=0',
-          '--memory=512m',
-          '--cpus=1.0',
-          '--pids-limit=64',
-          '--cap-drop=ALL',
-          '--security-opt=no-new-privileges:true',
-          '-u',
-          '0:0',
-          imageName,
-          'sh',
-          '-c',
-          [
-            'set -e',
-            'BASELINE="$1"',
-            '[ -n "$BASELINE" ] || BASELINE="$(/usr/local/bin/hirearchy-baseline-tree.sh)"',
-            'TREE="$(/usr/local/bin/hirearchy-capture-tree.sh)"',
-            'printf \'%s\\n\' "$TREE"',
-            "printf '%s\\n' '---HIREARCHY_FROZEN_BOUNDARY---'",
-            '/usr/local/bin/hirearchy-diff-trees.sh "$BASELINE" "$TREE"',
-          ].join('\n'),
-          '_',
-          baselineTree ?? '',
-        ],
-        {
-          timeoutMs: 90_000,
-          maxStdoutBytes: 3 * 1024 * 1024,
-          maxStderrBytes: 64 * 1024,
-        },
-      );
+      const helperScript = [
+        'set -e',
+        'BASELINE="$1"',
+        'if [ "$2" = generated ]; then',
+        '  mkdir -p /tmp/generated-baseline',
+        '  python3 -c \'import json,pathlib,sys; data=json.load(sys.stdin); root=pathlib.Path("/tmp/generated-baseline"); assert all(p and not pathlib.PurePosixPath(p).is_absolute() and ".." not in pathlib.PurePosixPath(p).parts and isinstance(c,str) for p,c in data.items()); [(root.joinpath(*pathlib.PurePosixPath(p).parts).parent.mkdir(parents=True, exist_ok=True), root.joinpath(*pathlib.PurePosixPath(p).parts).write_text(c, encoding="utf-8")) for p,c in data.items()]\'',
+        '  EVIDENCE_DIR="/run/hirearchy-evidence"',
+        '  export GIT_DIR="/opt/hirearchy/repo-template/.git" GIT_WORK_TREE="/tmp/generated-baseline" GIT_OBJECT_DIRECTORY="${EVIDENCE_DIR}/objects" GIT_ALTERNATE_OBJECT_DIRECTORIES="/opt/hirearchy/repo-template/.git/objects" GIT_INDEX_FILE="${EVIDENCE_DIR}/generated-baseline-index"',
+        '  mkdir -p "${EVIDENCE_DIR}/objects"',
+        '  git -c safe.directory="*" -C /tmp/generated-baseline add -f -A -- . ":(exclude,top).git" ":(exclude)**/__pycache__/**" ":(exclude)__pycache__/**" ":(exclude)**/*.pyc" ":(exclude)*.pyc" ":(exclude)**/.pytest_cache/**" ":(exclude).pytest_cache/**" ":(exclude)**/*.log" ":(exclude)*.log"',
+        '  TREE_BASELINE="$(git -c safe.directory="*" -C /tmp/generated-baseline write-tree)"',
+        '  TEMPLATE_BASELINE="$(/usr/local/bin/hirearchy-baseline-tree.sh 2>/dev/null || true)"',
+        '  if [ -n "$BASELINE" ] && [ "$BASELINE" != "$TEMPLATE_BASELINE" ]; then',
+        '    [ "$TREE_BASELINE" = "$BASELINE" ] || { echo generated-baseline-mismatch >&2; exit 1; }',
+        '  else',
+        '    BASELINE="$TREE_BASELINE"',
+        '  fi',
+        '  unset GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_WORK_TREE GIT_DIR',
+        'else',
+        '  [ -n "$BASELINE" ] || BASELINE="$(/usr/local/bin/hirearchy-baseline-tree.sh)"',
+        'fi',
+        'TREE="$(/usr/local/bin/hirearchy-capture-tree.sh)"',
+        'printf \'%s\\n\' "$TREE"',
+        "printf '%s\\n' '---HIREARCHY_FROZEN_BOUNDARY---'",
+        '/usr/local/bin/hirearchy-diff-trees.sh "$BASELINE" "$TREE"',
+      ].join('\n');
+      const captureArgs = [
+        'run',
+        ...(generatedStarterFiles ? ['-i'] : []),
+        '--rm',
+        '--name',
+        helperName,
+        '--network',
+        'none',
+        '--read-only',
+        '--mount',
+        `type=volume,source=${volumeName},target=/workspace,readonly`,
+        '--tmpfs',
+        '/tmp:rw,exec,nosuid,size=64m',
+        '--tmpfs',
+        '/run/hirearchy-evidence:rw,noexec,nosuid,size=64m,mode=0700,uid=0,gid=0',
+        '--memory=512m',
+        '--cpus=1.0',
+        '--pids-limit=64',
+        '--cap-drop=ALL',
+        '--security-opt=no-new-privileges:true',
+        '-u',
+        '0:0',
+        imageName,
+        'sh',
+        '-c',
+        helperScript,
+        '_',
+        baselineTree ?? '',
+        generatedStarterFiles ? 'generated' : 'template',
+      ];
+      const captureResult = generatedStarterFiles
+        ? await this.runProcessWithInput(
+            'docker',
+            captureArgs,
+            JSON.stringify(generatedStarterFiles),
+            {
+              timeoutMs: 90_000,
+              maxStdoutBytes: 3 * 1024 * 1024,
+              maxStderrBytes: 64 * 1024,
+            },
+          )
+        : await this.runProcess('docker', captureArgs, {
+            timeoutMs: 90_000,
+            maxStdoutBytes: 3 * 1024 * 1024,
+            maxStderrBytes: 64 * 1024,
+          });
 
       const boundary = '---HIREARCHY_FROZEN_BOUNDARY---';
       const boundaryIndex = captureResult.stdout.indexOf(boundary);
@@ -1307,6 +1554,19 @@ export class DockerSandboxAdapter implements SandboxAdapter {
     // SQLite finalization (or create-time orphan cleanup).
     try {
       await this.runProcess('docker', ['volume', 'rm', volumeName], {
+        timeoutMs: 15_000,
+        maxStdoutBytes: 4 * 1024,
+        maxStderrBytes: 64 * 1024,
+      });
+    } catch (error) {
+      if (!isMissingDockerVolumeError(error)) {
+        throw error;
+      }
+    }
+
+    const evidenceVolumeName = this.getEvidenceVolumeName(sessionId);
+    try {
+      await this.runProcess('docker', ['volume', 'rm', evidenceVolumeName], {
         timeoutMs: 15_000,
         maxStdoutBytes: 4 * 1024,
         maxStderrBytes: 64 * 1024,

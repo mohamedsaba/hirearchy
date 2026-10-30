@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import type { ReactNode } from 'react';
 import './styles.css';
+import './software-ui.css';
 import './workspace.css';
 import './home.css';
 import { IntentPrefetch } from './home/intent-prefetch';

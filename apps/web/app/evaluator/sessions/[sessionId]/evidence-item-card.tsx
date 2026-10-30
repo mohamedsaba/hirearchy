@@ -12,6 +12,7 @@ type EvidenceItemCardProps = Readonly<{
   showTokenTelemetry?: boolean;
   showTechnicalDetails?: boolean;
   defaultExpanded?: boolean;
+  sourceInspector?: boolean;
 }>;
 
 const EvidenceTime = ({
@@ -31,6 +32,7 @@ export const EvidenceItemCard = ({
   showTokenTelemetry = false,
   showTechnicalDetails = false,
   defaultExpanded = false,
+  sourceInspector = false,
 }: EvidenceItemCardProps) => {
   const [isExcerptExpanded, setIsExcerptExpanded] = useState(defaultExpanded);
   if (item.kind === 'SESSION_ACTIVATED' || item.kind === 'SESSION_SUBMITTED') {
@@ -61,21 +63,25 @@ export const EvidenceItemCard = ({
         : `Exit status ${item.exitCode}`;
     return (
       <article className="activity-card command-activity-card">
-        <header className="activity-card-header">
-          <div>
-            <p className="activity-label">Terminal activity</p>
-            <code className="activity-command">$ {item.command}</code>
-          </div>
-          <EvidenceTime
-            elapsedLabel={elapsedLabel}
-            timestamp={item.finishedAt}
-          />
-        </header>
-        <div className="activity-result" aria-label={`Command ${result}`}>
-          <span>{result}</span>
-          <span>{item.durationMs} ms</span>
-          <span>{item.cwd}</span>
-        </div>
+        {!sourceInspector ? (
+          <>
+            <header className="activity-card-header">
+              <div>
+                <p className="activity-label">Terminal activity</p>
+                <code className="activity-command">$ {item.command}</code>
+              </div>
+              <EvidenceTime
+                elapsedLabel={elapsedLabel}
+                timestamp={item.finishedAt}
+              />
+            </header>
+            <div className="activity-result" aria-label={`Command ${result}`}>
+              <span>{result}</span>
+              <span>{item.durationMs} ms</span>
+              <span>{item.cwd}</span>
+            </div>
+          </>
+        ) : null}
         {output.stdoutTruncated ? (
           <p className="activity-limitation">
             Standard output is a captured preview. Additional output was
@@ -90,13 +96,17 @@ export const EvidenceItemCard = ({
         {!compact && item.stdoutPreview ? (
           <div className="activity-output">
             <p>Standard output</p>
-            <pre>{item.stdoutPreview}</pre>
+            <pre tabIndex={0} aria-label="Recorded standard output">
+              {item.stdoutPreview}
+            </pre>
           </div>
         ) : null}
         {!compact && item.stderrPreview ? (
           <div className="activity-output">
             <p>Standard error</p>
-            <pre>{item.stderrPreview}</pre>
+            <pre tabIndex={0} aria-label="Recorded standard error">
+              {item.stderrPreview}
+            </pre>
           </div>
         ) : null}
       </article>
@@ -141,7 +151,13 @@ export const EvidenceItemCard = ({
                 </p>
               ) : null}
               {!compact && file.patchPreview ? (
-                <pre className="activity-patch">{file.patchPreview}</pre>
+                <pre
+                  className="activity-patch"
+                  tabIndex={0}
+                  aria-label={`Recorded patch for ${file.path}`}
+                >
+                  {file.patchPreview}
+                </pre>
               ) : null}
             </section>
           ))}
@@ -227,7 +243,13 @@ export const EvidenceItemCard = ({
             className="activity-section-block"
           >
             <p className="activity-sublabel">Recorded prompt input</p>
-            <pre className="activity-excerpt">{item.candidateInputExcerpt}</pre>
+            <pre
+              className="activity-excerpt"
+              tabIndex={0}
+              aria-label="Recorded AI prompt excerpt"
+            >
+              {item.candidateInputExcerpt}
+            </pre>
             {isTruncated ? (
               <p className="activity-limitation">
                 Displayed prompt excerpt is partial (
@@ -304,7 +326,13 @@ export const EvidenceItemCard = ({
             className="activity-section-block"
           >
             <p className="activity-sublabel">Recorded provider response</p>
-            <pre className="activity-excerpt">{item.responseExcerpt}</pre>
+            <pre
+              className="activity-excerpt"
+              tabIndex={0}
+              aria-label="Recorded AI response excerpt"
+            >
+              {item.responseExcerpt}
+            </pre>
             {isTruncated ? (
               <p className="activity-limitation">
                 Displayed response excerpt is partial (
@@ -415,7 +443,11 @@ export const EvidenceItemCard = ({
         {item.errorMessageExcerpt ? (
           <div className="activity-section-block">
             <p className="activity-sublabel">Recorded error detail</p>
-            <pre className="activity-excerpt error-excerpt">
+            <pre
+              className="activity-excerpt error-excerpt"
+              tabIndex={0}
+              aria-label="Recorded AI error detail"
+            >
               {item.errorMessageExcerpt}
             </pre>
           </div>

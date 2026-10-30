@@ -7,6 +7,8 @@ import {
 } from '../../src/access/evaluator-access';
 import { EvaluatorAccessForm } from './evaluator-access-form';
 import { EvaluatorReviewQueue } from './evaluator-review-queue';
+import { SoftwareProductHeader } from './software-product-header';
+import './evaluator-product.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,45 +19,80 @@ const EvaluatorAccessPage = async () => {
   );
 
   return (
-    <main className="access-shell">
-      <section
-        className="access-card evaluator-entry-card"
-        aria-labelledby="access-title"
-      >
-        <p className="eyebrow">Evaluator access</p>
-        <h1 id="access-title">Review submitted assessments.</h1>
+    <main className="software-product evaluator-product-shell">
+      <SoftwareProductHeader active="reviews" />
+      <div className="evaluator-product-content">
         {authenticated ? (
           <>
-            <section aria-labelledby="review-queue-title">
-              <h2 id="review-queue-title">Available for review</h2>
-              <EvaluatorReviewQueue />
+            <section
+              className="evaluator-page-intro"
+              aria-labelledby="review-title"
+            >
+              <div>
+                <p className="software-eyebrow">Evaluator workspace</p>
+                <h1 id="review-title">Reviews</h1>
+                <p>
+                  Open submitted work, inspect its sources, and record your
+                  decision.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <Link
+                  className="software-button software-button-secondary"
+                  href="/evaluator/assessments"
+                >
+                  All assessments
+                </Link>
+                <Link
+                  className="software-button software-button-primary"
+                  href="/evaluator/assessments/new"
+                >
+                  Create assessment
+                </Link>
+              </div>
             </section>
             <section
-              className="evaluator-known-session"
-              aria-labelledby="known-session-title"
+              className="evaluator-queue-panel"
+              aria-labelledby="queue-title"
             >
-              <h2 id="known-session-title">Open a known session</h2>
-              <p className="brief-copy">
-                Direct evaluator links remain available when you have a session
-                reference.
-              </p>
-              <EvaluatorAccessForm authenticated />
+              <div className="evaluator-section-heading">
+                <div>
+                  <h2 id="queue-title">Submitted assessments</h2>
+                  <p>
+                    Each report is based on the evidence recorded for that
+                    session.
+                  </p>
+                </div>
+              </div>
+              <EvaluatorReviewQueue />
             </section>
+            <details className="evaluator-known-session">
+              <summary>Open a known session reference</summary>
+              <p>Use this when you have a direct session reference.</p>
+              <EvaluatorAccessForm authenticated />
+            </details>
           </>
         ) : (
-          <>
-            <p className="brief-copy">
-              Enter the separate local evaluator credential to review submitted
-              assessments. A known session reference remains available as a
-              direct path.
-            </p>
-            <EvaluatorAccessForm />
-          </>
+          <section
+            className="evaluator-signin-panel"
+            aria-labelledby="access-title"
+          >
+            <div className="evaluator-signin-copy">
+              <p className="software-eyebrow">Evaluator access</p>
+              <h1 id="access-title">Review submitted work.</h1>
+              <p>
+                Sign in to open assessment reports and record your human review.
+              </p>
+              <p className="evaluator-signin-note">
+                Assessment evidence informs the decision. You own the decision.
+              </p>
+            </div>
+            <div className="evaluator-signin-form">
+              <EvaluatorAccessForm />
+            </div>
+          </section>
         )}
-        <Link className="text-link" href="/">
-          Return to session issuance
-        </Link>
-      </section>
+      </div>
     </main>
   );
 };

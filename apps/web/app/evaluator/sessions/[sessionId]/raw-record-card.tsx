@@ -20,7 +20,13 @@ export const RawRecordCard = ({
     <article className="raw-record-card">
       <p className="activity-label">Recorded platform data</p>
       {records.map((record) => (
-        <pre key={record.id}>{JSON.stringify(record, null, 2)}</pre>
+        <pre
+          key={record.id}
+          tabIndex={0}
+          aria-label={`Recorded platform data for event ${record.id}`}
+        >
+          {JSON.stringify(record, null, 2)}
+        </pre>
       ))}
     </article>
   );

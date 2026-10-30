@@ -12,7 +12,7 @@ import { DeterministicEvidenceReconstructionGenerator } from '../../apps/web/src
 import { buildReconstructionView } from '../../apps/web/src/reconstruction/evidence-reconstruction-runtime';
 import { buildEvaluatorBriefing } from '../../apps/web/src/evaluator/build-evaluator-briefing';
 import { projectBriefing } from '../../apps/web/src/evaluator/project-evaluator-briefing';
-import { createEvaluatorCookieValue } from '../../apps/web/src/access/evaluator-access';
+import { createSignedEvaluatorToken } from '../../apps/web/src/access/evaluator-access';
 import { scenario001 } from '../../apps/web/src/scenarios/scenario-001';
 import { scenario001SemanticSnapshot } from '../../apps/web/src/scenarios/scenario-semantic-snapshot';
 import { GET } from '../../apps/web/app/api/evaluator/sessions/[sessionId]/briefing/route';
@@ -195,9 +195,9 @@ describe('authorized briefing read and preserved reconstruction', () => {
           { params: Promise.resolve({ sessionId: evidence.sessionId }) },
         );
       expect((await request()).status).toBe(401);
-      state.cookie = createEvaluatorCookieValue('different-key');
+      state.cookie = createSignedEvaluatorToken('different-key');
       expect((await request()).status).toBe(401);
-      state.cookie = createEvaluatorCookieValue('briefing-key');
+      state.cookie = createSignedEvaluatorToken('briefing-key');
       const base = await request();
       expect(base.status).toBe(200);
       expect(base.headers.get('cache-control')).toBe('private, no-store');

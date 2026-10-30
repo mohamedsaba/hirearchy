@@ -27,6 +27,7 @@ import { SessionError } from '../../apps/web/src/sessions/session';
 import { SessionService } from '../../apps/web/src/sessions/session-service';
 import { deriveSessionDeadline } from '../../apps/web/src/sessions/session-timing';
 import { SqliteSessionStore } from '../../apps/web/src/sessions/sqlite-session-store';
+import { migrateLegacyCandidateTokens } from '../../apps/web/src/sessions/candidate-token-storage.mjs';
 import { POST as submitRoutePost } from '../../apps/web/app/api/candidate/sessions/[token]/submit/route';
 
 const hashCandidateToken = (candidateToken: string) =>
@@ -92,6 +93,12 @@ const createLegacySessionDatabase = (databasePath: string) => {
     );
 
   database.close();
+  const adoption = new Database(databasePath);
+  try {
+    migrateLegacyCandidateTokens(adoption, { adoptExisting: true });
+  } finally {
+    adoption.close();
+  }
 };
 
 describe('T1A.2 — Request-Bound Deadline Cutoff', () => {

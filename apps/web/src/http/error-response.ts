@@ -2,18 +2,23 @@ import { EvaluatorAccessError } from '../access/evaluator-evidence';
 import { AiInteractionError } from '../ai/ai-interaction';
 import { EvidenceReconstructionError } from '../reconstruction/evidence-reconstruction';
 import { SandboxError } from '../sandbox/sandbox';
+import { GeneratedRubricUnavailableError } from '../assessments/task-rubric';
 import { SessionError } from '../sessions/session';
+import { CandidateTokenStorageError } from '../sessions/candidate-token-storage.mjs';
+import { ApplicationStartupNotReadyError } from '../startup-status';
 
 const sessionStatus: Record<SessionError['code'], number> = {
   SESSION_NOT_FOUND: 404,
   SESSION_NOT_ACTIVE: 409,
   SESSION_FINALIZATION_STARTED: 409,
   SESSION_DEADLINE_EXCEEDED: 409,
+  TERMINAL_NOT_ENABLED: 409,
   EVIDENCE_NOT_READY: 409,
   CONTENT_TOO_LARGE: 413,
   COMMAND_TOO_LARGE: 413,
   PLATFORM_CAPTURE_FAILED: 500,
   INVALID_SCENARIO_DURATION: 400,
+  SCENARIO_UNAVAILABLE: 503,
 };
 
 const aiInteractionStatus: Record<AiInteractionError['code'], number> = {
@@ -29,6 +34,9 @@ const aiInteractionStatus: Record<AiInteractionError['code'], number> = {
   AMBIGUOUS_DISPATCH: 409,
   PROVIDER_NOT_CONFIGURED: 500,
   PLATFORM_PERSISTENCE_FAILED: 500,
+  AI_CONCURRENT_REQUEST_LIMIT: 429,
+  AI_INTERACTION_LIMIT_EXCEEDED: 429,
+  AI_RATE_LIMIT_EXCEEDED: 429,
 };
 
 const safeSandboxMessages: Record<SandboxError['code'], string> = {
@@ -46,6 +54,44 @@ const hasInfrastructureDiagnostics = (message: string): boolean => {
 };
 
 export const errorResponse = (error: unknown) => {
+  if (error instanceof ApplicationStartupNotReadyError) {
+    return Response.json(
+      {
+        error: {
+          code: 'APPLICATION_NOT_READY',
+          message: 'The application is temporarily unavailable.',
+        },
+      },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  if (error instanceof CandidateTokenStorageError) {
+    return Response.json(
+      {
+        error: {
+          code: 'CANDIDATE_TOKEN_STORAGE_UNAVAILABLE',
+          message:
+            'The request is unavailable until candidate-link storage is verified.',
+        },
+      },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  if (error instanceof GeneratedRubricUnavailableError) {
+    return Response.json(
+      {
+        error: {
+          code: error.code,
+          message:
+            'This generated assessment needs a complete validated rubric. Regenerate the assessment draft.',
+        },
+      },
+      { status: 422 },
+    );
+  }
+
   if (error instanceof SessionError) {
     const message =
       error.code === 'PLATFORM_CAPTURE_FAILED' &&
@@ -66,7 +112,7 @@ export const errorResponse = (error: unknown) => {
   }
 
   if (error instanceof SandboxError) {
-    console.error('Sandbox infrastructure failure', error);
+    console.error('Sandbox infrastructure failure [SANDBOX_INFRASTRUCTURE]');
     const message = hasInfrastructureDiagnostics(error.message)
       ? safeSandboxMessages[error.code]
       : error.message;
@@ -97,7 +143,7 @@ export const errorResponse = (error: unknown) => {
     );
   }
 
-  console.error('Unexpected request failure', error);
+  console.error('Unexpected request failure [INTERNAL_ERROR]');
   return Response.json(
     {
       error: {

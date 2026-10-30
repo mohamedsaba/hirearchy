@@ -1,5 +1,4 @@
-import path from 'node:path';
-
+import { getApplicationDatabasePath } from '../database/database-path';
 import { isEvaluatorCookieValid } from '../access/evaluator-access';
 import { EvaluatorAccessError } from '../access/evaluator-evidence';
 import { getSessionService } from '../sessions/session-service';
@@ -10,11 +9,8 @@ import {
 import { EvidenceReconstructionService } from './evidence-reconstruction-service';
 import { SqliteEvidenceReconstructionStore } from './sqlite-evidence-reconstruction-store';
 
-const databasePath = () =>
-  process.env.HIREARCHY_DB_PATH ??
-  path.join(process.cwd(), '.data/hirearchy.sqlite');
-
-const createStore = () => new SqliteEvidenceReconstructionStore(databasePath());
+const createStore = () =>
+  new SqliteEvidenceReconstructionStore(getApplicationDatabasePath());
 
 export const buildReconstructionView = (
   store: SqliteEvidenceReconstructionStore,

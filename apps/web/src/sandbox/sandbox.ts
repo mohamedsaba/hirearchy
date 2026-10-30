@@ -47,6 +47,7 @@ export type SandboxCreateOptions = Readonly<{
   imageName?: string;
   initialFiles?: Readonly<Record<string, string>>;
   scenarioType?: 'single_file' | 'multi_file';
+  generatedWorkspace?: boolean;
 }>;
 
 import type { WorkspaceFileChange } from '../events/session-event';
@@ -120,5 +121,6 @@ export interface SandboxAdapter {
   captureFrozenEvidence(
     sessionId: string,
     baselineTree?: string,
+    generatedStarterFiles?: Readonly<Record<string, string>>,
   ): Promise<{ currentTree: string; rawDiff: string }>;
 }

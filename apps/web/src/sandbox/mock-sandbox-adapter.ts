@@ -388,6 +388,9 @@ export class MockSandboxAdapter implements SandboxAdapter {
   }
 
   async freeze(sessionId: string): Promise<void> {
+    if (this.frozenSessions.has(sessionId)) {
+      return;
+    }
     if (this.failFreeze) {
       throw new SandboxError(
         'SANDBOX_FREEZE_FAILED',
@@ -407,6 +410,7 @@ export class MockSandboxAdapter implements SandboxAdapter {
   async captureFrozenEvidence(
     sessionId: string,
     baselineTree?: string,
+    generatedStarterFiles?: Readonly<Record<string, string>>,
   ): Promise<{ currentTree: string; rawDiff: string }> {
     if (this.failCaptureFrozenEvidence) {
       throw new SandboxError(
@@ -430,10 +434,17 @@ export class MockSandboxAdapter implements SandboxAdapter {
     const currentTree = this.computeTreeHash(sandbox.files);
     this.treeSnapshots.set(currentTree, new Map(sandbox.files));
 
+    let effectiveBaseline = baselineTree;
+    if (!effectiveBaseline && generatedStarterFiles) {
+      const genFiles = new Map(Object.entries(generatedStarterFiles));
+      effectiveBaseline = this.computeTreeHash(genFiles);
+      this.treeSnapshots.set(effectiveBaseline, genFiles);
+    }
+
     // Build raw diff in the same format as the Docker implementation
     const diffResult = await this.captureTreeDiff(
       sessionId,
-      baselineTree ?? sandbox.baselineTree,
+      effectiveBaseline ?? sandbox.baselineTree,
       currentTree,
     );
     return { currentTree, rawDiff: diffResult.rawDiff };

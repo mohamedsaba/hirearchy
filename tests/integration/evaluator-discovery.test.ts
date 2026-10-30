@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createEvaluatorCookieValue } from '../../apps/web/src/access/evaluator-access';
+import { createSignedEvaluatorToken } from '../../apps/web/src/access/evaluator-access';
 import { GET as discoveryGet } from '../../apps/web/app/api/evaluator/sessions/route';
 import { GET as sessionGet } from '../../apps/web/app/api/evaluator/sessions/[sessionId]/route';
 import { GET as reconstructionGet } from '../../apps/web/app/api/evaluator/sessions/[sessionId]/reconstruction/route';
@@ -82,7 +82,7 @@ describe('evaluator review discovery', () => {
     service.createSession();
     vi.stubEnv('HIREARCHY_DB_PATH', databasePath);
     vi.stubEnv('HIREARCHY_EVALUATOR_KEY', 'review-key');
-    state.cookie = createEvaluatorCookieValue('review-key');
+    state.cookie = createSignedEvaluatorToken('review-key');
 
     const response = await discoveryGet();
     const body = await response.json();
@@ -102,6 +102,7 @@ describe('evaluator review discovery', () => {
             'submittedAt',
             'durationSeconds',
             'closureReason',
+            'reviewProcessStatus',
           ].includes(key),
         ),
       ),
@@ -140,7 +141,7 @@ describe('evaluator review discovery', () => {
       ).status,
     ).toBe(401);
 
-    state.cookie = createEvaluatorCookieValue('review-key');
+    state.cookie = createSignedEvaluatorToken('review-key');
     const response = await sessionGet(
       new Request(`http://localhost/api/evaluator/sessions/${sessionId}`),
       { params: Promise.resolve({ sessionId }) },

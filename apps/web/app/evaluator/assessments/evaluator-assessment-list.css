@@ -1,0 +1,747 @@
+.evaluator-assessments-intro .evaluator-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.evaluator-assessments-intro .evaluator-page-actions .software-button-secondary,
+.evaluator-lifecycle-panel .software-button-secondary {
+  border-color: var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-ink);
+}
+
+.evaluator-assessments-intro
+  .evaluator-page-actions
+  .software-button-secondary:hover,
+.evaluator-lifecycle-panel .software-button-secondary:hover {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-note);
+}
+
+.lifecycle-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.evaluator-lifecycle-panel {
+  margin-top: 30px;
+  padding: 24px 26px 28px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
+}
+
+.lifecycle-results-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.lifecycle-results-summary p {
+  margin: 0;
+  color: var(--software-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lifecycle-refresh-button {
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-plum);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.lifecycle-refresh-button:hover:not([aria-disabled='true']) {
+  border-color: var(--software-plum);
+  background: var(--software-surface-note);
+}
+
+.lifecycle-refresh-button[aria-disabled='true'] {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.lifecycle-refresh-button:focus-visible {
+  outline: 3px solid var(--software-mint);
+  outline-offset: 2px;
+}
+
+.lifecycle-loading-placeholder {
+  min-height: 24px;
+}
+
+.evaluator-lifecycle-controls {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.6fr) minmax(180px, 0.9fr) minmax(
+      190px,
+      1fr
+    );
+  align-items: end;
+  gap: 14px;
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--software-border-subtle);
+}
+
+.evaluator-lifecycle-search,
+.evaluator-lifecycle-select {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--software-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.evaluator-lifecycle-search input,
+.evaluator-lifecycle-select select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-canvas);
+  color: var(--software-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.evaluator-lifecycle-select select {
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+.evaluator-lifecycle-search input::placeholder {
+  color: var(--software-muted);
+  opacity: 0.8;
+}
+
+.lifecycle-filter-hint {
+  grid-column: 1 / -1;
+  margin: -6px 0 0;
+  color: var(--software-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.evaluator-lifecycle-columns,
+.evaluator-lifecycle-item {
+  display: grid;
+  grid-template-columns:
+    minmax(190px, 1.6fr) minmax(145px, 1.15fr) minmax(92px, 0.7fr)
+    minmax(150px, 1.1fr) minmax(176px, 1.25fr);
+  gap: 14px;
+}
+
+.evaluator-lifecycle-columns {
+  padding: 15px 0 8px;
+  color: var(--software-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.evaluator-lifecycle-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evaluator-lifecycle-item {
+  position: relative;
+  align-items: center;
+  padding: 16px 0;
+  border-top: 1px solid var(--software-border-subtle);
+}
+
+.lifecycle-row-assessment,
+.lifecycle-row-state,
+.lifecycle-row-budget,
+.lifecycle-row-review,
+.lifecycle-row-actions {
+  min-width: 0;
+}
+
+.lifecycle-row-assessment h3 {
+  margin: 0;
+  color: var(--software-plum);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.lifecycle-row-assessment p {
+  margin: 5px 0 0;
+  color: var(--software-muted);
+  font-size: 11px;
+}
+
+.lifecycle-row-assessment code,
+.lifecycle-details-metadata code {
+  color: var(--software-muted);
+  font-family: var(--software-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.lifecycle-field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.lifecycle-status,
+.lifecycle-closure-status,
+.lifecycle-review-status {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--software-surface-note);
+  color: var(--software-plum);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.lifecycle-status-active {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
+}
+
+.lifecycle-closure-status {
+  margin-left: 4px;
+  border-color: var(--software-status-info-border);
+  background: var(--software-status-info-surface);
+  color: var(--software-status-info);
+}
+
+.lifecycle-current-timestamp {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  color: var(--software-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.lifecycle-current-timestamp > span:first-child {
+  font-weight: 650;
+}
+
+.lifecycle-row-budget strong {
+  color: var(--software-ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lifecycle-review-status {
+  border-radius: var(--software-radius-control);
+  background: var(--software-canvas);
+  color: var(--software-ink);
+}
+
+.lifecycle-row-review > .lifecycle-field-label {
+  margin-bottom: 5px;
+}
+
+.lifecycle-row-review > span:last-child {
+  color: var(--software-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.lifecycle-row-review > .lifecycle-review-status {
+  display: inline-flex;
+}
+
+.lifecycle-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.lifecycle-primary-action {
+  min-height: 38px;
+  flex: 1 1 auto;
+  padding: 0 11px;
+  font-size: 12px;
+  text-align: center;
+  white-space: normal;
+}
+
+.evaluator-lifecycle-details {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.evaluator-lifecycle-details summary {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-plum);
+  font-size: 12px;
+  font-weight: 650;
+  list-style: none;
+  cursor: pointer;
+}
+
+.evaluator-lifecycle-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.evaluator-lifecycle-details summary::after {
+  width: 7px;
+  height: 7px;
+  margin: -4px 0 0 9px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  content: '';
+  transform: rotate(45deg);
+}
+
+.evaluator-lifecycle-details[open] summary::after {
+  margin-top: 4px;
+  transform: rotate(225deg);
+}
+
+.evaluator-lifecycle-details summary:hover {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-note);
+}
+
+.lifecycle-details-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 14px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  box-shadow: 0 12px 32px rgb(41 30 54 / 15%);
+}
+
+.lifecycle-details-panel p {
+  margin: 0 0 10px;
+  color: var(--software-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lifecycle-details-metadata {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 10px;
+  padding: 10px 0;
+  border-block: 1px solid var(--software-border-subtle);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.lifecycle-details-metadata > div {
+  display: grid;
+  gap: 2px;
+}
+
+.lifecycle-details-metadata dt {
+  color: var(--software-muted);
+  font-weight: 650;
+}
+
+.lifecycle-details-metadata dd {
+  margin: 0;
+  color: var(--software-ink);
+  overflow-wrap: anywhere;
+}
+
+.lifecycle-details-panel p:last-child {
+  margin-bottom: 0;
+}
+
+.lifecycle-detail-link {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-plum);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.lifecycle-detail-link:hover {
+  border-color: var(--software-plum);
+  background: var(--software-surface-note);
+}
+
+.lifecycle-details-panel .lifecycle-copy-feedback {
+  margin: 8px 0 0;
+  color: var(--software-plum);
+  font-size: 11px;
+}
+
+.lifecycle-action-unavailable {
+  color: var(--software-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lifecycle-state-message {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 22px;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: var(--software-radius-control);
+  background: var(--software-canvas);
+  color: var(--software-muted);
+  font-size: 13px;
+}
+
+.lifecycle-state-message h3,
+.lifecycle-state-message p {
+  margin: 0;
+}
+
+.lifecycle-state-message h3 {
+  color: var(--software-plum);
+  font-size: 15px;
+}
+
+.lifecycle-state-message .software-button {
+  margin-top: 4px;
+}
+
+.lifecycle-state-error {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+}
+
+.lifecycle-state-error p[role='alert'] {
+  color: var(--software-status-danger);
+}
+
+@media (max-width: 64rem) {
+  .evaluator-assessments-intro {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .evaluator-lifecycle-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evaluator-lifecycle-search,
+  .lifecycle-filter-hint {
+    grid-column: 1 / -1;
+  }
+
+  .evaluator-lifecycle-columns {
+    display: none;
+  }
+
+  .lifecycle-field-label {
+    position: static;
+    width: auto;
+    height: auto;
+    display: block;
+    margin-bottom: 5px;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    color: var(--software-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  .evaluator-lifecycle-item {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      'assessment assessment assessment'
+      'state budget review'
+      'actions actions actions';
+    gap: 15px 18px;
+    padding: 16px;
+    border: 1px solid var(--software-border-subtle);
+    border-radius: var(--software-radius-control);
+    background: var(--software-surface);
+  }
+
+  .evaluator-lifecycle-list {
+    gap: 10px;
+  }
+
+  .lifecycle-row-assessment {
+    grid-area: assessment;
+  }
+
+  .lifecycle-row-state {
+    grid-area: state;
+  }
+
+  .lifecycle-row-budget {
+    grid-area: budget;
+  }
+
+  .lifecycle-row-review {
+    grid-area: review;
+  }
+
+  .lifecycle-row-actions {
+    grid-area: actions;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 40rem) {
+  .evaluator-assessments-content {
+    width: min(100% - 24px, 600px);
+    padding-top: 12px;
+    padding-bottom: 40px;
+  }
+
+  .evaluator-assessments-intro {
+    gap: 8px;
+  }
+
+  .evaluator-assessments-intro > div:first-child > .software-eyebrow {
+    display: none;
+  }
+
+  .evaluator-assessments-intro h1 {
+    font-size: 28px;
+    line-height: 1.05;
+  }
+
+  .evaluator-assessments-intro p:not(.software-eyebrow) {
+    margin-top: 5px;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .evaluator-assessments-intro .evaluator-page-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .evaluator-assessments-intro .evaluator-page-actions .software-button {
+    min-width: 0;
+    min-height: 44px;
+    flex: 1 1 0;
+    padding: 0 7px;
+    font-size: 12px;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .evaluator-lifecycle-panel {
+    margin-top: 12px;
+    padding: 12px;
+  }
+
+  .lifecycle-results-summary {
+    min-height: 44px;
+  }
+
+  .lifecycle-results-summary p {
+    font-size: 11px;
+  }
+
+  .lifecycle-refresh-button {
+    min-width: 76px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .evaluator-lifecycle-controls {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px 8px;
+    padding: 10px 0 9px;
+  }
+
+  .evaluator-lifecycle-search {
+    grid-column: 1 / -1;
+  }
+
+  .evaluator-lifecycle-select {
+    grid-column: 1 / -1;
+  }
+
+  .lifecycle-filter-hint {
+    grid-column: 1 / -1;
+    margin: -2px 0 0;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  .evaluator-lifecycle-search,
+  .evaluator-lifecycle-select {
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .evaluator-lifecycle-search input,
+  .evaluator-lifecycle-select select {
+    min-height: 44px;
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  .evaluator-lifecycle-select select {
+    padding-right: 23px;
+  }
+
+  .evaluator-lifecycle-item {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'assessment assessment'
+      'state state'
+      'budget review'
+      'actions actions';
+    gap: 10px 9px;
+    padding: 11px;
+  }
+
+  .lifecycle-row-assessment h3 {
+    font-size: 13px;
+  }
+
+  .lifecycle-row-assessment p {
+    margin-top: 3px;
+    font-size: 10px;
+  }
+
+  .lifecycle-field-label {
+    margin-bottom: 3px;
+    font-size: 9px;
+  }
+
+  .lifecycle-current-timestamp {
+    margin-top: 4px;
+    font-size: 9px;
+  }
+
+  .lifecycle-row-budget strong {
+    font-size: 13px;
+  }
+
+  .lifecycle-review-status,
+  .lifecycle-row-review > span:last-child {
+    font-size: 11px;
+  }
+
+  .lifecycle-row-actions {
+    position: relative;
+    align-items: stretch;
+    flex-direction: row;
+  }
+
+  .lifecycle-primary-action {
+    min-height: 44px;
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  .evaluator-lifecycle-details summary {
+    min-width: 82px;
+    min-height: 44px;
+    width: auto;
+    justify-content: center;
+  }
+
+  .evaluator-lifecycle-details {
+    position: static;
+  }
+
+  .lifecycle-details-panel {
+    top: calc(100% + 7px);
+    right: 0;
+    left: 0;
+    width: auto;
+    margin-top: 0;
+  }
+
+  .lifecycle-state-message {
+    padding: 17px;
+  }
+}
+
+.lifecycle-scope-banner {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: var(--software-radius-control);
+  background: var(--software-canvas);
+  color: var(--software-plum);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lifecycle-scope-banner p {
+  margin: 0;
+}
+
+.lifecycle-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--software-border-subtle);
+}
+
+.lifecycle-load-more-button {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+}

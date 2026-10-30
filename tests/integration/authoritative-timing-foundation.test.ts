@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { migrateLegacyCandidateTokens } from '../../apps/web/src/sessions/candidate-token-storage.mjs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -53,7 +54,7 @@ const createLegacySessionDatabase = (databasePath: string) => {
     )
     .run(
       'hist-submitted',
-      'hash-hist-submitted',
+      'a'.repeat(64),
       'slice-1-greeting-format',
       '1.0.0',
       'Title',
@@ -80,7 +81,7 @@ const createLegacySessionDatabase = (databasePath: string) => {
     )
     .run(
       'hist-active',
-      'hash-hist-active',
+      'b'.repeat(64),
       'slice-1-greeting-format',
       '1.0.0',
       'Title',
@@ -107,7 +108,7 @@ const createLegacySessionDatabase = (databasePath: string) => {
     )
     .run(
       'hist-created',
-      'hash-hist-created',
+      'c'.repeat(64),
       'slice-1-greeting-format',
       '1.0.0',
       'Title',
@@ -124,6 +125,12 @@ const createLegacySessionDatabase = (databasePath: string) => {
     );
 
   database.close();
+  const adoption = new Database(databasePath);
+  try {
+    migrateLegacyCandidateTokens(adoption, { adoptExisting: true });
+  } finally {
+    adoption.close();
+  }
 };
 
 describe('T1A.1 authoritative timing foundation', () => {

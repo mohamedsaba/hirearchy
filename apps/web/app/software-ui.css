@@ -1,0 +1,284 @@
+.software-product {
+  /* Common Thread foundation. Route styles may refine these values, but
+     shared selectors should not need to invent a second token vocabulary. */
+  --software-plum: #291e36;
+  --software-lilac: #ebe5f2;
+  --software-mint: #b0f0ce;
+  --software-ink: #251a35;
+  --software-muted: #625871;
+  --software-canvas: #faf8fc;
+  --software-surface: #fff;
+  --software-surface-subtle: var(--software-lilac);
+  --software-surface-note: #eee7f4;
+  --software-border: #ddd6e5;
+  --software-border-subtle: #eeeaf2;
+  --software-border-strong: #8b7c99;
+  --software-focus: #291e36;
+
+  --software-status-info: #334155;
+  --software-status-info-surface: #f8fafc;
+  --software-status-info-border: #cbd5e1;
+  --software-status-success: #166534;
+  --software-status-success-surface: #ecfdf3;
+  --software-status-success-border: #bbf7d0;
+  --software-status-warning: #74520a;
+  --software-status-warning-surface: #fff7df;
+  --software-status-warning-border: #e2c66f;
+  --software-status-danger: #b42318;
+  --software-status-danger-surface: #fef2f2;
+  --software-status-danger-border: #fecaca;
+
+  /* Legacy names used by route-local CSS. */
+  --software-danger: var(--software-status-danger);
+  --software-danger-surface: var(--software-status-danger-surface);
+  --software-success: var(--software-status-success);
+  --software-success-surface: var(--software-status-success-surface);
+  --software-warning: var(--software-status-warning);
+  --software-warning-surface: var(--software-status-warning-surface);
+
+  --software-sans: var(--font-dm-sans), sans-serif;
+  --software-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --software-space-page: var(--layout-gutter, 2rem);
+  --software-control-height: var(--control-height, 2.5rem);
+  --software-touch-target: var(--touch-target, 2.75rem);
+  --software-radius-control: var(--radius-control, 0.5rem);
+  --software-radius-surface: var(--radius-surface, 0.75rem);
+  --software-transition: var(--motion-standard, 180ms ease);
+
+  /* Compatibility aliases let the existing .button and status selectors
+     adopt the Software foundation without a broad workspace rewrite. */
+  --ink: var(--software-ink);
+  --ink-secondary: var(--software-ink);
+  --muted: var(--software-muted);
+  --surface: var(--software-surface);
+  --surface-subtle: var(--software-surface-subtle);
+  --surface-muted: var(--software-surface-note);
+  --line: var(--software-border);
+  --line-subtle: var(--software-border-subtle);
+  --line-strong: var(--software-border-strong);
+  --accent: var(--software-plum);
+  --accent-light: var(--software-lilac);
+  --accent-dark: var(--software-plum);
+  --focus-ring: var(--software-focus);
+  --status-success-bg: var(--software-status-success-surface);
+  --status-success-text: var(--software-status-success);
+  --status-success-border: var(--software-status-success-border);
+  --status-warning-bg: var(--software-status-warning-surface);
+  --status-warning-text: var(--software-status-warning);
+  --status-warning-border: var(--software-status-warning-border);
+  --status-danger-bg: var(--software-status-danger-surface);
+  --status-danger-text: var(--software-status-danger);
+  --status-danger-border: var(--software-status-danger-border);
+
+  color: var(--software-ink);
+  color-scheme: light;
+  font-family: var(--software-sans);
+  line-height: 1.5;
+}
+
+.software-product :where(h1, h2, h3) {
+  font-family: var(--software-sans);
+  color: var(--software-ink);
+}
+
+.software-product :where(h1) {
+  font-size: clamp(1.75rem, 3.2vw, 2rem);
+  line-height: 1.15;
+}
+
+.software-product :where(h2) {
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.software-product :where(h3) {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.software-product
+  :where(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--software-focus);
+  outline-offset: 2px;
+}
+
+.software-product :where(code, pre, kbd, samp) {
+  font-family: var(--software-mono);
+}
+
+/* Shared action states. Existing .button and .software-button classes keep
+   their route-specific color and layout rules through normal cascade order. */
+.software-product
+  :where(
+    .button,
+    .software-button,
+    .software-action,
+    .workspace-navigation-button
+  ) {
+  min-height: var(--software-control-height);
+  border-radius: var(--software-radius-control);
+  cursor: pointer;
+  transition:
+    background-color var(--software-transition),
+    border-color var(--software-transition),
+    color var(--software-transition),
+    box-shadow var(--software-transition);
+}
+
+.software-product
+  :where(.button-primary, .software-button-primary, .software-action-primary) {
+  border-color: var(--software-plum);
+  background: var(--software-plum);
+  color: var(--software-surface);
+}
+
+.software-product
+  :where(
+    .button-secondary,
+    .software-button-secondary,
+    .software-action-secondary
+  ) {
+  border: 1px solid var(--software-border-strong);
+  background: transparent;
+  color: var(--software-ink);
+}
+
+.software-product
+  :where(
+    .button-secondary,
+    .software-button-secondary,
+    .software-action-secondary
+  ):hover:not(:disabled) {
+  border-color: var(--software-plum);
+  background: var(--software-surface-note);
+}
+
+.software-product :where(button, .software-action):disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Native controls remain the source of truth for form semantics. */
+.software-product
+  :where(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: inherit;
+}
+
+.software-product
+  :where(
+    input:not([type='checkbox']):not([type='radio']),
+    textarea,
+    select
+  ):hover:not(:disabled) {
+  border-color: var(--software-border-strong);
+}
+
+.software-product
+  :where(
+    input:not([type='checkbox']):not([type='radio']),
+    textarea,
+    select
+  )[aria-invalid='true'] {
+  border-color: var(--software-status-danger);
+}
+
+.software-product :where(input, textarea, select):disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Reusable selected state for future shell controls; selection is context,
+   not a judgment about a candidate. */
+.software-product
+  :where(
+    .software-control,
+    .software-action,
+    .software-nav-item
+  )[aria-selected='true'],
+.software-product
+  :where(
+    .software-control,
+    .software-action,
+    .software-nav-item
+  )[data-selected='true'] {
+  border-color: var(--software-plum);
+  background: var(--software-mint);
+  color: var(--software-ink);
+}
+
+.software-product .software-surface,
+.software-product .software-panel {
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
+}
+
+.software-product .software-divider {
+  border: 0;
+  border-top: 1px solid var(--software-border);
+}
+
+.software-product .software-status {
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-status-info-surface);
+  color: var(--software-status-info);
+}
+
+.software-product .software-status-success {
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+
+.software-product .software-status-warning {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
+}
+
+.software-product .software-status-danger {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+@media (max-width: 48rem) {
+  .software-product {
+    --software-space-page: 1.5rem;
+    --software-touch-target: 2.75rem;
+    --software-header-height: 3.75rem;
+  }
+
+  .software-product
+    :where(
+      .button,
+      .software-button,
+      .software-action,
+      .workspace-navigation-button
+    ) {
+    min-height: var(--software-touch-target);
+  }
+}
+
+@media (max-width: 30rem) {
+  .software-product {
+    --software-space-page: 1rem;
+    --software-header-height: 3.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .software-product *,
+  .software-product *::before,
+  .software-product *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

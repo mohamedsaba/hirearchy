@@ -1,3 +1,5 @@
+import type { HirearchyContextMetadata } from '../ai/ai-interaction';
+
 export type SessionEventType =
   | 'COMMAND_STARTED'
   | 'COMMAND_FINISHED'
@@ -84,12 +86,7 @@ export type AiRequestStartedPayload = Readonly<{
     startLine?: number;
     endLine?: number;
   }>[];
-  hirearchyContext?: Readonly<{
-    scenarioId: string;
-    scenarioVersion: string;
-    configurationVersion: string;
-    injectedBriefingIncluded?: boolean;
-  }>;
+  hirearchyContext?: HirearchyContextMetadata;
 }>;
 
 export type AiResponseCompletedPayload = Readonly<{

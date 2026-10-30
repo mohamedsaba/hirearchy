@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { SessionError } from '../../../src/sessions/session';
 import { getSessionService } from '../../../src/sessions/session-service';
 import { toCandidateSessionView } from '../../../src/sessions/candidate-session-view';
+import { getCandidateCommandHistory } from '../../../src/server/candidate-command-history';
 import { CandidateWorkspace } from './candidate-workspace';
 
 export const dynamic = 'force-dynamic';
@@ -26,8 +27,15 @@ const CandidatePage = async ({ params }: CandidatePageProps) => {
     throw error;
   }
 
+  const initialCommands = getCandidateCommandHistory(
+    sessionService,
+    token,
+    session,
+  );
+
   return (
     <CandidateWorkspace
+      initialCommands={initialCommands}
       initialSession={toCandidateSessionView(session, sessionService.now())}
       token={token}
     />

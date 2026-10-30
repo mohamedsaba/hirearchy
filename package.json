@@ -7,21 +7,31 @@
   },
   "scripts": {
     "dev": "next dev apps/web",
+    "start": "next start apps/web",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "typecheck": "next typegen apps/web && tsc --project apps/web/tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:executor": "node scripts/test-restricted-executor.mjs && node scripts/test-restricted-executor-dispatch.mjs && node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs",
+    "test:postgres": "node scripts/test-postgres-foundation.mjs",
+    "test:supabase-auth": "node scripts/prove-supabase-auth.mjs",
+    "migrate:candidate-token-storage": "node scripts/migrate-candidate-token-storage.mjs",
     "build": "next build apps/web",
-    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:executor && npm run build"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-python": "^6.2.1",
+    "@tabler/icons-react": "^3.49.0",
+    "@uiw/react-codemirror": "^4.25.12",
     "better-sqlite3": "13.0.3",
     "diff": "9.0.0",
-    "next": "16.3.5",
+    "next": "16.4.3",
+    "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
@@ -29,10 +39,11 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.5",
-    "happy-dom": "^20.14.5",
+    "eslint-config-next": "16.4.3",
+    "happy-dom": "^21.0.4",
+    "playwright": "1.63.0",
     "prettier": "3.9.6",
     "typescript": "5.9.3",
-    "vitest": "5.0.0"
+    "vitest": "5.0.5"
   }
 }

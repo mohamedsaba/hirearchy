@@ -1,17 +1,21 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { RoleLensSwitcher } from '../../apps/web/app/evaluator/sessions/[sessionId]/role-lens-switcher';
 import { EvaluatorHeader } from '../../apps/web/app/evaluator/sessions/[sessionId]/evaluator-header';
 import { PlatformNotice } from '../../apps/web/app/evaluator/sessions/[sessionId]/platform-notice';
 import { TaskBrief } from '../../apps/web/app/evaluator/sessions/[sessionId]/task-brief';
 import { RecordedActivity } from '../../apps/web/app/evaluator/sessions/[sessionId]/recorded-activity';
 import { SubmittedWork } from '../../apps/web/app/evaluator/sessions/[sessionId]/submitted-work';
+import {
+  buildEvidenceSources,
+  EvidenceSourceInspector,
+} from '../../apps/web/app/evaluator/sessions/[sessionId]/evidence-workbench';
 import { ReviewGuidance } from '../../apps/web/app/evaluator/sessions/[sessionId]/review-guidance';
 import { ArtifactAvailabilityCard } from '../../apps/web/app/evaluator/sessions/[sessionId]/artifact-availability-card';
 import { EvaluatorExperience } from '../../apps/web/app/evaluator/sessions/[sessionId]/evaluator-experience';
 import { projectBriefing } from '../../apps/web/src/evaluator/project-evaluator-briefing';
 import type { EvaluatorBriefing } from '../../apps/web/src/evaluator/evaluator-briefing';
 import type { EvaluatorReviewPresentation } from '../../apps/web/src/evaluator/evaluator-review-presentation';
+import type { EvidenceCatalogEntry } from '../../apps/web/src/reconstruction/evidence-reference-catalog';
 
 const mockBriefing: EvaluatorBriefing = {
   schemaVersion: 1,
@@ -418,109 +422,8 @@ const mockReview: EvaluatorReviewPresentation = {
 };
 
 describe('Evaluator Experience V2 Component & Projection Suite', () => {
-  describe('RoleLensSwitcher', () => {
-    it('renders all 4 depth profiles as navigation links with session pathname and correct ?depth=', () => {
-      const html = renderToStaticMarkup(
-        <RoleLensSwitcher
-          activeRole="GENERALIST_RECRUITER"
-          sessionId="session-c-12345678"
-        />,
-      );
-
-      expect(html).toContain('aria-label="Evaluator perspective"');
-      expect(html).toContain('Generalist Recruiter');
-      expect(html).toContain('Technical Recruiter');
-      expect(html).toContain('Engineer');
-      expect(html).toContain('Engineering Manager');
-      // Navigation links for all 4 profiles
-      expect(html).toContain(
-        'href="/evaluator/sessions/session-c-12345678?depth=GENERALIST_RECRUITER"',
-      );
-      expect(html).toContain(
-        'href="/evaluator/sessions/session-c-12345678?depth=TECHNICAL_RECRUITER"',
-      );
-      expect(html).toContain(
-        'href="/evaluator/sessions/session-c-12345678?depth=ENGINEER"',
-      );
-      expect(html).toContain(
-        'href="/evaluator/sessions/session-c-12345678?depth=ENGINEERING_MANAGER"',
-      );
-      // Active role has aria-current="page"
-      expect(html).toContain('aria-current="page"');
-      expect(html).toContain('lens-tab-active');
-      // Inactive roles do NOT have aria-current
-      expect(html).not.toMatch(/href="[^"]*depth=ENGINEER"[^>]*aria-current/);
-      expect(html).not.toMatch(
-        /href="[^"]*depth=TECHNICAL_RECRUITER"[^>]*aria-current/,
-      );
-      expect(html).not.toMatch(
-        /href="[^"]*depth=ENGINEERING_MANAGER"[^>]*aria-current/,
-      );
-      // Copy requirement: "recorded tooling" rather than "verified tooling"
-      expect(html).toContain('recorded tooling');
-      expect(html).not.toContain('verified tooling');
-      // Strict removal of tab widget semantics
-      expect(html).not.toContain('role="tablist"');
-      expect(html).not.toContain('role="tab"');
-      expect(html).not.toContain('role="tabpanel"');
-      expect(html).not.toContain('aria-controls');
-      expect(html).not.toContain('aria-selected');
-      expect(html).not.toContain('tabindex');
-    });
-
-    it('renders native relative query links when sessionId is omitted', () => {
-      const html = renderToStaticMarkup(
-        <RoleLensSwitcher activeRole="ENGINEER" />,
-      );
-
-      expect(html).toContain('href="?depth=GENERALIST_RECRUITER"');
-      expect(html).toContain('href="?depth=TECHNICAL_RECRUITER"');
-      expect(html).toContain('href="?depth=ENGINEER"');
-      expect(html).toContain('href="?depth=ENGINEERING_MANAGER"');
-
-      // Engineer is active, others are not
-      expect(html).toMatch(
-        /href="\?depth=ENGINEER"[^>]*aria-current="page"|aria-current="page"[^>]*href="\?depth=ENGINEER"/,
-      );
-      expect(html).not.toMatch(
-        /href="\?depth=GENERALIST_RECRUITER"[^>]*aria-current/,
-      );
-    });
-
-    it('preserves unrelated query parameters and strips obsolete role param when switching profiles', () => {
-      const html = renderToStaticMarkup(
-        <RoleLensSwitcher
-          activeRole="TECHNICAL_RECRUITER"
-          sessionId="session-c-12345678"
-          searchParams={{
-            filter: 'failed',
-            view: 'compact',
-            role: 'ENGINEER',
-          }}
-        />,
-      );
-
-      // Preserves existing query params
-      expect(html).toContain('filter=failed');
-      expect(html).toContain('view=compact');
-      // Strips deprecated role param
-      expect(html).not.toContain('role=');
-      // Active role is Technical Recruiter with aria-current="page"
-      expect(html).toContain(
-        'href="/evaluator/sessions/session-c-12345678?filter=failed&amp;view=compact&amp;depth=TECHNICAL_RECRUITER"',
-      );
-      expect(html).toMatch(
-        /<a\s+(?:[^>]*?\s+)?aria-current="page"(?:[^>]*?\s+)?href="\/evaluator\/sessions\/session-c-12345678\?[^"]*depth=TECHNICAL_RECRUITER"/,
-      );
-      // Inactive role (Generalist) does not have aria-current
-      expect(html).toMatch(
-        /<a\s+(?!aria-current)[^>]*href="\/evaluator\/sessions\/session-c-12345678\?[^"]*depth=GENERALIST_RECRUITER"/,
-      );
-    });
-  });
-
   describe('EvaluatorHeader', () => {
-    it('renders Hirearchy Software branding, session reference, scenario title, and duration', () => {
+    it('renders the back link, session reference, scenario title, and duration without role controls', () => {
       const html = renderToStaticMarkup(
         <EvaluatorHeader
           sessionId="session-c-12345678"
@@ -528,12 +431,11 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
           sessionDuration={mockBriefing.sessionDuration}
           submittedAt="2026-09-16T17:12:34.000Z"
           closureReason="candidate_submission"
-          activeRole="GENERALIST_RECRUITER"
         />,
       );
 
-      expect(html).toContain('Hirearchy Software');
-      expect(html).toContain('Evaluator Briefing');
+      expect(html).toContain('Back to reviews');
+      expect(html).not.toContain('Evaluator perspective');
       expect(html).toContain('Cache Staleness Investigation');
       expect(html).toContain('12m 34s recorded');
       expect(html).toContain('Session session-…');
@@ -552,7 +454,6 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
           scenarioTitle="Cache Staleness Investigation"
           submittedAt="2026-09-16T17:12:34.000Z"
           closureReason="timeout"
-          activeRole="GENERALIST_RECRUITER"
         />,
       );
 
@@ -571,7 +472,7 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
         />,
       );
 
-      expect(html).toContain('What this scenario examines');
+      expect(html).toContain('What this task was about');
       expect(html).toContain(
         'Investigate and resolve stale inventory cache reads.',
       );
@@ -641,7 +542,7 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
         />,
       );
 
-      expect(html).toContain('Recorded activity');
+      expect(html).toContain('Session timeline');
       expect(html).toContain('What happened');
       expect(html).toContain('<ol');
       expect(html).toContain(
@@ -671,6 +572,7 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
       );
 
       expect(html).toContain('id="submitted-changes"');
+      expect(html).not.toContain('submitted-changes-embedded');
       expect(html).toContain('Submitted changes');
       expect(html).toContain('+5 lines');
       expect(html).toContain('−1 lines');
@@ -777,6 +679,7 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
       submittedAt: '2026-09-16T17:12:34.000Z',
       closureReason: 'candidate_submission' as const,
       diff: mockReview.submittedDiff,
+      events: [],
       scenario: {
         id: '001',
         title: 'Cache Staleness Investigation',
@@ -793,27 +696,104 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
       },
     };
 
-    it('Generalist Recruiter: grouped activity, no raw event IDs, no SHA hashes, progressive diff disclosure, and unmounted technical record', () => {
+    it('embeds the full submitted diff without redundant section chrome or false missing-state claims', () => {
+      const finalDiffEntry: EvidenceCatalogEntry = {
+        evidenceRef: 'session:session-c-12345678:final-diff',
+        sessionId: 'session-c-12345678',
+        role: 'final_state',
+        kind: 'final_diff',
+        chronologyOrder: null,
+        firstSequence: null,
+        lastSequence: null,
+        rawEventIds: [],
+        item: null,
+      };
+      const reviewWithFinalDiff = {
+        ...mockReview,
+        evidenceEntries: [...mockReview.evidenceEntries, finalDiffEntry],
+      };
+      const submittedSource = buildEvidenceSources(
+        reviewWithFinalDiff,
+        projectedEngineer,
+        [],
+      ).find((source) => source.entry?.kind === 'final_diff')!;
+      const embeddedHtml = renderToStaticMarkup(
+        <EvidenceSourceInspector
+          source={submittedSource}
+          evidence={evidence}
+          review={reviewWithFinalDiff}
+          projection={projectedEngineer}
+        />,
+      );
+
+      expect(embeddedHtml).toContain('submitted-changes-embedded');
+      expect(embeddedHtml).not.toContain('id="submitted-changes-title"');
+      expect(embeddedHtml).toContain('+5 lines');
+      expect(embeddedHtml).toContain('−1 lines');
+      expect(embeddedHtml).toContain('inventory/service.py');
+      expect(embeddedHtml).toContain(
+        'Server-derived changes against the immutable scenario baseline.',
+      );
+      expect(embeddedHtml).toContain(
+        '+    invalidate_cached_stock(product_id)',
+      );
+
+      const unsupportedProjection = {
+        ...projectedEngineer,
+        briefing: {
+          ...projectedEngineer.briefing,
+          submittedState: {
+            ...projectedEngineer.briefing.submittedState,
+            changedPaths: [],
+            fileCount: null,
+            additions: null,
+            deletions: null,
+            parsing: 'unsupported' as const,
+            text: 'The frozen submission diff is available; its file summary is unsupported.',
+          },
+        },
+      };
+      const unsupportedHtml = renderToStaticMarkup(
+        <EvidenceSourceInspector
+          source={submittedSource}
+          evidence={evidence}
+          review={reviewWithFinalDiff}
+          projection={unsupportedProjection}
+        />,
+      );
+
+      expect(unsupportedHtml).toContain('Submitted state available');
+      expect(unsupportedHtml).toContain(
+        'The frozen submission diff is available; its file summary is unsupported.',
+      );
+      expect(unsupportedHtml).toContain('File count unavailable');
+      expect(unsupportedHtml).not.toContain('0 files');
+      expect(unsupportedHtml).toContain(
+        '+    invalidate_cached_stock(product_id)',
+      );
+    });
+
+    it('generalist summary uses the three-mode navigation without exposing raw event IDs or hashes', () => {
       const html = renderToStaticMarkup(
         <EvaluatorExperience
           sessionId="session-c-12345678"
-          activeRole="GENERALIST_RECRUITER"
           projection={projectedGeneralist}
           review={mockReview}
           evidence={evidence}
         />,
       );
 
-      expect(html).toContain('Generalist Recruiter');
-      expect(html).toContain('What happened');
-      // No tab/tabpanel semantics in layout
-      expect(html).not.toContain('role="tabpanel"');
-      expect(html).not.toContain('role="tablist"');
-      expect(html).not.toContain('role="tab"');
-      expect(html).not.toContain('lens-panel');
-      expect(html).not.toContain('aria-controls="lens-panel');
+      expect(html).toContain('Verification progression');
+      expect(html).toContain('Evidence coverage');
+      expect(html).not.toContain('Evaluator perspective');
+      expect(html).toContain('role="tabpanel"');
+      expect(html).toContain('role="tablist"');
+      expect(html).toContain('role="tab"');
+      expect(html).toContain('workbench-mode-summary');
+      expect(html).toContain('workbench-mode-evidence');
+      expect(html).toContain('workbench-mode-review');
       // Progressive disclosure: diff behind toggle
-      expect(html).toContain('View submitted changes');
+      expect(html).toContain('Open submitted diff');
       // Technical record must NOT be mounted
       expect(html).not.toContain('Open technical chronology');
       expect(html).not.toContain('technical-record-prominent');
@@ -827,7 +807,7 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
       expect(html).not.toContain('Additional invariant checks passed');
     });
 
-    it('Engineer: evidence workspace keeps chronology primary and exposes inspection actions', () => {
+    it('Engineer: summary retains deep technical inspection behind a disclosure', () => {
       const html = renderToStaticMarkup(
         <EvaluatorExperience
           sessionId="session-c-12345678"
@@ -838,18 +818,10 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
         />,
       );
 
-      // No tab/tabpanel semantics
-      expect(html).not.toContain('role="tabpanel"');
-      expect(html).not.toContain('role="tablist"');
-      expect(html).not.toContain('role="tab"');
-      expect(html).not.toContain('lens-panel');
-      expect(html).not.toContain('aria-controls="lens-panel');
-      // Workspace owns Engineer-only inspection.
-      expect(html).not.toContain('View submitted changes');
-      expect(html).toContain('engineer-evidence-workspace');
-      expect(html).toContain('Final submitted state');
-      expect(html).toContain('Technical record');
-      expect(html).toContain('Recorded activity');
+      expect(html).toContain('role="tablist"');
+      expect(html).toContain('workbench-mode-evidence');
+      expect(html).toContain('Open submitted diff');
+      expect(html).not.toContain('engineer-evidence-workspace');
       expect(html).toContain('Evidence SHA-256');
     });
 
@@ -864,13 +836,11 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
         />,
       );
 
-      expect(html).toContain(
-        'The first recorded test run reported 3 failures.',
-      );
-      expect(html).not.toContain('Verification progression');
-      expect(html).toContain('View evidence');
+      expect(html).toContain('Verification progression');
+      expect(html).toContain('Evidence coverage');
+      expect(html).toContain('role="tablist"');
+      expect(html).not.toContain('View evidence');
       expect(html).not.toContain('Open technical chronology');
-      expect(html).not.toContain('role="tabpanel"');
     });
 
     it('Engineering Manager: review guidance and synthesis without capability scores', () => {
@@ -888,7 +858,7 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
       expect(html).not.toContain('Open technical chronology');
       expect(html).not.toContain('Candidate rank:');
       expect(html).not.toContain('Performance score:');
-      expect(html).not.toContain('role="tabpanel"');
+      expect(html).toContain('role="tabpanel"');
     });
   });
 });

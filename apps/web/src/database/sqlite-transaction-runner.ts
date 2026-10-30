@@ -1,8 +1,11 @@
 import Database from 'better-sqlite3';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-export type DatabaseInitializer = (database: Database.Database) => void;
+export type DatabaseInitializer = (
+  database: Database.Database,
+  allowNewDatabase: boolean,
+) => void;
 
 export class SqliteTransactionRunner {
   private readonly initializers: DatabaseInitializer[] = [];
@@ -14,19 +17,20 @@ export class SqliteTransactionRunner {
   }
 
   run<T>(operation: (database: Database.Database) => T): T {
+    const allowNewDatabase =
+      this.databasePath === ':memory:' || !existsSync(this.databasePath);
     if (this.databasePath !== ':memory:') {
       mkdirSync(path.dirname(this.databasePath), { recursive: true });
     }
 
     const database = new Database(this.databasePath);
-    database.pragma('journal_mode = WAL');
     database.pragma('busy_timeout = 5000');
 
-    for (const init of this.initializers) {
-      init(database);
-    }
-
     try {
+      for (const init of this.initializers) {
+        init(database, allowNewDatabase);
+      }
+      database.pragma('journal_mode = WAL');
       const transaction = database.transaction(() => operation(database));
       return transaction.immediate();
     } finally {

@@ -1,0 +1,416 @@
+.evaluator-product-shell {
+  min-height: 100vh;
+  background: var(--software-canvas);
+}
+
+.software-product-header {
+  min-height: 72px;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: var(--software-plum);
+  color: #fff;
+}
+
+.software-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 38px;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: -0.035em;
+}
+
+.software-product-capsule {
+  padding: 5px 12px;
+  border: 1px solid rgb(255 255 255 / 48%);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.software-product-header nav {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 24px;
+  margin-left: 70px;
+}
+
+.software-product-header nav a {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px 0;
+  color: rgb(255 255 255 / 78%);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.software-product-header nav a[aria-current='page'] {
+  color: #fff;
+}
+
+.software-product-header nav a[aria-current='page']::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: var(--software-mint);
+  content: '';
+}
+
+.evaluator-product-content {
+  width: min(1160px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 48px 0 80px;
+}
+
+.evaluator-page-intro,
+.evaluator-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.software-eyebrow {
+  margin: 0 0 10px;
+  color: var(--software-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.evaluator-page-intro h1,
+.evaluator-signin-copy h1 {
+  margin: 0;
+  color: var(--software-plum);
+  font-family: var(--software-sans);
+  font-size: clamp(32px, 4vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+  text-transform: none;
+}
+
+.evaluator-page-intro p:not(.software-eyebrow),
+.evaluator-section-heading p,
+.evaluator-signin-copy > p:not(.software-eyebrow) {
+  margin: 12px 0 0;
+  color: var(--software-muted);
+  line-height: 1.55;
+}
+
+.software-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 17px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.software-button-primary {
+  background: var(--software-plum);
+  color: white;
+}
+
+.evaluator-queue-panel {
+  margin-top: 40px;
+  padding: 28px;
+  border: 1px solid var(--software-border);
+  border-radius: 16px;
+  background: var(--software-surface);
+}
+
+.evaluator-section-heading h2 {
+  margin: 0;
+  color: var(--software-plum);
+  font-family: var(--software-sans);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  text-transform: none;
+}
+
+.evaluator-section-heading p {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.evaluator-queue-search {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 7px;
+  margin: 24px 0 14px;
+  color: var(--software-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.evaluator-queue-search input {
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--software-border);
+  border-radius: 9px;
+  background: white;
+  color: var(--software-ink);
+  font: inherit;
+}
+
+.evaluator-review-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evaluator-review-link {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(180px, 1fr)
+    auto;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 18px;
+  border: 1px solid var(--software-border);
+  border-radius: 12px;
+  color: var(--software-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.evaluator-review-link:hover {
+  border-color: var(--software-plum);
+}
+
+.evaluator-review-title {
+  color: var(--software-plum);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.evaluator-review-reference,
+.evaluator-review-process-status {
+  font-family: var(--software-mono);
+  font-size: 12px;
+}
+
+.evaluator-known-session {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--software-border);
+  border-radius: 12px;
+  background: var(--software-surface);
+}
+
+.evaluator-known-session summary {
+  color: var(--software-plum);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.evaluator-known-session > p {
+  color: var(--software-muted);
+}
+
+.evaluator-signin-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 56px;
+  align-items: center;
+  max-width: 920px;
+  margin: 64px auto;
+  padding: 48px;
+  border: 1px solid var(--software-border);
+  border-radius: 20px;
+  background: var(--software-surface);
+}
+
+.evaluator-signin-copy > p.evaluator-signin-note {
+  max-width: 330px;
+  margin-top: 24px;
+  padding-left: 14px;
+  border-left: 3px solid var(--software-mint);
+  color: var(--software-plum);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.evaluator-signin-form .access-form {
+  display: grid;
+  gap: 18px;
+}
+
+.evaluator-signin-form .access-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--software-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.evaluator-signin-form .access-form input {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--software-border);
+  border-radius: 9px;
+  color: var(--software-ink);
+  font: inherit;
+}
+
+.evaluator-signin-form .access-form .button-primary {
+  min-height: 46px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--software-plum);
+  color: white;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.evaluator-report-header {
+  border-bottom: 1px solid var(--software-border);
+  background: var(--software-canvas);
+}
+
+.evaluator-report-heading {
+  padding: 32px clamp(24px, 4vw, 60px) 28px;
+}
+
+.evaluator-report-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+.evaluator-report-status {
+  color: var(--software-success);
+  font-weight: 700;
+}
+
+.evaluator-report-heading h1 {
+  margin: 14px 0 0;
+  color: var(--software-plum);
+  font-family: var(--software-sans);
+  font-size: clamp(27px, 3.5vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  text-transform: none;
+}
+
+.evaluator-report-heading p {
+  margin: 8px 0 0;
+  color: var(--software-muted);
+}
+
+@media (max-width: 760px) {
+  .software-product-header {
+    min-height: 68px;
+    padding: 0 18px;
+    gap: 12px;
+  }
+
+  .software-product-header nav a {
+    padding: 3px 6px 0;
+    font-size: 13px;
+  }
+
+  .software-wordmark {
+    gap: 7px;
+    font-size: 25px;
+  }
+
+  .software-product-capsule {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .software-product-header nav {
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .evaluator-product-content {
+    width: min(100% - 32px, 600px);
+    padding-top: 32px;
+  }
+
+  .evaluator-page-intro,
+  .evaluator-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .evaluator-queue-panel {
+    margin-top: 28px;
+    padding: 18px;
+  }
+
+  .evaluator-review-link {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+    padding: 14px;
+  }
+
+  .evaluator-signin-panel {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    margin: 28px auto;
+    padding: 26px 20px;
+  }
+
+  .evaluator-report-heading {
+    padding: 24px 18px;
+  }
+}
+
+@media (max-width: 420px) {
+  .software-product-header {
+    padding: 0 12px;
+    gap: 6px;
+  }
+
+  .software-wordmark {
+    gap: 5px;
+    font-size: 20px;
+  }
+
+  .software-product-capsule {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .software-product-header nav {
+    gap: 0;
+  }
+
+  .software-product-header nav a {
+    padding-inline: 5px;
+    font-size: 11px;
+  }
+
+  .evaluator-review-link {
+    grid-template-columns: 1fr;
+  }
+}

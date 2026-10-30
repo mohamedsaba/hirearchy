@@ -808,42 +808,28 @@ describe('Slice 6E — Evaluator AI Evidence Presentation Rendering', () => {
       aiSummary: baseAiSummary,
     };
 
-    it('Generalist Recruiter sees compact AI summary without technical token metrics', () => {
-      const projection = projectBriefing(
-        briefingWithAi,
-        'GENERALIST_RECRUITER',
-      );
-      const html = renderToStaticMarkup(
-        <EvaluatorExperience
-          sessionId="briefing-test"
-          activeRole="GENERALIST_RECRUITER"
-          projection={projection}
-          review={mockReview}
-          evidence={evidence}
-        />,
-      );
+    it.each(briefingDepthProfiles)(
+      '%s starts in Summary with the three workspace modes and no private AI configuration',
+      (profile) => {
+        const projection = projectBriefing(briefingWithAi, profile);
+        const html = renderToStaticMarkup(
+          <EvaluatorExperience
+            sessionId="briefing-test"
+            activeRole={profile}
+            projection={projection}
+            review={mockReview}
+            evidence={evidence}
+          />,
+        );
 
-      expect(html).toContain('AI capability');
-      expect(html).toContain('3 AI interactions were recorded');
-      // Model and tokens hidden
-      expect(html).not.toContain('claude-3-5-sonnet');
-      expect(html).not.toContain('activity-token-telemetry');
-    });
-
-    it('Engineer sees compact AI summary with model information', () => {
-      const projection = projectBriefing(briefingWithAi, 'ENGINEER');
-      const html = renderToStaticMarkup(
-        <EvaluatorExperience
-          sessionId="briefing-test"
-          activeRole="ENGINEER"
-          projection={projection}
-          review={mockReview}
-          evidence={evidence}
-        />,
-      );
-
-      expect(html).toContain('AI capability');
-      expect(html).toContain('claude-3-5-sonnet');
-    });
+        expect(html).toContain('id="workbench-mode-summary"');
+        expect(html).toContain('id="workbench-mode-evidence"');
+        expect(html).toContain('id="workbench-mode-review"');
+        expect(html.match(/data-workbench-mode-tab=/g)).toHaveLength(3);
+        expect(html).not.toContain('AI capability');
+        expect(html).not.toContain('claude-3-5-sonnet');
+        expect(html).not.toContain('activity-token-telemetry');
+      },
+    );
   });
 });

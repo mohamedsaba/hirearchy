@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createEvaluatorCookieValue } from '../../apps/web/src/access/evaluator-access';
+import { createSignedEvaluatorToken } from '../../apps/web/src/access/evaluator-access';
 import {
   EvaluatorAccessError,
   getAuthorizedEvidence,
@@ -103,7 +103,7 @@ describe('persisted session flow', () => {
 
     const evidence = getAuthorizedEvidence(
       first.session.id,
-      createEvaluatorCookieValue('review-secret'),
+      createSignedEvaluatorToken('review-secret'),
       { credential: 'review-secret', service },
     );
     expect(evidence.sessionId).toBe(first.session.id);

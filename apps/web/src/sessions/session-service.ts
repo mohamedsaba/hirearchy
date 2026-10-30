@@ -5,9 +5,13 @@ import {
 } from '../ai/ai-interaction';
 import { AiInteractionService } from '../ai/ai-interaction-service';
 import { SqliteAiInteractionStore } from '../ai/sqlite-ai-interaction-store';
+import { cloneTaskRubric } from '../assessments/task-rubric';
+import type { TaskRubricSnapshot } from '../assessments/task-rubric';
 import { cloneScenarioSemanticSnapshot } from '../scenarios/scenario-semantic-snapshot';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { getApplicationDatabasePath } from '../database/database-path';
+import { loadValidatedGeneratedAssessment } from '../scenarios/generated-assessment';
 
 import { SqliteTransactionRunner } from '../database/sqlite-transaction-runner';
 import {
@@ -46,16 +50,31 @@ import {
   isDeadlineExceeded,
   toCandidateTimingProjection,
 } from './session-timing';
-import { SqliteSessionStore } from './sqlite-session-store';
+import {
+  type AssessmentIssuanceIdentity,
+  type AssessmentIssuanceWriteResult,
+  type AssessmentLifecycleEntry,
+  SqliteSessionStore,
+  type StoredAssessmentIssuance,
+} from './sqlite-session-store';
 import {
   evaluatorReviewLimit,
   type EvaluatorReviewEntry,
 } from '../evaluator/evaluator-review-entry';
+import { assertApplicationStartupReady } from '../startup-status';
 
 const maximumContentLength = MAX_WORKSPACE_FILE_READ_BYTES;
 
 const hashCandidateToken = (candidateToken: string) =>
   createHash('sha256').update(candidateToken).digest('hex');
+
+type SessionCreationOptions = Readonly<{
+  scenarioId?: string;
+  scenario?: ScenarioSnapshot;
+  aiCapability?: AiCapabilitySnapshot | null;
+  taskRubricSnapshot?: TaskRubricSnapshot | null;
+  terminalEnabled?: boolean;
+}>;
 
 export type SessionServiceOptions = Readonly<{
   now?: () => string;
@@ -69,6 +88,13 @@ export type SessionServiceOptions = Readonly<{
   commandTimeoutMs?: number;
   onSessionFinalized?: (sessionId: string) => void | Promise<void>;
 }>;
+
+export class SessionReconciliationError extends Error {
+  constructor() {
+    super('Session reconciliation is incomplete.');
+    this.name = 'SessionReconciliationError';
+  }
+}
 
 export class SessionService {
   readonly now: () => string;
@@ -168,7 +194,9 @@ export class SessionService {
     this.transactionRunner =
       options.transactionRunner ??
       new SqliteTransactionRunner(store.databasePath);
-    this.transactionRunner.registerInitializer(SqliteSessionStore.ensureSchema);
+    this.transactionRunner.registerInitializer((database, allowNewDatabase) =>
+      SqliteSessionStore.ensureSchema(database, { allowNewDatabase }),
+    );
     this.transactionRunner.registerInitializer(SqliteEventStore.ensureSchema);
     this.transactionRunner.registerInitializer(
       SqliteAiInteractionStore.ensureSchema,
@@ -186,11 +214,37 @@ export class SessionService {
       });
   }
 
-  createSession(options?: {
-    scenarioId?: string;
-    scenario?: ScenarioSnapshot;
-    aiCapability?: AiCapabilitySnapshot | null;
-  }) {
+  createSession(options?: SessionCreationOptions) {
+    const issuance = this.buildSession(options);
+    this.store.create(issuance.session);
+    return issuance;
+  }
+
+  verifyStorageForStartup() {
+    this.store.verifyStorageForStartup();
+  }
+
+  createAssessmentSession(
+    options: SessionCreationOptions,
+    identity: Pick<AssessmentIssuanceIdentity, 'key' | 'requestHash'>,
+  ): AssessmentIssuanceWriteResult & { candidateToken: string | null } {
+    const issuance = this.buildSession(options);
+    const written = this.store.createIdempotently(issuance.session, identity);
+    return {
+      ...written,
+      candidateToken: written.created ? issuance.candidateToken : null,
+    };
+  }
+
+  findAssessmentIssuanceByKey(key: string): StoredAssessmentIssuance | null {
+    return this.store.findAssessmentIssuanceByKey(key);
+  }
+
+  recoverCandidateTokenForAssessment(sessionId: string): string | null {
+    return this.store.recoverCandidateTokenForAssessment(sessionId);
+  }
+
+  private buildSession(options?: SessionCreationOptions) {
     const candidateToken = this.createToken();
     const scenario =
       options?.scenario ??
@@ -214,6 +268,7 @@ export class SessionService {
     const originalContent = normalizeLineEndings(scenario.originalContent);
     const session: AssessmentSession = {
       id: this.createId(),
+      candidateToken,
       candidateTokenHash: hashCandidateToken(candidateToken),
       scenario: {
         ...scenario,
@@ -240,9 +295,10 @@ export class SessionService {
         options?.aiCapability !== undefined
           ? cloneAiCapabilitySnapshot(options.aiCapability)
           : cloneAiCapabilitySnapshot(disabledAiCapabilitySnapshot),
+      taskRubricSnapshot: cloneTaskRubric(options?.taskRubricSnapshot),
+      terminalEnabled: options?.terminalEnabled ?? true,
     };
 
-    this.store.create(session);
     return { candidateToken, session };
   }
 
@@ -303,10 +359,33 @@ export class SessionService {
           current.scenarioType === 'multi_file' ||
           current.scenario.type === 'multi_file'
         ) {
+          const generated = current.scenario.id.startsWith('generated-')
+            ? await loadValidatedGeneratedAssessment(
+                path.dirname(getApplicationDatabasePath()),
+                current.scenario.id,
+              )
+            : null;
+          if (current.scenario.id.startsWith('generated-') && !generated) {
+            throw new SessionError(
+              'SCENARIO_UNAVAILABLE',
+              'The validated assessment files are unavailable.',
+            );
+          }
           await this.sandboxAdapter.createAndVerify(current.id, {
             imageName:
               current.scenario.imageName ?? 'hirearchy-scenario-001:latest',
             scenarioType: 'multi_file',
+            ...(generated ? { generatedWorkspace: true } : {}),
+            ...(generated
+              ? {
+                  initialFiles: Object.fromEntries(
+                    [
+                      ...generated.assessment.starterFiles,
+                      ...generated.assessment.targetTests,
+                    ].map((file) => [file.path, file.content]),
+                  ),
+                }
+              : {}),
           });
         } else {
           await this.sandboxAdapter.createAndVerify(current.id, {
@@ -384,10 +463,9 @@ export class SessionService {
         } catch (error) {
           try {
             this.store.save(tokenHash, previousContent);
-          } catch (rollbackError) {
+          } catch {
             console.error(
-              'Failed to rollback session working content after sandbox write failure',
-              rollbackError,
+              'Failed to rollback session working content [SESSION_ROLLBACK_FAILED]',
             );
           }
           throw error;
@@ -435,6 +513,13 @@ export class SessionService {
         );
       }
 
+      if (current.terminalEnabled === false) {
+        throw new SessionError(
+          'TERMINAL_NOT_ENABLED',
+          'Terminal access is not enabled for this assessment.',
+        );
+      }
+
       const deadline = deriveSessionDeadline(current);
       const now = this.now();
       if (deadline !== null && isDeadlineExceeded(deadline, now)) {
@@ -475,10 +560,10 @@ export class SessionService {
         try {
           const driftResult = await this.detectAndRecordDrift(current.id);
           beforeTree = driftResult.currentTree;
-        } catch (error) {
+        } catch {
           throw new SessionError(
             'PLATFORM_CAPTURE_FAILED',
-            `Pre-command workspace capture failed: ${error instanceof Error ? error.message : String(error)}`,
+            'Pre-command workspace capture failed.',
           );
         }
       }
@@ -803,6 +888,7 @@ export class SessionService {
       hashCandidateToken(candidateToken),
       admittedAt,
       'candidate_submission',
+      true,
     );
   }
 
@@ -810,7 +896,7 @@ export class SessionService {
     tokenHash: string,
     admittedAt: string,
     requestedClosureReason: 'candidate_submission' | 'timeout',
-    resumeAdmitted = false,
+    resumeAdmitted = true,
   ) {
     const session = this.store.findByCandidateTokenHash(tokenHash);
 
@@ -956,9 +1042,29 @@ export class SessionService {
         // stays paused and no submission is fabricated.
         let submittedTree: string | null = null;
         try {
+          const generated = current.scenario.id.startsWith('generated-')
+            ? await loadValidatedGeneratedAssessment(
+                path.dirname(getApplicationDatabasePath()),
+                current.scenario.id,
+              )
+            : null;
+          if (current.scenario.id.startsWith('generated-') && !generated) {
+            throw new Error(
+              'Validated generated starter files are unavailable.',
+            );
+          }
+          const generatedStarterFiles = generated
+            ? Object.fromEntries(
+                [
+                  ...generated.assessment.starterFiles,
+                  ...generated.assessment.targetTests,
+                ].map((file) => [file.path, file.content]),
+              )
+            : undefined;
           const frozen = await this.sandboxAdapter.captureFrozenEvidence(
             current.id,
             baselineTree,
+            generatedStarterFiles,
           );
           submittedTree = frozen.currentTree;
           submittedDiff = frozen.rawDiff;
@@ -1082,7 +1188,9 @@ export class SessionService {
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          console.error('Sandbox cleanup failed after submission', error);
+          console.error(
+            'Sandbox cleanup failed after submission [SANDBOX_CLEANUP_FAILED]',
+          );
           if (this.eventStore) {
             this.eventStore.append({
               id: `evt_${this.createId()}`,
@@ -1102,8 +1210,10 @@ export class SessionService {
       if (this.onSessionFinalized) {
         try {
           await this.onSessionFinalized(submitted.id);
-        } catch (error) {
-          console.error('Post-submission reconstruction failed', error);
+        } catch {
+          console.error(
+            'Post-submission reconstruction failed [POST_SUBMISSION_RECONSTRUCTION_FAILED]',
+          );
         }
       }
 
@@ -1132,17 +1242,50 @@ export class SessionService {
 
     const sessions = this.store.findAllActiveAndSubmitted();
     const tasks: Promise<unknown>[] = [];
+    let incomplete = false;
+    const inspectResources = async (sessionId: string) => {
+      try {
+        return await this.sandboxAdapter!.inspectResources!(sessionId);
+      } catch {
+        console.error(
+          'Sandbox resource inspection failed during startup reconciliation [RESOURCE_INSPECTION_FAILED]',
+        );
+        incomplete = true;
+        return null;
+      }
+    };
 
     for (const session of sessions) {
       if (session.status === 'SUBMITTED') {
-        const { containerStatus, volumeExists } =
-          await this.sandboxAdapter.inspectResources(session.id);
+        const resources = await inspectResources(session.id);
+        if (!resources) continue;
+        const { containerStatus, volumeExists } = resources;
         if (containerStatus !== 'missing' || volumeExists) {
           tasks.push(
             this.withSessionLock(session.id, async () => {
               const current = this.store.findById(session.id);
               if (current?.status === 'SUBMITTED') {
-                await this.sandboxAdapter!.teardown(session.id).catch(() => {});
+                try {
+                  await this.sandboxAdapter!.teardown(session.id);
+                } catch (error) {
+                  const errorMessage =
+                    error instanceof Error ? error.message : String(error);
+                  console.error(
+                    'Sandbox cleanup failed during startup reconciliation [SANDBOX_CLEANUP_FAILED]',
+                  );
+                  incomplete = true;
+                  this.eventStore?.append({
+                    id: `evt_${this.createId()}`,
+                    sessionId: session.id,
+                    type: 'SANDBOX_CLEANUP_FAILED',
+                    timestamp: this.now(),
+                    source: 'server',
+                    payload: {
+                      phase: 'reconciliation',
+                      errorMessage,
+                    },
+                  });
+                }
               }
               return current;
             }),
@@ -1154,8 +1297,9 @@ export class SessionService {
           session.closureReason !== null ||
           (deadline !== null && isDeadlineExceeded(deadline, observedAt))
         ) {
-          const { containerStatus, volumeExists } =
-            await this.sandboxAdapter.inspectResources(session.id);
+          const resources = await inspectResources(session.id);
+          if (!resources) continue;
+          const { containerStatus, volumeExists } = resources;
 
           if (containerStatus === 'missing' && volumeExists) {
             // Case R3: missing container but volume exists -> fail closed, preserve volume, do not finalize
@@ -1173,6 +1317,7 @@ export class SessionService {
                 },
               });
             }
+            incomplete = true;
             continue;
           }
 
@@ -1192,6 +1337,7 @@ export class SessionService {
                 },
               });
             }
+            incomplete = true;
             continue;
           }
 
@@ -1203,9 +1349,13 @@ export class SessionService {
     const results = await Promise.allSettled(tasks);
     for (const r of results) {
       if (r.status === 'rejected') {
-        console.error('Reconciliation task failed:', r.reason);
+        console.error(
+          'Session reconciliation task failed [RECONCILIATION_TASK_FAILED]',
+        );
+        incomplete = true;
       }
     }
+    if (incomplete) throw new SessionReconciliationError();
   }
 
   async sweepTimedOutSessions(observedAt = this.now()) {
@@ -1265,6 +1415,7 @@ export class SessionService {
       diff,
       events,
       aiCapabilitySnapshot: submitted.aiCapabilitySnapshot ?? null,
+      taskRubricSnapshot: submitted.taskRubricSnapshot ?? null,
     };
   }
 
@@ -1272,16 +1423,38 @@ export class SessionService {
     return this.store.findSubmittedReviewEntries(evaluatorReviewLimit);
   }
 
+  listAssessmentLifecycleEntries(
+    limit?: number,
+  ): readonly AssessmentLifecycleEntry[] {
+    return this.store.findAssessmentLifecycleEntries(limit);
+  }
+
   getSessionEvents(candidateToken: string) {
     const session = this.getCandidateSession(candidateToken);
-    return this.eventStore ? this.eventStore.getEvents(session.id) : [];
+    const events = this.eventStore ? this.eventStore.getEvents(session.id) : [];
+    return events.map((event) =>
+      event.type === 'SANDBOX_CLEANUP_FAILED'
+        ? {
+            ...event,
+            payload: {
+              phase: (event.payload as { phase: string }).phase,
+              errorMessage: 'Sandbox cleanup failed.',
+            },
+          }
+        : event,
+    );
+  }
+
+  getRecentSessionEvents(candidateToken: string, limit: number) {
+    const session = this.getCandidateSession(candidateToken);
+    return this.eventStore
+      ? this.eventStore.getRecentEvents(session.id, limit)
+      : [];
   }
 }
 
-export const getSessionService = () => {
-  const databasePath =
-    process.env.HIREARCHY_DB_PATH ??
-    path.join(process.cwd(), '.data/hirearchy.sqlite');
+const createSessionService = () => {
+  const databasePath = getApplicationDatabasePath();
 
   const store = new SqliteSessionStore(databasePath);
   const eventStore = new SqliteEventStore(databasePath);
@@ -1296,6 +1469,23 @@ export const getSessionService = () => {
       const { ensurePostSubmissionReconstruction } =
         await import('../reconstruction/evidence-reconstruction-runtime');
       await ensurePostSubmissionReconstruction(sessionId);
+    },
+  });
+};
+
+export const getSessionServiceForStartup = () => createSessionService();
+
+export const getSessionService = () => {
+  assertApplicationStartupReady();
+  const service = createSessionService();
+  return new Proxy(service, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        assertApplicationStartupReady();
+        return Reflect.apply(value, target, args);
+      };
     },
   });
 };
