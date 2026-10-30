@@ -17,6 +17,7 @@ import type {
   NormalizedAiResult,
 } from '../../apps/web/src/ai/ai-provider';
 import { DefaultAiProviderRegistry } from '../../apps/web/src/ai/ai-provider';
+import { MockAiProvider } from '../../apps/web/src/ai/mock-ai-provider';
 import { SqliteAiInteractionStore } from '../../apps/web/src/ai/sqlite-ai-interaction-store';
 import { SqliteEventStore } from '../../apps/web/src/events/sqlite-event-store';
 import { MockSandboxAdapter } from '../../apps/web/src/sandbox/mock-sandbox-adapter';
@@ -24,6 +25,36 @@ import { getSessionOperationCoordinator } from '../../apps/web/src/sessions/sess
 import { SessionService } from '../../apps/web/src/sessions/session-service';
 import { SqliteSessionStore } from '../../apps/web/src/sessions/sqlite-session-store';
 import { SqliteTransactionRunner } from '../../apps/web/src/database/sqlite-transaction-runner';
+
+// Explicit test injection: production code no longer registers a mock AI
+// provider by default. Route-driven scenarios in this file exercise the
+// success path, so the deterministic MockAiProvider is injected here on
+// purpose. Service-driven scenarios inject their own registries directly.
+vi.mock(
+  '../../apps/web/src/ai/ai-interaction-service',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('../../apps/web/src/ai/ai-interaction-service')
+      >();
+    const { MockAiProvider: MockProvider } =
+      await import('../../apps/web/src/ai/mock-ai-provider');
+    const { DefaultAiProviderRegistry: Registry } =
+      await import('../../apps/web/src/ai/ai-provider');
+    return {
+      ...actual,
+      getAiInteractionService: (
+        databasePath?: string,
+        options?: Parameters<typeof actual.getAiInteractionService>[1],
+      ) =>
+        actual.getAiInteractionService(databasePath, {
+          ...options,
+          providerRegistry:
+            options?.providerRegistry ?? new Registry([new MockProvider()]),
+        }),
+    };
+  },
+);
 
 class ControllableAiProvider implements AiProvider {
   public readonly providerId = 'mock-ai';
@@ -964,11 +995,13 @@ describe('Hirearchy Software Architecture Correction A1/A2 — Same-Session Coor
     runner.registerInitializer(SqliteEventStore.ensureSchema);
     runner.registerInitializer(SqliteAiInteractionStore.ensureSchema);
 
+    // Explicit injection: deterministic mock provider for replay behavior.
     const aiService = new AiInteractionService({
       sessionStore,
       eventStore,
       aiInteractionStore: aiStore,
       transactionRunner: runner,
+      providerRegistry: new DefaultAiProviderRegistry([new MockAiProvider()]),
     });
     const sessionService = new SessionService(sessionStore, {
       eventStore,
@@ -1373,11 +1406,13 @@ describe('Hirearchy Software Architecture Correction A1/A2 — Same-Session Coor
     runner.registerInitializer(SqliteEventStore.ensureSchema);
     runner.registerInitializer(SqliteAiInteractionStore.ensureSchema);
 
+    // Explicit injection: deterministic mock provider for normal completion.
     const aiService = new AiInteractionService({
       sessionStore,
       eventStore,
       aiInteractionStore: aiStore,
       transactionRunner: runner,
+      providerRegistry: new DefaultAiProviderRegistry([new MockAiProvider()]),
     });
     const sessionService = new SessionService(sessionStore, {
       eventStore,

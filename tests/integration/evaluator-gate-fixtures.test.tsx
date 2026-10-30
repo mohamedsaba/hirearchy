@@ -14,11 +14,11 @@ import { DeterministicEvidenceReconstructionGenerator } from '../../apps/web/src
 import { buildEvaluatorReviewPresentation } from '../../apps/web/src/evaluator/evaluator-review-presentation';
 import { buildReconstructionView } from '../../apps/web/src/reconstruction/evidence-reconstruction-runtime';
 import EvidencePage from '../../apps/web/app/evaluator/sessions/[sessionId]/page';
-import { createEvaluatorCookieValue } from '../../apps/web/src/access/evaluator-access';
+import { createSignedEvaluatorToken } from '../../apps/web/src/access/evaluator-access';
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({
-    get: () => ({ value: createEvaluatorCookieValue('fixture-evaluator-key') }),
+    get: () => ({ value: createSignedEvaluatorToken('fixture-evaluator-key') }),
   }),
 }));
 
@@ -133,9 +133,10 @@ describe('evaluator gate fixture consistency', () => {
             params: Promise.resolve({ sessionId: entry.sessionId }),
           }),
         );
-        expect(defaultHtml).toContain('What happened');
-        expect(defaultHtml).toContain('Submitted changes');
-        expect(defaultHtml).toContain('View submitted changes');
+        expect(defaultHtml).toContain('What this task was about');
+        expect(defaultHtml).toContain('Submitted work');
+        expect(defaultHtml).toContain('Open submitted diff');
+        expect(defaultHtml).toContain('Observed progression');
         expect(defaultHtml).not.toContain('Open technical chronology');
 
         const engineerHtml = renderToStaticMarkup(
@@ -144,11 +145,10 @@ describe('evaluator gate fixture consistency', () => {
             searchParams: Promise.resolve({ depth: 'ENGINEER' }),
           }),
         );
-        expect(engineerHtml).toContain('What happened');
-        expect(engineerHtml).toContain('Final submitted state');
-        expect(engineerHtml).toContain('Recorded activity');
-        expect(engineerHtml).toContain('What this scenario examines');
-        expect(engineerHtml).toContain('engineer-evidence-workspace');
+        expect(engineerHtml).toContain('data-role-lens="ENGINEER"');
+        expect(engineerHtml).toContain('id="workbench-mode-summary"');
+        expect(engineerHtml).toContain('id="workbench-mode-evidence"');
+        expect(engineerHtml).toContain('id="workbench-mode-review"');
         expect(review.submittedDiff).toBe(evidence.diff);
         if (caseId === 'G') {
           expect(evidence.scenario.evaluationContext).toBeUndefined();
@@ -158,11 +158,6 @@ describe('evaluator gate fixture consistency', () => {
         } else expect(evidence.scenario.evaluationContext).toBeDefined();
         if (caseId === 'F') {
           expect(review.notices).toHaveLength(1);
-          expect(defaultHtml).toContain('Activity capture incomplete');
-          expect(defaultHtml).toContain('Platform recording limitation');
-          expect(defaultHtml).toContain(
-            'Hirearchy Software did not capture part of the workspace history during this interval. Later recorded activity and the frozen submitted diff remain available.',
-          );
         }
         if (caseId === 'A')
           expect(

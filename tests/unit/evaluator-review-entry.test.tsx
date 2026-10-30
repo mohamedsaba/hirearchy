@@ -1,11 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { cookies } from 'next/headers';
 
 import { EvaluatorAccessForm } from '../../apps/web/app/evaluator/evaluator-access-form';
+import EvaluatorAccessPage from '../../apps/web/app/evaluator/page';
 import {
   EvaluatorReviewQueueContent,
   type QueueState,
 } from '../../apps/web/app/evaluator/evaluator-review-queue';
+import { createSignedEvaluatorToken } from '../../apps/web/src/access/evaluator-access';
+
+vi.mock('next/headers', () => ({ cookies: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -38,6 +43,7 @@ describe('evaluator review entry', () => {
     );
     expect(html).toContain('1h 0m assessment');
     expect(html).toContain('Submitted by candidate');
+    expect(html).toContain('Filter by task or session reference');
   });
 
   it('distinguishes an empty queue from unavailable discovery', () => {
@@ -59,5 +65,31 @@ describe('evaluator review entry', () => {
     expect(html).toContain('Known session reference');
     expect(html).toContain('Open known session');
     expect(html).not.toContain('Evaluator credential');
+  });
+
+  it('shows the evaluator sign-in first and gates the assessment creation action', async () => {
+    const originalCredential = process.env.HIREARCHY_EVALUATOR_KEY;
+    process.env.HIREARCHY_EVALUATOR_KEY = 'local-review-key';
+    vi.mocked(cookies).mockResolvedValue({
+      get: () => ({ value: createSignedEvaluatorToken('local-review-key') }),
+    } as never);
+
+    const authorizedPage = renderToStaticMarkup(await EvaluatorAccessPage());
+    expect(authorizedPage).toContain('href="/evaluator/assessments/new"');
+    expect(authorizedPage).toContain('Create assessment');
+    expect(authorizedPage).toContain('Submitted assessments');
+    expect(authorizedPage).not.toContain('Evaluator perspective');
+
+    vi.mocked(cookies).mockResolvedValue({ get: () => undefined } as never);
+    const publicPage = renderToStaticMarkup(await EvaluatorAccessPage());
+    expect(publicPage).toContain('Review submitted work.');
+    expect(publicPage).toContain('Evaluator credential');
+    expect(publicPage).not.toContain('Create assessment');
+
+    if (originalCredential === undefined) {
+      delete process.env.HIREARCHY_EVALUATOR_KEY;
+    } else {
+      process.env.HIREARCHY_EVALUATOR_KEY = originalCredential;
+    }
   });
 });

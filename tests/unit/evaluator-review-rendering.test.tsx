@@ -287,9 +287,7 @@ describe('evaluator review rendering', () => {
     expect(styles).toMatch(
       /\.evaluator-v2-container\s*\{[^}]*gap: clamp\(2.5rem, 5vw, 4.5rem\);/,
     );
-    expect(styles).toMatch(
-      /\.lens-tab\s*\{[^}]*min-height: 2.65rem;[^}]*border-left: 0;[^}]*font-size: 0.78rem;/,
-    );
+    expect(styles).not.toContain('.lens-tab');
     expect(styles).toMatch(
       /\.evaluator-v2-container \.activity-excerpt\s*\{[^}]*scrollbar-color:/,
     );

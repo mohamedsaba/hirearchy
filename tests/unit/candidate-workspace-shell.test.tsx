@@ -25,6 +25,7 @@ const activeSession: CandidateSessionView = {
   serverTime: '2026-09-22T10:01:00.000Z',
   closureReason: null,
   scenarioType: 'single_file',
+  terminalEnabled: true,
   aiCapability: { enabled: true },
 };
 
@@ -35,18 +36,19 @@ describe('C3 — Candidate workspace shell', () => {
     );
 
     expect(html).toContain('data-workspace-state="ACTIVE_WORKSPACE"');
-    expect(html).toContain('aria-label="Workspace navigation"');
-    expect(html).toContain('Scenario');
+    expect(html).toContain('aria-label="Workspace views"');
+    expect(html).toContain('data-mobile-view="code"');
+    expect(html).toContain('aria-label="Task and AI panel"');
+    expect(html).toContain('Task');
     expect(html).toContain('Files');
-    expect(html).toContain('Editor');
-    expect(html).toContain('Commands');
+    expect(html).toContain('Terminal');
     expect(html).toContain('AI');
     expect(html).toContain(
       'Run commands and tests inside the assessment environment.',
     );
-    expect(html).toContain('Engineering assistant');
+    expect(html).toContain('Weft');
     expect(html).toContain('Time remaining');
-    expect(html).toContain('Submit assessment');
+    expect(html).toContain('Review submission');
     expect(html).not.toContain('class="workspace-timer" aria-live');
   });
 
@@ -67,9 +69,9 @@ describe('C3 — Candidate workspace shell', () => {
     );
 
     expect(html).toContain('inventory/service.py');
-    expect(html).toContain('aria-label="Edit inventory/service.py"');
+    expect(html).not.toContain('aria-label="Edit inventory/service.py"');
     expect(html).toContain('aria-current="page"');
-    expect(html).toContain('aria-controls="workspace-editor"');
+    expect(html).toContain('aria-label="Workspace files"');
     expect(html).not.toContain('role="tablist"');
     expect(html).toContain('role="status"');
     expect(html).toContain('Saved');
@@ -95,7 +97,7 @@ describe('C3 — Candidate workspace shell', () => {
     );
 
     expect(html).toContain('No workspace file available');
-    expect(html).toContain('aria-label="Edit No workspace file available"');
+    expect(html).not.toContain('aria-label="Edit No workspace file available"');
     expect(html).toContain('disabled=""');
     expect(html).not.toContain('inventory/service.py');
   });
@@ -117,8 +119,9 @@ describe('C3 — Candidate workspace shell', () => {
     expect(html).toContain(
       'Your assessment has been submitted. Your work is final.',
     );
-    expect(html).not.toContain('aria-label="Workspace navigation"');
-    expect(html).not.toContain('Submit assessment</button>');
+    expect(html).not.toContain('aria-label="Task and AI panel"');
+    expect(html).not.toContain('aria-label="Workspace views"');
+    expect(html).not.toContain('Review submission</button>');
     expect(html).not.toContain('class="workspace-timer');
     expect(html).not.toContain('aria-label="Command"');
     expect(html).not.toContain('candidate-ai-prompt');
@@ -140,13 +143,13 @@ describe('C3 — Candidate workspace shell', () => {
     expect(html).toContain(
       'Time limit reached. New work is no longer accepted.',
     );
-    expect(html).toContain('Time limit reached</span>');
+    expect(html).toContain('Time limit reached.</span>');
     expect(html).toContain('Commands');
-    expect(html).toContain('Engineering assistant');
+    expect(html).toContain('Weft');
     expect(html).toContain('placeholder="Commands are unavailable"');
     expect(html).toContain('AI is unavailable.');
     expect(html).not.toContain('>Save</button>');
-    expect(html).not.toContain('>Submit assessment</button>');
+    expect(html).not.toContain('>Review submission</button>');
     expect(html).not.toContain('Your assessment has been submitted.');
     expect(html).not.toContain('aria-live="polite" class="workspace-timer');
   });
@@ -166,9 +169,10 @@ describe('C3 — Candidate workspace shell', () => {
     expect(html).toContain(
       'Submission has begun. No more changes can be accepted',
     );
-    expect(html).not.toContain('aria-label="Workspace navigation"');
+    expect(html).not.toContain('aria-label="Task and AI panel"');
+    expect(html).not.toContain('aria-label="Workspace views"');
     expect(html).not.toContain('>Save</button>');
-    expect(html).not.toContain('>Submit assessment</button>');
+    expect(html).not.toContain('>Review submission</button>');
     expect(html).not.toContain('class="workspace-timer');
     expect(html).not.toContain('aria-label="Command"');
     expect(html).not.toContain('candidate-ai-prompt');
@@ -192,6 +196,7 @@ describe('C3 — Candidate workspace shell', () => {
       'Your assessment time ended. Your work was finalized automatically.',
     );
     expect(html).not.toContain('Assessment submitted</h1>');
+    expect(html).not.toContain('aria-label="Workspace views"');
     expect(html).not.toContain('aria-label="Command"');
     expect(html).not.toContain('candidate-ai-prompt');
   });

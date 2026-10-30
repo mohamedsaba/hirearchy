@@ -16,6 +16,36 @@ import { toCandidateSessionView } from '../../apps/web/src/sessions/candidate-se
 import { SessionService } from '../../apps/web/src/sessions/session-service';
 import { SqliteSessionStore } from '../../apps/web/src/sessions/sqlite-session-store';
 
+// Explicit test injection: production code no longer registers a mock AI
+// provider by default. The lifecycle test exercises the route's success
+// path, so the deterministic MockAiProvider is injected here on purpose.
+vi.mock(
+  '../../apps/web/src/ai/ai-interaction-service',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('../../apps/web/src/ai/ai-interaction-service')
+      >();
+    const { MockAiProvider } =
+      await import('../../apps/web/src/ai/mock-ai-provider');
+    const { DefaultAiProviderRegistry } =
+      await import('../../apps/web/src/ai/ai-provider');
+    return {
+      ...actual,
+      getAiInteractionService: (
+        databasePath?: string,
+        options?: Parameters<typeof actual.getAiInteractionService>[1],
+      ) =>
+        actual.getAiInteractionService(databasePath, {
+          ...options,
+          providerRegistry:
+            options?.providerRegistry ??
+            new DefaultAiProviderRegistry([new MockAiProvider()]),
+        }),
+    };
+  },
+);
+
 describe('Candidate AI Workspace End-to-End Integration', () => {
   let directory: string;
   let databasePath: string;
@@ -55,7 +85,10 @@ describe('Candidate AI Workspace End-to-End Integration', () => {
 
     const initialView = toCandidateSessionView(session);
     expect(initialView.status).toBe('CREATED');
-    expect(initialView.aiCapability).toEqual({ enabled: true });
+    expect(initialView.aiCapability).toEqual({
+      enabled: true,
+      includesWorkspaceContext: false,
+    });
 
     // 2. Candidate activates session
     const activateReq = createRequest(
@@ -67,7 +100,10 @@ describe('Candidate AI Workspace End-to-End Integration', () => {
     expect(activateRes.status).toBe(200);
     const activeSessionData = await activateRes.json();
     expect(activeSessionData.status).toBe('ACTIVE');
-    expect(activeSessionData.aiCapability).toEqual({ enabled: true });
+    expect(activeSessionData.aiCapability).toEqual({
+      enabled: true,
+      includesWorkspaceContext: false,
+    });
 
     // 3. Candidate dispatches AI interaction with context reference
     const aiReq = createRequest(
@@ -95,7 +131,10 @@ describe('Candidate AI Workspace End-to-End Integration', () => {
     expect(submittedSession.status).toBe('SUBMITTED');
     const submittedView = toCandidateSessionView(submittedSession);
     expect(submittedView.status).toBe('SUBMITTED');
-    expect(submittedView.aiCapability).toEqual({ enabled: true });
+    expect(submittedView.aiCapability).toEqual({
+      enabled: true,
+      includesWorkspaceContext: false,
+    });
 
     // 5. Subsequent AI interactions on submitted session are rejected with 409
     const postSubmitAiReq = createRequest(
@@ -129,7 +168,10 @@ describe('Candidate AI Workspace End-to-End Integration', () => {
     });
     expect(activateRes.status).toBe(200);
     const activeData = await activateRes.json();
-    expect(activeData.aiCapability).toEqual({ enabled: false });
+    expect(activeData.aiCapability).toEqual({
+      enabled: false,
+      includesWorkspaceContext: false,
+    });
 
     // Attempting interaction fails with 409 AI_NOT_ENABLED
     const aiReq = createRequest(

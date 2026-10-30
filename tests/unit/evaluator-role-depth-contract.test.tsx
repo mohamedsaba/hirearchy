@@ -145,7 +145,7 @@ describe('E3 evaluator role-depth contract', () => {
     },
   );
 
-  it('uses truthful hierarchy destinations and ordered headings for Engineer review', () => {
+  it('keeps Summary concise while exposing three workspace modes and review controls', () => {
     const html = renderToStaticMarkup(
       <EvaluatorExperience
         sessionId={evidence.sessionId}
@@ -156,14 +156,15 @@ describe('E3 evaluator role-depth contract', () => {
       />,
     );
 
-    expect(html).toContain('href="#engineer-inspection">Technical inspection');
-    expect(html).not.toContain('href="#engineer-inspection">Source evidence');
-    expect(html).toContain('aria-labelledby="review-overview-title"');
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('id="workbench-mode-summary"');
+    expect(html).toContain('id="workbench-mode-evidence"');
+    expect(html).toContain('id="workbench-mode-review"');
+    expect(html.match(/data-workbench-mode-tab=/g)).toHaveLength(3);
+    expect(html).toContain('id="open-quick-note"');
+    expect(html).toContain('id="reviewer-note-body"');
     expect(html).toContain(
-      '<h2 class="section-kicker" id="review-overview-title">Overview</h2>',
-    );
-    expect(html).toContain(
-      '<h3 id="scenario-context-title">What this scenario examines</h3>',
+      '<h3 id="scenario-context-title">What this task was about</h3>',
     );
   });
 
@@ -182,13 +183,9 @@ describe('E3 evaluator role-depth contract', () => {
       );
       const depth = projection.defaultDepth;
 
-      expect(html.includes('View evidence')).toBe(depth.directEvidenceLinks);
-      expect(html.includes('View submitted changes')).toBe(
-        depth.conciseSubmissionScope,
-      );
-      expect(html.includes('engineer-evidence-workspace')).toBe(
-        depth.technicalRecord,
-      );
+      expect(html.includes('View evidence')).toBe(false);
+      expect(html.includes('Open submitted diff')).toBe(true);
+      expect(html.includes('engineer-evidence-workspace')).toBe(false);
       expect(html.includes('Artifact availability')).toBe(
         depth.artifactAvailability,
       );

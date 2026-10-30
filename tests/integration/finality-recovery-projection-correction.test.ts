@@ -229,20 +229,19 @@ describe('C8A — finality recovery projection correction', () => {
     ).toThrowError(expect.objectContaining(expected));
   });
 
-  it('does not rerun duplicate manual submission after admission', async () => {
+  it('resumes admitted manual submission retry after transient failure', async () => {
     const { candidateToken, session } = await createActive();
     sandbox.failCaptureFrozenEvidence = true;
-    const freeze = vi.spyOn(sandbox, 'freeze');
     const capture = vi.spyOn(sandbox, 'captureFrozenEvidence');
     await expect(service.submit(candidateToken)).rejects.toBeDefined();
 
+    sandbox.failCaptureFrozenEvidence = false;
     await expect(service.submit(candidateToken)).resolves.toMatchObject({
-      status: 'ACTIVE',
+      status: 'SUBMITTED',
       closureReason: 'candidate_submission',
     });
-    expect(freeze).toHaveBeenCalledTimes(1);
-    expect(capture).toHaveBeenCalledTimes(1);
-    expect(store.findById(session.id)?.submittedAt).toBeNull();
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect(store.findById(session.id)?.submittedAt).not.toBeNull();
   });
 
   it('background recovery resumes manual admission before deadline', async () => {

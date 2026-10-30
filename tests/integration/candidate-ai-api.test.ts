@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from '../../apps/web/app/api/candidate/sessions/[token]/ai/interactions/route';
 import {
@@ -10,6 +10,37 @@ import {
 } from '../../apps/web/src/ai/ai-interaction';
 import { SessionService } from '../../apps/web/src/sessions/session-service';
 import { SqliteSessionStore } from '../../apps/web/src/sessions/sqlite-session-store';
+
+// Explicit test injection: production code no longer registers a mock AI
+// provider by default (missing provider must surface as an honest failure).
+// These tests exercise the route's success path, so the deterministic
+// MockAiProvider is injected here on purpose — never implicitly.
+vi.mock(
+  '../../apps/web/src/ai/ai-interaction-service',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('../../apps/web/src/ai/ai-interaction-service')
+      >();
+    const { MockAiProvider } =
+      await import('../../apps/web/src/ai/mock-ai-provider');
+    const { DefaultAiProviderRegistry } =
+      await import('../../apps/web/src/ai/ai-provider');
+    return {
+      ...actual,
+      getAiInteractionService: (
+        databasePath?: string,
+        options?: Parameters<typeof actual.getAiInteractionService>[1],
+      ) =>
+        actual.getAiInteractionService(databasePath, {
+          ...options,
+          providerRegistry:
+            options?.providerRegistry ??
+            new DefaultAiProviderRegistry([new MockAiProvider()]),
+        }),
+    };
+  },
+);
 
 describe('Candidate AI API endpoint POST /api/candidate/sessions/[token]/ai/interactions', () => {
   let directory: string;
