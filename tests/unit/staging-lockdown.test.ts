@@ -4,6 +4,8 @@ import { NextRequest } from 'next/server';
 import { proxy } from '../../apps/web/proxy';
 import { getHealthStatus } from '../../apps/web/src/health';
 import { register } from '../../apps/web/instrumentation';
+import { r214CandidateExecutionAction } from '../../apps/web/src/r214-execution/server';
+import { r212CandidateAiAction } from '../../apps/web/src/r212-ai/server';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -42,6 +44,22 @@ describe('staging lockdown', () => {
         ai: 'disabled',
       },
     });
+  });
+
+  it('rejects execution and AI actions before configuration or admission', async () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-lockdown');
+    vi.stubEnv('HIREARCHY_EXECUTION_BACKEND', 'restricted-executor');
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: 'not json',
+    });
+    const execution = await r214CandidateExecutionAction(request, 'invalid');
+    const ai = await r212CandidateAiAction(request, 'invalid');
+    expect(execution.status).toBe(503);
+    expect((await execution.json()).error.code).toBe('EXECUTION_DISABLED');
+    expect(ai.status).toBe(503);
+    expect((await ai.json()).error.code).toBe('AI_ASSISTANCE_DISABLED');
+    expect(request.bodyUsed).toBe(false);
   });
 
   it('does not initialize storage or reconciliation on startup', async () => {
