@@ -7,11 +7,30 @@ export type CandidateContextAttachment = Readonly<{
   endLine?: number;
 }>;
 
+export type AssistantPlatformContext = Readonly<{
+  publishedBrief: string;
+  savedFiles: readonly Readonly<{
+    filePath: string;
+    content: string;
+    truncated: boolean;
+  }>[];
+  recordedChecks: readonly Readonly<{
+    eventId: string;
+    commandId: string;
+    command: string;
+    exitCode: number | null;
+    timedOut: boolean;
+    stdoutPreview: string;
+    stderrPreview: string;
+  }>[];
+}>;
+
 export type HirearchyContextMetadata = Readonly<{
   scenarioId: string;
   scenarioVersion: string;
   configurationVersion: string;
   injectedBriefingIncluded?: boolean;
+  assistantContext?: AssistantPlatformContext;
 }>;
 
 export type AiCapabilitySnapshot = Readonly<{
@@ -45,6 +64,7 @@ export const cloneAiCapabilitySnapshot = (
 export const MAXIMUM_PROMPT_LENGTH = 32_768; // 32 KiB
 export const MAXIMUM_RESPONSE_LENGTH = 65_536; // 64 KiB
 export const MAXIMUM_EXCERPT_LENGTH = 500;
+export const MAXIMUM_AI_CONTEXT_ATTACHMENTS = 3;
 
 export const boundExcerpt = (
   text: string,
@@ -66,6 +86,12 @@ export const validateCandidateContextAttachments = (
     throw new AiInteractionError(
       'INVALID_INPUT',
       'Candidate context attachments must be an array.',
+    );
+  }
+  if (attachments.length > MAXIMUM_AI_CONTEXT_ATTACHMENTS) {
+    throw new AiInteractionError(
+      'INVALID_INPUT',
+      `No more than ${MAXIMUM_AI_CONTEXT_ATTACHMENTS} context files may be attached.`,
     );
   }
   for (const attachment of attachments) {
@@ -165,7 +191,10 @@ export class AiInteractionError extends Error {
       | 'INTERACTION_NOT_FOUND'
       | 'PROVIDER_NOT_CONFIGURED'
       | 'PLATFORM_PERSISTENCE_FAILED'
-      | 'AMBIGUOUS_DISPATCH',
+      | 'AMBIGUOUS_DISPATCH'
+      | 'AI_CONCURRENT_REQUEST_LIMIT'
+      | 'AI_INTERACTION_LIMIT_EXCEEDED'
+      | 'AI_RATE_LIMIT_EXCEEDED',
     message: string,
   ) {
     super(message);

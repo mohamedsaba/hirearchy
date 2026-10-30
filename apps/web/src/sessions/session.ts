@@ -1,5 +1,6 @@
 import type { AiCapabilitySnapshot } from '../ai/ai-interaction';
 import type { ScenarioSnapshot } from '../scenarios/slice-one-scenario';
+import type { TaskRubricSnapshot } from '../assessments/task-rubric';
 
 export {
   type CandidateTimingProjection,
@@ -27,6 +28,9 @@ export type AssessmentSession = Readonly<{
   scenarioType?: 'single_file' | 'multi_file';
   submittedDiff?: string | null;
   aiCapabilitySnapshot?: AiCapabilitySnapshot | null;
+  taskRubricSnapshot?: TaskRubricSnapshot | null;
+  terminalEnabled?: boolean;
+  candidateToken?: string | null;
 }>;
 
 export type SubmittedSession = AssessmentSession &
@@ -44,11 +48,13 @@ export class SessionError extends Error {
       | 'SESSION_NOT_ACTIVE'
       | 'SESSION_FINALIZATION_STARTED'
       | 'SESSION_DEADLINE_EXCEEDED'
+      | 'TERMINAL_NOT_ENABLED'
       | 'EVIDENCE_NOT_READY'
       | 'CONTENT_TOO_LARGE'
       | 'COMMAND_TOO_LARGE'
       | 'PLATFORM_CAPTURE_FAILED'
-      | 'INVALID_SCENARIO_DURATION',
+      | 'INVALID_SCENARIO_DURATION'
+      | 'SCENARIO_UNAVAILABLE',
     message: string,
   ) {
     super(message);

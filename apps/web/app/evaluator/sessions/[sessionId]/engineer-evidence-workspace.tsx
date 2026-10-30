@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { IconFileDescription } from '@tabler/icons-react';
 import type {
   ObservedStatement,
   BriefingAiSummary,
@@ -24,6 +25,12 @@ type EngineerEvidenceWorkspaceProps = Readonly<{
   submittedState: SubmittedStateSummary;
   activatedAt: string | null;
   aiSummary: BriefingAiSummary;
+  initialSelectedEvidenceRef?: string | null;
+  focusEvidenceRef?: string | null;
+  showDetailedTechnical?: boolean;
+  showConfiguredModel?: boolean;
+  showTokenTelemetry?: boolean;
+  showTechnicalViews?: boolean;
 }>;
 
 export const EngineerEvidenceWorkspace = ({
@@ -34,12 +41,24 @@ export const EngineerEvidenceWorkspace = ({
   submittedState,
   activatedAt,
   aiSummary,
+  initialSelectedEvidenceRef = null,
+  focusEvidenceRef = null,
+  showDetailedTechnical = true,
+  showConfiguredModel = true,
+  showTokenTelemetry = true,
+  showTechnicalViews = true,
 }: EngineerEvidenceWorkspaceProps) => {
+  const initialEvidenceRef = evidenceEntries.some(
+    (entry) => entry.evidenceRef === initialSelectedEvidenceRef,
+  )
+    ? initialSelectedEvidenceRef
+    : null;
   const [selectedEvidenceRef, setSelectedEvidenceRef] = useState<string | null>(
-    null,
+    initialEvidenceRef,
   );
-  const [selectedPanel, setSelectedPanel] =
-    useState<InspectionPanel>('submittedChanges');
+  const [selectedPanel, setSelectedPanel] = useState<InspectionPanel>(
+    initialEvidenceRef || !showTechnicalViews ? 'evidence' : 'submittedChanges',
+  );
   const selectedEntry = evidenceEntries.find(
     (entry) => entry.evidenceRef === selectedEvidenceRef,
   );
@@ -47,6 +66,25 @@ export const EngineerEvidenceWorkspace = ({
   const selectEvidence = (evidenceRef: string) => {
     setSelectedEvidenceRef(evidenceRef);
     setSelectedPanel('evidence');
+  };
+
+  const returnToChronology = () => {
+    if (!selectedEvidenceRef) return;
+    const activity = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-evidence-refs]'),
+    ).find((element) =>
+      element.dataset.evidenceRefs?.split(' ').includes(selectedEvidenceRef),
+    );
+    const control = activity?.querySelector<HTMLButtonElement>(
+      '[data-evidence-control]',
+    );
+    if (control) {
+      control.scrollIntoView?.({ block: 'center' });
+      control.focus();
+      return;
+    }
+    activity?.scrollIntoView?.({ block: 'center' });
+    activity?.focus();
   };
 
   return (
@@ -59,15 +97,16 @@ export const EngineerEvidenceWorkspace = ({
           activities={activities}
           verification={verification}
           evidenceEntries={evidenceEntries}
-          showDetailedTechnical
+          showDetailedTechnical={showDetailedTechnical}
           showStructuredEvidence
           showDirectEvidenceLinks
           showVerificationChronology
           aiSummary={aiSummary}
-          showConfiguredModel
-          showTokenTelemetry
+          showConfiguredModel={showConfiguredModel}
+          showTokenTelemetry={showTokenTelemetry}
           activatedAt={activatedAt}
           selectedEvidenceRef={selectedEvidenceRef}
+          focusEvidenceRef={focusEvidenceRef}
           onSelectEvidence={selectEvidence}
         />
       </div>
@@ -77,34 +116,55 @@ export const EngineerEvidenceWorkspace = ({
         id="engineer-inspection"
         aria-labelledby="engineer-inspection-title"
       >
-        <header className="review-section-heading">
-          <p className="section-kicker">Technical inspection</p>
-          <h2 id="engineer-inspection-title">Source evidence</h2>
-          <p>Chronology remains visible while inspecting recorded details.</p>
+        <header className="review-section-heading engineer-inspection-heading">
+          <span className="evaluator-review-title-icon" aria-hidden="true">
+            <IconFileDescription size={22} stroke={1.8} />
+          </span>
+          <div>
+            <p className="section-kicker">Technical inspection</p>
+            <h2 id="engineer-inspection-title">Event details</h2>
+            <p>
+              Chronology remains visible while inspecting recorded details. The
+              source record is not an evaluator conclusion.
+            </p>
+          </div>
         </header>
 
-        <div
-          className="engineer-inspection-actions"
-          role="group"
-          aria-label="Inspection views"
-        >
+        {selectedEvidenceRef ? (
           <button
             type="button"
-            className="evidence-toggle-button"
-            aria-pressed={selectedPanel === 'submittedChanges'}
-            onClick={() => setSelectedPanel('submittedChanges')}
+            className="evaluator-return-to-chronology"
+            aria-controls="reconstruction"
+            onClick={returnToChronology}
           >
-            Final submitted state
+            ← Back to chronology
           </button>
-          <button
-            type="button"
-            className="evidence-toggle-button"
-            aria-pressed={selectedPanel === 'technicalRecord'}
-            onClick={() => setSelectedPanel('technicalRecord')}
+        ) : null}
+
+        {showTechnicalViews ? (
+          <div
+            className="engineer-inspection-actions"
+            role="group"
+            aria-label="Inspection views"
           >
-            Technical record
-          </button>
-        </div>
+            <button
+              type="button"
+              className="evidence-toggle-button"
+              aria-pressed={selectedPanel === 'submittedChanges'}
+              onClick={() => setSelectedPanel('submittedChanges')}
+            >
+              Final submitted state
+            </button>
+            <button
+              type="button"
+              className="evidence-toggle-button"
+              aria-pressed={selectedPanel === 'technicalRecord'}
+              onClick={() => setSelectedPanel('technicalRecord')}
+            >
+              Technical record
+            </button>
+          </div>
+        ) : null}
 
         {selectedPanel === 'submittedChanges' ? (
           <SubmittedWork
@@ -123,28 +183,30 @@ export const EngineerEvidenceWorkspace = ({
             aria-labelledby="selected-evidence-title"
           >
             <h3 id="selected-evidence-title">Selected source evidence</h3>
-            <dl className="engineer-evidence-provenance">
-              <div>
-                <dt>Evidence reference</dt>
-                <dd>
-                  <code>{selectedEntry.evidenceRef}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Record kind</dt>
-                <dd>{selectedEntry.kind}</dd>
-              </div>
-              <div>
-                <dt>Evidence role</dt>
-                <dd>{selectedEntry.role}</dd>
-              </div>
-            </dl>
+            {showDetailedTechnical ? (
+              <dl className="engineer-evidence-provenance">
+                <div>
+                  <dt>Evidence reference</dt>
+                  <dd>
+                    <code>{selectedEntry.evidenceRef}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Record kind</dt>
+                  <dd>{selectedEntry.kind}</dd>
+                </div>
+                <div>
+                  <dt>Evidence role</dt>
+                  <dd>{selectedEntry.role}</dd>
+                </div>
+              </dl>
+            ) : null}
             {selectedEntry.item ? (
               <EvidenceItemCard
                 item={selectedEntry.item}
-                showConfiguredModel
-                showTokenTelemetry
-                showTechnicalDetails
+                showConfiguredModel={showConfiguredModel}
+                showTokenTelemetry={showTokenTelemetry}
+                showTechnicalDetails={showDetailedTechnical}
               />
             ) : (
               <p className="empty-evidence-copy">

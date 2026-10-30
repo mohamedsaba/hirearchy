@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { IconListDetails } from '@tabler/icons-react';
 import type {
   BriefingAiSummary,
   ObservedStatement,
@@ -25,6 +26,7 @@ type RecordedActivityProps = Readonly<{
   showTokenTelemetry?: boolean;
   activatedAt?: string | null;
   selectedEvidenceRef?: string | null;
+  focusEvidenceRef?: string | null;
   onSelectEvidence?: (evidenceRef: string) => void;
 }>;
 
@@ -166,6 +168,7 @@ export const RecordedActivity = ({
   showTokenTelemetry = false,
   activatedAt,
   selectedEvidenceRef,
+  focusEvidenceRef,
   onSelectEvidence,
 }: RecordedActivityProps) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -228,6 +231,11 @@ export const RecordedActivity = ({
       <li
         key={activity.id}
         className={`activity-item activity-item-${activity.kind}`}
+        tabIndex={-1}
+        data-evidence-refs={activity.evidenceRefs.join(' ')}
+        data-evidence-focused={
+          activity.evidenceRefs.includes(focusEvidenceRef ?? '') || undefined
+        }
       >
         <div className="activity-marker-container" aria-hidden="true">
           <span className="activity-marker" />
@@ -268,6 +276,7 @@ export const RecordedActivity = ({
               <button
                 type="button"
                 className="evidence-toggle-button"
+                data-evidence-control={firstEntry.evidenceRef}
                 aria-pressed={isSelected}
                 aria-label={`View source evidence ${firstEntry.evidenceRef}`}
                 onClick={() => onSelectEvidence(firstEntry.evidenceRef)}
@@ -394,15 +403,20 @@ export const RecordedActivity = ({
       id="reconstruction"
     >
       <header className="review-section-heading">
-        <p className="section-kicker">Chronological progression</p>
-        <h2 id="recorded-activity-title">Recorded activity</h2>
-        <h3 id="summary-title" className="subheading-h3">
-          What happened
-        </h3>
-        <p>
-          Each factual statement is grounded in recorded session evidence.
-          Expand evidence to inspect the exact technical record.
-        </p>
+        <span className="evaluator-review-title-icon" aria-hidden="true">
+          <IconListDetails size={22} stroke={1.8} />
+        </span>
+        <div>
+          <p className="section-kicker">Chronological progression</p>
+          <h2 id="recorded-activity-title">Session timeline</h2>
+          <h3 id="summary-title" className="subheading-h3">
+            What happened
+          </h3>
+          <p>
+            Each factual statement is grounded in recorded session evidence.
+            Expand evidence to inspect the exact technical record.
+          </p>
+        </div>
       </header>
 
       {aiSummary ? (
@@ -437,6 +451,9 @@ export const RecordedActivity = ({
               key={unit.id}
               className="activity-item activity-burst-group"
               aria-label="Grouped AI interactions"
+              data-evidence-refs={unit.activities
+                .flatMap((activity) => activity.evidenceRefs)
+                .join(' ')}
             >
               <div className="activity-marker-container" aria-hidden="true">
                 <span className="activity-marker activity-marker-burst" />

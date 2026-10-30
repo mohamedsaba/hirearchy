@@ -11,15 +11,15 @@ import { buildEvaluatorReviewPresentation } from '../../../../src/evaluator/eval
 import { getAuthorizedReconstruction } from '../../../../src/reconstruction/evidence-reconstruction-runtime';
 import { SessionError } from '../../../../src/sessions/session';
 import { buildEvaluatorBriefing } from '../../../../src/evaluator/build-evaluator-briefing';
+import { buildEvaluatorAiConversations } from '../../../../src/evaluator/evaluator-ai-conversations';
+import { getAiInteractionService } from '../../../../src/ai/ai-interaction-service';
 import {
   projectBriefing,
   resolveBriefingDepthProfile,
   type BriefingDepthProfile,
 } from '../../../../src/evaluator/project-evaluator-briefing';
-import { submittedChangesAnchor } from './submitted-diff';
 import { EvaluatorExperience } from './evaluator-experience';
 
-export { submittedChangesAnchor };
 export const dynamic = 'force-dynamic';
 
 type EvidencePageProps = Readonly<{
@@ -84,16 +84,31 @@ const EvidencePage = async ({ params, searchParams }: EvidencePageProps) => {
     resolveBriefingDepthProfile(requestedRole);
 
   const projection = projectBriefing(briefing, activeRole);
+  const hasAiEvidence = review.chronology.some((item) =>
+    item.kind.startsWith('AI_'),
+  );
+  const aiConversations = buildEvaluatorAiConversations(
+    review.chronology,
+    review.evidenceEntries,
+    hasAiEvidence
+      ? getAiInteractionService().getInteractionsForSession(sessionId)
+      : [],
+    evidence.activatedAt,
+  );
 
   return (
-    <main className="evaluator-review-shell">
+    <main
+      className="software-product evaluator-review-shell"
+      style={{ width: '100%', maxWidth: 'none', margin: 0, padding: 0 }}
+    >
+      <h1 className="visually-hidden">Evaluator review</h1>
       <EvaluatorExperience
         sessionId={sessionId}
         evidence={evidence}
         review={review}
         projection={projection}
         activeRole={activeRole}
-        searchParams={resolvedSearchParams}
+        aiConversations={aiConversations}
       />
     </main>
   );

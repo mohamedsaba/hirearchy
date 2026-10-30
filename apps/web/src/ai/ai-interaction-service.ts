@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
+import { getApplicationDatabasePath } from '../database/database-path';
 
 import { SqliteTransactionRunner } from '../database/sqlite-transaction-runner';
 import { SqliteEventStore } from '../events/sqlite-event-store';
@@ -26,7 +26,14 @@ import {
   DefaultAiProviderRegistry,
   type NormalizedAiRequest,
 } from './ai-provider';
-import { MockAiProvider } from './mock-ai-provider';
+import {
+  NvidiaNimAiProvider,
+  OpenRouterAiProvider,
+} from './openrouter-ai-provider';
+import {
+  getNvidiaApiKey,
+  getOpenRouterApiKey,
+} from './server-ai-configuration';
 import { SqliteAiInteractionStore } from './sqlite-ai-interaction-store';
 
 export type AdmitAiInteractionParams = Readonly<{
@@ -76,6 +83,44 @@ export type FailAiInteractionParams = Readonly<{
   errorMessage: string;
 }>;
 
+export const DEFAULT_MAX_AI_INTERACTIONS_PER_SESSION = 25;
+export const DEFAULT_MAX_AI_CONCURRENT_PER_SESSION = 1;
+export const DEFAULT_MAX_AI_REQUESTS_PER_MINUTE = 6;
+export const DEFAULT_MAX_AI_TOTAL_ATTEMPTS_PER_SESSION = 50;
+
+/** Terminal reason recorded when a dispatch is released without a result. */
+export const ABANDONED_DISPATCH_FAILURE_REASON = 'dispatch_abandoned';
+
+/**
+ * Recovery horizon for interactions stuck in a non-terminal state after a
+ * provider initialization failure, a crashed request, or an interrupted
+ * process. It must outlast `timeoutMs` so a slow-but-live provider call is not
+ * reclaimed while it is still running.
+ */
+const DISPATCH_RECOVERY_TIMEOUT_MULTIPLIER = 3;
+const MINIMUM_DISPATCH_RECOVERY_MS = 90_000;
+
+const STRICT_POSITIVE_INTEGER_PATTERN = /^\d{1,9}$/;
+
+/**
+ * Parse an operator-supplied limit, failing closed to `defaultValue`.
+ *
+ * `Number.parseInt` alone is unsafe here: it accepts partial parses such as
+ * `"2oops"` and would silently widen a protection limit beyond the
+ * conservative default (for example turning the default concurrency of 1 into
+ * 2). Only an unambiguous positive integer may override the default.
+ */
+const parsePositiveInt = (
+  value: string | undefined,
+  defaultValue: number,
+): number => {
+  if (value === undefined) return defaultValue;
+  const trimmed = value.trim();
+  if (!STRICT_POSITIVE_INTEGER_PATTERN.test(trimmed)) return defaultValue;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : defaultValue;
+};
+
 export type AiInteractionServiceOptions = Readonly<{
   sessionStore: SqliteSessionStore;
   eventStore: SqliteEventStore;
@@ -85,6 +130,11 @@ export type AiInteractionServiceOptions = Readonly<{
   timeoutMs?: number;
   createId?: () => string;
   now?: () => string;
+  maxInteractionsPerSession?: number;
+  maxConcurrentPerSession?: number;
+  maxRateLimitPerMinute?: number;
+  maxTotalAttemptsPerSession?: number;
+  dispatchRecoveryAfterMs?: number;
 }>;
 
 export class AiInteractionService {
@@ -96,6 +146,11 @@ export class AiInteractionService {
   private readonly timeoutMs: number;
   private readonly createId: () => string;
   private readonly now: () => string;
+  readonly maxInteractionsPerSession: number;
+  readonly maxConcurrentPerSession: number;
+  readonly maxRateLimitPerMinute: number;
+  readonly maxTotalAttemptsPerSession: number;
+  readonly dispatchRecoveryAfterMs: number;
 
   constructor(options: AiInteractionServiceOptions) {
     this.sessionStore = options.sessionStore;
@@ -103,11 +158,40 @@ export class AiInteractionService {
     this.aiInteractionStore = options.aiInteractionStore;
     this.transactionRunner = options.transactionRunner;
     this.providerRegistry =
-      options.providerRegistry ??
-      new DefaultAiProviderRegistry([new MockAiProvider()]);
+      options.providerRegistry ?? new DefaultAiProviderRegistry();
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.createId = options.createId ?? randomUUID;
     this.now = options.now ?? (() => new Date().toISOString());
+    this.maxInteractionsPerSession =
+      options.maxInteractionsPerSession ??
+      parsePositiveInt(
+        process.env.HIREARCHY_AI_MAX_INTERACTIONS_PER_SESSION,
+        DEFAULT_MAX_AI_INTERACTIONS_PER_SESSION,
+      );
+    this.maxConcurrentPerSession =
+      options.maxConcurrentPerSession ??
+      parsePositiveInt(
+        process.env.HIREARCHY_AI_MAX_CONCURRENT_PER_SESSION,
+        DEFAULT_MAX_AI_CONCURRENT_PER_SESSION,
+      );
+    this.maxRateLimitPerMinute =
+      options.maxRateLimitPerMinute ??
+      parsePositiveInt(
+        process.env.HIREARCHY_AI_MAX_REQUESTS_PER_MINUTE,
+        DEFAULT_MAX_AI_REQUESTS_PER_MINUTE,
+      );
+    this.maxTotalAttemptsPerSession =
+      options.maxTotalAttemptsPerSession ??
+      parsePositiveInt(
+        process.env.HIREARCHY_AI_MAX_TOTAL_ATTEMPTS_PER_SESSION,
+        DEFAULT_MAX_AI_TOTAL_ATTEMPTS_PER_SESSION,
+      );
+    this.dispatchRecoveryAfterMs =
+      options.dispatchRecoveryAfterMs ??
+      Math.max(
+        this.timeoutMs * DISPATCH_RECOVERY_TIMEOUT_MULTIPLIER,
+        MINIMUM_DISPATCH_RECOVERY_MS,
+      );
   }
 
   admitInteraction(
@@ -198,6 +282,72 @@ export class AiInteractionService {
 
         validateCandidateContextAttachments(params.candidateContext);
 
+        // 0. Release interactions stranded in a non-terminal state by a provider
+        //    initialization failure, a crashed request, or an interrupted
+        //    process, so they cannot hold the concurrency allowance or the
+        //    session attempt quota indefinitely.
+        this.reclaimAbandonedDispatchesWithDatabase(database, sessionId, now);
+
+        // 1. Concurrency limit: Ensure no more than maxConcurrentPerSession active interactions
+        const openInteractions =
+          this.aiInteractionStore.findOpenBySessionIdWithDatabase(
+            database,
+            sessionId,
+          );
+        const activeOpenInteractions = openInteractions.filter(
+          (interaction) =>
+            new Date(now).getTime() -
+              new Date(interaction.createdAt).getTime() <=
+            this.timeoutMs,
+        );
+        if (activeOpenInteractions.length >= this.maxConcurrentPerSession) {
+          throw new AiInteractionError(
+            'AI_CONCURRENT_REQUEST_LIMIT',
+            'An AI interaction is already in progress for this session. Please wait for it to complete.',
+          );
+        }
+
+        // 2. Session completed interactions quota (expenditure protection)
+        const completedCount =
+          this.aiInteractionStore.countCompletedBySessionIdWithDatabase(
+            database,
+            sessionId,
+          );
+        if (completedCount >= this.maxInteractionsPerSession) {
+          throw new AiInteractionError(
+            'AI_INTERACTION_LIMIT_EXCEEDED',
+            `Session AI limit of ${this.maxInteractionsPerSession} completed requests has been reached.`,
+          );
+        }
+
+        // 3. Session total attempts limit (protect against unbounded retries / failure spam)
+        const totalAttempts =
+          this.aiInteractionStore.countTotalBySessionIdWithDatabase(
+            database,
+            sessionId,
+          );
+        if (totalAttempts >= this.maxTotalAttemptsPerSession) {
+          throw new AiInteractionError(
+            'AI_INTERACTION_LIMIT_EXCEEDED',
+            `Session AI attempt limit of ${this.maxTotalAttemptsPerSession} requests has been reached.`,
+          );
+        }
+
+        // 4. Rate limit: Max requests per minute
+        const recentAttempts =
+          this.aiInteractionStore.countRecentBySessionIdWithDatabase(
+            database,
+            sessionId,
+            60,
+            now,
+          );
+        if (recentAttempts >= this.maxRateLimitPerMinute) {
+          throw new AiInteractionError(
+            'AI_RATE_LIMIT_EXCEEDED',
+            `AI request rate limit exceeded. Maximum ${this.maxRateLimitPerMinute} requests per minute allowed.`,
+          );
+        }
+
         const interaction: AiInteraction = {
           id: interactionId,
           sessionId,
@@ -263,6 +413,77 @@ export class AiInteractionService {
         }
       }
       throw error;
+    }
+  }
+
+  /**
+   * Move interactions that have been open longer than the recovery horizon into
+   * a terminal FAILED state, appending an `AI_REQUEST_FAILED` event so the
+   * release is visible in reconstructed evidence rather than being a silent
+   * bookkeeping edit.
+   *
+   * Runs inside the admission transaction, which keeps admission atomic and
+   * preserves the existing SQLite data model: both `ADMITTED` and
+   * `DISPATCH_STARTED` already have a valid transition to `FAILED`, so no schema
+   * or state-machine change is required.
+   */
+  reclaimAbandonedDispatchesWithDatabase(
+    database: Database.Database,
+    sessionId: string,
+    nowIso: string,
+  ): readonly AiInteraction[] {
+    const nowMs = new Date(nowIso).getTime();
+    const cutoff = nowMs - this.dispatchRecoveryAfterMs;
+    const abandoned = this.aiInteractionStore
+      .findOpenBySessionIdWithDatabase(database, sessionId)
+      .filter(
+        (interaction) => new Date(interaction.createdAt).getTime() <= cutoff,
+      );
+
+    const reclaimed: AiInteraction[] = [];
+    for (const interaction of abandoned) {
+      const durationMs = Math.max(
+        0,
+        nowMs - new Date(interaction.createdAt).getTime(),
+      );
+      try {
+        reclaimed.push(
+          this.recordFailureWithDatabase(database, interaction.id, {
+            durationMs,
+            failureReason: ABANDONED_DISPATCH_FAILURE_REASON,
+            errorMessage:
+              'The AI request was abandoned before the provider returned and was released by the platform.',
+          }),
+        );
+      } catch {
+        // Best effort. A session that is no longer active cannot record a
+        // failure; those interactions are cancelled by session finalization.
+      }
+    }
+
+    return reclaimed;
+  }
+
+  /**
+   * Drive a claimed dispatch to a terminal FAILED state on an error path that
+   * would otherwise leave it stuck in DISPATCH_STARTED. Persistence failures
+   * are swallowed here because `reclaimAbandonedDispatchesWithDatabase` will
+   * release the interaction on the next admission.
+   */
+  private releaseStuckDispatch(
+    interactionId: string,
+    failureReason: string,
+    errorMessage: string,
+    dispatchStartedAtMs: number,
+  ): void {
+    try {
+      this.recordFailure(interactionId, {
+        durationMs: Math.max(0, Date.now() - dispatchStartedAtMs),
+        failureReason,
+        errorMessage,
+      });
+    } catch {
+      // Recovery is handled by the next admission sweep.
     }
   }
 
@@ -669,14 +890,40 @@ export class AiInteractionService {
       };
     }
 
-    const provider = this.providerRegistry.getProvider(
-      admission.interaction.configuredProviderId,
-    );
-    if (!provider) {
-      throw new AiInteractionError(
-        'PROVIDER_NOT_CONFIGURED',
-        `AI provider "${admission.interaction.configuredProviderId}" is not configured on the platform.`,
+    // From here on the interaction is already in DISPATCH_STARTED. Every exit
+    // path must therefore drive it to a terminal state, otherwise it would hold
+    // the per-session concurrency allowance and attempt quota indefinitely.
+    const dispatchStartedAt = Date.now();
+
+    let provider;
+    try {
+      provider = this.providerRegistry.getProvider(
+        admission.interaction.configuredProviderId,
       );
+    } catch (error: unknown) {
+      this.releaseStuckDispatch(
+        admission.interaction.id,
+        'provider_lookup_failed',
+        error instanceof Error
+          ? error.message
+          : 'The AI provider registry could not resolve the configured provider.',
+        dispatchStartedAt,
+      );
+      throw error;
+    }
+
+    if (!provider) {
+      // An unconfigured provider is a permanent failure for this interaction.
+      // Releasing it here is what prevents an unconfigured platform from
+      // wedging the session's concurrency allowance.
+      const message = `AI provider "${admission.interaction.configuredProviderId}" is not configured on the platform.`;
+      this.releaseStuckDispatch(
+        admission.interaction.id,
+        'provider_not_configured',
+        message,
+        dispatchStartedAt,
+      );
+      throw new AiInteractionError('PROVIDER_NOT_CONFIGURED', message);
     }
 
     const abortController = new AbortController();
@@ -687,14 +934,26 @@ export class AiInteractionService {
     }, this.timeoutMs);
 
     const startTime = Date.now();
-    const normalizedRequest: NormalizedAiRequest = {
-      configuredModelId: admission.interaction.configuredModelId,
-      candidateInput: params.candidatePromptText,
-      candidateContext: params.candidateContext,
-      hirearchyContext: params.hirearchyContext,
-    };
-
     try {
+      const conversationHistory = this.aiInteractionStore
+        .findBySessionId(sessionId)
+        .filter(
+          (interaction) =>
+            interaction.status === 'COMPLETED' &&
+            typeof interaction.capturedResponseText === 'string',
+        )
+        .slice(-4)
+        .map((interaction) => ({
+          candidateInput: boundExcerpt(interaction.candidatePromptText),
+          responseText: boundExcerpt(interaction.capturedResponseText ?? ''),
+        }));
+      const normalizedRequest: NormalizedAiRequest = {
+        configuredModelId: admission.interaction.configuredModelId,
+        candidateInput: params.candidatePromptText,
+        candidateContext: params.candidateContext,
+        hirearchyContext: params.hirearchyContext,
+        conversationHistory,
+      };
       const providerResult = await provider.execute(normalizedRequest, {
         signal: abortController.signal,
       });
@@ -751,7 +1010,18 @@ export class AiInteractionService {
       };
     } catch (error: unknown) {
       clearTimeout(timer);
+
       if (error instanceof AiInteractionError) {
+        // Platform and state-machine errors must surface unchanged so a
+        // persistence failure is never reported as a normal outcome. The
+        // dispatch is still released first, because the transaction that raised
+        // this error rolled back and left the interaction in DISPATCH_STARTED.
+        this.releaseStuckDispatch(
+          admission.interaction.id,
+          'dispatch_error',
+          error.message,
+          dispatchStartedAt,
+        );
         throw error;
       }
 
@@ -819,10 +1089,7 @@ export const getAiInteractionService = (
   databasePath?: string,
   options?: Partial<AiInteractionServiceOptions>,
 ) => {
-  const resolvedPath =
-    databasePath ??
-    process.env.HIREARCHY_DB_PATH ??
-    path.join(process.cwd(), '.data/hirearchy.sqlite');
+  const resolvedPath = databasePath ?? getApplicationDatabasePath();
 
   const sessionStore =
     options?.sessionStore ?? new SqliteSessionStore(resolvedPath);
@@ -835,14 +1102,24 @@ export const getAiInteractionService = (
   runner.registerInitializer(SqliteEventStore.ensureSchema);
   runner.registerInitializer(SqliteAiInteractionStore.ensureSchema);
 
+  const providerRegistry =
+    options?.providerRegistry ??
+    new DefaultAiProviderRegistry([
+      ...(getOpenRouterApiKey() ? [new OpenRouterAiProvider()] : []),
+      ...(getNvidiaApiKey() ? [new NvidiaNimAiProvider()] : []),
+    ]);
   return new AiInteractionService({
     sessionStore,
     eventStore,
     aiInteractionStore,
     transactionRunner: runner,
-    providerRegistry: options?.providerRegistry,
+    providerRegistry,
     timeoutMs: options?.timeoutMs,
     createId: options?.createId,
     now: options?.now,
+    maxInteractionsPerSession: options?.maxInteractionsPerSession,
+    maxConcurrentPerSession: options?.maxConcurrentPerSession,
+    maxRateLimitPerMinute: options?.maxRateLimitPerMinute,
+    maxTotalAttemptsPerSession: options?.maxTotalAttemptsPerSession,
   });
 };

@@ -2,6 +2,7 @@
 
 import type { CandidateEphemeralUiMode } from '../../../src/candidate/candidate-experience-state';
 import type { CandidateSessionView } from '../../../src/sessions/candidate-session-view';
+import type { TaskRubricSnapshot } from '../../../src/assessments/task-rubric';
 
 type CandidatePrestartProps = Readonly<{
   session: CandidateSessionView;
@@ -38,14 +39,25 @@ export const CandidatePrestart = ({
 }: CandidatePrestartProps) => {
   const durationText = formatDurationDescription(session.durationSeconds);
   const aiEnabled = session.aiCapability?.enabled ?? false;
+  const rubricSession = session as CandidateSessionView & {
+    taskRubric?: TaskRubricSnapshot | null;
+  };
+  const taskRubric = rubricSession.taskRubric ?? null;
+  const hasTaskRubricProjection = 'taskRubric' in session;
 
   // 1. Provisioning Failure State (Platform Failure)
   if (provisioningError) {
     return (
-      <main className="workspace-shell" aria-labelledby="prestart-title">
+      <main
+        className="candidate-workspace software-product workspace-shell"
+        aria-labelledby="prestart-title"
+      >
         <header className="workspace-header">
           <div>
-            <p className="eyebrow">Candidate Environment</p>
+            <div className="candidate-brand">
+              <strong>Hirearchy</strong>
+              <span>Software</span>
+            </div>
             <p className="session-reference">Session {session.id}</p>
           </div>
           <span className="status status-danger" role="status">
@@ -92,10 +104,16 @@ export const CandidatePrestart = ({
   // 2. Provisioning in Progress
   if (uiMode === 'provisioning') {
     return (
-      <main className="workspace-shell" aria-labelledby="prestart-title">
+      <main
+        className="candidate-workspace software-product workspace-shell"
+        aria-labelledby="prestart-title"
+      >
         <header className="workspace-header">
           <div>
-            <p className="eyebrow">Candidate Environment</p>
+            <div className="candidate-brand">
+              <strong>Hirearchy</strong>
+              <span>Software</span>
+            </div>
             <p className="session-reference">Session {session.id}</p>
           </div>
           <span className="status" role="status">
@@ -126,10 +144,16 @@ export const CandidatePrestart = ({
   // 3. Ready to Start Confirmation
   if (uiMode === 'ready_to_start') {
     return (
-      <main className="workspace-shell" aria-labelledby="prestart-title">
+      <main
+        className="candidate-workspace software-product workspace-shell"
+        aria-labelledby="prestart-title"
+      >
         <header className="workspace-header">
           <div>
-            <p className="eyebrow">Hirearchy Software Assessment</p>
+            <div className="candidate-brand">
+              <strong>Hirearchy</strong>
+              <span>Software</span>
+            </div>
             <p className="session-reference">Session {session.id}</p>
           </div>
           <span className="status">Ready</span>
@@ -178,10 +202,16 @@ export const CandidatePrestart = ({
   // 4. Orientation View
   if (uiMode === 'orientation') {
     return (
-      <main className="workspace-shell" aria-labelledby="prestart-title">
+      <main
+        className="candidate-workspace software-product workspace-shell"
+        aria-labelledby="prestart-title"
+      >
         <header className="workspace-header">
           <div>
-            <p className="eyebrow">Hirearchy Software Assessment</p>
+            <div className="candidate-brand">
+              <strong>Hirearchy</strong>
+              <span>Software</span>
+            </div>
             <p className="session-reference">Session {session.id}</p>
           </div>
           <span className="status">Orientation</span>
@@ -222,8 +252,10 @@ export const CandidatePrestart = ({
                   the workspace.
                 </li>
                 <li>
-                  <strong>Commands:</strong> Run commands and tests inside the
-                  assessment environment.
+                  <strong>Commands:</strong>{' '}
+                  {session.terminalEnabled
+                    ? 'Run commands and tests inside the assessment environment.'
+                    : 'Not enabled for this assessment.'}
                 </li>
                 <li>
                   <strong>Integrated AI Assistant:</strong>{' '}
@@ -246,9 +278,11 @@ export const CandidatePrestart = ({
                 AI Policy
               </h2>
               <p className="section-body">
-                AI assistance is permitted as part of the environment. You
-                remain fully responsible for the accuracy, design, and quality
-                of your submitted work.
+                The integrated AI assistant is{' '}
+                {aiEnabled ? 'available' : 'not available'} for this assessment.
+                Interactions through it are recorded; this does not establish
+                how submitted code was written. You remain responsible for the
+                accuracy, design, and quality of your submitted work.
               </p>
             </section>
 
@@ -264,6 +298,51 @@ export const CandidatePrestart = ({
                 part of the technical assessment.
               </p>
             </section>
+
+            {taskRubric?.criteria.length ? (
+              <section
+                className="orientation-section candidate-task-rubric"
+                aria-labelledby="candidate-rubric-title"
+              >
+                <h2 id="candidate-rubric-title" className="section-title">
+                  Task criteria
+                </h2>
+                <p className="section-body">
+                  After submission, recorded evidence about your work is
+                  analyzed against these task-specific criteria. They describe
+                  this work sample, not general suitability. A human evaluator
+                  owns every hiring decision.
+                </p>
+                <ol className="candidate-rubric-list">
+                  {taskRubric.criteria.map((criterion) => (
+                    <li key={criterion.id}>
+                      <div>
+                        <strong>{criterion.label}</strong>
+                        <span>{criterion.description}</span>
+                        {criterion.applicability.kind !== 'always' ? (
+                          <small>{criterion.applicability.rule}</small>
+                        ) : null}
+                      </div>
+                      <span>{criterion.weight}%</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : (
+              <section
+                className="orientation-section"
+                aria-labelledby="candidate-rubric-title"
+              >
+                <h2 id="candidate-rubric-title" className="section-title">
+                  Task criteria
+                </h2>
+                <p className="section-body">
+                  {hasTaskRubricProjection
+                    ? 'This session has no saved task rubric, so a scored task report will not be available.'
+                    : 'Task-specific criteria are not available for this session yet. Review the task instructions before you begin.'}
+                </p>
+              </section>
+            )}
 
             <section
               className="orientation-section"
@@ -316,10 +395,16 @@ export const CandidatePrestart = ({
 
   // 5. Default ENTRY View
   return (
-    <main className="workspace-shell" aria-labelledby="prestart-title">
+    <main
+      className="candidate-workspace software-product workspace-shell"
+      aria-labelledby="prestart-title"
+    >
       <header className="workspace-header">
         <div>
-          <p className="eyebrow">Hirearchy Software Candidate Workspace</p>
+          <div className="candidate-brand">
+            <strong>Hirearchy</strong>
+            <span>Software</span>
+          </div>
           <p className="session-reference">Session {session.id}</p>
         </div>
         <span className="status">Pre-start</span>
@@ -332,8 +417,8 @@ export const CandidatePrestart = ({
         </h1>
         <p className="summary">
           You will complete an engineering task in a dedicated assessment
-          workspace equipped with a code editor, command execution console, and
-          developer tools.
+          workspace. The tools available for this assessment are listed in the
+          orientation.
         </p>
 
         <div className="prestart-box highlight-box">

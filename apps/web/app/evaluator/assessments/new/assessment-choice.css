@@ -1,0 +1,147 @@
+.assessment-choice {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.assessment-choice-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--software-border);
+  border-radius: 7px;
+  color: var(--software-ink);
+  background: var(--software-surface);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 450;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.assessment-choice-trigger:hover,
+.assessment-choice-trigger[aria-expanded='true'] {
+  border-color: #9789a7;
+}
+
+.assessment-choice-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.assessment-choice-chevron {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.assessment-choice-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  border: 1px solid var(--software-border);
+  border-radius: 10px;
+  background: var(--software-surface);
+  box-shadow: 0 12px 30px rgb(37 26 53 / 16%);
+  animation: assessment-choice-enter 140ms ease-out;
+}
+
+.assessment-choice-list {
+  max-height: min(15rem, 42vh);
+  overflow-y: auto;
+  padding: 0.3rem;
+}
+
+.assessment-choice-group-label {
+  margin: 0;
+  padding: 0.55rem 0.65rem 0.25rem;
+  color: var(--software-muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.assessment-choice-option {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.48rem 0.65rem;
+  border-radius: 6px;
+  color: var(--software-ink);
+  font-size: 0.84rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.assessment-choice-option:hover:not([data-disabled='true']),
+.assessment-choice-option[data-active='true']:not([data-disabled='true']),
+.assessment-choice-option[aria-selected='true'] {
+  background: var(--software-lilac);
+}
+
+.assessment-choice-option[data-disabled='true'],
+.assessment-choice-option[aria-disabled='true'] {
+  color: var(--software-muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.assessment-choice-option[data-disabled='true']:hover {
+  background: transparent;
+}
+
+.assessment-choice-option[data-disabled='true'][data-active='true'] {
+  background: #f5f2f8;
+}
+
+.assessment-choice-option[aria-selected='true'] > span:last-child {
+  color: var(--software-muted);
+  font-size: 0.69rem;
+  font-weight: 650;
+}
+
+.assessment-choice-brief {
+  margin: 0;
+  padding: 0.65rem 0.85rem 0.75rem;
+  border-top: 1px solid var(--software-border);
+  color: var(--software-muted);
+  background: #fcfafc;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+@keyframes assessment-choice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assessment-choice-trigger {
+    transition: none;
+  }
+  .assessment-choice-popover {
+    animation: none;
+  }
+}

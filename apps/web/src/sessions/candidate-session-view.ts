@@ -1,8 +1,15 @@
 import type { AssessmentSession } from './session';
 import { deriveSessionDeadline } from './session-timing';
+import { cloneTaskRubric } from '../assessments/task-rubric';
+import type { TaskRubricSnapshot } from '../assessments/task-rubric';
+import {
+  NVIDIA_PROVIDER_ID,
+  OPENROUTER_PROVIDER_ID,
+} from '../ai/server-ai-configuration';
 
 export type CandidateAiCapability = Readonly<{
   enabled: boolean;
+  includesWorkspaceContext: boolean;
 }>;
 
 export type CandidateScenarioView = Readonly<{
@@ -32,7 +39,9 @@ export type CandidateSessionView = Readonly<{
   serverTime: string | null;
   closureReason: AssessmentSession['closureReason'];
   scenarioType: 'single_file' | 'multi_file';
+  terminalEnabled: boolean;
   aiCapability: CandidateAiCapability | null;
+  taskRubric: TaskRubricSnapshot | null;
 }>;
 
 export const toCandidateSessionView = (
@@ -65,10 +74,17 @@ export const toCandidateSessionView = (
     closureReason: session.closureReason,
     scenarioType:
       session.scenarioType ?? session.scenario.type ?? 'single_file',
+    terminalEnabled: session.terminalEnabled ?? true,
     aiCapability: session.aiCapabilitySnapshot
       ? ({
           enabled: Boolean(session.aiCapabilitySnapshot.enabled),
+          includesWorkspaceContext:
+            session.aiCapabilitySnapshot.configuredProviderId ===
+              OPENROUTER_PROVIDER_ID ||
+            session.aiCapabilitySnapshot.configuredProviderId ===
+              NVIDIA_PROVIDER_ID,
         } as const satisfies CandidateAiCapability)
       : null,
+    taskRubric: cloneTaskRubric(session.taskRubricSnapshot),
   };
 };

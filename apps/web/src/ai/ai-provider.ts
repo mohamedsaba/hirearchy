@@ -8,6 +8,10 @@ export type NormalizedAiRequest = Readonly<{
   candidateInput: string;
   candidateContext?: readonly CandidateContextAttachment[];
   hirearchyContext?: HirearchyContextMetadata;
+  conversationHistory?: readonly Readonly<{
+    candidateInput: string;
+    responseText: string;
+  }>[];
 }>;
 
 export type NormalizedAiTokenUsage = Readonly<{

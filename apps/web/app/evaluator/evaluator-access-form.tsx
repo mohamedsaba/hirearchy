@@ -61,6 +61,10 @@ export const EvaluatorAccessForm = ({
           ? 'Known session reference'
           : 'Known session reference (optional)'}
         <input
+          aria-describedby={
+            error && authenticated ? 'evaluator-access-error' : undefined
+          }
+          aria-invalid={error && authenticated ? true : undefined}
           autoComplete="off"
           onChange={(event) => setSessionId(event.target.value)}
           required={authenticated}
@@ -71,6 +75,8 @@ export const EvaluatorAccessForm = ({
         <label>
           Evaluator credential
           <input
+            aria-describedby={error ? 'evaluator-access-error' : undefined}
+            aria-invalid={error ? true : undefined}
             autoComplete="current-password"
             onChange={(event) => setCredential(event.target.value)}
             required
@@ -89,7 +95,12 @@ export const EvaluatorAccessForm = ({
               : 'Continue to review queue'}
       </button>
       {error ? (
-        <p className="form-error" aria-live="polite">
+        <p
+          className="form-error"
+          id="evaluator-access-error"
+          role="alert"
+          aria-live="assertive"
+        >
           {error}
         </p>
       ) : null}

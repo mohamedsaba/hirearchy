@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
   },
   poweredByHeader: false,
   serverExternalPackages: ['better-sqlite3'],
+  outputFileTracingExcludes: {
+    '/*': ['./.env*', '../../.env*', './.data/**', '../../.data/**'],
+  },
 };
 
 export default nextConfig;

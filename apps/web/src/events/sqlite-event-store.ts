@@ -105,6 +105,28 @@ export class SqliteEventStore {
     });
   }
 
+  getRecentEvents(sessionId: string, limit: number): readonly SessionEvent[] {
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new RangeError('Event limit must be a positive integer.');
+    }
+    return this.withDatabase((database) => {
+      const rows = database
+        .prepare(
+          'SELECT * FROM assessment_events WHERE session_id = ? ORDER BY sequence DESC LIMIT ?',
+        )
+        .all(sessionId, limit) as EventRow[];
+      return rows.reverse().map((row) => ({
+        id: row.id,
+        sessionId: row.session_id,
+        sequence: row.sequence,
+        type: row.type as SessionEventType,
+        timestamp: row.timestamp,
+        source: row.source as 'server' | 'sandbox',
+        payload: JSON.parse(row.payload),
+      }));
+    });
+  }
+
   private withDatabase<T>(operation: (database: Database.Database) => T): T {
     if (this.databasePath !== ':memory:') {
       mkdirSync(path.dirname(this.databasePath), { recursive: true });

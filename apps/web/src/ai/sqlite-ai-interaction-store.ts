@@ -274,6 +274,74 @@ export class SqliteAiInteractionStore {
     );
   }
 
+  countCompletedBySessionIdWithDatabase(
+    database: Database.Database,
+    sessionId: string,
+  ): number {
+    const row = database
+      .prepare(
+        "SELECT COUNT(*) as count FROM ai_interactions WHERE session_id = ? AND status = 'COMPLETED'",
+      )
+      .get(sessionId) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  countCompletedBySessionId(sessionId: string): number {
+    return this.withDatabase((database) =>
+      this.countCompletedBySessionIdWithDatabase(database, sessionId),
+    );
+  }
+
+  countTotalBySessionIdWithDatabase(
+    database: Database.Database,
+    sessionId: string,
+  ): number {
+    const row = database
+      .prepare(
+        'SELECT COUNT(*) as count FROM ai_interactions WHERE session_id = ?',
+      )
+      .get(sessionId) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  countTotalBySessionId(sessionId: string): number {
+    return this.withDatabase((database) =>
+      this.countTotalBySessionIdWithDatabase(database, sessionId),
+    );
+  }
+
+  countRecentBySessionIdWithDatabase(
+    database: Database.Database,
+    sessionId: string,
+    windowSeconds: number,
+    nowIso: string,
+  ): number {
+    const cutoffTime = new Date(
+      new Date(nowIso).getTime() - windowSeconds * 1000,
+    ).toISOString();
+    const row = database
+      .prepare(
+        'SELECT COUNT(*) as count FROM ai_interactions WHERE session_id = ? AND created_at >= ?',
+      )
+      .get(sessionId, cutoffTime) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  countRecentBySessionId(
+    sessionId: string,
+    windowSeconds: number,
+    nowIso = new Date().toISOString(),
+  ): number {
+    return this.withDatabase((database) =>
+      this.countRecentBySessionIdWithDatabase(
+        database,
+        sessionId,
+        windowSeconds,
+        nowIso,
+      ),
+    );
+  }
+
   private withDatabase<T>(operation: (database: Database.Database) => T): T {
     if (this.databasePath !== ':memory:') {
       mkdirSync(path.dirname(this.databasePath), { recursive: true });
