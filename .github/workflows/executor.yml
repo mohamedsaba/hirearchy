@@ -46,7 +46,7 @@ jobs:
 
   real-docker:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -58,6 +58,12 @@ jobs:
         run: docker pull postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
       - name: Pull reviewed executor image
         run: docker pull ghcr.io/mohamedsaba/hirearchy-executor@sha256:c7b3f6e5c953e95b6e3fbb57c52ef4e1185705edc7a43aee5b5bfb2bc096840f
+      - name: Pull pinned disposable authentication fixture
+        run: docker pull supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+      - name: Install browser for the application journey
+        run: npx playwright install --with-deps chromium
       - run: node scripts/test-restricted-executor.mjs
       - run: node scripts/test-restricted-executor-dispatch.mjs
       - run: node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs
+      - name: Run disposable recruiter-to-evidence journey
+        run: node scripts/test-r214-integration.mjs

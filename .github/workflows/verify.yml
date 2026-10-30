@@ -32,6 +32,7 @@ jobs:
           docker build -t hirearchy-musl-builder:3.20 -f scenarios/001-cache-staleness/Dockerfile.ci-builder .
           docker build -t hirearchy-scenario-001-test:latest -f scenarios/001-cache-staleness/Dockerfile.ci-base .
           docker build -t hirearchy-scenario-001:latest scenarios/001-cache-staleness
+          docker build -t hirearchy-scenario-002:v1.0.0 scenarios/002-booking-notification-retry
       - name: Check formatting, lint, types, tests, and build
         run: |
           npm run format:check
@@ -39,3 +40,5 @@ jobs:
           npm run typecheck
           npm run test
           npm run build
+      - name: Check existing scenario runtimes
+        run: HIREARCHY_DOCKER_SCENARIO_TEST=1 npx vitest run tests/integration/scenario-002-docker-readiness.test.ts
