@@ -1,0 +1,32 @@
+name: Publish reviewed executor image
+
+on:
+  push:
+    branches:
+      - codex/executor-public-review
+    paths:
+      - packages/restricted-executor/image/**
+      - .github/workflows/publish-executor-image.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    if: github.event_name == 'push' && github.repository == 'mohamedsaba/hirearchy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Authenticate to GHCR
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Build and publish the reviewed image
+        run: |
+          image="ghcr.io/mohamedsaba/hirearchy-executor:build-$GITHUB_SHA"
+          docker buildx build --platform linux/amd64 --provenance=false --push --metadata-file /tmp/executor-image-metadata.json --tag "$image" packages/restricted-executor/image
+          node -e 'const m=require("/tmp/executor-image-metadata.json"); console.log("Published manifest:", m["containerimage.digest"])'
