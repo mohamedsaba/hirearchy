@@ -1,0 +1,96 @@
+{
+  "title": "Booking confirmations after response timeouts",
+  "brief": "Customers can request another confirmation for an existing booking, but some legitimate confirmations are suppressed. Investigate the identity used by the service helper while ensuring that retries after a response timeout never deliver twice. The README explains the local sender contract, scope boundaries and verification instructions. Implement the declared behaviors, preserve the public function signature, and provide a short handoff describing changes, actual verification and limitations.",
+  "durationSeconds": 2700,
+  "recommendations": {
+    "durationMinutes": 45,
+    "terminalEnabled": true,
+    "integratedAi": true
+  },
+  "primaryFilePath": "src/confirmations.py",
+  "expectedBehavior": [
+    "Retries of the same account, booking and operation do not deliver twice, including after a response timeout.",
+    "Distinct operations and account/booking scopes preserve legitimate deliveries; identifiers remain exact and case-sensitive.",
+    "Invalid inputs and conflicting replay recipients raise ValueError without changing delivery state.",
+    "Preserve the function and upstream sender contract; propagate timeouts for callers to retry."
+  ],
+  "acceptanceCriteria": [
+    "Retries of the same account, booking and operation do not deliver twice, including after a response timeout.",
+    "Distinct operations and account/booking scopes preserve legitimate deliveries; identifiers remain exact and case-sensitive.",
+    "Invalid inputs and conflicting replay recipients raise ValueError without changing delivery state.",
+    "Preserve the function and upstream sender contract; propagate timeouts for callers to retry.",
+    "Provide a concise README handoff with changed behavior, actual verification or its limitations, and known remaining limitations."
+  ],
+  "evaluatorContext": {
+    "purpose": "Inspect whether the submitted change preserves retry safety and distinct intent under the disclosed sender contract. This contained authoring specimen is technically testable, not human-calibrated or automatically operationally approved.",
+    "reviewQuestions": [
+      "Which declared identity scopes and failure paths were implemented and checked?",
+      "Does the handoff agree with recorded changes and actual verification?",
+      "What limitations are stated without claiming hidden understanding or unaided ability?"
+    ]
+  },
+  "rubric": [
+    {
+      "id": "retry-identity",
+      "label": "Retry identity",
+      "description": "Inspect the submitted identity scope and recorded checks for retries, distinct intent and opaque identifiers.",
+      "weight": 40,
+      "applicability": {
+        "kind": "always",
+        "rule": "Applies to the observable submitted work for this task."
+      }
+    },
+    {
+      "id": "failure-boundaries",
+      "label": "Failure boundaries",
+      "description": "Inspect invalid-input and conflicting-replay behavior and timeout handling against the disclosed contract.",
+      "weight": 30,
+      "applicability": {
+        "kind": "always",
+        "rule": "Applies to the observable submitted work for this task."
+      }
+    },
+    {
+      "id": "verification-handoff",
+      "label": "Verification and handoff",
+      "description": "Compare the README handoff with actual recorded checks or explicit tool limitations; do not reward invented test success.",
+      "weight": 20,
+      "applicability": {
+        "kind": "always",
+        "rule": "Applies to the observable submitted work for this task."
+      }
+    },
+    {
+      "id": "recorded-integrated-ai-collaboration",
+      "label": "Recorded AI collaboration",
+      "description": "Inspect recorded context, suggestions and their relationship to the submitted change and recorded checks; prompt length and usage frequency are not quality.",
+      "weight": 10,
+      "applicability": {
+        "kind": "recorded_integrated_ai_interaction",
+        "rule": "Applies when an integrated-AI interaction is recorded. It is not applicable only when the tool is disabled or trusted, complete capture proves no interaction occurred; that weight is excluded from the denominator. If capture has a gap or truncation and absence cannot be established, evidence is insufficient. External AI use and code origin are not inferred."
+      }
+    }
+  ],
+  "starterFiles": [
+    {
+      "path": "src/confirmations.py",
+      "content": "def confirm_booking(sender, account, booking, operation, recipient):\n    return sender.deliver((booking,), recipient)\n"
+    },
+    {
+      "path": "README.md",
+      "content": "# Booking confirmation retry incident\n\nRun `python3 -m pytest -q`. This small service helper uses a local sender double;\nthere is no live email, external API, database, clock or network dependency.\n\nThe upstream sender accepts an immutable tuple idempotency key and an exact\nrecipient string. It returns an integer receipt. Replaying the same key and\nrecipient returns the original receipt without delivering again. A changed\nrecipient for an existing key raises ValueError without changing state. A timeout\ncan happen after a successful delivery. Keep that sender contract unchanged.\n\nThe caller supplies an account ID, booking ID, operation ID and recipient.\nSame exact account/booking/operation means one intent, including across retries.\nDistinct operation IDs represent legitimate separate intents even for one booking.\nOperation IDs are scoped to account AND booking. These identifiers are opaque and\ncase-sensitive; do not normalize or merge them. All four inputs must be nonempty\nstrings (whitespace-only is invalid). Reject invalid inputs before any delivery.\nTimeouts propagate to the caller; the caller retries with the original inputs.\n\nImplement these declared requirements in src/confirmations.py. Keep its public\nfunction signature. No real delivery or distributed durability is required; tests\nexercise deterministic calls to the documented local sender. True concurrent\nworkers, database transactions and process crashes are outside this contained task.\n\nBefore submission, add a short handoff below: changed behavior, checks performed\n(or why checks could not be run when terminal access is disabled), and limitations.\nDo not claim a check passed unless you ran it. Different correct solutions are welcome.\n\n## Handoff\n\n"
+    }
+  ],
+  "targetTests": [
+    {
+      "path": "tests/test_confirmations.py",
+      "content": "import pytest\nfrom src.confirmations import confirm_booking\n\n\nclass LocalSender:\n    \"\"\"Declared upstream contract: idempotency key binds the exact recipient.\n    A timeout can occur after delivery. Replaying the same request returns its\n    receipt without a second delivery. Different recipient is a conflict.\n    \"\"\"\n    def __init__(self, timeout_once=False):\n        self.deliveries = {}\n        self.timeout_once = timeout_once\n\n    def deliver(self, key, recipient):\n        if key in self.deliveries:\n            old_recipient, receipt = self.deliveries[key]\n            if old_recipient != recipient:\n                raise ValueError(\"Replay recipient conflict\")\n            return receipt\n        receipt = len(self.deliveries) + 1\n        self.deliveries[key] = (recipient, receipt)\n        if self.timeout_once:\n            self.timeout_once = False\n            raise TimeoutError(\"Response lost after successful delivery\")\n        return receipt\n\n\ndef test_retry_after_delivery_timeout_does_not_send_twice():\n    sender = LocalSender(timeout_once=True)\n    with pytest.raises(TimeoutError):\n        confirm_booking(sender, \"account-a\", \"booking-1\", \"op-1\", \"Ada\")\n    assert confirm_booking(sender, \"account-a\", \"booking-1\", \"op-1\", \"Ada\") == 1\n    assert len(sender.deliveries) == 1\n\n\ndef test_same_booking_with_distinct_intent_is_delivered():\n    sender = LocalSender()\n    assert confirm_booking(sender, \"account-a\", \"booking-1\", \"op-1\", \"Ada\") == 1\n    assert confirm_booking(sender, \"account-a\", \"booking-1\", \"op-2\", \"Ada\") == 2\n\n\ndef test_operation_identity_is_scoped_to_account_and_booking():\n    sender = LocalSender()\n    assert confirm_booking(sender, \"account-a\", \"booking-1\", \"op-1\", \"Ada\") == 1\n    assert confirm_booking(sender, \"account-b\", \"booking-1\", \"op-1\", \"Ada\") == 2\n    assert confirm_booking(sender, \"account-a\", \"booking-2\", \"op-1\", \"Ada\") == 3\n\n\ndef test_conflicting_retry_is_rejected_without_mutation():\n    sender = LocalSender()\n    confirm_booking(sender, \"account-a\", \"booking-1\", \"op-1\", \"Ada\")\n    before = dict(sender.deliveries)\n    with pytest.raises(ValueError):\n        confirm_booking(sender, \"account-a\", \"booking-1\", \"op-1\", \"Grace\")\n    assert sender.deliveries == before\n\n\n@pytest.mark.parametrize(\"index\", range(4))\n@pytest.mark.parametrize(\"invalid\", [\"\", \"   \", None, 123])\ndef test_invalid_input_does_not_deliver(index, invalid):\n    sender = LocalSender()\n    values = [\"account-a\", \"booking-1\", \"op-1\", \"Ada\"]\n    values[index] = invalid\n    with pytest.raises(ValueError):\n        confirm_booking(sender, *values)\n    assert sender.deliveries == {}\n\n\ndef test_identities_are_not_normalized_or_merged():\n    sender = LocalSender()\n    assert confirm_booking(sender, \"Account-A\", \"booking-1\", \"op-1\", \"Ada\") == 1\n    assert confirm_booking(sender, \"account-a\", \"booking-1\", \"op-1\", \"Ada\") == 2\n"
+    }
+  ],
+  "referenceFixFiles": [
+    {
+      "path": "src/confirmations.py",
+      "content": "def confirm_booking(sender, account, booking, operation, recipient):\n    values = (account, booking, operation, recipient)\n    if any(not isinstance(value, str) or not value.strip() for value in values):\n        raise ValueError(\"Identifiers and recipient must be nonempty strings\")\n    return sender.deliver((account, booking, operation), recipient)\n"
+    }
+  ]
+}

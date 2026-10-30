@@ -13,6 +13,7 @@ import { defineConfig, configDefaults } from 'vitest/config';
 // its node_modules glob, keep working. Overriding `exclude` outright would drop
 // them.
 export default defineConfig({
+  envDir: 'tests',
   test: {
     exclude: [
       ...configDefaults.exclude,
@@ -20,5 +21,7 @@ export default defineConfig({
       '**/.agents/**',
       '**/tests/restricted-executor/**',
     ],
+    setupFiles: ['./tests/setup.ts'],
+    maxWorkers: 4,
   },
 });
