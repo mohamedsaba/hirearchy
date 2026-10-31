@@ -67,5 +67,11 @@ jobs:
       - run: node scripts/test-restricted-executor.mjs
       - run: node scripts/test-restricted-executor-dispatch.mjs
       - run: node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs
+      - name: Build internal staging PostgreSQL verifier image
+        run: docker build -t hirearchy-staging-postgres-local database/postgres/staging
+      - name: Build persistent staging application
+        run: npm run build
+      - name: Verify authenticated staging and separate-instance recovery
+        run: npm run test:staging
       - name: Run disposable recruiter-to-evidence journey
         run: node scripts/test-r214-integration.mjs

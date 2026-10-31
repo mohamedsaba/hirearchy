@@ -1,5 +1,7 @@
 import { isIP } from 'node:net';
 
+import { isStagingLockdown } from '../runtime/profile';
+
 export const R23_SESSION_COOKIE = '__Host-r23-session';
 export const R23_CSRF_COOKIE = '__Host-r23-csrf';
 export const R23_CALLBACK_COOKIE = '__Host-r23-callback';
@@ -61,7 +63,7 @@ function loopbackUrl(value: string, protocols: string[]): URL {
 
 export function r23IsEnabled(): boolean {
   return (
-    process.env.HIREARCHY_RUNTIME_PROFILE !== 'staging-lockdown' &&
+    !isStagingLockdown() &&
     process.env.NODE_ENV !== 'production' &&
     (process.env.NODE_ENV === 'development' ||
       process.env.NODE_ENV === 'test') &&

@@ -756,6 +756,25 @@ async function main() {
     );
 
     await runCheck(
+      'staging proof state remains inaccessible to runtime roles',
+      async () => {
+        const { rows } = await admin.query(`
+        SELECT role_name, relation_name,
+               pg_catalog.has_table_privilege(role_name, relation_name, 'SELECT,INSERT,UPDATE,DELETE') AS access
+        FROM pg_catalog.unnest(ARRAY['app_evaluator', 'app_candidate_gateway', 'app_control_worker']) AS role_name
+        CROSS JOIN pg_catalog.unnest(ARRAY['hirearchy.staging_verification_keys', 'hirearchy.staging_proof_nonces', 'hirearchy.staging_sessions']) AS relation_name
+      `);
+        assert.equal(rows.length, 9);
+        for (const row of rows)
+          assert.equal(
+            row.access,
+            false,
+            `${row.role_name}: ${row.relation_name}`,
+          );
+      },
+    );
+
+    await runCheck(
       '0013 upgrade denies forged evaluator contexts and worker reads without deleting evidence',
       () =>
         checkUpgradeFromLegacyGrants({

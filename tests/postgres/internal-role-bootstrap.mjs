@@ -18,10 +18,10 @@ export async function checkInternalRoleBootstrap(admin, bootstrapSql) {
              rolcreaterole, rolreplication, rolinherit, rolconfig,
              pg_catalog.has_schema_privilege(oid, 'hirearchy', 'USAGE') AS app_access
       FROM pg_catalog.pg_roles
-      WHERE rolname IN ('r23_gateway', 'r23_session_owner')
+      WHERE rolname IN ('r23_gateway', 'r23_session_owner', 'staging_verifier_owner')
       ORDER BY rolname
     `);
-    assert.equal(rows.length, 2);
+    assert.equal(rows.length, 3);
     for (const role of rows) {
       assert.equal(role.rolcanlogin, role.rolname === 'r23_gateway');
       for (const attribute of [
@@ -59,6 +59,10 @@ export async function checkInternalRoleBootstrap(admin, bootstrapSql) {
     'CREATE ROLE r23_gateway LOGIN NOINHERIT; CREATE ROLE r215_test_member NOLOGIN; GRANT r215_test_member TO r23_gateway',
     "CREATE ROLE r23_gateway LOGIN NOINHERIT; ALTER ROLE r23_gateway SET search_path = 'public'",
     "CREATE ROLE r23_gateway LOGIN NOINHERIT; ALTER ROLE r23_gateway IN DATABASE postgres SET search_path = 'public'",
+    'CREATE ROLE staging_verifier_owner LOGIN NOINHERIT',
+    'CREATE ROLE staging_verifier_owner NOLOGIN SUPERUSER NOINHERIT',
+    'CREATE ROLE staging_verifier_owner NOLOGIN NOINHERIT; CREATE ROLE r215_test_member NOLOGIN; GRANT r215_test_member TO staging_verifier_owner',
+    "CREATE ROLE staging_verifier_owner NOLOGIN NOINHERIT; ALTER ROLE staging_verifier_owner SET search_path = 'public'",
   ]) {
     await inTransaction(async () => {
       await admin.query(unsafeSetup);
@@ -68,7 +72,7 @@ export async function checkInternalRoleBootstrap(admin, bootstrapSql) {
       );
     });
     const { rows } = await admin.query(
-      "SELECT rolname FROM pg_catalog.pg_roles WHERE rolname IN ('r23_gateway', 'r23_session_owner', 'r215_test_member')",
+      "SELECT rolname FROM pg_catalog.pg_roles WHERE rolname IN ('r23_gateway', 'r23_session_owner', 'staging_verifier_owner', 'r215_test_member')",
     );
     assert.equal(rows.length, 0, 'test-created roles must roll back');
   }

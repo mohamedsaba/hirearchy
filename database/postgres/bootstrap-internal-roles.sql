@@ -9,7 +9,8 @@ BEGIN
   FOR role_name, expected_login IN
     SELECT * FROM (VALUES
       ('r23_gateway', true),
-      ('r23_session_owner', false)
+      ('r23_session_owner', false),
+      ('staging_verifier_owner', false)
     ) AS required_roles(name, can_login)
   LOOP
     SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,

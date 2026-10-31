@@ -106,6 +106,21 @@ describe('staging lockdown', () => {
     await expect(register()).resolves.toBeUndefined();
   });
 
+  it('keeps execution, AI, and startup disabled in authenticated staging', async () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: 'not json',
+    });
+    expect(
+      (await r214CandidateExecutionAction(request, 'invalid')).status,
+    ).toBe(503);
+    expect((await r212CandidateAiAction(request, 'invalid')).status).toBe(503);
+    expect(request.bodyUsed).toBe(false);
+    await expect(register()).resolves.toBeUndefined();
+  });
+
   it('leaves the existing runtime unchanged when not selected', () => {
     vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', '');
     expect(

@@ -1,5 +1,5 @@
 import { getRateLimitIdentityStatus } from './access/trusted-proxy-client-identity';
-import { isStagingLockdown } from './runtime/profile';
+import { isAuthenticatedStaging, isStagingLockdown } from './runtime/profile';
 
 export type HealthStatus = Readonly<{
   service: 'hirearchy-web';
@@ -7,7 +7,7 @@ export type HealthStatus = Readonly<{
   readiness: 'not-checked';
   rateLimitIdentity: ReturnType<typeof getRateLimitIdentityStatus>;
   capabilities?: {
-    application: 'disabled';
+    application: 'disabled' | 'restricted';
     execution: 'disabled';
     ai: 'disabled';
   };
@@ -23,7 +23,7 @@ export const getHealthStatus = (): HealthStatus => ({
   ...(isStagingLockdown()
     ? {
         capabilities: {
-          application: 'disabled',
+          application: isAuthenticatedStaging() ? 'restricted' : 'disabled',
           execution: 'disabled',
           ai: 'disabled',
         } as const,

@@ -1,11 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { isStagingLockdown } from './src/runtime/profile';
+import {
+  isAuthenticatedStaging,
+  isStagingLockdown,
+} from './src/runtime/profile';
 
 export function proxy(request: NextRequest) {
   if (
     isStagingLockdown() &&
-    !(request.method === 'GET' && request.nextUrl.pathname === '/api/health')
+    !(request.method === 'GET' && request.nextUrl.pathname === '/api/health') &&
+    !(
+      isAuthenticatedStaging() &&
+      request.method === 'POST' &&
+      request.nextUrl.pathname === '/api/staging/v1'
+    )
   ) {
     return NextResponse.json(
       {
