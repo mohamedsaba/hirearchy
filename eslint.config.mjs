@@ -17,6 +17,8 @@ export default defineConfig([
   globalIgnores([
     'apps/web/.next/**',
     'coverage/**',
+    // Local database backups and extracted release artifacts are generated state.
+    '.data/**',
     '.worktrees/**',
     '.agents/**',
   ]),

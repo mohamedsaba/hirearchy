@@ -1,5 +1,10 @@
 import type { R23Config } from './config';
 
+type R23IdentityConfig = Pick<
+  R23Config,
+  'authUrl' | 'authIssuer' | 'authAudience'
+>;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const verifiedIdentities = new WeakSet<object>();
 
@@ -54,7 +59,10 @@ function parseSegment(segment: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export function readR23Claims(token: string, config: R23Config): Claims {
+export function readR23Claims(
+  token: string,
+  config: R23IdentityConfig,
+): Claims {
   if (token.length > 16384) return denied();
   const parts = token.split('.');
   if (parts.length !== 3 || !parts[2]) return denied();
@@ -131,7 +139,7 @@ async function requestAuth(url: URL, init: RequestInit): Promise<Response> {
   }
 }
 
-function endpoint(config: R23Config, path: string): URL {
+function endpoint(config: R23IdentityConfig, path: string): URL {
   return new URL(path, config.authUrl);
 }
 
@@ -228,7 +236,7 @@ export async function revokeAuthSession(
 }
 
 export async function verifyR23AccessToken(
-  config: R23Config,
+  config: R23IdentityConfig,
   accessToken: string,
   expectedExpiry?: Pick<R23TokenGrant, 'expiresIn' | 'reportedExpiresAt'>,
 ): Promise<R23VerifiedIdentity> {

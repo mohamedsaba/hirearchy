@@ -7,6 +7,10 @@ const TABLES = [
   'organization_memberships',
   'assessment_sessions',
 ];
+const SENSITIVE_TABLES = [
+  'candidate_ai_interactions',
+  'candidate_execution_operations',
+];
 
 const GUC_COLUMNS = `
   NULLIF(current_setting('hirearchy.actor_principal_id', true), '') AS principal_id,
@@ -22,7 +26,7 @@ function expectCapabilityScope(expression) {
   assert.match(expression, /candidate_token_envelopes/);
 }
 
-export async function checkRuntimeRolesAndDefaultDeny({ admin, pools }) {
+export async function checkRuntimeRolesAndDefaultDeny({ admin, pools, ids }) {
   const runtimeRoles = [
     'app_evaluator',
     'app_candidate_gateway',
@@ -154,6 +158,42 @@ export async function checkRuntimeRolesAndDefaultDeny({ admin, pools }) {
     'runtime roles must have no tenant table privileges',
   );
 
+  const { rows: sensitivePrivileges } = await admin.query(
+    `SELECT role.rolname, table_row.relname, privilege.name
+       FROM pg_catalog.pg_roles AS role
+       CROSS JOIN pg_catalog.pg_class AS table_row
+       JOIN pg_catalog.pg_namespace AS schema_row ON schema_row.oid = table_row.relnamespace
+       CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) AS privilege(name)
+      WHERE role.rolname = ANY($1::name[])
+        AND schema_row.nspname = 'hirearchy'
+        AND table_row.relname = ANY($2::name[])
+        AND pg_catalog.has_table_privilege(role.oid, table_row.oid, privilege.name)
+      ORDER BY role.rolname, table_row.relname, privilege.name`,
+    [runtimeRoles, SENSITIVE_TABLES],
+  );
+  assert.deepEqual(
+    sensitivePrivileges,
+    [],
+    'runtime roles must have no direct AI or execution table privileges',
+  );
+
+  const { rows: sensitivePolicies } = await admin.query(
+    `SELECT tablename, policyname, roles::text[] AS roles
+       FROM pg_catalog.pg_policies
+      WHERE schemaname = 'hirearchy' AND tablename = ANY($1::text[])
+      ORDER BY tablename, policyname`,
+    [SENSITIVE_TABLES],
+  );
+  assert.deepEqual(
+    sensitivePolicies.filter(({ roles }) =>
+      roles.some((role) =>
+        ['app_evaluator', 'app_control_worker'].includes(role),
+      ),
+    ),
+    [],
+    'AI and execution tables must not have evaluator or worker RLS policies',
+  );
+
   const { rows: functionPrivileges } = await admin.query(
     `SELECT role.rolname, procedure.proname
        FROM pg_catalog.pg_roles AS role
@@ -200,6 +240,16 @@ export async function checkRuntimeRolesAndDefaultDeny({ admin, pools }) {
     );
     assert.equal(identity[0].current_user, role);
     assert.equal(identity[0].session_user, role);
+
+    if (role === 'app_evaluator' || role === 'app_control_worker') {
+      await checkSensitiveDirectReadsDenied(pool, {
+        organizationId: ids.organizationA,
+        sessionId: ids.sessionA,
+        principalId: ids.principalShared,
+        role,
+      });
+    }
+
     await assert.rejects(
       pool.query('SELECT * FROM hirearchy.organizations'),
       (error) => error.code === '42501',
@@ -244,6 +294,180 @@ export async function checkRuntimeRolesAndDefaultDeny({ admin, pools }) {
     } finally {
       client.release();
     }
+  }
+}
+
+async function checkSensitiveDirectReadsDenied(
+  pool,
+  { organizationId, sessionId, principalId, role },
+) {
+  for (const table of SENSITIVE_TABLES) {
+    const identitySources =
+      role === 'app_evaluator' ? ['r27', 'hirearchy'] : ['none'];
+    for (const identitySource of identitySources) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        if (role === 'app_evaluator') {
+          await client.query(
+            `SELECT pg_catalog.set_config('r27.organization_id', $1, true),
+                    pg_catalog.set_config('r27.session_id', $2, true),
+                    pg_catalog.set_config('r27.principal_id', $3, true),
+                    pg_catalog.set_config('hirearchy.evaluator_principal_id', $4, true)`,
+            [
+              organizationId,
+              sessionId,
+              identitySource === 'r27' ? principalId : '',
+              identitySource === 'hirearchy' ? principalId : '',
+            ],
+          );
+        }
+        await assert.rejects(
+          client.query(`SELECT * FROM hirearchy.${table}`),
+          (error) => error.code === '42501',
+          `${role} must not directly read ${table} with ${identitySource} identity context`,
+        );
+      } finally {
+        await client.query('ROLLBACK').catch(() => undefined);
+        client.release();
+      }
+    }
+  }
+}
+
+export async function checkLegacySensitiveDirectReads({ admin, pools, ids }) {
+  const { rows: legacyPrivileges } = await admin.query(
+    `SELECT role.rolname, table_row.relname,
+            pg_catalog.has_schema_privilege(role.oid, schema_row.oid, 'USAGE') AS schema_usage,
+            pg_catalog.has_table_privilege(role.oid, table_row.oid, 'SELECT') AS table_select
+       FROM pg_catalog.pg_roles AS role
+       CROSS JOIN pg_catalog.pg_class AS table_row
+       JOIN pg_catalog.pg_namespace AS schema_row ON schema_row.oid = table_row.relnamespace
+      WHERE role.rolname = ANY(ARRAY['app_evaluator', 'app_control_worker']::name[])
+        AND schema_row.nspname = 'hirearchy'
+        AND table_row.relname = ANY($1::name[])
+      ORDER BY role.rolname, table_row.relname`,
+    [SENSITIVE_TABLES],
+  );
+  assert.deepEqual(
+    legacyPrivileges,
+    ['app_control_worker', 'app_evaluator'].flatMap((rolname) =>
+      SENSITIVE_TABLES.map((relname) => ({
+        rolname,
+        relname,
+        schema_usage: true,
+        table_select: true,
+      })),
+    ),
+    'pre-0013 evaluator and worker grants expose direct evidence-table SELECT',
+  );
+
+  const { rows: legacyPolicies } = await admin.query(
+    `SELECT tablename, policyname, roles::text[] AS roles, qual
+       FROM pg_catalog.pg_policies
+      WHERE schemaname = 'hirearchy' AND tablename = ANY($1::text[])
+      ORDER BY tablename, policyname`,
+    [SENSITIVE_TABLES],
+  );
+  const directPolicies = legacyPolicies.filter(({ roles }) =>
+    roles.some((role) =>
+      ['app_evaluator', 'app_control_worker'].includes(role),
+    ),
+  );
+  assert.deepEqual(
+    directPolicies.map(({ tablename, policyname, roles }) => ({
+      tablename,
+      policyname,
+      roles,
+    })),
+    [
+      {
+        tablename: 'candidate_ai_interactions',
+        policyname: 'r212_control_worker_ai_interactions_select',
+        roles: ['app_control_worker'],
+      },
+      {
+        tablename: 'candidate_ai_interactions',
+        policyname: 'r212_evaluator_ai_interactions_select',
+        roles: ['app_evaluator'],
+      },
+      {
+        tablename: 'candidate_execution_operations',
+        policyname: 'r213_control_worker_execution_select',
+        roles: ['app_control_worker'],
+      },
+      {
+        tablename: 'candidate_execution_operations',
+        policyname: 'r213_evaluator_execution_select',
+        roles: ['app_evaluator'],
+      },
+    ],
+    'pre-0013 direct policies must match the legacy grants being upgraded',
+  );
+  for (const { policyname, qual } of directPolicies.filter(({ roles }) =>
+    roles.includes('app_evaluator'),
+  )) {
+    assert.match(qual, /r27\.principal_id/);
+    assert.match(qual, /hirearchy\.evaluator_principal_id/);
+    assert.ok(policyname.startsWith('r21'));
+  }
+
+  for (const table of SENSITIVE_TABLES) {
+    for (const identitySource of ['r27', 'hirearchy']) {
+      const client = await pools.app_evaluator.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `SELECT pg_catalog.set_config('r27.organization_id', $1, true),
+                  pg_catalog.set_config('r27.session_id', $2, true),
+                  pg_catalog.set_config('r27.principal_id', $3, true),
+                  pg_catalog.set_config('hirearchy.evaluator_principal_id', $4, true)`,
+          [
+            ids.organizationA,
+            ids.sessionA,
+            identitySource === 'r27' ? ids.principalShared : '',
+            identitySource === 'hirearchy' ? ids.principalShared : '',
+          ],
+        );
+        await assert.rejects(
+          client.query(
+            `SELECT * FROM hirearchy.${table}
+              WHERE organization_id = $1 AND session_id = $2`,
+            [ids.organizationA, ids.sessionA],
+          ),
+          (error) =>
+            error.code === '42501' &&
+            /reviewer_assignments/.test(error.message),
+          `pre-0013 app_evaluator query must expose its missing reviewer_assignments dependency with ${identitySource} GUC`,
+        );
+      } finally {
+        await client.query('ROLLBACK').catch(() => undefined);
+        client.release();
+      }
+    }
+  }
+
+  for (const table of SENSITIVE_TABLES) {
+    const idColumn =
+      table === 'candidate_ai_interactions' ? 'interaction_id' : 'operation_id';
+    const { rows } = await pools.app_control_worker.query(
+      `SELECT ${idColumn} AS id
+         FROM hirearchy.${table}
+        WHERE organization_id = $1 AND session_id = $2`,
+      [ids.organizationA, ids.sessionA],
+    );
+    assert.deepEqual(
+      rows,
+      [
+        {
+          id:
+            table === 'candidate_ai_interactions'
+              ? 'r2-upgrade-ai-evidence'
+              : 'r2-upgrade-execution-evidence',
+        },
+      ],
+      `pre-0013 app_control_worker can read ${table}`,
+    );
   }
 }
 
