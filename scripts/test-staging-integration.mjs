@@ -84,6 +84,25 @@ async function db(container) {
     ),
   );
   const port = Number(/:(\d+)$/.exec(docker('port', container, '5432/tcp'))[1]);
+  // pg_isready on the local socket can observe initdb's temporary server.
+  // Wait for the final TCP listener used by the application, not that server.
+  await waitFor(async () => {
+    const probe = new Client({
+      host: '127.0.0.1',
+      port,
+      user: 'postgres',
+      password,
+      database: 'postgres',
+      connectionTimeoutMillis: 1000,
+    });
+    try {
+      await probe.connect();
+      await probe.query('SELECT 1');
+      return true;
+    } finally {
+      await probe.end();
+    }
+  });
   const connect = async (user = 'postgres') => {
     const client = new Client({
       host: '127.0.0.1',
@@ -518,7 +537,7 @@ try {
     { mode: 0o600 },
   );
   console.error(
-    `Staging integration failed at ${stage}; private diagnostics: ${artifact.pathname}`,
+    `Staging integration failed at ${stage} (${error.code ?? error.name ?? 'unknown'}); private diagnostics: ${artifact.pathname}`,
   );
   process.exitCode = 1;
 } finally {
