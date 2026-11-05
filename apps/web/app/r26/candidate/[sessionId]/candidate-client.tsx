@@ -309,6 +309,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
 
   const [executionView, setExecutionView] =
     useState<R213CandidateExecutionView | null>(null);
+  const [executionViewLoading, setExecutionViewLoading] = useState(false);
   const [executionRunning, setExecutionRunning] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(
@@ -323,6 +324,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const fetchExecutionView = useCallback(
     async (capabilityEnabled = viewRef.current?.capabilities.execution) => {
       if (!token || capabilityEnabled !== true) return;
+      setExecutionViewLoading(true);
       try {
         const response = await fetch(
           `/r26/api/candidate/${encodeURIComponent(sessionId)}/execution`,
@@ -339,9 +341,13 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         if (response.ok) {
           const data = (await response.json()) as R213CandidateExecutionView;
           setExecutionView(data);
+        } else {
+          setExecutionView(null);
         }
       } catch {
-        // Non-blocking
+        setExecutionView(null);
+      } finally {
+        setExecutionViewLoading(false);
       }
     },
     [sessionId, token],
@@ -370,6 +376,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const applyView = useCallback((next: R26CandidateGetResponse) => {
     viewRef.current = next;
     setView(next);
+    if (next.status === 'SUBMITTED') setPendingSubmit(null);
     setServerOffsetMs(Date.parse(next.serverNow) - Date.now());
     setClockNow(Date.now());
     setLoadFailure('');
@@ -615,6 +622,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     !accessUnavailable;
   const editorLocked = Boolean(
     !canEdit ||
+    pendingSubmit ||
     saveConflict ||
     conflictLatest ||
     (busy && !pendingSave) ||
@@ -623,6 +631,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const isSubmittedOrExpired = Boolean(
     view?.status === 'SUBMITTED' ||
     accessUnavailable ||
+    pendingSubmit ||
     invitationExpired ||
     sessionTimeExpired,
   );
@@ -631,6 +640,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   );
   const aiInputDisabled = Boolean(
     aiSubmitting ||
+    pendingSubmit ||
     view?.capabilities.ai !== true ||
     isSubmittedOrExpired ||
     isBudgetExhausted ||
@@ -638,17 +648,23 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     view?.status === 'CREATED',
   );
 
+  const canRunChecks = Boolean(
+    token &&
+    view?.capabilities.execution === true &&
+    executionView?.terminalEnabled === true &&
+    executionView.remainingExecutions > 0 &&
+    canEdit &&
+    !pendingSubmit &&
+    !busy &&
+    !accessUnavailable &&
+    !isDirty &&
+    !pendingSave &&
+    !saveConflict &&
+    !executionRunning,
+  );
+
   const runChecks = useCallback(async () => {
-    if (
-      !token ||
-      !view ||
-      view.capabilities.execution !== true ||
-      accessUnavailable ||
-      executionRunning ||
-      isDirty ||
-      pendingSave
-    )
-      return;
+    if (!canRunChecks || !token || !view) return;
     setExecutionRunning(true);
     setExecutionError(null);
 
@@ -708,16 +724,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     } finally {
       setExecutionRunning(false);
     }
-  }, [
-    accessUnavailable,
-    executionRunning,
-    fetchExecutionView,
-    isDirty,
-    pendingSave,
-    sessionId,
-    token,
-    view,
-  ]);
+  }, [canRunChecks, fetchExecutionView, sessionId, token, view]);
 
   const activate = async () => {
     if (!view || (view.dataNotice && !consentAccepted)) {
@@ -784,6 +791,13 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
             setSaveConflict(true);
           }
         }
+        if (!saved) {
+          setPendingSave(intent);
+          setMessage(
+            'The save response did not confirm this file. Retry the same save to verify it safely.',
+          );
+          return;
+        }
         setPendingSave(null);
         if (saved?.content === intent.content) {
           setConflictLatest(null);
@@ -793,10 +807,6 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         } else if (saved) {
           setMessage(
             'Your save was accepted, and a newer saved version now exists. Your draft is preserved; resolve the version conflict before saving again.',
-          );
-        } else {
-          setMessage(
-            automatic ? 'Changes saved automatically.' : 'Work saved.',
           );
         }
       } catch (error) {
@@ -839,7 +849,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
 
   const save = useCallback(
     async (automatic = false) => {
-      if (!currentDraft || !isDirty || !canEdit || busy || !activeFile) return;
+      if (
+        !currentDraft ||
+        !isDirty ||
+        !canEdit ||
+        pendingSubmit ||
+        busy ||
+        !activeFile
+      )
+        return;
       if (saveConflict) return;
       if (pendingSave) {
         await retrySave(pendingSave);
@@ -861,6 +879,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
       currentDraft,
       isDirty,
       pendingSave,
+      pendingSubmit,
       retrySave,
       saveConflict,
     ],
@@ -872,6 +891,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
       !isDirty ||
       !canEdit ||
       busy ||
+      pendingSubmit ||
       pendingSave ||
       saveConflict ||
       conflictLatest
@@ -888,19 +908,20 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     currentDraft,
     isDirty,
     pendingSave,
+    pendingSubmit,
     saveConflict,
     save,
   ]);
 
   useEffect(() => {
-    if (!isDirty && !pendingSave) return;
+    if (!isDirty && !pendingSave && !pendingSubmit) return;
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', warnBeforeLeaving);
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
-  }, [isDirty, pendingSave]);
+  }, [isDirty, pendingSave, pendingSubmit]);
 
   const loadLatestVersion = () => {
     if (!conflictLatest) return;
@@ -912,7 +933,8 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   };
 
   const saveDraftAgainstLatest = async () => {
-    if (!conflictLatest || !currentDraft || !canEdit || busy) return;
+    if (!conflictLatest || !currentDraft || !canEdit || pendingSubmit || busy)
+      return;
     const intent: PendingSave = {
       requestId: requestId(),
       path: conflictLatest.path,
@@ -932,20 +954,21 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   };
 
   const submit = async () => {
-    if (!view || !canEdit || busy || !view.workspaceDigest) return;
-    if (isDirty) {
+    if (!view || busy || !view.workspaceDigest) return;
+    if (!pendingSubmit && !canEdit) return;
+    if (!pendingSubmit && isDirty) {
       setMessage(
         'Your latest edits are being saved automatically. Wait until they are saved before submitting.',
       );
       return;
     }
-    if (pendingSave) {
+    if (!pendingSubmit && pendingSave) {
       setMessage(
         'Confirm the pending save with Retry save before submitting the assessment.',
       );
       return;
     }
-    if (saveConflict) {
+    if (!pendingSubmit && saveConflict) {
       setMessage('Resolve the saved-version conflict before submitting.');
       return;
     }
@@ -1216,7 +1239,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                           {executionView.maxExecutions} runs remaining
                         </span>
                       </div>
-                    ) : view.capabilities.execution && !executionView ? (
+                    ) : view.capabilities.execution &&
+                      !executionView &&
+                      executionViewLoading ? (
                       <strong data-testid="terminal-capability-status">
                         Checking availability…
                       </strong>
@@ -1318,6 +1343,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                     busy ||
                     isDirty ||
                     Boolean(pendingSave) ||
+                    Boolean(pendingSubmit) ||
                     saveConflict ||
                     Boolean(conflictLatest)
                   }
@@ -1401,7 +1427,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 : 'Activate the assessment to load the workspace files'}
             </span>
             <div>
-              {canEdit && activeFile ? (
+              {canEdit && !pendingSubmit && activeFile ? (
                 <button
                   className="r26-button r26-button-primary"
                   disabled={busy || !isDirty || saveConflict}
@@ -1415,11 +1441,13 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                       : 'Save work'}
                 </button>
               ) : null}
-              {canEdit ? (
+              {canEdit || pendingSubmit ? (
                 <button
                   className="r26-button r26-button-secondary"
                   disabled={
-                    busy || isDirty || Boolean(pendingSave) || saveConflict
+                    busy ||
+                    (!pendingSubmit &&
+                      (isDirty || Boolean(pendingSave) || saveConflict))
                   }
                   aria-describedby={
                     isDirty || pendingSave || saveConflict
@@ -1437,7 +1465,17 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 </button>
               ) : null}
             </div>
-            {canEdit && (isDirty || pendingSave || saveConflict) ? (
+            {pendingSubmit ? (
+              <p
+                className="r26-capability-note"
+                role="status"
+                data-testid="candidate-submit-uncertain"
+              >
+                {busy
+                  ? 'Submission is being confirmed. Editing and other actions are paused.'
+                  : 'The submission outcome is unknown. Your workspace is read-only until you retry the same submission.'}
+              </p>
+            ) : canEdit && (isDirty || pendingSave || saveConflict) ? (
               <p
                 id="candidate-submit-save-status"
                 className="r26-capability-note"
@@ -1469,7 +1507,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           ) : activeFile && currentDraft ? (
             <div
               className="r26-code-editor"
-              data-readonly={canEdit ? 'false' : 'true'}
+              data-readonly={editorLocked ? 'true' : 'false'}
             >
               <CodeMirror
                 aria-label="Edit file"
@@ -1586,7 +1624,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                       className="r26-execution-version"
                       data-testid="execution-workspace-version"
                     >
-                      Saved version {activeFile?.version ?? '1'} · Digest{' '}
+                      Saved version {activeFile?.version ?? 'Unknown'} · Digest{' '}
                       {view.workspaceDigest
                         ? view.workspaceDigest.slice(0, 8)
                         : '—'}
@@ -1595,23 +1633,17 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                       className="r26-execution-budget-pill"
                       data-testid="execution-panel-budget"
                     >
-                      {executionView
+                      {executionView?.terminalEnabled
                         ? `${executionView.remainingExecutions} of ${executionView.maxExecutions} runs remaining`
-                        : '10 of 10 runs remaining'}
+                        : executionViewLoading
+                          ? 'Checking run availability…'
+                          : 'Run availability could not be confirmed'}
                     </span>
                   </div>
                   <button
                     className="r26-button r26-button-primary r26-run-checks-btn"
                     data-testid="run-checks-button"
-                    disabled={
-                      !canEdit ||
-                      busy ||
-                      isDirty ||
-                      Boolean(pendingSave) ||
-                      executionRunning ||
-                      (executionView !== null &&
-                        executionView.remainingExecutions <= 0)
-                    }
+                    disabled={!canRunChecks}
                     onClick={() => void runChecks()}
                     type="button"
                   >
@@ -2157,10 +2189,14 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   >
                     <strong>Assessment concluded</strong>
                     <p>
-                      {view?.closureReason === 'timeout' ||
-                      (remainingMs !== null && remainingMs <= 0)
-                        ? 'Assessment time has expired. AI assistance is now closed.'
-                        : 'Assessment has been submitted. AI assistance is read-only.'}
+                      {pendingSubmit
+                        ? 'Submission is being confirmed. AI actions are paused.'
+                        : view?.closureReason === 'timeout' ||
+                            (remainingMs !== null && remainingMs <= 0)
+                          ? 'Assessment time has expired. AI assistance is now closed.'
+                          : submitted
+                            ? 'Assessment has been submitted. AI assistance is read-only.'
+                            : 'Candidate actions are paused.'}
                     </p>
                   </div>
                 ) : isBudgetExhausted ? (

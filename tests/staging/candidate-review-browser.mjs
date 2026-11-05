@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 function loadPlaywright() {
   const require = createRequire(import.meta.url);
@@ -57,6 +59,7 @@ function candidatePathAtAppOrigin(candidateUrl, appUrl) {
  */
 export async function checkCandidateReviewBrowserAcceptance({
   appUrl: initialAppUrl,
+  browserEvidenceDir,
   users,
   organizationId,
   sessionId,
@@ -76,6 +79,11 @@ export async function checkCandidateReviewBrowserAcceptance({
   );
   assert.equal(typeof stopApp, 'function', 'App stop callback is required');
   assert.equal(typeof startApp, 'function', 'App start callback is required');
+  assert.equal(
+    typeof browserEvidenceDir,
+    'string',
+    'A private browser evidence directory is required',
+  );
 
   const { chromium } = loadPlaywright();
   const browser = await chromium.launch({
@@ -87,6 +95,7 @@ export async function checkCandidateReviewBrowserAcceptance({
 
   let appUrl = initialAppUrl;
   let heldSaveResponseRelease = null;
+  let heldRevokeResponseRelease = null;
   let recruiterContext = null;
   let candidateContext = null;
   let reviewerContext = null;
@@ -409,11 +418,161 @@ export async function checkCandidateReviewBrowserAcceptance({
         ),
         'The confirmed first save must not overwrite the newer editor text',
       );
+      await mkdir(browserEvidenceDir, { recursive: true, mode: 0o700 });
+      const screenshotViewports = [
+        { name: 'desktop', width: 1440, height: 1000 },
+        { name: 'tablet', width: 820, height: 1180 },
+        { name: 'mobile', width: 390, height: 844 },
+      ];
+      for (const viewport of screenshotViewports) {
+        await candidatePage.setViewportSize({
+          width: viewport.width,
+          height: viewport.height,
+        });
+        await candidatePage.screenshot({
+          path: join(
+            browserEvidenceDir,
+            `candidate-workspace-${viewport.name}.png`,
+          ),
+          type: 'png',
+          fullPage: false,
+          animations: 'disabled',
+        });
+      }
+      await candidatePage.setViewportSize({ width: 1280, height: 900 });
     } finally {
       releaseFirstResponse();
       heldSaveResponseRelease = null;
       await candidatePage.unroute(`**/r26/api/candidate/${sessionId}`);
     }
+
+    const executionGatePage = await candidateContext.newPage();
+    let executionPostCount = 0;
+    executionGatePage.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        new URL(request.url()).pathname ===
+          `/r26/api/candidate/${sessionId}/execution`
+      ) {
+        executionPostCount += 1;
+      }
+    });
+    await executionGatePage.route(
+      `**/r26/api/candidate/${sessionId}`,
+      async (route) => {
+        if (route.request().method() !== 'GET') {
+          await route.continue();
+          return;
+        }
+        const response = await route.fetch();
+        const body = await response.json();
+        body.capabilities.execution = true;
+        await route.fulfill({ response, body: JSON.stringify(body) });
+      },
+    );
+    await executionGatePage.route(
+      `**/r26/api/candidate/${sessionId}/execution`,
+      async (route) => {
+        if (route.request().method() === 'GET') {
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: '{}',
+          });
+          return;
+        }
+        await route.continue();
+      },
+    );
+    await executionGatePage.goto(candidateUrl);
+    const runChecksButton = executionGatePage.getByTestId('run-checks-button');
+    await executionGatePage
+      .getByText('Run availability could not be confirmed')
+      .waitFor({ timeout: 20_000 });
+    assert.equal(
+      await executionGatePage.getByTestId('execution-panel-budget').innerText(),
+      'Run availability could not be confirmed',
+      'A missing execution view must not display an invented run budget',
+    );
+    assert.equal(
+      await runChecksButton.isDisabled(),
+      true,
+      'Execution must stay disabled until terminal availability and budget are confirmed',
+    );
+    await runChecksButton.evaluate((button) =>
+      button.removeAttribute('disabled'),
+    );
+    await runChecksButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(
+      executionPostCount,
+      0,
+      'The execution handler must also reject runs without a confirmed budget',
+    );
+    await executionGatePage.close();
+
+    const submitInputs = [];
+    let firstSubmitStatus = null;
+    await candidatePage.route(
+      `**/r26/api/candidate/${sessionId}`,
+      async (route) => {
+        const request = route.request();
+        const body =
+          request.method() === 'POST'
+            ? JSON.parse(request.postData() ?? '{}')
+            : null;
+        if (body?.action !== 'submit') {
+          await route.continue();
+          return;
+        }
+
+        submitInputs.push(body.input);
+        if (submitInputs.length === 1) {
+          const response = await route.fetch();
+          firstSubmitStatus = response.status();
+          assert.equal(
+            response.ok(),
+            true,
+            'The first submission must commit before its response is dropped',
+          );
+          await route.abort('failed');
+          return;
+        }
+        await route.continue();
+      },
+    );
+    await candidatePage
+      .getByRole('button', { name: 'Submit assessment' })
+      .click();
+    await candidatePage.getByTestId('candidate-submit-uncertain').waitFor();
+    assert.ok(firstSubmitStatus >= 200 && firstSubmitStatus < 300);
+    const candidateEditor = candidatePage.locator(
+      '.cm-content[aria-label="Edit file"]',
+    );
+    assert.equal(
+      await candidateEditor.getAttribute('aria-readonly'),
+      'true',
+      'Editing must pause after a submission response is lost',
+    );
+    assert.equal(
+      await candidatePage
+        .getByRole('combobox', { name: 'Workspace file' })
+        .isDisabled(),
+      true,
+      'File switching must pause while submission status is unknown',
+    );
+    await candidatePage
+      .getByRole('button', { name: 'Retry submission' })
+      .click();
+    await candidatePage
+      .getByText('Assessment submitted. Your saved work is now read-only.')
+      .waitFor({ timeout: 20_000 });
+    assert.deepEqual(
+      submitInputs[1],
+      submitInputs[0],
+      'Retry after a lost submit response must reuse the same request ID and frozen digest',
+    );
+    await candidatePage.unroute(`**/r26/api/candidate/${sessionId}`);
 
     assert.deepEqual(
       forbiddenCapabilityRequests,
@@ -441,29 +600,20 @@ export async function checkCandidateReviewBrowserAcceptance({
         (await resumedEditor.evaluate((element) => element.innerText)).includes(
           'edit typed while the save was in flight',
         ),
-      'candidate work to survive an application restart',
+      'submitted candidate work to survive an application restart',
     );
     assert.equal(
       (await resumedEditor.evaluate((element) => element.innerText)).includes(
         'edit typed while the save was in flight',
       ),
       true,
-      'The confirmed latest edit must resume after restart',
+      'The submitted work must remain available after restart',
     );
-
-    await Promise.all([
-      candidatePage.waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname ===
-            `/r26/api/candidate/${sessionId}` &&
-          response.request().method() === 'POST' &&
-          response.ok(),
-      ),
-      candidatePage.getByRole('button', { name: 'Submit assessment' }).click(),
-    ]);
-    await candidatePage
-      .getByText('Assessment submitted. Your saved work is now read-only.')
-      .waitFor();
+    assert.equal(
+      await resumedEditor.getAttribute('aria-readonly'),
+      'true',
+      'A confirmed submission must remain read-only after restart',
+    );
 
     await recruiterContext.close();
     recruiterContext = await browser.newContext({
@@ -484,9 +634,66 @@ export async function checkCandidateReviewBrowserAcceptance({
     await recoveredRecruiterPage
       .getByTestId('candidate-invitation-revoke')
       .waitFor({ timeout: 20_000 });
+
+    let releaseRevokeResponse;
+    let resolveRevokeCommitted;
+    const revokeResponseHeld = new Promise((resolve) => {
+      releaseRevokeResponse = resolve;
+      heldRevokeResponseRelease = resolve;
+    });
+    const revokeCommitted = new Promise((resolve) => {
+      resolveRevokeCommitted = resolve;
+    });
+    const invitationEndpoint =
+      `**/r23/api/organizations/${organizationId.toLowerCase()}` +
+      `/sessions/${sessionId}/candidate-token`;
+    await recoveredRecruiterPage.route(invitationEndpoint, async (route) => {
+      if (route.request().method() !== 'DELETE') {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      assert.equal(
+        response.ok(),
+        true,
+        'Revocation must commit before the stale response is delayed',
+      );
+      resolveRevokeCommitted();
+      await revokeResponseHeld;
+      await route.abort('failed');
+    });
     await recoveredRecruiterPage
       .getByTestId('candidate-invitation-revoke')
       .click();
+    await revokeCommitted;
+    const staleAfterRevoke = `sess_stale_${randomUUID()}`;
+    await recoveredRecruiterPage.goto(
+      `${appUrl}${builderPath}?issuedSession=${encodeURIComponent(staleAfterRevoke)}`,
+    );
+    await recoveredRecruiterPage
+      .getByTestId('recovered-session-error')
+      .waitFor({ timeout: 20_000 });
+    releaseRevokeResponse();
+    heldRevokeResponseRelease = null;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(
+      await recoveredRecruiterPage
+        .getByTestId('candidate-invitation-link')
+        .count(),
+      0,
+      'A late response from another session must not expose the old invitation link',
+    );
+    assert.equal(
+      await recoveredRecruiterPage
+        .getByText(/Candidate access has been revoked/i)
+        .count(),
+      0,
+      'A late revoke response must not overwrite the current session panel',
+    );
+    await recoveredRecruiterPage.unroute(invitationEndpoint);
+    await recoveredRecruiterPage.goto(
+      `${appUrl}${builderPath}?issuedSession=${encodeURIComponent(sessionId)}`,
+    );
     await recoveredRecruiterPage
       .getByText(/This invitation has been revoked/i)
       .waitFor({ timeout: 20_000 });
@@ -634,6 +841,7 @@ export async function checkCandidateReviewBrowserAcceptance({
     return { passed: true, sessionId };
   } finally {
     heldSaveResponseRelease?.();
+    heldRevokeResponseRelease?.();
     await Promise.allSettled([
       recruiterContext?.close(),
       candidateContext?.close(),

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type {
   R23CandidateInvitationResponse,
   R23CandidateInvitationRevocationResponse,
@@ -242,6 +242,20 @@ export function AssessmentBuilderClient({
   const currentSessionId = issuedSession?.sessionId ?? recoveredSessionId;
   const initialOrganizationIdRef = useRef(organizationId);
   const initialAssessmentIdRef = useRef(initialDraft?.definitionId ?? null);
+  const invitationContextKey = `${organizationId}\u0000${initialDraft?.definitionId ?? ''}\u0000${currentSessionId ?? ''}`;
+  const invitationContextRef = useRef({
+    key: invitationContextKey,
+    generation: 0,
+  });
+
+  useLayoutEffect(() => {
+    if (invitationContextRef.current.key === invitationContextKey) return;
+    invitationContextRef.current = {
+      key: invitationContextKey,
+      generation: invitationContextRef.current.generation + 1,
+    };
+    setInvitationBusy(false);
+  }, [invitationContextKey]);
 
   useEffect(() => {
     const now = new Date();
@@ -660,6 +674,21 @@ export function AssessmentBuilderClient({
     setInvitationRefreshVersion((version) => version + 1);
   };
 
+  const confirmedCandidatePathFor = (sessionId: string | null) => {
+    if (
+      !sessionId ||
+      invitation?.sessionId !== sessionId ||
+      invitation.status !== 'active' ||
+      !invitation.expiresAt ||
+      !invitation.candidatePath ||
+      invitationNeedsRefresh ||
+      invitationBusy
+    ) {
+      return null;
+    }
+    return invitation.candidatePath;
+  };
+
   const createCandidateInvitation = async () => {
     const sessionId = currentSessionId;
     if (
@@ -673,6 +702,10 @@ export function AssessmentBuilderClient({
     ) {
       return;
     }
+
+    const operationGeneration = invitationContextRef.current.generation;
+    const isCurrentContext = () =>
+      invitationContextRef.current.generation === operationGeneration;
 
     let intent = invitationCreateIntentRef.current;
     if (!intent) {
@@ -718,6 +751,7 @@ export function AssessmentBuilderClient({
         body: JSON.stringify({ expiresAt: intent.expiresAt, csrf: csrfToken }),
         cache: 'no-store',
       });
+      if (!isCurrentContext()) return;
 
       if (!response.ok) {
         if (response.status >= 500) {
@@ -756,7 +790,8 @@ export function AssessmentBuilderClient({
       }
 
       const result: R23CandidateInvitationResponse = await response.json();
-      if (currentSessionId !== sessionId || result.sessionId !== sessionId) {
+      if (!isCurrentContext()) return;
+      if (result.sessionId !== sessionId) {
         setInvitationRetryPending(true);
         setInvitationError(
           'The invitation result could not be matched to this session. Reload its status before sharing a link.',
@@ -788,12 +823,14 @@ export function AssessmentBuilderClient({
         setInvitationNeedsRefresh(false);
       }
     } catch {
-      setInvitationRetryPending(true);
-      setInvitationError(
-        'The invitation result could not be confirmed. Retry the same request or reload its status before sharing a link.',
-      );
+      if (isCurrentContext()) {
+        setInvitationRetryPending(true);
+        setInvitationError(
+          'The invitation result could not be confirmed. Retry the same request or reload its status before sharing a link.',
+        );
+      }
     } finally {
-      setInvitationBusy(false);
+      if (isCurrentContext()) setInvitationBusy(false);
     }
   };
 
@@ -808,6 +845,10 @@ export function AssessmentBuilderClient({
     ) {
       return;
     }
+
+    const operationGeneration = invitationContextRef.current.generation;
+    const isCurrentContext = () =>
+      invitationContextRef.current.generation === operationGeneration;
 
     const endpoint = `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`;
     setInvitationBusy(true);
@@ -826,14 +867,12 @@ export function AssessmentBuilderClient({
         body: JSON.stringify({ csrf: csrfToken }),
         cache: 'no-store',
       });
+      if (!isCurrentContext()) return;
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result: R23CandidateInvitationRevocationResponse =
         await response.json();
-      if (
-        currentSessionId !== sessionId ||
-        result.sessionId !== sessionId ||
-        result.status !== 'revoked'
-      ) {
+      if (!isCurrentContext()) return;
+      if (result.sessionId !== sessionId || result.status !== 'revoked') {
         throw new Error('Revocation result could not be confirmed.');
       }
       setInvitation({
@@ -847,35 +886,35 @@ export function AssessmentBuilderClient({
         'Candidate access has been revoked. Saved work remains with the assigned hiring team.',
       );
     } catch {
-      setInvitationNeedsRefresh(true);
-      setInvitationError(
-        'Revocation could not be confirmed. Reload invitation status before sharing this link again.',
-      );
+      if (isCurrentContext()) {
+        setInvitationNeedsRefresh(true);
+        setInvitationError(
+          'Revocation could not be confirmed. Reload invitation status before sharing this link again.',
+        );
+      }
     } finally {
-      setInvitationBusy(false);
+      if (isCurrentContext()) setInvitationBusy(false);
     }
   };
 
   const copyCandidateInvitation = async () => {
-    const candidatePath =
-      invitation?.status === 'active' &&
-      invitation.expiresAt &&
-      invitation.candidatePath &&
-      !invitationNeedsRefresh &&
-      !invitationBusy
-        ? invitation.candidatePath
-        : null;
+    const operationGeneration = invitationContextRef.current.generation;
+    const candidatePath = confirmedCandidatePathFor(currentSessionId);
     if (!candidatePath || !appOrigin) return;
 
     const invitationUrl = absoluteInvitationUrl(candidatePath, appOrigin);
     if (!invitationUrl) return;
     try {
       await navigator.clipboard.writeText(invitationUrl);
-      setInvitationCopyMessage('Candidate invitation link copied.');
+      if (invitationContextRef.current.generation === operationGeneration) {
+        setInvitationCopyMessage('Candidate invitation link copied.');
+      }
     } catch {
-      setInvitationCopyMessage(
-        'Copy is unavailable here. Select and copy the invitation link below.',
-      );
+      if (invitationContextRef.current.generation === operationGeneration) {
+        setInvitationCopyMessage(
+          'Copy is unavailable here. Select and copy the invitation link below.',
+        );
+      }
     }
   };
 
@@ -962,19 +1001,192 @@ export function AssessmentBuilderClient({
     setAcceptanceCriteria(acceptanceCriteria.filter((_, idx) => idx !== index));
   };
 
-  const activeCandidatePath =
-    invitation?.sessionId === currentSessionId &&
-    invitation?.status === 'active' &&
-    invitation.expiresAt &&
-    invitation.candidatePath &&
-    !invitationNeedsRefresh &&
-    !invitationBusy
-      ? invitation.candidatePath
-      : null;
+  const activeCandidatePath = confirmedCandidatePathFor(currentSessionId);
   const candidateInvitationUrl =
     activeCandidatePath && appOrigin
       ? absoluteInvitationUrl(activeCandidatePath, appOrigin)
       : null;
+  const renderCandidateInvitationControls = (recovered = false) => {
+    const currentInvitation =
+      invitation?.sessionId === currentSessionId ? invitation : null;
+    return (
+      <>
+        {invitationLoading ? (
+          <p role="status">Checking invitation status…</p>
+        ) : null}
+        {invitationError ? (
+          <div
+            className="assessment-feedback assessment-feedback-error"
+            role="alert"
+            data-testid={
+              recovered
+                ? 'recovered-session-error'
+                : 'candidate-invitation-error'
+            }
+          >
+            {invitationError}
+          </div>
+        ) : null}
+        {invitationMessage ? <p role="status">{invitationMessage}</p> : null}
+
+        {currentInvitation?.status === 'not_created' ? (
+          <div>
+            <p>
+              No candidate invitation has been created. The link defaults to
+              seven days and can be set to expire within 30 days. No email will
+              be sent.
+            </p>
+            <label
+              htmlFor="candidate-invitation-expires-at"
+              style={{ display: 'block', margin: '12px 0' }}
+            >
+              Invitation expires at
+              <input
+                id="candidate-invitation-expires-at"
+                data-testid="candidate-invitation-expires-at"
+                type="datetime-local"
+                required
+                min={invitationExpiryMin || undefined}
+                max={invitationExpiryMax || undefined}
+                value={invitationExpiresAtInput}
+                aria-invalid={Boolean(invitationExpiryError)}
+                aria-describedby={
+                  invitationExpiryError
+                    ? 'candidate-invitation-expiry-error'
+                    : undefined
+                }
+                disabled={invitationBusy || invitationRetryPending}
+                onChange={(event) => {
+                  setInvitationExpiresAtInput(event.target.value);
+                  setInvitationExpiryError(null);
+                }}
+              />
+            </label>
+            {invitationExpiryError ? (
+              <p id="candidate-invitation-expiry-error" role="alert">
+                {invitationExpiryError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="button button-primary"
+              data-testid="candidate-invitation-create"
+              disabled={
+                invitationBusy ||
+                invitationLoading ||
+                (invitationNeedsRefresh && !invitationRetryPending)
+              }
+              onClick={() => void createCandidateInvitation()}
+            >
+              {invitationBusy
+                ? 'Creating invitation…'
+                : invitationRetryPending
+                  ? 'Retry invitation creation'
+                  : 'Create candidate invitation'}
+            </button>
+          </div>
+        ) : null}
+
+        {currentInvitation?.status === 'active' ? (
+          <div>
+            {invitationNeedsRefresh ? (
+              <p role="status">
+                Invitation status is being confirmed. The link stays hidden
+                until confirmation.
+              </p>
+            ) : (
+              <p>
+                Candidate access is active until{' '}
+                <time dateTime={currentInvitation.expiresAt ?? undefined}>
+                  {formatInvitationTime(currentInvitation.expiresAt)}
+                </time>
+                . No email was sent.
+              </p>
+            )}
+            {candidateInvitationUrl ? (
+              <>
+                <label
+                  htmlFor="candidate-invitation-link"
+                  style={{ display: 'block', margin: '12px 0' }}
+                >
+                  Candidate invitation link
+                  <input
+                    id="candidate-invitation-link"
+                    data-testid="candidate-invitation-link"
+                    type="text"
+                    readOnly
+                    value={candidateInvitationUrl}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  data-testid="candidate-invitation-copy"
+                  disabled={invitationBusy}
+                  onClick={() => void copyCandidateInvitation()}
+                >
+                  Copy candidate link
+                </button>
+                {invitationCopyMessage ? (
+                  <p role="status">{invitationCopyMessage}</p>
+                ) : null}
+              </>
+            ) : invitationNeedsRefresh ? null : (
+              <p role="alert">
+                The active invitation link could not be confirmed. Reload status
+                before sharing it.
+              </p>
+            )}
+            <button
+              type="button"
+              className="button button-secondary"
+              data-testid="candidate-invitation-revoke"
+              disabled={invitationBusy}
+              onClick={() => void revokeCandidateInvitation()}
+              style={{ marginLeft: '8px' }}
+            >
+              {invitationBusy ? 'Updating…' : 'Revoke candidate access'}
+            </button>
+          </div>
+        ) : null}
+
+        {currentInvitation?.status === 'expired' ? (
+          <p role="status">
+            This invitation expired at{' '}
+            {formatInvitationTime(currentInvitation.expiresAt)}. It cannot be
+            renewed here; issue a new session to invite a candidate again.
+          </p>
+        ) : null}
+        {currentInvitation?.status === 'revoked' ? (
+          <p role="status">
+            This invitation has been revoked. Candidate access is blocked and
+            saved work is retained. Issue a new session to invite a candidate
+            again.
+          </p>
+        ) : null}
+        {currentInvitation?.status === 'unmanaged' ? (
+          <p role="status">
+            This session has an older invitation that cannot be recovered or
+            managed in this demo. Issue a new session before inviting a
+            candidate.
+          </p>
+        ) : null}
+
+        {currentInvitation || invitationError || invitationNeedsRefresh ? (
+          <button
+            type="button"
+            className="button button-secondary"
+            data-testid="candidate-invitation-refresh"
+            disabled={invitationLoading || invitationBusy}
+            onClick={refreshInvitationStatus}
+          >
+            Reload invitation status
+          </button>
+        ) : null}
+      </>
+    );
+  };
 
   return (
     <div className="assessment-builder-page">
@@ -2127,200 +2339,16 @@ export function AssessmentBuilderClient({
                         {recoveryContextError}
                       </div>
                     ) : null}
-                    {invitationLoading ? (
-                      <p role="status">Checking issued session access…</p>
-                    ) : null}
-                    {invitationError ? (
-                      <div
-                        role="alert"
-                        data-testid="recovered-session-error"
-                        className="assessment-feedback assessment-feedback-error"
-                      >
-                        {invitationError}
-                      </div>
-                    ) : null}
-                    {invitationMessage ? (
-                      <p role="status">{invitationMessage}</p>
-                    ) : null}
-
                     {recoveredSessionId &&
                     invitation?.sessionId === recoveredSessionId ? (
-                      <>
-                        <p>
-                          Session reference:{' '}
-                          <code data-testid="recovered-session-id">
-                            {invitation.sessionId}
-                          </code>
-                        </p>
-                        {invitation.status === 'not_created' ? (
-                          <div>
-                            <p>
-                              No candidate invitation has been created. Choose
-                              an expiry within 30 days; no email will be sent.
-                            </p>
-                            <label
-                              htmlFor="candidate-invitation-expires-at"
-                              style={{ display: 'block', margin: '12px 0' }}
-                            >
-                              Invitation expires at
-                              <input
-                                id="candidate-invitation-expires-at"
-                                data-testid="candidate-invitation-expires-at"
-                                type="datetime-local"
-                                required
-                                min={invitationExpiryMin || undefined}
-                                max={invitationExpiryMax || undefined}
-                                value={invitationExpiresAtInput}
-                                aria-invalid={Boolean(invitationExpiryError)}
-                                aria-describedby={
-                                  invitationExpiryError
-                                    ? 'candidate-invitation-expiry-error'
-                                    : undefined
-                                }
-                                disabled={
-                                  invitationBusy || invitationRetryPending
-                                }
-                                onChange={(event) => {
-                                  setInvitationExpiresAtInput(
-                                    event.target.value,
-                                  );
-                                  setInvitationExpiryError(null);
-                                }}
-                              />
-                            </label>
-                            {invitationExpiryError ? (
-                              <p
-                                id="candidate-invitation-expiry-error"
-                                role="alert"
-                              >
-                                {invitationExpiryError}
-                              </p>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="button button-primary"
-                              data-testid="candidate-invitation-create"
-                              disabled={
-                                invitationBusy ||
-                                invitationLoading ||
-                                (invitationNeedsRefresh &&
-                                  !invitationRetryPending)
-                              }
-                              onClick={() => void createCandidateInvitation()}
-                            >
-                              {invitationBusy
-                                ? 'Creating invitation…'
-                                : invitationRetryPending
-                                  ? 'Retry invitation creation'
-                                  : 'Create candidate invitation'}
-                            </button>
-                          </div>
-                        ) : null}
-                        {invitation.status === 'active' ? (
-                          <div>
-                            {invitationNeedsRefresh ? (
-                              <p role="status">
-                                Invitation status is being confirmed. The link
-                                stays hidden until confirmation.
-                              </p>
-                            ) : (
-                              <p>
-                                Candidate access is active until{' '}
-                                <time
-                                  dateTime={invitation.expiresAt ?? undefined}
-                                >
-                                  {formatInvitationTime(invitation.expiresAt)}
-                                </time>
-                                . No email was sent.
-                              </p>
-                            )}
-                            {candidateInvitationUrl ? (
-                              <>
-                                <label
-                                  htmlFor="candidate-invitation-link"
-                                  style={{ display: 'block', margin: '12px 0' }}
-                                >
-                                  Candidate invitation link
-                                  <input
-                                    id="candidate-invitation-link"
-                                    data-testid="candidate-invitation-link"
-                                    type="text"
-                                    readOnly
-                                    value={candidateInvitationUrl}
-                                    onFocus={(event) =>
-                                      event.currentTarget.select()
-                                    }
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  className="button button-secondary"
-                                  data-testid="candidate-invitation-copy"
-                                  disabled={invitationBusy}
-                                  onClick={() => void copyCandidateInvitation()}
-                                >
-                                  Copy candidate link
-                                </button>
-                                {invitationCopyMessage ? (
-                                  <p role="status">{invitationCopyMessage}</p>
-                                ) : null}
-                              </>
-                            ) : invitationNeedsRefresh ? null : (
-                              <p role="alert">
-                                The active invitation link could not be
-                                confirmed. Reload status before sharing it.
-                              </p>
-                            )}
-                            <button
-                              type="button"
-                              className="button button-secondary"
-                              data-testid="candidate-invitation-revoke"
-                              disabled={invitationBusy}
-                              onClick={() => void revokeCandidateInvitation()}
-                              style={{ marginLeft: '8px' }}
-                            >
-                              {invitationBusy
-                                ? 'Updating…'
-                                : 'Revoke candidate access'}
-                            </button>
-                          </div>
-                        ) : null}
-                        {invitation.status === 'expired' ? (
-                          <p role="status">
-                            This invitation expired at{' '}
-                            {formatInvitationTime(invitation.expiresAt)}. It
-                            cannot be renewed here; issue a new session to
-                            invite a candidate again.
-                          </p>
-                        ) : null}
-                        {invitation.status === 'revoked' ? (
-                          <p role="status">
-                            This invitation has been revoked. Candidate access
-                            is blocked and saved work is retained. Issue a new
-                            session to invite a candidate again.
-                          </p>
-                        ) : null}
-                        {invitation.status === 'unmanaged' ? (
-                          <p role="status">
-                            This session has an older invitation that cannot be
-                            recovered or managed in this demo. Issue a new
-                            session before inviting a candidate.
-                          </p>
-                        ) : null}
-                      </>
+                      <p>
+                        Session reference:{' '}
+                        <code data-testid="recovered-session-id">
+                          {invitation.sessionId}
+                        </code>
+                      </p>
                     ) : null}
-
-                    {recoveredSessionId ? (
-                      <button
-                        type="button"
-                        className="button button-secondary"
-                        data-testid="candidate-invitation-refresh"
-                        disabled={invitationLoading || invitationBusy}
-                        onClick={refreshInvitationStatus}
-                      >
-                        Reload invitation status
-                      </button>
-                    ) : null}
+                    {renderCandidateInvitationControls(true)}
                     <button
                       type="button"
                       className="button button-secondary"
@@ -2596,218 +2624,7 @@ export function AssessmentBuilderClient({
                               aria-label="Candidate invitation"
                             >
                               <h4>Candidate invitation</h4>
-                              {invitationLoading ? (
-                                <p role="status">Checking invitation status…</p>
-                              ) : null}
-                              {invitationError ? (
-                                <div
-                                  className="assessment-feedback assessment-feedback-error"
-                                  role="alert"
-                                  data-testid="candidate-invitation-error"
-                                >
-                                  {invitationError}
-                                </div>
-                              ) : null}
-                              {invitationMessage ? (
-                                <p role="status">{invitationMessage}</p>
-                              ) : null}
-
-                              {invitation?.status === 'not_created' ? (
-                                <div>
-                                  <p>
-                                    No candidate invitation has been created.
-                                    The link defaults to seven days and can be
-                                    set to expire within 30 days. No email will
-                                    be sent.
-                                  </p>
-                                  <label
-                                    htmlFor="candidate-invitation-expires-at"
-                                    style={{
-                                      display: 'block',
-                                      margin: '12px 0',
-                                    }}
-                                  >
-                                    Invitation expires at
-                                    <input
-                                      id="candidate-invitation-expires-at"
-                                      data-testid="candidate-invitation-expires-at"
-                                      type="datetime-local"
-                                      required
-                                      min={invitationExpiryMin || undefined}
-                                      max={invitationExpiryMax || undefined}
-                                      value={invitationExpiresAtInput}
-                                      aria-invalid={Boolean(
-                                        invitationExpiryError,
-                                      )}
-                                      aria-describedby={
-                                        invitationExpiryError
-                                          ? 'candidate-invitation-expiry-error'
-                                          : undefined
-                                      }
-                                      disabled={
-                                        invitationBusy || invitationRetryPending
-                                      }
-                                      onChange={(event) => {
-                                        setInvitationExpiresAtInput(
-                                          event.target.value,
-                                        );
-                                        setInvitationExpiryError(null);
-                                      }}
-                                    />
-                                  </label>
-                                  {invitationExpiryError ? (
-                                    <p
-                                      id="candidate-invitation-expiry-error"
-                                      role="alert"
-                                    >
-                                      {invitationExpiryError}
-                                    </p>
-                                  ) : null}
-                                  <button
-                                    type="button"
-                                    className="button button-primary"
-                                    data-testid="candidate-invitation-create"
-                                    disabled={
-                                      invitationBusy ||
-                                      invitationLoading ||
-                                      (invitationNeedsRefresh &&
-                                        !invitationRetryPending)
-                                    }
-                                    onClick={() =>
-                                      void createCandidateInvitation()
-                                    }
-                                  >
-                                    {invitationBusy
-                                      ? 'Creating invitation…'
-                                      : invitationRetryPending
-                                        ? 'Retry invitation creation'
-                                        : 'Create candidate invitation'}
-                                  </button>
-                                </div>
-                              ) : null}
-
-                              {invitation?.status === 'active' ? (
-                                <div>
-                                  {invitationNeedsRefresh ? (
-                                    <p role="status">
-                                      Invitation status is being confirmed. The
-                                      link stays hidden until confirmation.
-                                    </p>
-                                  ) : (
-                                    <p>
-                                      Candidate access is active until{' '}
-                                      <time
-                                        dateTime={
-                                          invitation.expiresAt ?? undefined
-                                        }
-                                      >
-                                        {formatInvitationTime(
-                                          invitation.expiresAt,
-                                        )}
-                                      </time>
-                                      . No email was sent.
-                                    </p>
-                                  )}
-                                  {candidateInvitationUrl ? (
-                                    <>
-                                      <label
-                                        htmlFor="candidate-invitation-link"
-                                        style={{
-                                          display: 'block',
-                                          margin: '12px 0',
-                                        }}
-                                      >
-                                        Candidate invitation link
-                                        <input
-                                          id="candidate-invitation-link"
-                                          data-testid="candidate-invitation-link"
-                                          type="text"
-                                          readOnly
-                                          value={candidateInvitationUrl}
-                                          onFocus={(event) =>
-                                            event.currentTarget.select()
-                                          }
-                                        />
-                                      </label>
-                                      <button
-                                        type="button"
-                                        className="button button-secondary"
-                                        data-testid="candidate-invitation-copy"
-                                        disabled={invitationBusy}
-                                        onClick={() =>
-                                          void copyCandidateInvitation()
-                                        }
-                                      >
-                                        Copy candidate link
-                                      </button>
-                                      {invitationCopyMessage ? (
-                                        <p role="status">
-                                          {invitationCopyMessage}
-                                        </p>
-                                      ) : null}
-                                    </>
-                                  ) : invitationNeedsRefresh ? null : (
-                                    <p role="alert">
-                                      The active invitation link could not be
-                                      confirmed. Reload status before sharing
-                                      it.
-                                    </p>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="button button-secondary"
-                                    data-testid="candidate-invitation-revoke"
-                                    disabled={invitationBusy}
-                                    onClick={() =>
-                                      void revokeCandidateInvitation()
-                                    }
-                                    style={{ marginLeft: '8px' }}
-                                  >
-                                    {invitationBusy
-                                      ? 'Updating…'
-                                      : 'Revoke candidate access'}
-                                  </button>
-                                </div>
-                              ) : null}
-
-                              {invitation?.status === 'expired' ? (
-                                <p role="status">
-                                  This invitation expired at{' '}
-                                  {formatInvitationTime(invitation.expiresAt)}.
-                                  It cannot be renewed here; issue a new session
-                                  to invite a candidate again.
-                                </p>
-                              ) : null}
-                              {invitation?.status === 'revoked' ? (
-                                <p role="status">
-                                  This invitation has been revoked. Candidate
-                                  access is blocked and saved work is retained.
-                                  Issue a new session to invite a candidate
-                                  again.
-                                </p>
-                              ) : null}
-                              {invitation?.status === 'unmanaged' ? (
-                                <p role="status">
-                                  This session has an older invitation that
-                                  cannot be recovered or managed in this demo.
-                                  Issue a new session before inviting a
-                                  candidate.
-                                </p>
-                              ) : null}
-
-                              {invitation ||
-                              invitationError ||
-                              invitationNeedsRefresh ? (
-                                <button
-                                  type="button"
-                                  className="button button-secondary"
-                                  data-testid="candidate-invitation-refresh"
-                                  disabled={invitationLoading || invitationBusy}
-                                  onClick={refreshInvitationStatus}
-                                >
-                                  Reload invitation status
-                                </button>
-                              ) : null}
+                              {renderCandidateInvitationControls()}
                             </section>
                           ) : issuedSession.candidatePath ? (
                             <Link
