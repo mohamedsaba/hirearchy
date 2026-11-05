@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 
 import { readR23Config, r23IsEnabled } from '../r23-auth/config';
+import { isAuthenticatedStaging } from '../runtime/profile';
 
 export type R26Config = Readonly<{
   databaseUrl: string;
@@ -28,6 +29,10 @@ const isLoopback = (hostname: string) => {
 
 export function r26IsEnabled(): boolean {
   return process.env.HIREARCHY_R26_DISPOSABLE === '1' && r23IsEnabled();
+}
+
+export function r26CandidatePageIsAvailable(): boolean {
+  return isAuthenticatedStaging() || r26IsEnabled();
 }
 
 export function readR26Config(): R26Config | null {
