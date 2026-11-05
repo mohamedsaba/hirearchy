@@ -13,8 +13,10 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, Pool } from 'pg';
 import { applyMigrations } from '../database/postgres/migrate.mjs';
+import { checkInternalRoleBootstrap } from '../tests/postgres/internal-role-bootstrap.mjs';
 import {
   checkFixtureRlsAndGucResidual,
+  checkLegacySensitiveDirectReads,
   checkLegacyCompatibility,
   checkRuntimePrincipalIdentityDenied,
   checkRlsDeniesWithoutPolicy,
@@ -463,6 +465,156 @@ async function createFixtureRlsProbe(admin, password, organizationContext) {
   });
 }
 
+async function checkUpgradeFromLegacyGrants({
+  admin,
+  fixture,
+  adminPassword,
+  passwords,
+  bootstrapSql,
+  internalBootstrapSql,
+}) {
+  const database = `r2_upgrade_${randomBytes(6).toString('hex')}`;
+  const prefixDir = mkdtempSync(join(tmpdir(), 'hirearchy-r2-upgrade-prefix-'));
+  let upgradeAdmin;
+  let upgradeMigrator;
+  const upgradePools = [];
+  const upgradeRuntimePools = {};
+  await admin.query(`CREATE DATABASE ${database}`);
+  try {
+    const upgradeConfig = (user, password) =>
+      connectionConfig(fixture, database, user, password);
+    upgradeAdmin = await connectWithRetry(
+      upgradeConfig('postgres', adminPassword),
+    );
+    await upgradeAdmin.query(bootstrapSql);
+    await upgradeAdmin.query(internalBootstrapSql);
+
+    const legacyMigrations = readdirSync(MIGRATIONS_DIR)
+      .filter((filename) => filename.endsWith('.sql') && filename < '0013_')
+      .sort();
+    assert.ok(
+      legacyMigrations.some((filename) => filename.startsWith('0012_')),
+    );
+    assert.ok(
+      legacyMigrations.every((filename) => !filename.startsWith('0013_')),
+    );
+    for (const filename of legacyMigrations) {
+      writeFileSync(
+        join(prefixDir, filename),
+        readFileSync(join(MIGRATIONS_DIR, filename)),
+      );
+    }
+
+    upgradeMigrator = await connectWithRetry(
+      upgradeConfig('hirearchy_migrator', passwords.hirearchy_migrator),
+    );
+    const legacyResult = await applyMigrations(upgradeMigrator, {
+      migrationsDir: prefixDir,
+    });
+    assert.ok(legacyResult.appliedVersions.includes('0012'));
+    assert.ok(!legacyResult.appliedVersions.includes('0013'));
+
+    const fixtureData = createFoundationFixtures();
+    await installMigratorFixtureAccess(upgradeAdmin);
+    try {
+      await seedFoundationFixtures(upgradeMigrator, fixtureData.ids);
+    } finally {
+      await removeMigratorFixtureAccess(upgradeAdmin);
+    }
+    await upgradeAdmin.query(
+      `INSERT INTO hirearchy.reviewer_assignments
+         (id, organization_id, session_id, reviewer_principal_id, assigned_by_principal_id)
+       VALUES ('r2-upgrade-reviewer-assignment', $1, $2, $3, $4)`,
+      [
+        fixtureData.ids.organizationA,
+        fixtureData.ids.sessionA,
+        fixtureData.ids.principalShared,
+        fixtureData.ids.principalA,
+      ],
+    );
+    await upgradeAdmin.query(
+      `UPDATE hirearchy.assessment_sessions
+          SET status = 'SUBMITTED',
+              activated_at = created_at + INTERVAL '1 second',
+              submitted_at = created_at + INTERVAL '2 seconds',
+              closure_reason = 'candidate_submission'
+        WHERE id = $1`,
+      [fixtureData.ids.sessionA],
+    );
+    await upgradeAdmin.query(
+      `INSERT INTO hirearchy.candidate_ai_interactions
+         (organization_id, session_id, interaction_id, request_id, sequence_start,
+          sequence_completed, candidate_prompt, assistant_response, status, completed_at)
+       VALUES ($1, $2, 'r2-upgrade-ai-evidence', 'r2-upgrade-ai-request', 1, 2,
+               'synthetic prompt', 'synthetic response', 'COMPLETED', pg_catalog.clock_timestamp())`,
+      [fixtureData.ids.organizationA, fixtureData.ids.sessionA],
+    );
+    await upgradeAdmin.query(
+      `INSERT INTO hirearchy.candidate_execution_operations
+         (organization_id, session_id, operation_id, request_id, sequence_start,
+          sequence_completed, workspace_digest, workspace_version, recipe_id,
+          recipe_version, recipe_digest, fence, status, exit_code, completed_at)
+       VALUES ($1, $2, 'r2-upgrade-execution-evidence', 'r2-upgrade-execution-request',
+               1, 2, repeat('a', 64), 1, 'r2-upgrade-fixture', '1.0.0',
+               repeat('b', 64), 1, 'COMPLETED', 0, pg_catalog.clock_timestamp())`,
+      [fixtureData.ids.organizationA, fixtureData.ids.sessionA],
+    );
+
+    for (const role of [
+      'app_evaluator',
+      'app_candidate_gateway',
+      'app_control_worker',
+    ]) {
+      const pool = new Pool({
+        ...upgradeConfig(role, passwords[role]),
+        max: 1,
+      });
+      upgradePools.push(pool);
+      upgradeRuntimePools[role] = pool;
+    }
+    await checkLegacySensitiveDirectReads({
+      admin: upgradeAdmin,
+      pools: upgradeRuntimePools,
+      ids: fixtureData.ids,
+    });
+
+    const hardenedResult = await applyMigrations(upgradeMigrator);
+    assert.ok(hardenedResult.appliedVersions.includes('0013'));
+    const preservedAi = await upgradeAdmin.query(
+      `SELECT interaction_id FROM hirearchy.candidate_ai_interactions
+        WHERE session_id = $1`,
+      [fixtureData.ids.sessionA],
+    );
+    const preservedExecution = await upgradeAdmin.query(
+      `SELECT operation_id FROM hirearchy.candidate_execution_operations
+        WHERE session_id = $1`,
+      [fixtureData.ids.sessionA],
+    );
+    assert.deepEqual(preservedAi.rows, [
+      { interaction_id: 'r2-upgrade-ai-evidence' },
+    ]);
+    assert.deepEqual(preservedExecution.rows, [
+      { operation_id: 'r2-upgrade-execution-evidence' },
+    ]);
+    await checkRuntimeRolesAndDefaultDeny({
+      admin: upgradeAdmin,
+      pools: upgradeRuntimePools,
+      ids: fixtureData.ids,
+    });
+  } finally {
+    await Promise.all(
+      upgradePools.map((pool) => pool.end().catch(() => undefined)),
+    );
+    await Promise.all(
+      [upgradeMigrator, upgradeAdmin]
+        .filter(Boolean)
+        .map((client) => client.end().catch(() => undefined)),
+    );
+    rmSync(prefixDir, { recursive: true, force: true });
+    await admin.query(`DROP DATABASE IF EXISTS ${database}`);
+  }
+}
+
 async function installFixtureRlsPolicies(admin) {
   await admin.query(`
     CREATE POLICY r2_fixture_tenant_org_read ON hirearchy.organizations
@@ -545,6 +697,15 @@ async function main() {
     );
     await admin.query(bootstrapSql);
     await admin.query(bootstrapSql);
+    const internalBootstrapSql = readFileSync(
+      join(ROOT, 'database/postgres/bootstrap-internal-roles.sql'),
+      'utf8',
+    );
+    await runCheck(
+      'internal roles bootstrap is atomic, repeatable, and rejects unsafe roles',
+      () => checkInternalRoleBootstrap(admin, internalBootstrapSql),
+    );
+    await admin.query(internalBootstrapSql);
     await admin.query(
       `CREATE TABLE public.r2_compatibility_sentinel (id integer PRIMARY KEY, value text NOT NULL)`,
     );
@@ -594,6 +755,38 @@ async function main() {
       },
     );
 
+    await runCheck(
+      'staging proof state remains inaccessible to runtime roles',
+      async () => {
+        const { rows } = await admin.query(`
+        SELECT role_name, relation_name,
+               pg_catalog.has_table_privilege(role_name, relation_name, 'SELECT,INSERT,UPDATE,DELETE') AS access
+        FROM pg_catalog.unnest(ARRAY['app_evaluator', 'app_candidate_gateway', 'app_control_worker']) AS role_name
+        CROSS JOIN pg_catalog.unnest(ARRAY['hirearchy.staging_verification_keys', 'hirearchy.staging_proof_nonces', 'hirearchy.staging_sessions']) AS relation_name
+      `);
+        assert.equal(rows.length, 9);
+        for (const row of rows)
+          assert.equal(
+            row.access,
+            false,
+            `${row.role_name}: ${row.relation_name}`,
+          );
+      },
+    );
+
+    await runCheck(
+      '0013 upgrade denies forged evaluator contexts and worker reads without deleting evidence',
+      () =>
+        checkUpgradeFromLegacyGrants({
+          admin,
+          fixture,
+          adminPassword,
+          passwords,
+          bootstrapSql,
+          internalBootstrapSql,
+        }),
+    );
+
     const fixtureData = createFoundationFixtures();
     await installMigratorFixtureAccess(admin);
     try {
@@ -623,7 +816,12 @@ async function main() {
     );
     await runCheck(
       'actual runtime LOGIN role attributes and default-deny grants',
-      () => checkRuntimeRolesAndDefaultDeny({ admin, pools: runtimePools }),
+      () =>
+        checkRuntimeRolesAndDefaultDeny({
+          admin,
+          pools: runtimePools,
+          ids: fixtureData.ids,
+        }),
     );
     await runCheck(
       'ordinary runtime roles cannot clear or replace principal subjects',

@@ -10,6 +10,7 @@ import {
   type R212RecordedInteraction,
 } from '../../../../database/postgres/r212/adapter.mjs';
 import { readR26Config, r26IsEnabled } from '../r26-candidate/config';
+import { isStagingLockdown } from '../runtime/profile';
 import {
   R212_MAX_PROMPT_CHARS,
   R212_SYNTHETIC_MODEL_ID,
@@ -314,6 +315,13 @@ export async function r212CandidateAiAction(
   request: Request,
   sessionId: string,
 ): Promise<Response> {
+  if (isStagingLockdown()) {
+    return errorResponse(
+      503,
+      'AI_ASSISTANCE_DISABLED',
+      'AI assistance is disabled in staging lockdown.',
+    );
+  }
   try {
     requireSessionId(sessionId);
     const config = requireEnabledConfig();

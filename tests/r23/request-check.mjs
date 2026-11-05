@@ -816,6 +816,33 @@ async function runJourney({
     401,
     'invalid Auth signature denied by real Next route',
   );
+  const mismatched = await storedCredentials(
+    admin,
+    sessions.a,
+    env.R23_SESSION_KEY,
+  );
+  const otherIdentity = await storedCredentials(
+    admin,
+    sessions.b,
+    env.R23_SESSION_KEY,
+  );
+  try {
+    await mismatched.replace({
+      ...mismatched.pair,
+      accessToken: otherIdentity.pair.accessToken,
+    });
+    assert.equal(
+      (
+        await request(origin, `/r23/organizations/${orgA}`, {
+          cookies: sessions.a,
+        })
+      ).status,
+      401,
+      'a valid Auth token for another subject cannot use this bound session',
+    );
+  } finally {
+    await mismatched.replace(mismatched.pair);
+  }
   const external = await storedCredentials(
     admin,
     sessions.signup,

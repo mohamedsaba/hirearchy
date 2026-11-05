@@ -1,0 +1,92 @@
+import { NextResponse, type NextRequest } from 'next/server';
+
+import {
+  isAuthenticatedStaging,
+  isStagingLockdown,
+} from './src/runtime/profile';
+
+const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
+  /^\/r23\/login$/,
+  /^\/r23\/auth\/callback$/,
+  /^\/r23\/organizations$/,
+  /^\/r23\/organizations\/[^/]+$/,
+  /^\/r23\/organizations\/[^/]+\/builder$/,
+  /^\/r23\/organizations\/[^/]+\/sessions\/[^/]+$/,
+  /^\/r23\/api\/organizations\/[^/]+\/assessments\/draft$/,
+  /^\/r23\/api\/organizations\/[^/]+\/assessments\/versions\/[^/]+$/,
+  /^\/r23\/api\/organizations\/[^/]+\/reviewers$/,
+  /^\/r23\/api\/organizations\/[^/]+\/sessions$/,
+  /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+$/,
+  /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/assignments$/,
+  /^\/r27\/organizations\/[^/]+\/sessions\/[^/]+$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/evidence$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/evidence\/revisions\/[^/]+$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations\/[^/]+$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet$/,
+];
+
+const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
+  /^\/api\/staging\/v1$/,
+  /^\/r23\/auth\/login$/,
+  /^\/r23\/auth\/logout$/,
+  /^\/r23\/auth\/refresh$/,
+  /^\/r23\/organization$/,
+  /^\/r23\/api\/organizations\/[^/]+\/assessments\/validate$/,
+  /^\/r23\/api\/organizations\/[^/]+\/sessions$/,
+];
+
+const STAGING_BROWSER_PUT_PATTERNS: readonly RegExp[] = [
+  /^\/r23\/api\/organizations\/[^/]+\/assessments\/draft$/,
+];
+
+function isAllowedAuthenticatedStagingRequest(
+  method: string,
+  pathname: string,
+): boolean {
+  if (
+    (method === 'GET' || method === 'HEAD') &&
+    (pathname.startsWith('/_next/') || pathname === '/favicon.ico')
+  ) {
+    return true;
+  }
+  if (method === 'GET' || method === 'HEAD') {
+    return STAGING_BROWSER_GET_PATTERNS.some((pattern) =>
+      pattern.test(pathname),
+    );
+  }
+  if (method === 'POST') {
+    return STAGING_BROWSER_POST_PATTERNS.some((pattern) =>
+      pattern.test(pathname),
+    );
+  }
+  if (method === 'PUT') {
+    return STAGING_BROWSER_PUT_PATTERNS.some((pattern) =>
+      pattern.test(pathname),
+    );
+  }
+  return false;
+}
+
+export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (
+    isStagingLockdown() &&
+    !(request.method === 'GET' && pathname === '/api/health') &&
+    !(
+      isAuthenticatedStaging() &&
+      isAllowedAuthenticatedStagingRequest(request.method, pathname)
+    )
+  ) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'STAGING_CAPABILITY_DISABLED',
+          message: 'This capability is unavailable in staging lockdown.',
+        },
+      },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+  return NextResponse.next();
+}

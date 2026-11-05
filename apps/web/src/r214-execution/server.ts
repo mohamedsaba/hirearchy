@@ -14,6 +14,7 @@ import type {
 } from '../../../../database/postgres/r213/contract.d.mts';
 import { createR26CandidateAdapter } from '../../../../database/postgres/r26/adapter.mjs';
 import { readR26Config, r26IsEnabled } from '../r26-candidate/config';
+import { isStagingLockdown } from '../runtime/profile';
 import {
   DEFAULT_PYTHON_CHECK_RECIPE,
   RESTRICTED_EXECUTOR_PROVENANCE,
@@ -336,6 +337,13 @@ export async function r214CandidateExecutionAction(
   sessionId: string,
   adapterOverride?: ExecutionAdapter,
 ): Promise<Response> {
+  if (isStagingLockdown()) {
+    return errorResponse(
+      503,
+      'EXECUTION_DISABLED',
+      'Candidate execution is disabled in staging lockdown.',
+    );
+  }
   try {
     requireSessionId(sessionId);
     const config = requireEnabledConfig();

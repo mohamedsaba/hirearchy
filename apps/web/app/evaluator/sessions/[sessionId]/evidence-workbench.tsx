@@ -652,6 +652,10 @@ const R29ObservationPanel = ({
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [writesEnabled, setWritesEnabled] = useState<boolean>(true);
+  const [writesUnavailableReason, setWritesUnavailableReason] = useState<
+    string | null
+  >(null);
 
   const [newBody, setNewBody] = useState<string>('');
   const [creating, setCreating] = useState<boolean>(false);
@@ -686,12 +690,25 @@ const R29ObservationPanel = ({
         }
         return response.json();
       })
-      .then((data: { observations?: readonly R29EvaluatorObservation[] }) => {
-        if (active) {
-          setObservations(data.observations ?? []);
-          setLoading(false);
-        }
-      })
+      .then(
+        (data: {
+          observations?: readonly R29EvaluatorObservation[];
+          writesEnabled?: boolean;
+          writesUnavailableReason?: string;
+        }) => {
+          if (active) {
+            setObservations(data.observations ?? []);
+            if (data.writesEnabled === false) {
+              setWritesEnabled(false);
+              setWritesUnavailableReason(
+                data.writesUnavailableReason ??
+                  'Private observation creation and editing are disabled in the R2.15 internal staging slice (read-only access).',
+              );
+            }
+            setLoading(false);
+          }
+        },
+      )
       .catch((err: unknown) => {
         if (active) {
           setError(err instanceof Error ? err.message : String(err));
@@ -1045,7 +1062,7 @@ const R29ObservationPanel = ({
                         Updated {formatObservationDisplayDate(obs.updatedAt)}
                       </time>
                     </div>
-                    {!isEditing ? (
+                    {!isEditing && writesEnabled ? (
                       <button
                         type="button"
                         onClick={() => handleStartEdit(obs)}
@@ -1244,114 +1261,131 @@ const R29ObservationPanel = ({
       </div>
 
       {/* Authoring form */}
-      <form
-        onSubmit={handleCreate}
-        style={{
-          borderTop: '1px solid var(--software-border, #e5e7eb)',
-          paddingTop: '14px',
-          minWidth: 0,
-          maxWidth: '100%',
-          boxSizing: 'border-box',
-        }}
-      >
-        <h4
+      {writesEnabled ? (
+        <form
+          onSubmit={handleCreate}
           style={{
-            margin: '0 0 6px 0',
-            fontSize: '13px',
-            fontWeight: 600,
-            color: '#374151',
-          }}
-        >
-          Record Observation
-        </h4>
-
-        {createError ? (
-          <div
-            role="alert"
-            style={{
-              background: '#fee2e2',
-              color: '#991b1b',
-              padding: '8px 12px',
-              borderRadius: '4px',
-              fontSize: '13px',
-              marginBottom: '8px',
-            }}
-          >
-            {createError}
-          </div>
-        ) : null}
-
-        {createSuccess ? (
-          <div
-            role="status"
-            style={{
-              background: '#dcfce7',
-              color: '#15803d',
-              padding: '8px 12px',
-              borderRadius: '4px',
-              fontSize: '13px',
-              marginBottom: '8px',
-            }}
-          >
-            Observation saved.
-          </div>
-        ) : null}
-
-        <textarea
-          aria-label="Observation note"
-          placeholder="Record human evaluator note anchored to this evidence…"
-          rows={3}
-          maxLength={10000}
-          value={newBody}
-          onChange={(e) => {
-            setNewBody(e.target.value);
-            if (createSuccess) setCreateSuccess(false);
-          }}
-          style={{
-            width: '100%',
+            borderTop: '1px solid var(--software-border, #e5e7eb)',
+            paddingTop: '14px',
             minWidth: 0,
             maxWidth: '100%',
             boxSizing: 'border-box',
-            padding: '8px 10px',
-            fontSize: '14px',
-            fontFamily: 'inherit',
-            borderRadius: '6px',
-            border: '1px solid #d1d5db',
-          }}
-        />
-
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: '8px',
-            gap: '8px',
           }}
         >
-          <span style={{ fontSize: '11px', color: '#6b7280' }}>
-            {newBody.length} / 10000 characters
-          </span>
-          <button
-            type="submit"
-            disabled={creating || !newBody.trim()}
+          <h4
             style={{
+              margin: '0 0 6px 0',
               fontSize: '13px',
-              padding: '6px 14px',
-              borderRadius: '6px',
-              border: 'none',
-              background: '#2563eb',
-              color: '#ffffff',
               fontWeight: 600,
-              cursor: creating || !newBody.trim() ? 'not-allowed' : 'pointer',
-              opacity: creating || !newBody.trim() ? 0.6 : 1,
+              color: '#374151',
             }}
           >
-            {creating ? 'Saving…' : 'Save observation'}
-          </button>
+            Record Observation
+          </h4>
+
+          {createError ? (
+            <div
+              role="alert"
+              style={{
+                background: '#fee2e2',
+                color: '#991b1b',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '13px',
+                marginBottom: '8px',
+              }}
+            >
+              {createError}
+            </div>
+          ) : null}
+
+          {createSuccess ? (
+            <div
+              role="status"
+              style={{
+                background: '#dcfce7',
+                color: '#15803d',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '13px',
+                marginBottom: '8px',
+              }}
+            >
+              Observation saved.
+            </div>
+          ) : null}
+
+          <textarea
+            aria-label="Observation note"
+            placeholder="Record human evaluator note anchored to this evidence…"
+            rows={3}
+            maxLength={10000}
+            value={newBody}
+            onChange={(e) => {
+              setNewBody(e.target.value);
+              if (createSuccess) setCreateSuccess(false);
+            }}
+            style={{
+              width: '100%',
+              minWidth: 0,
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              padding: '8px 10px',
+              fontSize: '14px',
+              fontFamily: 'inherit',
+              borderRadius: '6px',
+              border: '1px solid #d1d5db',
+            }}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: '8px',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontSize: '11px', color: '#6b7280' }}>
+              {newBody.length} / 10000 characters
+            </span>
+            <button
+              type="submit"
+              disabled={creating || !newBody.trim()}
+              style={{
+                fontSize: '13px',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                border: 'none',
+                background: '#2563eb',
+                color: '#ffffff',
+                fontWeight: 600,
+                cursor: creating || !newBody.trim() ? 'not-allowed' : 'pointer',
+                opacity: creating || !newBody.trim() ? 0.6 : 1,
+              }}
+            >
+              {creating ? 'Saving…' : 'Save observation'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div
+          data-testid="observation-writes-unavailable"
+          role="status"
+          style={{
+            borderTop: '1px solid var(--software-border, #e5e7eb)',
+            paddingTop: '12px',
+            fontSize: '13px',
+            color: '#92400e',
+          }}
+        >
+          <strong>Read-Only Staging Slice:</strong>{' '}
+          {writesUnavailableReason ??
+            'Private observation creation and editing are disabled in the R2.15 internal staging slice.'}
         </div>
-      </form>
+      )}
     </section>
   );
 };
@@ -3058,6 +3092,10 @@ export const R210ReviewPacketPanel = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedMessage, setLastSavedMessage] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [writesEnabled, setWritesEnabled] = useState<boolean>(true);
+  const [writesUnavailableReason, setWritesUnavailableReason] = useState<
+    string | null
+  >(null);
 
   // Finalization state
   const [finalizing, setFinalizing] = useState<boolean>(false);
@@ -3101,7 +3139,16 @@ export const R210ReviewPacketPanel = ({
         if (packetRes.ok) {
           const data = await packetRes.json();
           currentPacket = data.reviewPacket ?? null;
-          if (active) setPacket(currentPacket);
+          if (active) {
+            setPacket(currentPacket);
+            if (data.writesEnabled === false) {
+              setWritesEnabled(false);
+              setWritesUnavailableReason(
+                data.writesUnavailableReason ??
+                  'Review packet draft saving and finalization are disabled in the R2.15 internal staging slice (read-only access).',
+              );
+            }
+          }
         } else if (packetRes.status !== 404 && packetRes.status !== 403) {
           throw new Error(
             `Failed to load review packet (HTTP ${packetRes.status})`,
@@ -3759,8 +3806,30 @@ export const R210ReviewPacketPanel = ({
         </div>
       ) : null}
 
-      {/* Mode 1: FINALIZED READ-ONLY PRESENTATION */}
-      {isFinalized && packet ? (
+      {/* Read-Only Staging Notice */}
+      {!writesEnabled ? (
+        <div
+          data-testid="review-packet-writes-unavailable"
+          role="status"
+          style={{
+            padding: '12px 16px',
+            marginBottom: '20px',
+            borderRadius: '8px',
+            backgroundColor: '#fffbeb',
+            border: '1px solid #f59e0b',
+            color: '#92400e',
+            fontSize: '13px',
+            fontWeight: 500,
+          }}
+        >
+          <strong>Read-Only Staging Slice:</strong>{' '}
+          {writesUnavailableReason ??
+            'Review packet draft saving and finalization are disabled in the R2.15 internal staging slice (read-only access).'}
+        </div>
+      ) : null}
+
+      {/* Mode 1: FINALIZED OR READ-ONLY PRESENTATION */}
+      {(isFinalized || !writesEnabled) && packet ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Metadata */}
           <dl
@@ -4103,6 +4172,20 @@ export const R210ReviewPacketPanel = ({
             ) : null}
           </section>
         </div>
+      ) : !writesEnabled ? (
+        <p
+          data-testid="review-packet-empty-readonly"
+          style={{
+            margin: 0,
+            fontSize: '14px',
+            color: 'var(--software-muted, #6b7280)',
+            fontStyle: 'italic',
+          }}
+        >
+          No private review packet has been recorded for your reviewer account
+          on this session. Review packet authoring is disabled in this staging
+          slice.
+        </p>
       ) : (
         /* Mode 2: DRAFT REVIEW FORM */
         <form

@@ -3,9 +3,10 @@ import {
   markApplicationStartupPending,
   markApplicationStartupReady,
 } from './src/startup-status';
+import { isStagingLockdown } from './src/runtime/profile';
 
 export const register = async () => {
-  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  if (process.env.NEXT_RUNTIME !== 'nodejs' || isStagingLockdown()) return;
   markApplicationStartupPending();
   let reconciliationStarted = false;
 
