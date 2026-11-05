@@ -104,6 +104,35 @@ async function expectCandidateError(promise, code, status) {
   });
 }
 
+async function candidateStateSnapshot(admin, sessionId) {
+  const { rows } = await admin.query(
+    `SELECT session.status::pg_catalog.text AS status,
+            session.activated_at,
+            session.submitted_at,
+            session.closure_reason,
+            (SELECT pg_catalog.count(*)::pg_catalog.int4
+               FROM hirearchy.candidate_workspace_files AS file
+              WHERE file.session_id = session.id) AS file_count,
+            (SELECT pg_catalog.count(*)::pg_catalog.int4
+               FROM hirearchy.candidate_session_events AS event
+              WHERE event.session_id = session.id) AS event_count,
+            (SELECT pg_catalog.count(*)::pg_catalog.int4
+               FROM hirearchy.candidate_session_operations AS operation
+              WHERE operation.session_id = session.id) AS operation_count,
+            (SELECT pg_catalog.count(*)::pg_catalog.int4
+               FROM hirearchy.candidate_session_submissions AS submission
+              WHERE submission.session_id = session.id) AS submission_count,
+            (SELECT pg_catalog.count(*)::pg_catalog.int4
+               FROM hirearchy.candidate_data_consents AS consent
+              WHERE consent.session_id = session.id) AS consent_count
+       FROM hirearchy.assessment_sessions AS session
+      WHERE session.id = $1`,
+    [sessionId],
+  );
+  assert.equal(rows.length, 1, 'candidate fixture session exists');
+  return rows[0];
+}
+
 async function waitForLockWait(admin, timeoutMs = 1500) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -203,6 +232,10 @@ export async function runR26PostgresCandidateChecks({
             pg_catalog.has_function_privilege(role.rolname,
               'hirearchy.r26_candidate_command(text,text,text,jsonb)', 'EXECUTE') AS command_execute,
             pg_catalog.has_function_privilege(role.rolname,
+              'hirearchy.r26_candidate_lifecycle_ready()', 'EXECUTE') AS lifecycle_ready_execute,
+            pg_catalog.has_function_privilege(role.rolname,
+              'hirearchy.r26_candidate_command_unchecked(text,text,text,jsonb)', 'EXECUTE') AS unchecked_command_execute,
+            pg_catalog.has_function_privilege(role.rolname,
               'hirearchy.r26_candidate_view(text,text,jsonb)', 'EXECUTE') AS helper_execute,
             EXISTS (
               SELECT 1 FROM pg_catalog.pg_namespace AS namespace
@@ -247,6 +280,7 @@ export async function runR26PostgresCandidateChecks({
     'rolinherit',
     'has_membership',
     'helper_execute',
+    'unchecked_command_execute',
     'owns_schema',
     'owns_table',
     'owns_function',
@@ -261,9 +295,74 @@ export async function runR26PostgresCandidateChecks({
   assert.equal(role.rolcanlogin, true);
   assert.equal(role.hirearchy_usage, true);
   assert.equal(role.command_execute, true);
+  assert.equal(role.lifecycle_ready_execute, true);
+
+  const executableCandidateFunctions = await admin.query(
+    `SELECT pg_catalog.replace(procedure.oid::pg_catalog.regprocedure::pg_catalog.text,
+                               'hirearchy.', '') AS signature
+       FROM pg_catalog.pg_proc AS procedure
+       JOIN pg_catalog.pg_namespace AS namespace
+         ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'hirearchy'
+        AND pg_catalog.has_function_privilege(
+          'app_candidate_gateway', procedure.oid, 'EXECUTE'
+        )
+      ORDER BY signature`,
+  );
+  assert.deepEqual(
+    executableCandidateFunctions.rows.map((row) => row.signature),
+    [
+      'r26_candidate_command(text,text,text,jsonb)',
+      'r26_candidate_lifecycle_ready()',
+    ],
+    'candidate gateway can invoke only the mutating command and its authenticated read-only lifecycle probe',
+  );
+
+  const lifecycleProbePrivileges = await admin.query(`
+    SELECT EXISTS (
+             SELECT 1
+               FROM pg_catalog.pg_proc AS procedure
+               CROSS JOIN LATERAL pg_catalog.aclexplode(
+                 COALESCE(
+                   procedure.proacl,
+                   pg_catalog.acldefault('f', procedure.proowner)
+                 )
+               ) AS privilege
+              WHERE procedure.oid = pg_catalog.to_regprocedure(
+                      'hirearchy.r26_candidate_lifecycle_ready()'
+                    )
+                AND privilege.grantee = 0
+                AND privilege.privilege_type = 'EXECUTE'
+           ) AS public_execute,
+           pg_catalog.has_function_privilege(
+             'app_evaluator',
+             'hirearchy.r26_candidate_lifecycle_ready()',
+             'EXECUTE'
+           ) AS evaluator_execute,
+           pg_catalog.has_function_privilege(
+             'r23_gateway',
+             'hirearchy.r26_candidate_lifecycle_ready()',
+             'EXECUTE'
+           ) AS recruiter_execute,
+           pg_catalog.has_function_privilege(
+             'app_candidate_gateway',
+             'hirearchy.r26_candidate_command_unchecked(text,text,text,jsonb)',
+             'EXECUTE'
+           ) AS unchecked_execute
+  `);
+  assert.deepEqual(lifecycleProbePrivileges.rows[0], {
+    public_execute: false,
+    evaluator_execute: false,
+    recruiter_execute: false,
+    unchecked_execute: false,
+  });
 
   const connectionString = `postgres://app_candidate_gateway:${encodeURIComponent(runtimePassword)}@${connection.host}:${connection.port}/${connection.database ?? 'postgres'}`;
   const adapter = createR26CandidateAdapter({ connectionString });
+  const durableAdapter = createR26CandidateAdapter({
+    connectionString,
+    requireLifecycleMarker: true,
+  });
   const candidateDirect = new Pool({
     ...connection,
     user: 'app_candidate_gateway',
@@ -273,6 +372,12 @@ export async function runR26PostgresCandidateChecks({
   const evaluator = new Pool({
     ...connection,
     user: 'app_evaluator',
+    password: runtimePassword,
+    max: 1,
+  });
+  const recruiter = new Pool({
+    ...connection,
+    user: 'r23_gateway',
     password: runtimePassword,
     max: 1,
   });
@@ -291,6 +396,29 @@ export async function runR26PostgresCandidateChecks({
     await assert.rejects(
       () =>
         candidateDirect.query(
+          `SELECT hirearchy.r26_candidate_command_unchecked($1, $2, 'read', '{}'::jsonb)`,
+          ['0'.repeat(64), 'sess_r26_unchecked'],
+        ),
+      (error) => error?.code === '42501',
+      'Candidate gateway cannot invoke the internal legacy command directly',
+    );
+    await assert.rejects(
+      () => evaluator.query('SELECT hirearchy.r26_candidate_lifecycle_ready()'),
+      (error) => error?.code === '42501',
+      'Evaluator role cannot invoke the candidate lifecycle probe',
+    );
+    await assert.rejects(
+      () => recruiter.query('SELECT hirearchy.r26_candidate_lifecycle_ready()'),
+      (error) => error?.code === '42501',
+      'Recruiter gateway cannot invoke the candidate lifecycle probe',
+    );
+    const readiness = await candidateDirect.query(
+      'SELECT hirearchy.r26_candidate_lifecycle_ready() AS ready',
+    );
+    assert.deepEqual(readiness.rows, [{ ready: false }]);
+    await assert.rejects(
+      () =>
+        candidateDirect.query(
           'SELECT count(*) FROM hirearchy.candidate_workspace_files',
         ),
       (error) => error?.code === '42501',
@@ -298,6 +426,24 @@ export async function runR26PostgresCandidateChecks({
     );
 
     const main = await createFixture(admin, { label: 'main' });
+    const stateBeforeUnmarkedDurableCall = await candidateStateSnapshot(
+      admin,
+      main.sessionId,
+    );
+    await expectCandidateError(
+      durableAdapter.command({
+        tokenHash: main.tokenHash,
+        sessionId: main.sessionId,
+        action: 'read',
+      }),
+      'CANDIDATE_STORAGE_UNAVAILABLE',
+      503,
+    );
+    assert.deepEqual(
+      await candidateStateSnapshot(admin, main.sessionId),
+      stateBeforeUnmarkedDurableCall,
+      'an unmarked database is rejected before the candidate command changes session state',
+    );
     const concurrentActivation = await createFixture(admin, {
       label: 'activate-race',
     });
@@ -1061,7 +1207,9 @@ export async function runR26PostgresCandidateChecks({
     }
     if (locker) await locker.end().catch(() => undefined);
     await evaluator.end();
+    await recruiter.end();
     await candidateDirect.end();
+    await durableAdapter.close();
     await adapter.close();
   }
 }

@@ -10,5 +10,5 @@ export type R23CandidateInvitationResponse = Readonly<{
 
 export type R23CandidateInvitationRevocationResponse = Readonly<{
   sessionId: string;
-  status: 'revoked';
+  status: 'revoked' | 'not_created' | 'unmanaged';
 }>;

@@ -58,4 +58,53 @@ describe('isolated PostgreSQL candidate configuration', () => {
       expect(() => readR26Config()).toThrow(R26ConfigurationError);
     }
   });
+
+  it('requires the durable candidate login to share an explicit database with staging', () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    vi.stubEnv(
+      'STAGING_DATABASE_URL',
+      'postgres://r23_gateway:recruiter-only@127.0.0.1:5432/postgres',
+    );
+    vi.stubEnv(
+      'STAGING_CANDIDATE_DATABASE_URL',
+      'postgres://app_candidate_gateway:candidate-only@127.0.0.1:5432/postgres',
+    );
+    vi.stubEnv('STAGING_PUBLIC_ORIGIN', 'http://127.0.0.1:3000');
+    vi.stubEnv('HIREARCHY_R26_DISPOSABLE', '1');
+    vi.stubEnv(
+      'R26_DATABASE_URL',
+      'postgres://app_candidate_gateway:ignored@127.0.0.1:5432/other',
+    );
+
+    expect(readR26Config()).toMatchObject({
+      databaseUrl:
+        'postgres://app_candidate_gateway:candidate-only@127.0.0.1:5432/postgres',
+      publicOrigin: 'http://127.0.0.1:3000',
+      profile: 'durable-staging',
+    });
+
+    for (const [recruiterUrl, candidateUrl] of [
+      [
+        'postgres://r23_gateway:recruiter-only@127.0.0.1:5432/postgres',
+        'postgres://app_candidate_gateway:candidate-only@127.0.0.1:5432',
+      ],
+      [
+        'postgres://r23_gateway:recruiter-only@127.0.0.1:5432',
+        'postgres://app_candidate_gateway:candidate-only@127.0.0.1:5432',
+      ],
+      [
+        'postgres://r23_gateway:recruiter-only@127.0.0.1:5432/postgres',
+        'postgres://app_candidate_gateway:candidate-only@127.0.0.1:5432/other',
+      ],
+      [
+        'postgres://r23_gateway:recruiter-only@127.0.0.1:5432/postgres?sslmode=disable',
+        'postgres://app_candidate_gateway:candidate-only@127.0.0.1:5432/postgres',
+      ],
+    ]) {
+      vi.stubEnv('STAGING_DATABASE_URL', recruiterUrl);
+      vi.stubEnv('STAGING_CANDIDATE_DATABASE_URL', candidateUrl);
+      expect(() => readR26Config()).toThrow(R26ConfigurationError);
+    }
+  });
 });

@@ -32,6 +32,7 @@ export async function checkBrowserAcceptance({
   source,
   authUrl,
   submittedSessionId,
+  browserEvidenceDir,
 }) {
   let appUrl = initialAppUrl;
   const { chromium } = loadPlaywright();
@@ -328,6 +329,11 @@ export async function checkBrowserAcceptance({
         /^sess_[0-9a-f-]{36}$/i,
         'Issued session ID must match sess_UUID',
       );
+      assert.equal(
+        new URL(recruiterPage.url()).searchParams.get('issuedSession'),
+        newlyIssuedSessionId,
+        'Issuing an assessment must retain its non-secret session ID in the builder URL',
+      );
 
       // Verify candidate link is disabled or marked unavailable
       const candWorkspaceLink = recruiterPage.locator(
@@ -549,21 +555,13 @@ export async function checkBrowserAcceptance({
       assert.equal(rev1EvRes.status(), 200);
       await rev1Page.waitForLoadState('domcontentloaded');
 
-      // Switch to Review tab to verify review packet read-only boundary
+      // Switch to Review tab and verify the assigned reviewer can author a draft.
       await rev1Page
         .locator('button[data-workbench-mode-tab="review"]')
         .click();
-      await rev1Page.waitForSelector(
-        '[data-testid="review-packet-writes-unavailable"]',
-        { timeout: 15000 },
-      );
-      const packetWritesNotice1 = rev1Page.locator(
-        '[data-testid="review-packet-writes-unavailable"]',
-      );
-      assert.ok(
-        await packetWritesNotice1.isVisible(),
-        'Review packet writes unavailable notice must be visible',
-      );
+      await rev1Page
+        .getByRole('textbox', { name: 'Review summary' })
+        .waitFor({ timeout: 15000 });
 
       // Verify Reviewer 1 private data is visible and Reviewer 2 private data is absent
       const rev1Text = await rev1Page.textContent('body');
@@ -576,7 +574,7 @@ export async function checkBrowserAcceptance({
         'Reviewer 2 private observation/packet text must NOT be present for Reviewer 1',
       );
 
-      // Switch to Evidence tab to verify observation read-only boundary
+      // Switch to Evidence tab and verify the assigned reviewer can author notes.
       await rev1Page
         .locator('button[data-workbench-mode-tab="evidence"]')
         .click();
@@ -590,17 +588,9 @@ export async function checkBrowserAcceptance({
         await eventRow.click();
       }
 
-      await rev1Page.waitForSelector(
-        '[data-testid="observation-writes-unavailable"]',
-        { timeout: 15000 },
-      );
-      const obsWritesNotice1 = rev1Page.locator(
-        '[data-testid="observation-writes-unavailable"]',
-      );
-      assert.ok(
-        await obsWritesNotice1.isVisible(),
-        'Observation writes unavailable notice must be visible',
-      );
+      await rev1Page
+        .getByRole('textbox', { name: 'Observation note' })
+        .waitFor({ timeout: 15000 });
 
       // Reviewer 2 visits submitted session
       const rev2Context = await browser.newContext({
@@ -636,10 +626,9 @@ export async function checkBrowserAcceptance({
       await rev2Page
         .locator('button[data-workbench-mode-tab="review"]')
         .click();
-      await rev2Page.waitForSelector(
-        '[data-testid="review-packet-writes-unavailable"]',
-        { timeout: 15000 },
-      );
+      await rev2Page
+        .getByRole('textbox', { name: 'Review summary' })
+        .waitFor({ timeout: 15000 });
 
       const rev2Text = await rev2Page.textContent('body');
       assert.ok(
@@ -723,14 +712,6 @@ export async function checkBrowserAcceptance({
         ['POST', '/api/evaluator/assessments'],
         ['POST', `/r26/api/candidate/${newlyIssuedSessionId}/execution`],
         ['POST', `/r26/api/candidate/${newlyIssuedSessionId}/ai`],
-        [
-          'POST',
-          `/r27/api/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}/observations`,
-        ],
-        [
-          'POST',
-          `/r27/api/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}/review-packet`,
-        ],
       ];
 
       for (const [method, path] of blockedRoutes) {
@@ -755,10 +736,33 @@ export async function checkBrowserAcceptance({
       await recruiterContext.close();
     }
 
+    console.log(
+      'Browser Acceptance [9/9]: Testing durable candidate and assigned-reviewer workflow...',
+    );
+    const { checkCandidateReviewBrowserAcceptance } = await import(
+      './candidate-review-browser.mjs'
+    );
+    const candidateReview = await checkCandidateReviewBrowserAcceptance({
+      appUrl,
+      browserEvidenceDir,
+      users,
+      organizationId,
+      sessionId: newlyIssuedSessionId,
+      stopApp,
+      startApp,
+      source,
+      authUrl,
+    });
+    assert.equal(candidateReview.passed, true);
+    if (typeof candidateReview.appUrl === 'string') {
+      appUrl = candidateReview.appUrl;
+    }
+
     console.log('✓ All browser acceptance checks passed successfully.');
     return {
       passed: true,
       newlyIssuedSessionId,
+      appUrl,
     };
   } finally {
     await browser.close();

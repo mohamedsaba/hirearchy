@@ -1,6 +1,6 @@
 import {
-  disabledResponse,
-  r23IsEnabled,
+  r25CandidateTokenApiDelete,
+  r25CandidateTokenApiPost,
   r25CandidateTokenRecoveryApiGet,
 } from '../../../../../../../../src/r23-auth/server';
 
@@ -18,7 +18,22 @@ export const GET = async (
   return r25CandidateTokenRecoveryApiGet(request, organizationId, sessionId);
 };
 
-export const POST = async (request: Request) => {
-  if (!r23IsEnabled()) return disabledResponse(request);
-  return new Response(null, { status: 405 });
+export const POST = async (
+  request: Request,
+  {
+    params,
+  }: { params: Promise<{ organizationId: string; sessionId: string }> },
+) => {
+  const { organizationId, sessionId } = await params;
+  return r25CandidateTokenApiPost(request, organizationId, sessionId);
+};
+
+export const DELETE = async (
+  request: Request,
+  {
+    params,
+  }: { params: Promise<{ organizationId: string; sessionId: string }> },
+) => {
+  const { organizationId, sessionId } = await params;
+  return r25CandidateTokenApiDelete(request, organizationId, sessionId);
 };

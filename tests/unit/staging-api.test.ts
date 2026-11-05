@@ -92,6 +92,9 @@ describe('authenticated staging boundary', () => {
       '/r23/organization',
       '/r23/api/organizations/org-1/assessments/validate',
       '/r23/api/organizations/org-1/sessions',
+      '/r27/api/organizations/org-1/sessions/session-1/observations',
+      '/r27/api/organizations/org-1/sessions/session-1/review-packet',
+      '/r27/api/organizations/org-1/sessions/session-1/review-packet/finalize',
     ]) {
       expect(
         proxy(
@@ -101,13 +104,21 @@ describe('authenticated staging boundary', () => {
     }
 
     // Allowed browser PUT routes
+    for (const path of [
+      '/r23/api/organizations/org-1/assessments/draft',
+      '/r27/api/organizations/org-1/sessions/session-1/review-packet',
+    ]) {
+      expect(
+        proxy(new NextRequest(`http://localhost${path}`, { method: 'PUT' }))
+          .headers.get('x-middleware-next'),
+      ).toBe('1');
+    }
+
     expect(
       proxy(
         new NextRequest(
-          'http://localhost/r23/api/organizations/org-1/assessments/draft',
-          {
-            method: 'PUT',
-          },
+          'http://localhost/r27/api/organizations/org-1/sessions/session-1/observations/00000000-0000-4000-8000-000000000001',
+          { method: 'PATCH' },
         ),
       ).headers.get('x-middleware-next'),
     ).toBe('1');
@@ -123,9 +134,10 @@ describe('authenticated staging boundary', () => {
       ['/r26/api/candidate/example/execution', 'POST'],
       ['/r26/api/candidate/example/ai', 'POST'],
       ['/api/candidate/sessions/example/terminal/exec', 'POST'],
-      ['/r27/api/organizations/org-1/sessions/session-1/observations', 'POST'],
-      ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'POST'],
-      ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'PUT'],
+      ['/r27/api/organizations/org-1/sessions/session-1/observations', 'DELETE'],
+      ['/r27/api/organizations/org-1/sessions/session-1/observations/obs-1', 'POST'],
+      ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'DELETE'],
+      ['/r27/api/organizations/org-1/sessions/session-1/review-packet/finalize', 'PUT'],
     ] as const) {
       const blocked = proxy(
         new NextRequest(`http://localhost${path}`, { method }),

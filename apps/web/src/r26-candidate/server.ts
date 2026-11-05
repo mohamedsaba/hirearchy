@@ -8,6 +8,13 @@ import {
   type R26CandidateSubmitInput,
   type R26CandidateView,
 } from '../../../../database/postgres/r26/adapter.mjs';
+import { isAuthenticatedStaging } from '../runtime/profile';
+import {
+  R26_CANDIDATE_DATA_NOTICE_TEXT,
+  R26_CANDIDATE_DATA_NOTICE_VERSION,
+  type R26CandidateActivationInput,
+  type R26CandidateGetResponse,
+} from './contract';
 import { readR26Config, r26IsEnabled } from './config';
 
 const MAX_BODY_BYTES = 650_000;
@@ -129,7 +136,7 @@ function requireBearer(request: Request): string {
 }
 
 function requireEnabledConfig() {
-  if (!r26IsEnabled()) {
+  if (!isAuthenticatedStaging() && !r26IsEnabled()) {
     throw new R26RequestError(
       404,
       'ASSESSMENT_NOT_FOUND',
@@ -145,6 +152,62 @@ function requireEnabledConfig() {
     );
   }
   return config;
+}
+
+function candidateResponse(
+  view: R26CandidateView & Record<string, unknown>,
+  profile: 'durable-staging' | 'disposable',
+): R26CandidateGetResponse {
+  const invitationExpiresAt = view.invitationExpiresAt;
+  if (
+    profile === 'durable-staging' &&
+    (typeof invitationExpiresAt !== 'string' ||
+      Number.isNaN(Date.parse(invitationExpiresAt)))
+  ) {
+    throw new R26RequestError(
+      503,
+      'CANDIDATE_WORKSPACE_UNAVAILABLE',
+      'The isolated candidate workspace is temporarily unavailable.',
+    );
+  }
+  const digest = createHash('sha256')
+    .update(R26_CANDIDATE_DATA_NOTICE_TEXT, 'utf8')
+    .digest('hex');
+  if (profile === 'durable-staging') {
+    const capabilities = view.capabilities;
+    const notice = view.dataNotice;
+    if (
+      !isRecord(capabilities) ||
+      Object.keys(capabilities).sort().join(',') !== 'ai,execution' ||
+      capabilities.ai !== false ||
+      capabilities.execution !== false ||
+      !isRecord(notice) ||
+      Object.keys(notice).sort().join(',') !== 'digest,text,version' ||
+      notice.version !== R26_CANDIDATE_DATA_NOTICE_VERSION ||
+      notice.digest !== digest ||
+      notice.text !== R26_CANDIDATE_DATA_NOTICE_TEXT
+    ) {
+      throw new R26RequestError(
+        503,
+        'CANDIDATE_WORKSPACE_UNAVAILABLE',
+        'The isolated candidate workspace is temporarily unavailable.',
+      );
+    }
+  }
+  return {
+    ...view,
+    invitationExpiresAt:
+      profile === 'durable-staging' ? (invitationExpiresAt as string) : null,
+    capabilities: { ai: false, execution: false },
+    dataNotice:
+      profile === 'durable-staging'
+        ? {
+            version: R26_CANDIDATE_DATA_NOTICE_VERSION,
+            digest,
+            text: R26_CANDIDATE_DATA_NOTICE_TEXT,
+          }
+        : null,
+  };
 }
 
 function requireSameOrigin(request: Request, expectedOrigin: string): void {
@@ -254,12 +317,12 @@ function hasOnlyKeys(
 type ParsedActionBody =
   | Readonly<{
       action: 'activate';
-      input: Readonly<Record<string, never>>;
+      input: R26CandidateActivationInput;
     }>
   | Readonly<{ action: 'save'; input: R26CandidateSaveInput }>
   | Readonly<{ action: 'submit'; input: R26CandidateSubmitInput }>;
 
-function parseActionBody(value: unknown): ParsedActionBody {
+function parseActionBody(value: unknown, durable: boolean): ParsedActionBody {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, ['action', 'input']) ||
@@ -273,14 +336,37 @@ function parseActionBody(value: unknown): ParsedActionBody {
   }
 
   if (value.action === 'activate') {
-    if (Object.keys(value.input).length !== 0) {
+    if (Object.keys(value.input).length === 0 && !durable) {
+      return { action: 'activate', input: {} };
+    }
+    const consent = value.input.consent;
+    if (
+      !durable ||
+      Object.keys(value.input).length !== 1 ||
+      !isRecord(consent) ||
+      !hasOnlyKeys(consent, ['version', 'digest', 'accepted']) ||
+      Object.keys(consent).length !== 3 ||
+      consent.version !== R26_CANDIDATE_DATA_NOTICE_VERSION ||
+      typeof consent.digest !== 'string' ||
+      !DIGEST_PATTERN.test(consent.digest) ||
+      consent.accepted !== true
+    ) {
       throw new R26RequestError(
         400,
         'INVALID_REQUEST',
         'The request could not be accepted.',
       );
     }
-    return { action: 'activate', input: {} };
+    return {
+      action: 'activate',
+      input: {
+        consent: {
+          version: R26_CANDIDATE_DATA_NOTICE_VERSION,
+          digest: consent.digest,
+          accepted: true,
+        },
+      },
+    };
   }
 
   if (value.action === 'save') {
@@ -366,10 +452,13 @@ function parseActionBody(value: unknown): ParsedActionBody {
 }
 
 async function runCommand(
-  databaseUrl: string,
+  config: NonNullable<ReturnType<typeof readR26Config>>,
   command: R26CandidateCommand,
 ): Promise<R26CandidateView> {
-  const adapter = createR26CandidateAdapter({ connectionString: databaseUrl });
+  const adapter = createR26CandidateAdapter({
+    connectionString: config.databaseUrl,
+    requireLifecycleMarker: config.profile === 'durable-staging',
+  });
   try {
     return await adapter.command(command);
   } finally {
@@ -385,12 +474,18 @@ export async function r26CandidateRead(
     requireSessionId(sessionId);
     const config = requireEnabledConfig();
     const token = requireBearer(request);
-    const view = await runCommand(config.databaseUrl, {
+    const view = await runCommand(config, {
       tokenHash: createHash('sha256').update(token, 'utf8').digest('hex'),
       sessionId,
       action: 'read',
     });
-    return Response.json(view, { status: 200, headers: responseHeaders });
+    return Response.json(
+      candidateResponse(
+        view as R26CandidateView & Record<string, unknown>,
+        config.profile,
+      ),
+      { status: 200, headers: responseHeaders },
+    );
   } catch (error) {
     return responseForError(error);
   }
@@ -405,13 +500,22 @@ export async function r26CandidateAction(
     const config = requireEnabledConfig();
     requireSameOrigin(request, config.publicOrigin);
     const token = requireBearer(request);
-    const body = parseActionBody(await readBoundedJson(request));
-    const view = await runCommand(config.databaseUrl, {
+    const body = parseActionBody(
+      await readBoundedJson(request),
+      config.profile === 'durable-staging',
+    );
+    const view = await runCommand(config, {
       tokenHash: createHash('sha256').update(token, 'utf8').digest('hex'),
       sessionId,
       ...body,
     });
-    return Response.json(view, { status: 200, headers: responseHeaders });
+    return Response.json(
+      candidateResponse(
+        view as R26CandidateView & Record<string, unknown>,
+        config.profile,
+      ),
+      { status: 200, headers: responseHeaders },
+    );
   } catch (error) {
     return responseForError(error);
   }

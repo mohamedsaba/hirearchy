@@ -18,6 +18,7 @@ const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/sessions$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/assignments$/,
+  /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
   /^\/r27\/organizations\/[^/]+\/sessions\/[^/]+$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/evidence$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/evidence\/revisions\/[^/]+$/,
@@ -34,10 +35,23 @@ const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
   /^\/r23\/organization$/,
   /^\/r23\/api\/organizations\/[^/]+\/assessments\/validate$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions$/,
+  /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet\/finalize$/,
 ];
 
 const STAGING_BROWSER_PUT_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/assessments\/draft$/,
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet$/,
+];
+
+const STAGING_BROWSER_PATCH_PATTERNS: readonly RegExp[] = [
+  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations\/[^/]+$/,
+];
+
+const STAGING_BROWSER_DELETE_PATTERNS: readonly RegExp[] = [
+  /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
 ];
 
 function isAllowedAuthenticatedStagingRequest(
@@ -62,6 +76,16 @@ function isAllowedAuthenticatedStagingRequest(
   }
   if (method === 'PUT') {
     return STAGING_BROWSER_PUT_PATTERNS.some((pattern) =>
+      pattern.test(pathname),
+    );
+  }
+  if (method === 'PATCH') {
+    return STAGING_BROWSER_PATCH_PATTERNS.some((pattern) =>
+      pattern.test(pathname),
+    );
+  }
+  if (method === 'DELETE') {
+    return STAGING_BROWSER_DELETE_PATTERNS.some((pattern) =>
       pattern.test(pathname),
     );
   }

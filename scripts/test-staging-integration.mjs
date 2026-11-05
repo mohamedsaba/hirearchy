@@ -27,10 +27,12 @@ const image = 'hirearchy-staging-postgres-local';
 const authImage =
   'supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b';
 const password = randomBytes(32).toString('hex');
+const candidatePassword = randomBytes(32).toString('hex');
 const jwtSecret = randomBytes(48).toString('hex');
 const issuer = 'https://auth.hirearchy.test/auth/v1';
 const keys = generateKeyPairSync('ed25519');
 const artifact = new URL(`../.data/${name}/`, import.meta.url);
+const browserEvidence = new URL('browser-evidence/', artifact);
 const docker = (...args) =>
   execFileSync('docker', args, {
     encoding: 'utf8',
@@ -104,12 +106,12 @@ async function db(container) {
       await probe.end();
     }
   });
-  const connect = async (user = 'postgres') => {
+  const connect = async (user = 'postgres', rolePassword = password) => {
     const client = new Client({
       host: '127.0.0.1',
       port,
       user,
-      password,
+      password: rolePassword,
       database: 'postgres',
     });
     await client.connect();
@@ -118,6 +120,94 @@ async function db(container) {
   };
   return { container, port, connect, admin: await connect() };
 }
+
+async function assertStringConsentRejected(source, sourceSessionId) {
+  const sessionId = `sess_consent_${randomUUID().replaceAll('-', '')}`;
+  const tokenHash = randomBytes(32).toString('hex');
+  await source.admin.query(
+    `INSERT INTO hirearchy.assessment_sessions (
+       id, organization_id, issuer_principal_id
+     )
+     SELECT $1, session.organization_id, session.issuer_principal_id
+       FROM hirearchy.assessment_sessions AS session
+      WHERE session.id = $2`,
+    [sessionId, sourceSessionId],
+  );
+  await source.admin.query(
+    `INSERT INTO hirearchy.candidate_token_envelopes (
+       organization_id, session_id, candidate_token_hash,
+       candidate_token_ciphertext, expires_at
+     )
+     SELECT session.organization_id, session.id, $2,
+            'synthetic-consent-type-fixture',
+            pg_catalog.clock_timestamp() + INTERVAL '7 days'
+       FROM hirearchy.assessment_sessions AS session
+      WHERE session.id = $1`,
+    [sessionId, tokenHash],
+  );
+
+  const candidate = await source.connect(
+    'app_candidate_gateway',
+    candidatePassword,
+  );
+  const snapshot = async () => {
+    const { rows } = await source.admin.query(
+      `SELECT session.status, session.activated_at, session.submitted_at,
+              (SELECT pg_catalog.count(*)::pg_catalog.int4
+                 FROM hirearchy.candidate_session_events AS event
+                WHERE event.session_id = session.id) AS event_count,
+              (SELECT pg_catalog.count(*)::pg_catalog.int4
+                 FROM hirearchy.candidate_workspace_files AS file
+                WHERE file.session_id = session.id) AS file_count,
+              (SELECT pg_catalog.count(*)::pg_catalog.int4
+                 FROM hirearchy.candidate_session_operations AS operation
+                WHERE operation.session_id = session.id) AS operation_count,
+              (SELECT pg_catalog.count(*)::pg_catalog.int4
+                 FROM hirearchy.candidate_session_submissions AS submission
+                WHERE submission.session_id = session.id) AS submission_count,
+              (SELECT pg_catalog.count(*)::pg_catalog.int4
+                 FROM hirearchy.candidate_data_consents AS consent
+                WHERE consent.session_id = session.id) AS consent_count
+         FROM hirearchy.assessment_sessions AS session
+        WHERE session.id = $1`,
+      [sessionId],
+    );
+    assert.equal(rows.length, 1);
+    return rows[0];
+  };
+  try {
+    const before = await snapshot();
+    await assert.rejects(
+      candidate.query(
+        `SELECT hirearchy.r26_candidate_command(
+           $1, $2, 'activate', $3::pg_catalog.jsonb
+         )`,
+        [
+          tokenHash,
+          sessionId,
+          JSON.stringify({
+            consent: {
+              version: 'candidate-data-v1',
+              digest:
+                '9bfa590ff8fe9f3af6c9d020d9641bb736340b3f4ca03bc9e7aac3a0a1e22059',
+              accepted: 'true',
+            },
+          }),
+        ],
+      ),
+      (error) => error?.code === 'R2603',
+      'durable candidate command rejects the JSON string "true" for consent',
+    );
+    assert.deepEqual(
+      await snapshot(),
+      before,
+      'invalid consent does not create consent, activation, or candidate evidence',
+    );
+  } finally {
+    await candidate.end();
+  }
+}
+
 async function bootstrap(target) {
   for (const file of [
     'bootstrap-roles.sql',
@@ -126,7 +216,7 @@ async function bootstrap(target) {
   ])
     await target.admin.query(await sqlFile(`database/postgres/${file}`));
   await target.admin.query(
-    `ALTER ROLE hirearchy_migrator PASSWORD '${password}'; ALTER ROLE r23_gateway PASSWORD '${password}'`,
+    `ALTER ROLE hirearchy_migrator PASSWORD '${password}'; ALTER ROLE r23_gateway PASSWORD '${password}'; ALTER ROLE app_candidate_gateway PASSWORD '${candidatePassword}'`,
   );
 }
 async function migrate(target) {
@@ -217,6 +307,7 @@ async function startApp(
         STAGING_AUTH_ISSUER: issuer,
         STAGING_AUTH_AUDIENCE: 'authenticated',
         STAGING_DATABASE_URL: `postgres://r23_gateway:${password}@127.0.0.1:${target.port}/postgres`,
+        STAGING_CANDIDATE_DATABASE_URL: `postgres://app_candidate_gateway:${candidatePassword}@127.0.0.1:${target.port}/postgres`,
         STAGING_PROOF_PRIVATE_KEY:
           proofKey ??
           keys.privateKey
@@ -311,6 +402,7 @@ async function restore(dump, suffix) {
 }
 try {
   await mkdir(artifact, { recursive: true, mode: 0o700 });
+  await mkdir(browserEvidence, { recursive: true, mode: 0o700 });
   docker('image', 'inspect', image);
   docker('image', 'inspect', authImage);
   docker('network', 'create', name);
@@ -320,6 +412,16 @@ try {
   const source = await db(`${name}-source`);
   await bootstrap(source);
   await migrate(source);
+  stage = 'candidate lifecycle is absent before durable installation';
+  const preinstallCandidate = await source.connect(
+    'app_candidate_gateway',
+    candidatePassword,
+  );
+  const preinstallReadiness = await preinstallCandidate.query(
+    'SELECT hirearchy.r26_candidate_lifecycle_ready() AS ready',
+  );
+  assert.deepEqual(preinstallReadiness.rows, [{ ready: false }]);
+  await preinstallCandidate.end();
   await authRoles(source);
   const authUrl = await auth(source, 'source');
   stage = 'installer rejects disposable fixture schema';
@@ -380,6 +482,16 @@ try {
   await source.admin.query(
     await sqlFile('database/postgres/staging/install-api.sql'),
   );
+  stage = 'candidate lifecycle marker is installed';
+  const installedCandidate = await source.connect(
+    'app_candidate_gateway',
+    candidatePassword,
+  );
+  const installedReadiness = await installedCandidate.query(
+    'SELECT hirearchy.r26_candidate_lifecycle_ready() AS ready',
+  );
+  assert.deepEqual(installedReadiness.rows, [{ ready: true }]);
+  await installedCandidate.end();
   stage = 'database proof security';
   const gateway = await source.connect('r23_gateway');
   await checkProofBoundary(
@@ -403,6 +515,8 @@ try {
     organizationId,
     provisioned,
   });
+  stage = 'candidate consent accepts only a JSON boolean';
+  await assertStringConsentRejected(source, state.sessionId);
   stage = 'application restart';
   await stopApp();
   appUrl = await startApp(source, authUrl);
@@ -517,7 +631,7 @@ try {
     provisioned,
   });
   stage = 'browser acceptance workflow';
-  await checkBrowserAcceptance({
+  const browserAcceptance = await checkBrowserAcceptance({
     appUrl,
     users: input.users,
     organizationId,
@@ -529,7 +643,9 @@ try {
     source: rollback,
     authUrl: rollbackAuth,
     submittedSessionId,
+    browserEvidenceDir: browserEvidence.pathname,
   });
+  appUrl = browserAcceptance.appUrl;
   await writeFile(
     new URL('result.json', artifact),
     JSON.stringify(

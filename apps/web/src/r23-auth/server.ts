@@ -44,6 +44,9 @@ import {
   stagingAssessmentIssuanceApiPost,
   stagingAssessmentValidateApiPost,
   stagingAssessmentVersionApiGet,
+  stagingCandidateInvitationApiDelete,
+  stagingCandidateInvitationApiGet,
+  stagingCandidateInvitationApiPost,
   stagingCallbackGet,
   stagingCapabilityDisabledJsonResponse,
   stagingEvidenceApiGet,
@@ -54,8 +57,10 @@ import {
   stagingLoginGet,
   stagingLoginPost,
   stagingLogoutPost,
+  stagingObservationApiPatch,
   stagingObservationApiGet,
   stagingObservationsApiGet,
+  stagingObservationsApiPost,
   stagingOrganizationGet,
   stagingOrganizationPost,
   stagingOrganizationReviewersApiGet,
@@ -65,6 +70,8 @@ import {
   stagingOrganizationsGet,
   stagingRefreshPost,
   stagingReviewPacketApiGet,
+  stagingReviewPacketApiPut,
+  stagingReviewPacketFinalizeApiPost,
   stagingRevisionApiGet,
   stagingSessionAssignmentsApiGet,
 } from '../staging/browser';
@@ -2823,9 +2830,7 @@ export async function r25CandidateTokenRecoveryApiGet(
   sessionId: string,
 ): Promise<Response> {
   if (isAuthenticatedStaging()) {
-    return stagingCapabilityDisabledJsonResponse(
-      'Candidate token recovery is unavailable in the authenticated staging slice.',
-    );
+    return stagingCandidateInvitationApiGet(request, organizationId, sessionId);
   }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
@@ -2911,6 +2916,38 @@ export async function r25CandidateTokenRecoveryApiGet(
   } catch (error) {
     return failureResponse(request, error);
   }
+}
+
+export async function r25CandidateTokenApiPost(
+  request: Request,
+  organizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCandidateInvitationApiPost(
+      request,
+      organizationId,
+      sessionId,
+    );
+  }
+  if (!r23IsEnabled()) return disabledResponse(request);
+  return new Response(null, { status: 405 });
+}
+
+export async function r25CandidateTokenApiDelete(
+  request: Request,
+  organizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCandidateInvitationApiDelete(
+      request,
+      organizationId,
+      sessionId,
+    );
+  }
+  if (!r23IsEnabled()) return disabledResponse(request);
+  return new Response(null, { status: 405 });
 }
 
 export async function r25OrganizationReviewersApiGet(
@@ -3333,9 +3370,7 @@ export async function r29ObservationApiPost(
   sessionId: string,
 ): Promise<Response> {
   if (isAuthenticatedStaging()) {
-    return stagingCapabilityDisabledJsonResponse(
-      'Private observation creation is unavailable in the authenticated staging slice.',
-    );
+    return stagingObservationsApiPost(request, targetOrganizationId, sessionId);
   }
   const jsonRequest = asR27JsonRequest(request);
   if (!r29IsEnabled()) return disabledResponse(jsonRequest);
@@ -3403,8 +3438,11 @@ export async function r29ObservationApiPatch(
   observationId: string,
 ): Promise<Response> {
   if (isAuthenticatedStaging()) {
-    return stagingCapabilityDisabledJsonResponse(
-      'Private observation editing is unavailable in the authenticated staging slice.',
+    return stagingObservationApiPatch(
+      request,
+      targetOrganizationId,
+      sessionId,
+      observationId,
     );
   }
   const jsonRequest = asR27JsonRequest(request);
@@ -3566,9 +3604,7 @@ export async function r210ReviewPacketApiPut(
   sessionId: string,
 ): Promise<Response> {
   if (isAuthenticatedStaging()) {
-    return stagingCapabilityDisabledJsonResponse(
-      'Review packet writes are unavailable in the authenticated staging slice.',
-    );
+    return stagingReviewPacketApiPut(request, targetOrganizationId, sessionId);
   }
   const jsonRequest = asR27JsonRequest(request);
   if (!r210IsEnabled()) return disabledResponse(jsonRequest);
@@ -3748,8 +3784,10 @@ export async function r210ReviewPacketFinalizeApiPost(
   sessionId: string,
 ): Promise<Response> {
   if (isAuthenticatedStaging()) {
-    return stagingCapabilityDisabledJsonResponse(
-      'Review packet finalization is unavailable in the authenticated staging slice.',
+    return stagingReviewPacketFinalizeApiPost(
+      request,
+      targetOrganizationId,
+      sessionId,
     );
   }
   const jsonRequest = asR27JsonRequest(request);

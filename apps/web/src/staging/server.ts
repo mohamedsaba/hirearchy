@@ -31,6 +31,10 @@ const operations = new Set([
   'assessment.issue',
   'evidence.read',
   'review.read',
+  'evidence.observation.create',
+  'evidence.observation.update',
+  'review.packet.save',
+  'review.packet.finalize',
 ]);
 
 export type StagingConfiguration = ReturnType<typeof configuration>;
