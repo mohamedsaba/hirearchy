@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 function loadPlaywright() {
@@ -50,6 +50,42 @@ function candidatePathAtAppOrigin(candidateUrl, appUrl) {
     `${original.pathname}${original.search}${original.hash}`,
     appUrl,
   ).toString();
+}
+
+async function saveBrowserEvidence(
+  page,
+  browserEvidenceDir,
+  filename,
+  options = {},
+) {
+  assert.match(
+    filename,
+    /^\d{2}-[a-z0-9-]+\.png$/,
+    'Browser evidence names must be fixed, numbered PNG files',
+  );
+  await mkdir(browserEvidenceDir, { recursive: true, mode: 0o700 });
+  await chmod(browserEvidenceDir, 0o700);
+  await page.screenshot({
+    path: join(browserEvidenceDir, filename),
+    type: 'png',
+    fullPage: false,
+    animations: 'disabled',
+    ...options,
+  });
+}
+
+async function assertNoHorizontalOverflow(page, surface) {
+  const dimensions = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    document: Math.max(
+      document.documentElement.scrollWidth,
+      document.body?.scrollWidth ?? 0,
+    ),
+  }));
+  assert.ok(
+    dimensions.document <= dimensions.viewport + 1,
+    `${surface} has horizontal overflow at ${dimensions.viewport}px: ${dimensions.document}px`,
+  );
 }
 
 /**
@@ -216,6 +252,25 @@ export async function checkCandidateReviewBrowserAcceptance({
         .innerText(),
       /No email was sent/i,
     );
+    await recruiterPage.setViewportSize({ width: 390, height: 844 });
+    const recruiterInvitationPanel = recruiterPage.getByTestId(
+      'recovered-candidate-invitation-panel',
+    );
+    await recruiterInvitationPanel.scrollIntoViewIfNeeded();
+    await assertNoHorizontalOverflow(
+      recruiterPage,
+      'Recruiter invitation view',
+    );
+    await saveBrowserEvidence(
+      recruiterPage,
+      browserEvidenceDir,
+      '01-recruiter-invitation.png',
+      {
+        mask: [recruiterPage.getByTestId('candidate-invitation-link')],
+        maskColor: '#111827',
+      },
+    );
+    await recruiterPage.setViewportSize({ width: 1280, height: 900 });
 
     candidateContext = await browser.newContext({
       ignoreHTTPSErrors: true,
@@ -264,6 +319,13 @@ export async function checkCandidateReviewBrowserAcceptance({
         .count()) > 0,
       'The AI-disabled state must be explicit',
     );
+    await notice.scrollIntoViewIfNeeded();
+    await saveBrowserEvidence(
+      candidatePage,
+      browserEvidenceDir,
+      '02-candidate-prestart.png',
+    );
+    await assertNoHorizontalOverflow(candidatePage, 'Candidate prestart view');
 
     await candidatePage.reload();
     await candidatePage.getByTestId('candidate-data-use-notice').waitFor();
@@ -274,10 +336,20 @@ export async function checkCandidateReviewBrowserAcceptance({
       true,
       'Consent must remain unchecked after reload until the candidate confirms it',
     );
-    await candidatePage
+    const consentCheckbox = candidatePage
       .getByTestId('candidate-data-use-notice')
-      .locator('input[type="checkbox"]')
-      .check();
+      .locator('input[type="checkbox"]');
+    await consentCheckbox.focus();
+    await candidatePage.keyboard.press('Space');
+    assert.equal(
+      await consentCheckbox.isChecked(),
+      true,
+      'Candidate consent must be operable from the keyboard',
+    );
+    const activateButton = candidatePage.getByRole('button', {
+      name: 'Activate assessment',
+    });
+    await activateButton.focus();
     await Promise.all([
       candidatePage.waitForResponse(
         (response) =>
@@ -286,9 +358,7 @@ export async function checkCandidateReviewBrowserAcceptance({
           response.request().method() === 'POST' &&
           response.ok(),
       ),
-      candidatePage
-        .getByRole('button', { name: 'Activate assessment' })
-        .click(),
+      candidatePage.keyboard.press('Enter'),
     ]);
     await candidatePage
       .getByText('Assessment activated. Your time has started.')
@@ -418,26 +488,26 @@ export async function checkCandidateReviewBrowserAcceptance({
         ),
         'The confirmed first save must not overwrite the newer editor text',
       );
-      await mkdir(browserEvidenceDir, { recursive: true, mode: 0o700 });
       const screenshotViewports = [
         { name: 'desktop', width: 1440, height: 1000 },
         { name: 'tablet', width: 820, height: 1180 },
         { name: 'mobile', width: 390, height: 844 },
       ];
-      for (const viewport of screenshotViewports) {
+      for (const [index, viewport] of screenshotViewports.entries()) {
         await candidatePage.setViewportSize({
           width: viewport.width,
           height: viewport.height,
         });
-        await candidatePage.screenshot({
-          path: join(
-            browserEvidenceDir,
-            `candidate-workspace-${viewport.name}.png`,
-          ),
-          type: 'png',
-          fullPage: false,
-          animations: 'disabled',
-        });
+        await editor.scrollIntoViewIfNeeded();
+        await assertNoHorizontalOverflow(
+          candidatePage,
+          `Candidate saved workspace (${viewport.name})`,
+        );
+        await saveBrowserEvidence(
+          candidatePage,
+          browserEvidenceDir,
+          `0${index + 3}-candidate-saved-${viewport.name}.png`,
+        );
       }
       await candidatePage.setViewportSize({ width: 1280, height: 900 });
     } finally {
@@ -571,6 +641,14 @@ export async function checkCandidateReviewBrowserAcceptance({
       submitInputs[1],
       submitInputs[0],
       'Retry after a lost submit response must reuse the same request ID and frozen digest',
+    );
+    await candidatePage
+      .getByText('Assessment submitted. Your saved work is now read-only.')
+      .scrollIntoViewIfNeeded();
+    await saveBrowserEvidence(
+      candidatePage,
+      browserEvidenceDir,
+      '06-candidate-submitted.png',
     );
     await candidatePage.unroute(`**/r26/api/candidate/${sessionId}`);
 
@@ -741,6 +819,15 @@ export async function checkCandidateReviewBrowserAcceptance({
       'section[aria-label="Anchored Observations"]',
     );
     await observationPanel.waitFor({ timeout: 20_000 });
+    await reviewerPage.setViewportSize({ width: 390, height: 844 });
+    await observationPanel.scrollIntoViewIfNeeded();
+    await assertNoHorizontalOverflow(reviewerPage, 'Evaluator evidence view');
+    await saveBrowserEvidence(
+      reviewerPage,
+      browserEvidenceDir,
+      '07-evaluator-chronology.png',
+    );
+    await reviewerPage.setViewportSize({ width: 1280, height: 900 });
     const observationText = `Observed saved revisions for session ${sessionId.slice(-8)}.`;
     await observationPanel
       .getByRole('textbox', { name: 'Observation note' })
@@ -831,6 +918,17 @@ export async function checkCandidateReviewBrowserAcceptance({
     await reloadedReviewPacket
       .getByTestId('review-packet-finalized-notice')
       .waitFor();
+    await reviewerPage.setViewportSize({ width: 390, height: 844 });
+    await reloadedReviewPacket.scrollIntoViewIfNeeded();
+    await assertNoHorizontalOverflow(
+      reviewerPage,
+      'Finalized evaluator review',
+    );
+    await saveBrowserEvidence(
+      reviewerPage,
+      browserEvidenceDir,
+      '08-evaluator-finalized-review.png',
+    );
     assert.match(
       await reloadedReviewPacket
         .getByTestId('review-packet-summary')
