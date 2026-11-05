@@ -132,8 +132,11 @@ CREATE POLICY staging_verifier_session_select
   USING (
     subject_id = NULLIF(pg_catalog.current_setting('staging.subject_id', true), '')::pg_catalog.uuid
     AND auth_session_id = NULLIF(pg_catalog.current_setting('staging.auth_session_id', true), '')::pg_catalog.uuid
-    AND organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
     AND principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND (
+      organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+      OR NULLIF(pg_catalog.current_setting('staging.organization_id', true), '') IS NULL
+    )
   );
 
 DROP POLICY IF EXISTS staging_verifier_session_insert ON hirearchy.staging_sessions;
@@ -181,10 +184,22 @@ CREATE POLICY staging_verifier_membership_select
   ON hirearchy.organization_memberships
   FOR SELECT TO staging_verifier_owner
   USING (
-    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-    AND (
-      principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-      OR principal_id = NULLIF(pg_catalog.current_setting('staging.reviewer_principal_id', true), '')::pg_catalog.uuid
+    (
+      organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+      AND (
+        principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+        OR principal_id = NULLIF(pg_catalog.current_setting('staging.reviewer_principal_id', true), '')::pg_catalog.uuid
+        OR (
+          NULLIF(pg_catalog.current_setting('staging.list_organization_reviewers', true), '') = 'true'
+          AND role = 'reviewer'
+          AND status = 'active'
+          AND revoked_at IS NULL
+        )
+      )
+    )
+    OR (
+      NULLIF(pg_catalog.current_setting('staging.organization_id', true), '') IS NULL
+      AND principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
     )
   );
 
@@ -541,6 +556,14 @@ def run(sql, types=None, values=None):
 def json_value(value):
     return json.loads(value) if isinstance(value, str) else value
 
+def safe_json_value(value):
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except ValueError:
+        return value
+
 def set_context(name, value):
     run(
         "SELECT pg_catalog.set_config($1, $2, true)",
@@ -549,7 +572,7 @@ def set_context(name, value):
     )
 
 def set_scope(subject_id, auth_session_id, principal_id=None, organization_id=None,
-              reviewer_principal_id=None, session_id=None):
+              reviewer_principal_id=None, session_id=None, list_organization_reviewers=None):
     values = {
         'staging.subject_id': subject_id,
         'staging.auth_session_id': auth_session_id,
@@ -557,6 +580,7 @@ def set_scope(subject_id, auth_session_id, principal_id=None, organization_id=No
         'staging.organization_id': organization_id,
         'staging.reviewer_principal_id': reviewer_principal_id,
         'staging.session_id': session_id,
+        'staging.list_organization_reviewers': list_organization_reviewers,
     }
     for name, value in values.items():
         set_context(name, value)
@@ -705,6 +729,8 @@ def require_open_session(auth_session_id, subject_id, principal_id, organization
 
 def validate_operation_args(operation, args):
     schemas = {
+        'membership.list': ((), ()),
+        'organization.context': (('organizationId',), ()),
         'session.open': (('organizationId',), ()),
         'session.revoke': (('organizationId',), ()),
         'assessment.create': (('organizationId', 'content'), ('assessmentId',)),
@@ -720,10 +746,44 @@ def validate_operation_args(operation, args):
     require_args(args, required, optional)
 
 def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_exp, proof_exp):
-    if operation in ('session.open', 'session.revoke'):
-        organization_id = require_uuid(args.get('organizationId'), 'organization ID')
-    else:
-        organization_id = require_uuid(args.get('organizationId'), 'organization ID')
+    if operation == 'membership.list':
+        set_scope(subject_id, auth_session_id, principal_id)
+        revoked_rows = run(
+            """
+            SELECT 1
+            FROM hirearchy.staging_sessions
+            WHERE auth_session_id = $1::pg_catalog.uuid
+              AND subject_id = $2::pg_catalog.uuid
+              AND principal_id = $3::pg_catalog.uuid
+              AND (revoked_at IS NOT NULL OR expires_at <= pg_catalog.clock_timestamp())
+            LIMIT 1
+            """,
+            ['uuid', 'uuid', 'uuid'],
+            [auth_session_id, subject_id, principal_id],
+        )
+        if revoked_rows:
+            error('Staging session is unavailable', '28000')
+        rows = run(
+            """
+            SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+              'organizationId', organization_id::pg_catalog.text,
+              'role', role,
+              'version', version
+            ) ORDER BY organization_id), '[]'::pg_catalog.jsonb) AS items
+            FROM hirearchy.organization_memberships
+            WHERE principal_id = $1::pg_catalog.uuid
+              AND status = 'active'
+              AND revoked_at IS NULL
+            """,
+            ['uuid'],
+            [principal_id],
+        )[0]['items']
+        return {
+            'principalId': principal_id,
+            'memberships': json_value(rows),
+        }
+
+    organization_id = require_uuid(args.get('organizationId'), 'organization ID')
     set_scope(
         subject_id, auth_session_id, principal_id, organization_id,
         args.get('reviewerPrincipalId'), args.get('sessionId'),
@@ -756,6 +816,179 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
         return {'opened': True, 'organizationId': organization_id}
 
     require_open_session(auth_session_id, subject_id, principal_id, organization_id, auth_exp)
+
+    if operation == 'organization.context':
+        reviewers = []
+        draft_obj = None
+        validated_versions = []
+        if role == 'recruiter':
+            set_scope(
+                subject_id, auth_session_id, principal_id, organization_id,
+                list_organization_reviewers='true',
+            )
+            reviewer_rows = run(
+                """
+                SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+                  'principalId', principal_id::pg_catalog.text,
+                  'role', role,
+                  'joinedAt', pg_catalog.to_char(joined_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                ) ORDER BY principal_id), '[]'::pg_catalog.jsonb) AS items
+                FROM hirearchy.organization_memberships
+                WHERE organization_id = $1::pg_catalog.uuid
+                  AND role = 'reviewer'
+                  AND status = 'active'
+                  AND revoked_at IS NULL
+                """,
+                ['uuid'],
+                [organization_id],
+            )[0]['items']
+            reviewers = json_value(reviewer_rows)
+            set_scope(subject_id, auth_session_id, principal_id, organization_id)
+            draft_rows = run(
+                """
+                SELECT def.id::pg_catalog.text AS definition_id,
+                       def.organization_id::pg_catalog.text AS organization_id,
+                       def.author_principal_id::pg_catalog.text AS author_principal_id,
+                       def.draft_version AS version,
+                       pg_catalog.to_char(def.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
+                       pg_catalog.to_char(def.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
+                       draft.staging_content AS content,
+                       draft.template_id AS template_id
+                FROM hirearchy.assessment_definitions AS def
+                JOIN hirearchy.assessment_drafts AS draft
+                  ON draft.definition_id = def.id
+                 AND draft.organization_id = def.organization_id
+                 AND draft.version = def.draft_version
+                WHERE def.organization_id = $1::pg_catalog.uuid
+                  AND def.author_principal_id = $2::pg_catalog.uuid
+                ORDER BY def.updated_at DESC, def.id DESC
+                LIMIT 1
+                """,
+                ['uuid', 'uuid'],
+                [organization_id, principal_id],
+            )
+            if draft_rows:
+                d = draft_rows[0]
+                raw_content = json_value(d['content'])
+                if isinstance(raw_content, dict):
+                    draft_obj = {
+                        'templateId': raw_content.get('templateId', d['template_id'] or 'custom'),
+                        'definitionId': d['definition_id'],
+                        'organizationId': d['organization_id'],
+                        'authorPrincipalId': d['author_principal_id'],
+                        'version': int(d['version']),
+                        'title': raw_content['title'],
+                        'brief': raw_content['brief'],
+                        'expectedBehavior': raw_content['expectedBehavior'],
+                        'acceptanceCriteria': raw_content['acceptanceCriteria'],
+                        'primaryFilePath': raw_content['primaryFilePath'],
+                        'starterFiles': raw_content['starterFiles'],
+                        'durationMinutes': raw_content['durationMinutes'],
+                        'terminalEnabled': raw_content['terminalEnabled'],
+                        'integratedAi': raw_content['integratedAi'],
+                        'rubric': raw_content['rubric'],
+                        'createdAt': d['created_at'],
+                        'updatedAt': d['updated_at'],
+                    }
+            validated_rows = run(
+                """
+                SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+                  'id', id::pg_catalog.text,
+                  'definitionId', definition_id::pg_catalog.text,
+                  'organizationId', organization_id::pg_catalog.text,
+                  'authorPrincipalId', author_principal_id::pg_catalog.text,
+                  'versionNumber', version_number,
+                  'contentDigest', content_digest,
+                  'scenarioId', scenario_id,
+                  'scenarioVersion', scenario_version,
+                  'scenarioTitle', scenario_title,
+                  'scenarioSnapshot', scenario_snapshot,
+                  'taskRubricSnapshot', task_rubric_snapshot,
+                  'durationSeconds', duration_seconds,
+                  'terminalEnabled', terminal_enabled,
+                  'integratedAi', integrated_ai,
+                  'validationReceipt', validation_receipt,
+                  'createdAt', pg_catalog.to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                ) ORDER BY created_at DESC, version_number DESC), '[]'::pg_catalog.jsonb) AS items
+                FROM hirearchy.assessment_validated_versions
+                WHERE organization_id = $1::pg_catalog.uuid
+                  AND author_principal_id = $2::pg_catalog.uuid
+                """,
+                ['uuid', 'uuid'],
+                [organization_id, principal_id],
+            )[0]['items']
+            validated_versions = []
+            for v in json_value(validated_rows):
+                v = dict(v)
+                v['scenarioSnapshot'] = safe_json_value(v.get('scenarioSnapshot'))
+                v['taskRubricSnapshot'] = safe_json_value(v.get('taskRubricSnapshot'))
+                validated_versions.append(v)
+
+        session_rows = run(
+            """
+            SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+              'sessionId', s.id,
+              'organizationId', s.organization_id::pg_catalog.text,
+              'issuerPrincipalId', s.issuer_principal_id::pg_catalog.text,
+              'scenarioId', s.scenario_id,
+              'scenarioVersion', s.scenario_version,
+              'scenarioTitle', s.scenario_title,
+              'status', s.status,
+              'durationSeconds', s.duration_seconds,
+              'createdAt', pg_catalog.to_char(s.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+              'activatedAt', CASE WHEN s.activated_at IS NULL THEN NULL
+                                  ELSE pg_catalog.to_char(s.activated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+              'submittedAt', CASE WHEN s.submitted_at IS NULL THEN NULL
+                                  ELSE pg_catalog.to_char(s.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+              'closureReason', s.closure_reason,
+              'reviewProcessStatus', s.review_process_status,
+              'terminalEnabled', s.terminal_enabled,
+              'visibilityScope', CASE WHEN $3 = 'recruiter' THEN 'issued_by_recruiter' ELSE 'assigned_to_reviewer' END,
+              'assignments', COALESCE((
+                SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+                  'assignmentId', a.id,
+                  'sessionId', a.session_id,
+                  'organizationId', a.organization_id::pg_catalog.text,
+                  'reviewerPrincipalId', a.reviewer_principal_id::pg_catalog.text,
+                  'assignedByPrincipalId', a.assigned_by_principal_id::pg_catalog.text,
+                  'assignedAt', pg_catalog.to_char(a.assigned_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                  'revokedAt', CASE WHEN a.revoked_at IS NULL THEN NULL
+                                    ELSE pg_catalog.to_char(a.revoked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+                  'version', a.version,
+                  'isActive', a.revoked_at IS NULL
+                ) ORDER BY a.assigned_at DESC, a.id DESC)
+                FROM hirearchy.reviewer_assignments AS a
+                WHERE a.organization_id = s.organization_id
+                  AND a.session_id = s.id
+              ), '[]'::pg_catalog.jsonb)
+            ) ORDER BY s.created_at DESC, s.id DESC), '[]'::pg_catalog.jsonb) AS items
+            FROM hirearchy.assessment_sessions AS s
+            WHERE s.organization_id = $1::pg_catalog.uuid
+              AND (
+                ($3 = 'recruiter' AND s.issuer_principal_id = $2::pg_catalog.uuid)
+                OR (
+                  $3 = 'reviewer' AND EXISTS (
+                    SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+                    WHERE assignment.organization_id = s.organization_id
+                      AND assignment.session_id = s.id
+                      AND assignment.reviewer_principal_id = $2::pg_catalog.uuid
+                      AND assignment.revoked_at IS NULL
+                  )
+                )
+              )
+            """,
+            ['uuid', 'uuid', 'text'],
+            [organization_id, principal_id, role],
+        )[0]['items']
+        return {
+            'organizationId': organization_id,
+            'principalId': principal_id,
+            'role': role,
+            'reviewers': reviewers,
+            'draft': draft_obj,
+            'validatedVersions': validated_versions,
+            'sessions': json_value(session_rows),
+        }
 
     if operation == 'session.revoke':
         rows = run(
@@ -1106,8 +1339,15 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             """
             SELECT session.id, session.scenario_id, session.scenario_version,
                    session.scenario_title, session.status,
+                   session.duration_seconds,
                    session.terminal_enabled, session.ai_capability_snapshot,
-                   session.created_at
+                   session.scenario_snapshot, session.task_rubric_snapshot,
+                   pg_catalog.to_char(session.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_iso,
+                   CASE WHEN session.activated_at IS NULL THEN NULL
+                        ELSE pg_catalog.to_char(session.activated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END AS activated_at_iso,
+                   CASE WHEN session.submitted_at IS NULL THEN NULL
+                        ELSE pg_catalog.to_char(session.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END AS submitted_at_iso,
+                   session.closure_reason, session.review_process_status
             FROM hirearchy.assessment_sessions AS session
             JOIN hirearchy.reviewer_assignments AS assignment
               ON assignment.organization_id = session.organization_id
@@ -1130,8 +1370,16 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                         'id': session['id'], 'organizationId': organization_id,
                         'scenarioId': session['scenario_id'], 'scenarioVersion': session['scenario_version'],
                         'scenarioTitle': session['scenario_title'], 'status': session['status'],
+                        'durationSeconds': session['duration_seconds'],
+                        'createdAt': session['created_at_iso'],
+                        'activatedAt': session['activated_at_iso'],
+                        'submittedAt': session['submitted_at_iso'],
+                        'closureReason': session['closure_reason'],
+                        'reviewProcessStatus': session['review_process_status'],
                         'terminalEnabled': session['terminal_enabled'],
                         'aiCapabilitySnapshot': json_value(session['ai_capability_snapshot']),
+                        'scenarioSnapshot': safe_json_value(session['scenario_snapshot']),
+                        'taskRubricSnapshot': safe_json_value(session['task_rubric_snapshot']),
                     },
                     'events': [], 'fileRevisions': [], 'submissions': [],
                     'observations': [], 'observationHistory': [],
@@ -1210,8 +1458,16 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                     'id': session['id'], 'organizationId': organization_id,
                     'scenarioId': session['scenario_id'], 'scenarioVersion': session['scenario_version'],
                     'scenarioTitle': session['scenario_title'], 'status': session['status'],
+                    'durationSeconds': session['duration_seconds'],
+                    'createdAt': session['created_at_iso'],
+                    'activatedAt': session['activated_at_iso'],
+                    'submittedAt': session['submitted_at_iso'],
+                    'closureReason': session['closure_reason'],
+                    'reviewProcessStatus': session['review_process_status'],
                     'terminalEnabled': session['terminal_enabled'],
                     'aiCapabilitySnapshot': decode_json(session['ai_capability_snapshot']),
+                    'scenarioSnapshot': safe_json_value(session['scenario_snapshot']),
+                    'taskRubricSnapshot': safe_json_value(session['task_rubric_snapshot']),
                 },
                 'events': decode_json(event_rows),
                 'fileRevisions': decode_json(revision_rows),
@@ -1380,17 +1636,21 @@ if len(principal_rows) != 1:
 principal_id = principal_rows[0]['id']
 validate_operation_args(proof['op'], proof['args'])
 args = proof['args']
-organization_id = require_uuid(args.get('organizationId'), 'organization ID')
-set_scope(proof['sub'], proof['sid'], principal_id, organization_id,
-          args.get('reviewerPrincipalId'), args.get('sessionId'))
-active_role = require_membership(
-    organization_id, principal_id, ('recruiter', 'reviewer')
-)
-if proof['op'] == 'session.open':
+if proof['op'] == 'membership.list':
+    set_scope(proof['sub'], proof['sid'], principal_id)
     result = dispatch(proof['op'], args, proof['sub'], proof['sid'], principal_id, effective_auth_exp, proof['exp'])
 else:
-    require_open_session(proof['sid'], proof['sub'], principal_id, organization_id, effective_auth_exp)
-    result = dispatch(proof['op'], args, proof['sub'], proof['sid'], principal_id, effective_auth_exp, proof['exp'])
+    organization_id = require_uuid(args.get('organizationId'), 'organization ID')
+    set_scope(proof['sub'], proof['sid'], principal_id, organization_id,
+              args.get('reviewerPrincipalId'), args.get('sessionId'))
+    active_role = require_membership(
+        organization_id, principal_id, ('recruiter', 'reviewer')
+    )
+    if proof['op'] == 'session.open':
+        result = dispatch(proof['op'], args, proof['sub'], proof['sid'], principal_id, effective_auth_exp, proof['exp'])
+    else:
+        require_open_session(proof['sid'], proof['sub'], principal_id, organization_id, effective_auth_exp)
+        result = dispatch(proof['op'], args, proof['sub'], proof['sid'], principal_id, effective_auth_exp, proof['exp'])
 
 run(
     "DELETE FROM hirearchy.staging_proof_nonces WHERE expires_at <= pg_catalog.clock_timestamp()"

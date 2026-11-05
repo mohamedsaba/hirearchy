@@ -1,6 +1,6 @@
 import type { R23Config } from './config';
 
-type R23IdentityConfig = Pick<
+export type R23IdentityConfig = Pick<
   R23Config,
   'authUrl' | 'authIssuer' | 'authAudience'
 >;
@@ -181,7 +181,7 @@ function credentialPair(value: Record<string, unknown>): R23TokenGrant {
 }
 
 export async function passwordGrant(
-  config: R23Config,
+  config: R23IdentityConfig,
   email: string,
   password: string,
 ): Promise<R23TokenGrant> {
@@ -201,7 +201,7 @@ export async function passwordGrant(
 }
 
 export async function refreshGrant(
-  config: R23Config,
+  config: R23IdentityConfig,
   refreshToken: string,
 ): Promise<R23TokenGrant> {
   const response = await requestAuth(
@@ -220,7 +220,7 @@ export async function refreshGrant(
 }
 
 export async function revokeAuthSession(
-  config: R23Config,
+  config: R23IdentityConfig,
   accessToken: string,
 ): Promise<void> {
   const response = await requestAuth(endpoint(config, '/logout?scope=local'), {

@@ -21,6 +21,8 @@ import type { R211AssessmentDraftInput } from '../r211-builder/contract';
 import { dispatchStagingProof } from './dispatch.mjs';
 
 const operations = new Set([
+  'membership.list',
+  'organization.context',
   'session.open',
   'session.revoke',
   'assessment.create',
@@ -30,6 +32,27 @@ const operations = new Set([
   'evidence.read',
   'review.read',
 ]);
+
+export type StagingConfiguration = ReturnType<typeof configuration>;
+export type StagingProofArgs = Parameters<typeof issueStagingProof>[3];
+
+export function loadStagingConfiguration(): StagingConfiguration {
+  return configuration();
+}
+
+export async function dispatchVerifiedStagingOperation(
+  config: StagingConfiguration,
+  identity: Parameters<typeof issueStagingProof>[1],
+  op: string,
+  args: StagingProofArgs,
+): Promise<unknown> {
+  const proof = issueStagingProof(config.proof, identity, op, args);
+  return dispatchStagingProof(
+    config.databaseUrl,
+    proof.payload,
+    proof.signature,
+  );
+}
 
 function required(name: string): string {
   const value = process.env[name];

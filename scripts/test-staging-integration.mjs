@@ -21,6 +21,7 @@ import {
   checkInstallerBoundary,
   checkProofBoundary,
 } from '../tests/staging/security.mjs';
+import { checkBrowserAcceptance } from '../tests/staging/browser.mjs';
 const name = `hirearchy-r215-${randomBytes(6).toString('hex')}`;
 const image = 'hirearchy-staging-postgres-local';
 const authImage =
@@ -224,6 +225,7 @@ async function startApp(
         STAGING_PROOF_ISSUER: 'hirearchy-staging',
         STAGING_PROOF_AUDIENCE: 'hirearchy-postgres',
         STAGING_PROOF_KEY_ID: 'rehearsal-1',
+        STAGING_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
       },
     },
   );
@@ -503,7 +505,7 @@ try {
     state,
   });
   stage = 'private reviewer isolation regression';
-  await checkPrivateReview({
+  const { sessionId: submittedSessionId } = await checkPrivateReview({
     call,
     appUrl,
     recruiter,
@@ -513,6 +515,20 @@ try {
     state,
     admin: rollback.admin,
     provisioned,
+  });
+  stage = 'browser acceptance workflow';
+  await checkBrowserAcceptance({
+    appUrl,
+    users: input.users,
+    organizationId,
+    provisioned,
+    stopApp,
+    startApp: () =>
+      startApp(rollback, rollbackAuth, undefined, restoredRelease),
+    admin: rollback.admin,
+    source: rollback,
+    authUrl: rollbackAuth,
+    submittedSessionId,
   });
   await writeFile(
     new URL('result.json', artifact),

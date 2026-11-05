@@ -21,10 +21,18 @@ import {
 import '../../../../evaluator/assessments/new/assessment-builder.css';
 import '../../../../evaluator/assessments/new/assessment-choice.css';
 
+export interface AssessmentBuilderReviewerOption {
+  principalId: string;
+  role: string;
+  joinedAt?: string;
+}
+
 export interface AssessmentBuilderClientProps {
   organizationId: string;
   csrfToken: string;
   initialDraft: R211AssessmentDraft | null;
+  reviewers?: AssessmentBuilderReviewerOption[];
+  isAuthenticatedStaging?: boolean;
 }
 
 type BuilderStage = 'define' | 'validate' | 'issue';
@@ -72,6 +80,8 @@ export function AssessmentBuilderClient({
   organizationId,
   csrfToken,
   initialDraft,
+  reviewers = [],
+  isAuthenticatedStaging = false,
 }: AssessmentBuilderClientProps) {
   const [stage, setStage] = useState<BuilderStage>('define');
 
@@ -151,10 +161,14 @@ export function AssessmentBuilderClient({
     useState<R211ValidatedVersion | null>(null);
 
   // Issuance state
+  const [selectedReviewerPrincipalId, setSelectedReviewerPrincipalId] =
+    useState<string>(reviewers[0]?.principalId ?? '');
   const [isIssuing, setIsIssuing] = useState(false);
   const [issuedSession, setIssuedSession] = useState<{
     sessionId: string;
-    candidatePath: string;
+    candidatePath: string | null;
+    reviewerPrincipalId?: string | null;
+    candidateTokenIssued?: boolean;
   } | null>(null);
   const [issuanceError, setIssuanceError] = useState<string | null>(null);
 
@@ -322,6 +336,12 @@ export function AssessmentBuilderClient({
   // Issue Action
   const handleIssue = async () => {
     if (!validatedVersion) return;
+    if (isAuthenticatedStaging && !selectedReviewerPrincipalId) {
+      setIssuanceError(
+        'Select an active organization reviewer to assign before issuing the assessment.',
+      );
+      return;
+    }
     setIsIssuing(true);
     setIssuanceError(null);
 
@@ -342,6 +362,9 @@ export function AssessmentBuilderClient({
             durationMinutes: Math.round(validatedVersion.durationSeconds / 60),
             terminalEnabled: validatedVersion.terminalEnabled,
             integratedAi: validatedVersion.integratedAi,
+            ...(selectedReviewerPrincipalId
+              ? { reviewerPrincipalId: selectedReviewerPrincipalId }
+              : {}),
             idempotencyKey,
             csrf: csrfToken,
           }),
@@ -360,7 +383,16 @@ export function AssessmentBuilderClient({
 
       setIssuedSession({
         sessionId: data.sessionId,
-        candidatePath: data.candidatePath ?? `/r26/candidate/${data.sessionId}`,
+        candidatePath:
+          data.candidatePath === null
+            ? null
+            : (data.candidatePath ?? `/r26/candidate/${data.sessionId}`),
+        reviewerPrincipalId:
+          data.reviewerPrincipalId ?? (selectedReviewerPrincipalId || null),
+        candidateTokenIssued:
+          typeof data.candidateTokenIssued === 'boolean'
+            ? data.candidateTokenIssued
+            : data.candidatePath !== null,
       });
     } catch (err: unknown) {
       setIssuanceError(
@@ -470,6 +502,36 @@ export function AssessmentBuilderClient({
               integrity, and issue tamper-evident candidate sessions with
               immutable content snapshots.
             </p>
+            <p style={{ marginTop: '8px' }}>
+              <Link
+                href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
+                data-testid="back-to-organization-link"
+              >
+                ← Back to organization workspace
+              </Link>
+            </p>
+            {isAuthenticatedStaging ? (
+              <div
+                data-testid="builder-staging-capabilities-banner"
+                role="region"
+                aria-label="Authenticated staging capabilities"
+                style={{
+                  marginTop: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #f59e0b',
+                  backgroundColor: '#fffbeb',
+                  color: '#92400e',
+                  fontSize: '0.85rem',
+                }}
+              >
+                <strong>Authenticated Staging Mode (R2.15):</strong> Draft
+                persistence, static structural validation, and internal session
+                issuance with evaluator assignment are active. Live AI-provider
+                task generation, candidate workspace execution, and candidate
+                invitation tokens are disabled in this slice.
+              </div>
+            ) : null}
           </header>
 
           {/* Stepper Navigation */}
@@ -1634,6 +1696,56 @@ export function AssessmentBuilderClient({
                           <code>{idempotencyKey}</code>
                         </dd>
                       </dl>
+
+                      {(isAuthenticatedStaging || reviewers.length > 0) && (
+                        <div
+                          style={{
+                            marginTop: '16px',
+                            paddingTop: '16px',
+                            borderTop:
+                              '1px solid var(--software-border, #e5e7eb)',
+                          }}
+                        >
+                          <label
+                            htmlFor="issue-reviewer-select"
+                            style={{
+                              display: 'block',
+                              fontWeight: 600,
+                              marginBottom: '6px',
+                              fontSize: '0.9rem',
+                            }}
+                          >
+                            Assign Authorized Evaluator (Reviewer)
+                          </label>
+                          <select
+                            id="issue-reviewer-select"
+                            name="reviewerPrincipalId"
+                            data-testid="issue-reviewer-select"
+                            value={selectedReviewerPrincipalId}
+                            onChange={(e) =>
+                              setSelectedReviewerPrincipalId(e.target.value)
+                            }
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: '6px',
+                              border:
+                                '1px solid var(--software-border, #d1d5db)',
+                              background: 'var(--software-surface, #fff)',
+                              color: 'var(--software-ink, #000)',
+                            }}
+                          >
+                            <option value="">
+                              Select an eligible organization reviewer
+                            </option>
+                            {reviewers.map((r) => (
+                              <option key={r.principalId} value={r.principalId}>
+                                {r.principalId} ({r.role})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
 
                     {issuanceError && (
@@ -1732,19 +1844,56 @@ export function AssessmentBuilderClient({
                             {issuedSession.sessionId}
                           </code>
                         </dd>
+                        {issuedSession.reviewerPrincipalId ? (
+                          <>
+                            <dt style={{ fontWeight: 600 }}>
+                              Assigned Evaluator:
+                            </dt>
+                            <dd>
+                              <code data-testid="issued-reviewer-principal-id">
+                                {issuedSession.reviewerPrincipalId}
+                              </code>
+                            </dd>
+                          </>
+                        ) : null}
                         <dt style={{ fontWeight: 600 }}>Candidate Link:</dt>
                         <dd>
-                          <Link
-                            href={issuedSession.candidatePath}
-                            data-testid="candidate-workspace-link"
-                            style={{
-                              color: '#047857',
-                              fontWeight: 600,
-                              wordBreak: 'break-all',
-                            }}
-                          >
-                            {issuedSession.candidatePath}
-                          </Link>
+                          {issuedSession.candidatePath ? (
+                            <Link
+                              href={issuedSession.candidatePath}
+                              data-testid="candidate-workspace-link"
+                              style={{
+                                color: '#047857',
+                                fontWeight: 600,
+                                wordBreak: 'break-all',
+                              }}
+                            >
+                              {issuedSession.candidatePath}
+                            </Link>
+                          ) : (
+                            <div
+                              data-testid="candidate-invitation-unavailable-notice"
+                              role="status"
+                              style={{
+                                padding: '10px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid #f59e0b',
+                                backgroundColor: '#fffbeb',
+                                color: '#92400e',
+                                fontSize: '0.85rem',
+                              }}
+                            >
+                              <strong>
+                                Candidate invitation token not issued (R2.15
+                                internal staging scope):
+                              </strong>{' '}
+                              This internal issuance creates a persisted{' '}
+                              <code>CREATED</code> session and assigns the
+                              selected evaluator, but does not issue a candidate
+                              invitation link or enable candidate runtime
+                              execution or live AI.
+                            </div>
+                          )}
                         </dd>
                       </dl>
                     </div>

@@ -116,4 +116,5 @@ export async function checkPrivateReview({
     revokedClaims.session_id,
   ]);
   await call(appUrl, otherReviewer, 'evidence.read', args, 401);
+  return { sessionId };
 }

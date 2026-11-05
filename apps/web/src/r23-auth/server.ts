@@ -37,6 +37,37 @@ import { getApplicationDatabasePath } from '../database/database-path';
 import { r26IsEnabled } from '../r26-candidate/config';
 import { r27IsEnabled } from '../r27-evidence/config';
 import { r29IsEnabled } from '../r29-observations/config';
+import { isAuthenticatedStaging } from '../runtime/profile';
+import {
+  stagingAssessmentDraftApiGet,
+  stagingAssessmentDraftApiPut,
+  stagingAssessmentIssuanceApiPost,
+  stagingAssessmentValidateApiPost,
+  stagingAssessmentVersionApiGet,
+  stagingCallbackGet,
+  stagingCapabilityDisabledJsonResponse,
+  stagingEvidenceApiGet,
+  stagingLoadOrganizationSessionList,
+  stagingLoadOrganizationSessionSummary,
+  stagingLoadR27Evidence,
+  stagingLoadR28Revision,
+  stagingLoginGet,
+  stagingLoginPost,
+  stagingLogoutPost,
+  stagingObservationApiGet,
+  stagingObservationsApiGet,
+  stagingOrganizationGet,
+  stagingOrganizationPost,
+  stagingOrganizationReviewersApiGet,
+  stagingOrganizationSessionPageGet,
+  stagingOrganizationSessionsApiGet,
+  stagingOrganizationSessionSummaryApiGet,
+  stagingOrganizationsGet,
+  stagingRefreshPost,
+  stagingReviewPacketApiGet,
+  stagingRevisionApiGet,
+  stagingSessionAssignmentsApiGet,
+} from '../staging/browser';
 import {
   validateCreateObservationInput,
   validateUpdateObservationInput,
@@ -907,6 +938,13 @@ export async function loadAuthenticatedOrganizationSessionList(
     limit?: number;
   },
 ): Promise<AuthenticatedSessionListContext> {
+  if (isAuthenticatedStaging()) {
+    return stagingLoadOrganizationSessionList(
+      request,
+      targetOrganizationId,
+      queryParams,
+    );
+  }
   const active = getRuntime();
   if (!active) throw new R23AuthUnavailable();
   if (!UUID.test(targetOrganizationId)) throw new R23BadRequest();
@@ -1006,6 +1044,13 @@ export async function loadAuthenticatedOrganizationSessionSummary(
   targetOrganizationId: string,
   sessionId: string,
 ): Promise<AuthenticatedSessionSummaryContext> {
+  if (isAuthenticatedStaging()) {
+    return stagingLoadOrganizationSessionSummary(
+      request,
+      targetOrganizationId,
+      sessionId,
+    );
+  }
   const active = getRuntime();
   if (!active) throw new R23AuthUnavailable();
   if (!UUID.test(targetOrganizationId)) throw new R23BadRequest();
@@ -1158,6 +1203,14 @@ export async function loadAuthenticatedR27Evidence(
   sessionId: string,
   query: R27EvidenceQuery = {},
 ): Promise<R27Evidence | null> {
+  if (isAuthenticatedStaging()) {
+    return stagingLoadR27Evidence(
+      request,
+      targetOrganizationId,
+      sessionId,
+      query,
+    );
+  }
   const active = getRuntime();
   if (!active) throw new R23AuthUnavailable();
   if (
@@ -1235,6 +1288,9 @@ export async function r27EvidenceApiGet(
   organizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingEvidenceApiGet(request, organizationId, sessionId);
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r27IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -1276,6 +1332,14 @@ export async function loadAuthenticatedR28Revision(
   sessionId: string,
   sequence: string,
 ): Promise<R28CandidateRevision | null> {
+  if (isAuthenticatedStaging()) {
+    return stagingLoadR28Revision(
+      request,
+      targetOrganizationId,
+      sessionId,
+      sequence,
+    );
+  }
   const active = getRuntime();
   if (!active) throw new R23AuthUnavailable();
   if (
@@ -1315,6 +1379,9 @@ export async function r28RevisionApiGet(
   sessionId: string,
   sequence: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingRevisionApiGet(request, organizationId, sessionId, sequence);
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r27IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -1351,6 +1418,7 @@ export async function r28RevisionApiGet(
 }
 
 export function r23LoginGet(): Response {
+  if (isAuthenticatedStaging()) return stagingLoginGet();
   if (!r23IsEnabled()) return disabledResponse();
   try {
     getRuntime();
@@ -1365,6 +1433,7 @@ export function r23LoginGet(): Response {
 }
 
 export async function r23LoginPost(request: Request): Promise<Response> {
+  if (isAuthenticatedStaging()) return stagingLoginPost(request);
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -1419,6 +1488,7 @@ export async function r23LoginPost(request: Request): Promise<Response> {
 }
 
 export async function r23CallbackGet(request: Request): Promise<Response> {
+  if (isAuthenticatedStaging()) return stagingCallbackGet(request);
   if (!r23IsEnabled()) return disabledResponse(request);
   let sessionPending = false;
   try {
@@ -1462,6 +1532,7 @@ export async function r23CallbackGet(request: Request): Promise<Response> {
 }
 
 export async function r23OrganizationsGet(request: Request): Promise<Response> {
+  if (isAuthenticatedStaging()) return stagingOrganizationsGet(request);
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -1495,6 +1566,7 @@ export async function r23OrganizationsGet(request: Request): Promise<Response> {
 }
 
 export async function r23OrganizationPost(request: Request): Promise<Response> {
+  if (isAuthenticatedStaging()) return stagingOrganizationPost(request);
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -1526,6 +1598,9 @@ export async function r23OrganizationGet(
   request: Request,
   organizationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingOrganizationGet(request, organizationId);
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const url = new URL(request.url);
@@ -1793,6 +1868,9 @@ export async function r24OrganizationSessionsApiGet(
   request: Request,
   organizationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingOrganizationSessionsApiGet(request, organizationId);
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const url = new URL(request.url);
@@ -1863,6 +1941,13 @@ export async function r24OrganizationSessionSummaryApiGet(
   organizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingOrganizationSessionSummaryApiGet(
+      request,
+      organizationId,
+      sessionId,
+    );
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const context = await loadAuthenticatedOrganizationSessionSummary(
@@ -1931,6 +2016,13 @@ export async function r24OrganizationSessionSummaryGet(
   organizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingOrganizationSessionPageGet(
+      request,
+      organizationId,
+      sessionId,
+    );
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const context = await loadAuthenticatedOrganizationSessionSummary(
@@ -2094,6 +2186,7 @@ export async function r24OrganizationSessionSummaryGet(
 export const r23OrganizationSessionPageGet = r24OrganizationSessionSummaryGet;
 
 export async function r23RefreshPost(request: Request): Promise<Response> {
+  if (isAuthenticatedStaging()) return stagingRefreshPost(request);
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -2120,6 +2213,7 @@ export async function r23RefreshPost(request: Request): Promise<Response> {
 }
 
 export async function r23LogoutPost(request: Request): Promise<Response> {
+  if (isAuthenticatedStaging()) return stagingLogoutPost(request);
   if (!r23IsEnabled()) return disabledResponse(request);
   let active: R23Runtime | null = null;
   let localClosed = false;
@@ -2215,6 +2309,9 @@ export async function r25AssessmentIssuanceApiPost(
   request: Request,
   organizationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingAssessmentIssuanceApiPost(request, organizationId);
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -2725,6 +2822,11 @@ export async function r25CandidateTokenRecoveryApiGet(
   organizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCapabilityDisabledJsonResponse(
+      'Candidate token recovery is unavailable in the authenticated staging slice.',
+    );
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -2815,6 +2917,9 @@ export async function r25OrganizationReviewersApiGet(
   request: Request,
   organizationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingOrganizationReviewersApiGet(request, organizationId);
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -2872,6 +2977,9 @@ export async function r25SessionAssignmentsApiGet(
   organizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingSessionAssignmentsApiGet(request, organizationId, sessionId);
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -2940,6 +3048,11 @@ export async function r25SessionAssignmentsApiPost(
   organizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCapabilityDisabledJsonResponse(
+      'Post-issuance reviewer assignment writes are unavailable in the authenticated staging slice.',
+    );
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -3016,6 +3129,11 @@ export async function r25SessionAssignmentRevocationApi(
   sessionId: string,
   assignmentId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCapabilityDisabledJsonResponse(
+      'Reviewer assignment revocation writes are unavailable in the authenticated staging slice.',
+    );
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -3079,6 +3197,9 @@ export async function r29ObservationsApiGet(
   targetOrganizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingObservationsApiGet(request, targetOrganizationId, sessionId);
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r29IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -3134,6 +3255,14 @@ export async function r29ObservationApiGet(
   sessionId: string,
   observationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingObservationApiGet(
+      request,
+      targetOrganizationId,
+      sessionId,
+      observationId,
+    );
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r29IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -3203,6 +3332,11 @@ export async function r29ObservationApiPost(
   targetOrganizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCapabilityDisabledJsonResponse(
+      'Private observation creation is unavailable in the authenticated staging slice.',
+    );
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r29IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -3268,6 +3402,11 @@ export async function r29ObservationApiPatch(
   sessionId: string,
   observationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCapabilityDisabledJsonResponse(
+      'Private observation editing is unavailable in the authenticated staging slice.',
+    );
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r29IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -3369,6 +3508,9 @@ export async function r210ReviewPacketApiGet(
   targetOrganizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingReviewPacketApiGet(request, targetOrganizationId, sessionId);
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r210IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -3423,6 +3565,11 @@ export async function r210ReviewPacketApiPut(
   targetOrganizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCapabilityDisabledJsonResponse(
+      'Review packet writes are unavailable in the authenticated staging slice.',
+    );
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r210IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -3600,6 +3747,11 @@ export async function r210ReviewPacketFinalizeApiPost(
   targetOrganizationId: string,
   sessionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingCapabilityDisabledJsonResponse(
+      'Review packet finalization is unavailable in the authenticated staging slice.',
+    );
+  }
   const jsonRequest = asR27JsonRequest(request);
   if (!r210IsEnabled()) return disabledResponse(jsonRequest);
 
@@ -3772,6 +3924,9 @@ export async function r211AssessmentDraftApiGet(
   request: Request,
   targetOrganizationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingAssessmentDraftApiGet(request, targetOrganizationId);
+  }
   const jsonRequest = asR27JsonRequest(request);
   try {
     const active = getRuntime();
@@ -3813,6 +3968,9 @@ export async function r211AssessmentDraftApiPut(
   request: Request,
   targetOrganizationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingAssessmentDraftApiPut(request, targetOrganizationId);
+  }
   const jsonRequest = asR27JsonRequest(request);
   try {
     const active = getRuntime();
@@ -3907,6 +4065,9 @@ export async function r211AssessmentValidateApiPost(
   request: Request,
   targetOrganizationId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingAssessmentValidateApiPost(request, targetOrganizationId);
+  }
   const jsonRequest = asR27JsonRequest(request);
   try {
     const active = getRuntime();
@@ -4009,6 +4170,13 @@ export async function r211AssessmentVersionApiGet(
   targetOrganizationId: string,
   versionId: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingAssessmentVersionApiGet(
+      request,
+      targetOrganizationId,
+      versionId,
+    );
+  }
   const jsonRequest = asR27JsonRequest(request);
   try {
     const active = getRuntime();

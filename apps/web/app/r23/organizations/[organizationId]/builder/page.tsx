@@ -4,6 +4,7 @@ import {
   loadAuthenticatedOrganizationSessionList,
   r211AssessmentDraftApiGet,
 } from '../../../../../src/r23-auth/server';
+import { isAuthenticatedStaging } from '../../../../../src/runtime/profile';
 import { AssessmentBuilderClient } from './assessment-builder-client';
 import type { R211AssessmentDraft } from '../../../../../src/r211-builder/contract';
 
@@ -42,17 +43,28 @@ export default async function AssessmentBuilderPage({
     notFound();
   }
 
-  let initialDraft: R211AssessmentDraft | null = null;
-  try {
-    if (typeof r211AssessmentDraftApiGet === 'function') {
-      const draftRes = await r211AssessmentDraftApiGet(request, organizationId);
-      if (draftRes.ok) {
-        const data = await draftRes.json();
-        initialDraft = data?.draft ?? null;
+  const contextWithStaging = context as typeof context & {
+    reviewers?: Array<{ principalId: string; role: string; joinedAt: string }>;
+    draft?: R211AssessmentDraft | null;
+  };
+
+  let initialDraft: R211AssessmentDraft | null =
+    contextWithStaging.draft ?? null;
+  if (!initialDraft) {
+    try {
+      if (typeof r211AssessmentDraftApiGet === 'function') {
+        const draftRes = await r211AssessmentDraftApiGet(
+          request,
+          organizationId,
+        );
+        if (draftRes.ok) {
+          const data = await draftRes.json();
+          initialDraft = data?.draft ?? null;
+        }
       }
+    } catch {
+      initialDraft = null;
     }
-  } catch {
-    initialDraft = null;
   }
 
   return (
@@ -60,6 +72,8 @@ export default async function AssessmentBuilderPage({
       organizationId={organizationId}
       csrfToken={context.csrfToken}
       initialDraft={initialDraft}
+      reviewers={contextWithStaging.reviewers ?? []}
+      isAuthenticatedStaging={isAuthenticatedStaging()}
     />
   );
 }

@@ -52,6 +52,86 @@ describe('authenticated staging boundary', () => {
         new NextRequest('http://localhost/api/sessions', { method: 'POST' }),
       ).status,
     ).toBe(503);
+
+    // Allowed browser GET routes
+    for (const path of [
+      '/r23/login',
+      '/r23/auth/callback',
+      '/r23/organizations',
+      '/r23/organizations/org-1',
+      '/r23/organizations/org-1/builder',
+      '/r23/organizations/org-1/sessions/session-1',
+      '/r23/api/organizations/org-1/assessments/draft',
+      '/r23/api/organizations/org-1/assessments/versions/v1',
+      '/r23/api/organizations/org-1/reviewers',
+      '/r23/api/organizations/org-1/sessions',
+      '/r23/api/organizations/org-1/sessions/session-1',
+      '/r23/api/organizations/org-1/sessions/session-1/assignments',
+      '/r27/organizations/org-1/sessions/session-1',
+      '/r27/api/organizations/org-1/sessions/session-1/evidence',
+      '/r27/api/organizations/org-1/sessions/session-1/evidence/revisions/rev-1',
+      '/r27/api/organizations/org-1/sessions/session-1/observations',
+      '/r27/api/organizations/org-1/sessions/session-1/observations/obs-1',
+      '/r27/api/organizations/org-1/sessions/session-1/review-packet',
+      '/_next/static/test.js',
+      '/favicon.ico',
+    ]) {
+      expect(
+        proxy(
+          new NextRequest(`http://localhost${path}`, { method: 'GET' }),
+        ).headers.get('x-middleware-next'),
+      ).toBe('1');
+    }
+
+    // Allowed browser POST routes
+    for (const path of [
+      '/api/staging/v1',
+      '/r23/auth/login',
+      '/r23/auth/logout',
+      '/r23/auth/refresh',
+      '/r23/organization',
+      '/r23/api/organizations/org-1/assessments/validate',
+      '/r23/api/organizations/org-1/sessions',
+    ]) {
+      expect(
+        proxy(
+          new NextRequest(`http://localhost${path}`, { method: 'POST' }),
+        ).headers.get('x-middleware-next'),
+      ).toBe('1');
+    }
+
+    // Allowed browser PUT routes
+    expect(
+      proxy(
+        new NextRequest(
+          'http://localhost/r23/api/organizations/org-1/assessments/draft',
+          {
+            method: 'PUT',
+          },
+        ),
+      ).headers.get('x-middleware-next'),
+    ).toBe('1');
+
+    // Blocked legacy, execution, candidate, and review-write routes
+    for (const [path, method] of [
+      ['/', 'GET'],
+      ['/evaluator', 'GET'],
+      ['/api/evaluator/assessments/generate', 'POST'],
+      ['/api/evaluator/assessments/preview', 'POST'],
+      ['/api/evaluator/assessments', 'POST'],
+      ['/r26/candidate', 'GET'],
+      ['/r26/api/candidate/example/execution', 'POST'],
+      ['/r26/api/candidate/example/ai', 'POST'],
+      ['/api/candidate/sessions/example/terminal/exec', 'POST'],
+      ['/r27/api/organizations/org-1/sessions/session-1/observations', 'POST'],
+      ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'POST'],
+      ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'PUT'],
+    ] as const) {
+      const blocked = proxy(
+        new NextRequest(`http://localhost${path}`, { method }),
+      );
+      expect(blocked.status).toBe(503);
+    }
   });
 
   it('verifies the bearer through GoTrue before dispatch and signs its exact arguments', async () => {
