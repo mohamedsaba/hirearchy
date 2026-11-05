@@ -52,6 +52,15 @@ function candidatePathAtAppOrigin(candidateUrl, appUrl) {
   ).toString();
 }
 
+async function gotoCandidateInvitation(page, candidateUrl) {
+  try {
+    await page.goto(candidateUrl);
+  } catch {
+    // The fragment is a bearer credential; keep it out of Playwright error logs.
+    throw new Error('Candidate invitation navigation failed');
+  }
+}
+
 async function saveBrowserEvidence(
   page,
   browserEvidenceDir,
@@ -233,12 +242,20 @@ export async function checkCandidateReviewBrowserAcceptance({
     const candidateUrl = await recruiterPage
       .getByTestId('candidate-invitation-link')
       .inputValue();
-    assert.equal(
-      new URL(candidateUrl).origin,
-      new URL(appUrl).origin,
-      'Only an active same-origin candidate link may be shown',
+    let candidateLinkIsSafe = false;
+    try {
+      const parsedCandidateUrl = new URL(candidateUrl);
+      candidateLinkIsSafe =
+        parsedCandidateUrl.origin === new URL(appUrl).origin &&
+        parsedCandidateUrl.pathname === `/r26/candidate/${sessionId}` &&
+        parsedCandidateUrl.hash.length > 1;
+    } catch {
+      // Do not include the candidate bearer URL in assertion diagnostics.
+    }
+    assert.ok(
+      candidateLinkIsSafe,
+      'The active candidate link must be same-origin and target this session; token details are kept out of test output',
     );
-    assert.match(candidateUrl, new RegExp(`/r26/candidate/${sessionId}#`));
     assert.equal(
       await recruiterPage
         .locator('[data-testid="recovered-candidate-invitation-panel"] time')
@@ -266,7 +283,11 @@ export async function checkCandidateReviewBrowserAcceptance({
       browserEvidenceDir,
       '01-recruiter-invitation.png',
       {
-        mask: [recruiterPage.getByTestId('candidate-invitation-link')],
+        mask: [
+          recruiterPage.locator(
+            '[data-testid="candidate-invitation-link"], [data-testid="candidate-workspace-link"]',
+          ),
+        ],
         maskColor: '#111827',
       },
     );
@@ -287,7 +308,7 @@ export async function checkCandidateReviewBrowserAcceptance({
         forbiddenCapabilityRequests.push(pathname);
       }
     });
-    await candidatePage.goto(candidateUrl);
+    await gotoCandidateInvitation(candidatePage, candidateUrl);
     const notice = candidatePage.getByTestId('candidate-data-use-notice');
     await notice.waitFor({ timeout: 20_000 });
     const noticeText = await notice.innerText();
@@ -554,7 +575,7 @@ export async function checkCandidateReviewBrowserAcceptance({
         await route.continue();
       },
     );
-    await executionGatePage.goto(candidateUrl);
+    await gotoCandidateInvitation(executionGatePage, candidateUrl);
     const runChecksButton = executionGatePage.getByTestId('run-checks-button');
     await executionGatePage
       .getByText('Run availability could not be confirmed')
@@ -668,7 +689,10 @@ export async function checkCandidateReviewBrowserAcceptance({
       viewport: { width: 1280, height: 900 },
     });
     candidatePage = await candidateContext.newPage();
-    await candidatePage.goto(candidatePathAtAppOrigin(candidateUrl, appUrl));
+    await gotoCandidateInvitation(
+      candidatePage,
+      candidatePathAtAppOrigin(candidateUrl, appUrl),
+    );
     const resumedEditor = candidatePage.locator(
       '.cm-content[aria-label="Edit file"]',
     );

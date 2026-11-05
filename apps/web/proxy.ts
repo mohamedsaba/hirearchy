@@ -19,6 +19,8 @@ const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/assignments$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
+  /^\/r26\/candidate\/[^/]+$/,
+  /^\/r26\/api\/candidate\/[^/]+$/,
   /^\/r27\/organizations\/[^/]+\/sessions\/[^/]+$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/evidence$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/evidence\/revisions\/[^/]+$/,
@@ -37,8 +39,8 @@ const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/sessions$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations$/,
-  /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet\/finalize$/,
+  /^\/r26\/api\/candidate\/[^/]+$/,
 ];
 
 const STAGING_BROWSER_PUT_PATTERNS: readonly RegExp[] = [
