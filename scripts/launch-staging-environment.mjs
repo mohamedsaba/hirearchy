@@ -6,16 +6,13 @@ import {
   randomBytes,
   createHmac,
 } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { Client } from 'pg';
-import { applyMigrations } from '../database/postgres/migrate.mjs';
-import { provisionStaging } from './provision-staging.mjs';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
 const dataDir = join(rootDir, '.data', 'local-staging');
-await mkdir(dataDir, { recursive: true, mode: 0o700 });
 
 const networkName = 'hirearchy-local-staging-net';
 const pgContainer = 'hirearchy-local-staging-pg';
@@ -34,23 +31,80 @@ const docker = (...args) =>
     encoding: 'utf8',
   }).trim();
 
-function removeExistingContainers() {
-  for (const name of [authContainer, pgContainer]) {
-    try {
-      docker('rm', '-f', name);
-    } catch {
-      /* not running */
-    }
+let networkCreated = false;
+const createdContainers = [];
+let appPid;
+
+process.on('exit', (code) => {
+  if (
+    code === 0 ||
+    (!networkCreated && createdContainers.length === 0 && !appPid)
+  ) {
+    return;
   }
-  try {
-    docker('network', 'rm', networkName);
-  } catch {
-    /* not present */
+  const retained = [
+    ...createdContainers.map((name) => 'container ' + name),
+    ...(networkCreated ? ['network ' + networkName] : []),
+    ...(appPid ? ['loopback app process ' + appPid] : []),
+  ];
+  console.error(
+    'Startup failed; resources created by this run are retained: ' +
+      retained.join(', '),
+  );
+});
+
+function resourceNames(output) {
+  return new Set(
+    output
+      .split(/\r?\n/)
+      .map((name) => name.trim())
+      .filter(Boolean),
+  );
+}
+
+async function assertPortAvailable(port) {
+  await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', (error) => {
+      reject(
+        new Error(
+          'Refusing to start local staging: 127.0.0.1:' +
+            port +
+            ' is unavailable (' +
+            (error.code ?? error.message) +
+            ').',
+        ),
+      );
+    });
+    server.listen(port, '127.0.0.1', () => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+}
+
+async function preflightResources() {
+  const containers = resourceNames(
+    docker('ps', '--all', '--format', '{{.Names}}'),
+  );
+  const networks = resourceNames(
+    docker('network', 'ls', '--format', '{{.Name}}'),
+  );
+  const conflicts = [
+    ...[authContainer, pgContainer]
+      .filter((name) => containers.has(name))
+      .map((name) => 'container ' + name),
+    ...(networks.has(networkName) ? ['network ' + networkName] : []),
+  ];
+  if (conflicts.length > 0) {
+    throw new Error(
+      'Refusing to overwrite existing local staging resources: ' +
+        conflicts.join(', ') +
+        '. Stop or remove only resources you own, then retry.',
+    );
   }
-  try {
-    execFileSync('fuser', ['-k', `${appPort}/tcp`], { stdio: 'ignore' });
-  } catch {
-    /* not listening */
+
+  for (const port of [pgPort, authPort, appPort]) {
+    await assertPortAvailable(port);
   }
 }
 
@@ -71,11 +125,15 @@ async function sqlFile(relativePath) {
   return readFile(join(rootDir, relativePath), 'utf8');
 }
 
-console.log('Cleaning up any previous local staging containers...');
-removeExistingContainers();
+await preflightResources();
+const { Client } = await import('pg');
+const { applyMigrations } = await import('../database/postgres/migrate.mjs');
+const { provisionStaging } = await import('./provision-staging.mjs');
+await mkdir(dataDir, { recursive: true, mode: 0o700 });
 
 console.log('Creating Docker network...');
 docker('network', 'create', networkName);
+networkCreated = true;
 
 console.log(
   `Starting PostgreSQL container (${pgContainer}) on port ${pgPort}...`,
@@ -95,6 +153,7 @@ docker(
   `POSTGRES_PASSWORD=${postgresPassword}`,
   image,
 );
+createdContainers.push(pgContainer);
 
 await waitFor(() =>
   docker('exec', pgContainer, 'pg_isready', '-U', 'postgres').includes(
@@ -193,6 +252,7 @@ docker(
   }).flatMap(([k, v]) => ['-e', `${k}=${v}`]),
   authImage,
 );
+createdContainers.push(authContainer);
 
 await waitFor(async () => {
   const res = await fetch(`${authExternalUrl}/health`);
@@ -308,6 +368,7 @@ const appProcess = spawn(
     detached: true,
   },
 );
+appPid = appProcess.pid;
 
 let appLog = '';
 appProcess.stdout.on('data', (d) => {
@@ -558,8 +619,9 @@ const statusInfo = {
 await writeFile(
   join(dataDir, 'status.json'),
   JSON.stringify(statusInfo, null, 2),
-  'utf8',
+  { encoding: 'utf8', mode: 0o600 },
 );
+await chmod(join(dataDir, 'status.json'), 0o600);
 await adminClient.end();
 
 console.log('\n======================================================');
@@ -578,31 +640,3 @@ console.log(`Created Session: ${createdSessionId}`);
 console.log(`Submitted Session: ${submittedSessionId}`);
 console.log('======================================================\n');
 process.exit(0);
-
-await writeFile(
-  join(dataDir, 'status.json'),
-  JSON.stringify(statusInfo, null, 2),
-  'utf8',
-);
-
-// Write launch env file for next app
-const envContent = [
-  `PORT=${appPort}`,
-  `HIREARCHY_RUNTIME_PROFILE=staging-authenticated`,
-  `STAGING_AUTH_URL=${authExternalUrl}`,
-  `STAGING_AUTH_ISSUER=${authExternalUrl}`,
-  `STAGING_AUTH_AUDIENCE=authenticated`,
-  `STAGING_DATABASE_URL=postgres://r23_gateway:${postgresPassword}@127.0.0.1:${pgPort}/postgres`,
-  `STAGING_PROOF_PRIVATE_KEY=${keys.privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64')}`,
-  `STAGING_PROOF_ISSUER=${proofIssuer}`,
-  `STAGING_PROOF_AUDIENCE=${proofAudience}`,
-  `STAGING_PROOF_KEY_ID=${proofKeyId}`,
-  `STAGING_PUBLIC_ORIGIN=http://127.0.0.1:${appPort}`,
-].join('\n');
-
-await writeFile(join(dataDir, '.env.local'), envContent, 'utf8');
-
-await adminClient.end();
-
-console.log('Staging environment provisioned successfully!');
-console.log('Status saved to .data/local-staging/status.json');
