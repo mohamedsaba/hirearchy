@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { randomUUID } from 'node:crypto';
 
 function loadPlaywright() {
   const require = createRequire(import.meta.url);
@@ -15,6 +15,214 @@ function loadPlaywright() {
     }
   }
   throw new Error('Unable to resolve Playwright module');
+}
+
+async function assertExpiredInvitationReplay({
+  admin,
+  page,
+  context,
+  appUrl,
+  organizationId,
+  sessionId,
+  recruiterPrincipalId,
+}) {
+  const sessionRows = await admin.query(
+    `SELECT organization_id::pg_catalog.text AS organization_id,
+            issuer_principal_id::pg_catalog.text AS issuer_principal_id
+       FROM hirearchy.assessment_sessions
+      WHERE id = $1`,
+    [sessionId],
+  );
+  assert.equal(sessionRows.rows.length, 1);
+  const session = sessionRows.rows[0];
+  assert.equal(session.organization_id, organizationId.toLowerCase());
+  assert.equal(session.issuer_principal_id, recruiterPrincipalId);
+  const existingEnvelope = await admin.query(
+    'SELECT 1 FROM hirearchy.candidate_token_envelopes WHERE session_id = $1',
+    [sessionId],
+  );
+  assert.equal(existingEnvelope.rows.length, 0);
+
+  const idempotencyKey = `expired-replay.${randomUUID()}`;
+  const expiresAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const createdAt = new Date(Date.parse(expiresAt) - 24 * 60 * 60 * 1000);
+  const requestHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        expiresAt,
+        organizationId: session.organization_id,
+        sessionId,
+      }),
+      'utf8',
+    )
+    .digest('hex');
+  const tokenHash = randomBytes(32).toString('hex');
+  await admin.query(
+    `INSERT INTO hirearchy.candidate_token_envelopes (
+       organization_id, session_id, candidate_token_hash,
+       candidate_token_ciphertext, created_at, expires_at
+     ) VALUES (
+       $1::pg_catalog.uuid, $2, $3, 'synthetic-expired-envelope',
+       $4::pg_catalog.timestamptz, $5::pg_catalog.timestamptz
+     )`,
+    [session.organization_id, sessionId, tokenHash, createdAt, expiresAt],
+  );
+  await admin.query(
+    `INSERT INTO hirearchy.candidate_invitation_requests (
+       organization_id, idempotency_key, session_id, issuer_principal_id,
+       request_hash, expires_at
+     ) VALUES ($1::pg_catalog.uuid, $2, $3, $4::pg_catalog.uuid, $5, $6::pg_catalog.timestamptz)`,
+    [
+      session.organization_id,
+      idempotencyKey,
+      sessionId,
+      session.issuer_principal_id,
+      requestHash,
+      expiresAt,
+    ],
+  );
+
+  const csrf = (await context.cookies(appUrl)).find(
+    (cookie) => cookie.name === '__Host-r23-csrf',
+  )?.value;
+  assert.ok(csrf, 'Recruiter CSRF cookie must be present');
+  const result = await page.evaluate(
+    async ({
+      organizationId: orgId,
+      sessionId: issuedSessionId,
+      csrf,
+      idempotencyKey,
+      expiresAt,
+    }) => {
+      const response = await fetch(
+        `/r23/api/organizations/${encodeURIComponent(orgId)}/sessions/${encodeURIComponent(issuedSessionId)}/candidate-token`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKey,
+            'X-CSRF-Token': csrf,
+          },
+          body: JSON.stringify({ csrf, expiresAt }),
+          cache: 'no-store',
+        },
+      );
+      return { status: response.status, body: await response.json() };
+    },
+    { organizationId, sessionId, csrf, idempotencyKey, expiresAt },
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, {
+    sessionId,
+    status: 'expired',
+    expiresAt,
+    candidatePath: null,
+  });
+}
+
+async function reviewWriteCounts(admin, organizationId, sessionId) {
+  const { rows } = await admin.query(
+    `SELECT
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_observations
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS observations,
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_observation_history
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS observation_history,
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_review_packets
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS review_packets,
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_review_packet_history
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS review_packet_history`,
+    [organizationId, sessionId],
+  );
+  return rows[0];
+}
+
+async function assertUnassignedReviewerWritesDenied({
+  browser,
+  appUrl,
+  user,
+  organizationId,
+  sessionId,
+  admin,
+}) {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${appUrl}/r23/login`);
+    await page.locator('input[name="email"]').fill(user.email);
+    await page.locator('input[name="password"]').fill(user.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL('**/r23/organizations');
+    const selectForm = page.locator('form').filter({
+      has: page.locator(`input[value="${organizationId.toLowerCase()}"]`),
+    });
+    await selectForm.locator('button[type="submit"]').click();
+    await page.waitForURL(
+      `**/r23/organizations/${organizationId.toLowerCase()}`,
+    );
+
+    const csrf = (await context.cookies(appUrl)).find(
+      (cookie) => cookie.name === '__Host-r23-csrf',
+    )?.value;
+    assert.ok(csrf, 'Unassigned reviewer CSRF cookie must be present');
+    const before = await reviewWriteCounts(admin, organizationId, sessionId);
+    const basePath = `/r27/api/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(sessionId)}`;
+    const observationStatus = await page.evaluate(
+      async ({ basePath, csrf }) => {
+        const response = await fetch(`${basePath}/observations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrf,
+          },
+          body: JSON.stringify({
+            csrf,
+            evidenceSourceType: 'timeline_event',
+            eventSequence: '1',
+            evidenceDigest: '0'.repeat(64),
+            body: 'Unassigned reviewer write must be rejected.',
+          }),
+        });
+        return response.status;
+      },
+      { basePath, csrf },
+    );
+    assert.equal(observationStatus, 403);
+
+    const packetStatus = await page.evaluate(
+      async ({ basePath, csrf }) => {
+        const response = await fetch(`${basePath}/review-packet`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrf,
+          },
+          body: JSON.stringify({
+            csrf,
+            summary: 'Unassigned reviewer write must be rejected.',
+            strengths: [],
+            concerns: [],
+            unresolvedQuestions: [],
+            referencedObservationIds: [],
+            referencedEvidence: [],
+          }),
+        });
+        return response.status;
+      },
+      { basePath, csrf },
+    );
+    assert.equal(packetStatus, 403);
+    assert.deepEqual(
+      await reviewWriteCounts(admin, organizationId, sessionId),
+      before,
+      'Denied unassigned reviewer writes must not change observations, review packets, or history',
+    );
+  } finally {
+    await context.close();
+  }
 }
 
 /**
@@ -310,13 +518,13 @@ export async function checkBrowserAcceptance({
         .click();
       await recruiterPage.waitForSelector('[data-testid="issuance-success"]');
 
-      // Verify candidate link unavailable notice is present
-      const candidateNotice = recruiterPage.locator(
-        '[data-testid="candidate-invitation-unavailable-notice"]',
+      // Candidate links are created only through the explicit invitation panel.
+      const candidateInvitationPanel = recruiterPage.locator(
+        '[data-testid="candidate-invitation-panel"]',
       );
       assert.ok(
-        await candidateNotice.isVisible(),
-        'Candidate invitation unavailable notice must be explicitly displayed',
+        await candidateInvitationPanel.isVisible(),
+        'Candidate invitation controls must be visible after authenticated issuance',
       );
 
       newlyIssuedSessionId = (
@@ -335,19 +543,32 @@ export async function checkBrowserAcceptance({
         'Issuing an assessment must retain its non-secret session ID in the builder URL',
       );
 
-      // Verify candidate link is disabled or marked unavailable
-      const candWorkspaceLink = recruiterPage.locator(
-        '[data-testid="candidate-workspace-link"]',
+      assert.ok(
+        submittedSessionId,
+        'A submitted session is required for the expired invitation replay check',
       );
-      if (await candWorkspaceLink.count()) {
-        const disabledAttr =
-          await candWorkspaceLink.getAttribute('aria-disabled');
-        assert.equal(
-          disabledAttr,
-          'true',
-          'Candidate workspace link must be disabled',
-        );
-      }
+      await assertExpiredInvitationReplay({
+        admin,
+        page: recruiterPage,
+        context: recruiterContext,
+        appUrl,
+        organizationId,
+        sessionId: submittedSessionId,
+        recruiterPrincipalId: provisioned.users[0].principalId,
+      });
+
+      const summaryRes = await recruiterPage.goto(
+        `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}`,
+      );
+      assert.equal(summaryRes.status(), 200);
+      const manageInvitationLink = recruiterPage.locator(
+        '[data-testid="manage-candidate-invitation-link"]',
+      );
+      assert.ok(await manageInvitationLink.isVisible());
+      assert.equal(
+        await manageInvitationLink.getAttribute('href'),
+        `/r23/organizations/${organizationId.toLowerCase()}/builder?issuedSession=${encodeURIComponent(newlyIssuedSessionId)}`,
+      );
 
       // Return to session list and verify newly issued session is displayed
       await recruiterPage.goto(
@@ -440,6 +661,12 @@ export async function checkBrowserAcceptance({
         'Session status CREATED or Issued must be visible',
       );
       assert.ok(
+        summaryText.includes(
+          'Candidate invitation links are managed by the issuing recruiter.',
+        ),
+        'Assigned reviewer must see that candidate invitation access is recruiter-managed',
+      );
+      assert.ok(
         summaryText.includes(provisioned.users[1].principalId),
         'Assigned reviewer principal ID must be visible',
       );
@@ -525,6 +752,23 @@ export async function checkBrowserAcceptance({
     if (submittedSessionId) {
       console.log(
         'Browser Acceptance [6/8]: Testing private reviewer data isolation on SUBMITTED session...',
+      );
+
+      const recruiterSubmittedSummary = await recruiterPage.goto(
+        `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/sessions/${submittedSessionId}`,
+      );
+      assert.equal(
+        recruiterSubmittedSummary.status(),
+        200,
+        'Recruiter must retain access to the issued session summary after submission',
+      );
+      const recruiterSubmittedSummaryText =
+        await recruiterPage.textContent('body');
+      assert.ok(
+        recruiterSubmittedSummaryText.includes(
+          'This session has been submitted. Submitted evidence and reviewer notes are available only to the reviewer assigned to this session.',
+        ),
+        'Submitted non-reviewer must see the assigned-reviewer access scope',
       );
 
       // Reviewer 1 visits submitted session
@@ -739,9 +983,13 @@ export async function checkBrowserAcceptance({
     console.log(
       'Browser Acceptance [9/9]: Testing durable candidate and assigned-reviewer workflow...',
     );
-    const { checkCandidateReviewBrowserAcceptance } = await import(
-      './candidate-review-browser.mjs'
-    );
+    const { checkCandidateReviewBrowserAcceptance } =
+      await import('./candidate-review-browser.mjs');
+    let restartedAppUrl = null;
+    const captureStartApp = async (...args) => {
+      restartedAppUrl = await startApp(...args);
+      return restartedAppUrl;
+    };
     const candidateReview = await checkCandidateReviewBrowserAcceptance({
       appUrl,
       browserEvidenceDir,
@@ -749,14 +997,25 @@ export async function checkBrowserAcceptance({
       organizationId,
       sessionId: newlyIssuedSessionId,
       stopApp,
-      startApp,
+      startApp: captureStartApp,
       source,
       authUrl,
     });
     assert.equal(candidateReview.passed, true);
-    if (typeof candidateReview.appUrl === 'string') {
-      appUrl = candidateReview.appUrl;
-    }
+    appUrl =
+      typeof candidateReview.appUrl === 'string'
+        ? candidateReview.appUrl
+        : (restartedAppUrl ?? appUrl);
+    const reviewedSessionId = candidateReview.sessionId ?? newlyIssuedSessionId;
+    assert.equal(reviewedSessionId, newlyIssuedSessionId);
+    await assertUnassignedReviewerWritesDenied({
+      browser,
+      appUrl,
+      user: otherReviewerUser,
+      organizationId,
+      sessionId: reviewedSessionId,
+      admin,
+    });
 
     console.log('✓ All browser acceptance checks passed successfully.');
     return {

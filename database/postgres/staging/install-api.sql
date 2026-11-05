@@ -1453,15 +1453,12 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             SELECT pg_catalog.to_char(
                      $1::pg_catalog.timestamptz AT TIME ZONE 'UTC',
                      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
-                   ) AS expires_at,
-                   $1::pg_catalog.timestamptz > pg_catalog.clock_timestamp()
-                     AND $1::pg_catalog.timestamptz <= pg_catalog.clock_timestamp() + INTERVAL '30 days'
-                     AS valid
+                   ) AS expires_at
             """,
             ['text'],
             [expires_at],
         )[0]
-        if normalized_expiry['expires_at'] != expires_at or not normalized_expiry['valid']:
+        if normalized_expiry['expires_at'] != expires_at:
             error('Staging request is invalid', '22023')
 
         fingerprint_payload = json.dumps(
@@ -1532,6 +1529,18 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
         session_state = session_rows[0]
         if session_state['status'] != 'CREATED' or session_state['activated_at'] is not None:
             return {'conflict': 'INVITATION_ALREADY_EXISTS'}
+
+        fresh_expiry = run(
+            """
+            SELECT $1::pg_catalog.timestamptz > pg_catalog.clock_timestamp()
+                     AND $1::pg_catalog.timestamptz <= pg_catalog.clock_timestamp() + INTERVAL '30 days'
+                     AS valid
+            """,
+            ['text'],
+            [expires_at],
+        )[0]
+        if not fresh_expiry['valid']:
+            error('Staging request is invalid', '22023')
 
         run(
             """

@@ -8,6 +8,8 @@ import {
   type R26CandidateSubmitInput,
   type R26CandidateView,
 } from '../../../../database/postgres/r26/adapter.mjs';
+import { readCandidateAiCapability } from '../r212-ai/server';
+import { readCandidateExecutionCapability } from '../r213-execution/server';
 import { isAuthenticatedStaging } from '../runtime/profile';
 import {
   R26_CANDIDATE_DATA_NOTICE_TEXT,
@@ -157,6 +159,7 @@ function requireEnabledConfig() {
 function candidateResponse(
   view: R26CandidateView & Record<string, unknown>,
   profile: 'durable-staging' | 'disposable',
+  disposableCapabilities: Readonly<{ ai: boolean; execution: boolean }>,
 ): R26CandidateGetResponse {
   const invitationExpiresAt = view.invitationExpiresAt;
   if (
@@ -198,7 +201,10 @@ function candidateResponse(
     ...view,
     invitationExpiresAt:
       profile === 'durable-staging' ? (invitationExpiresAt as string) : null,
-    capabilities: { ai: false, execution: false },
+    capabilities:
+      profile === 'durable-staging'
+        ? { ai: false, execution: false }
+        : disposableCapabilities,
     dataNotice:
       profile === 'durable-staging'
         ? {
@@ -207,6 +213,23 @@ function candidateResponse(
             text: R26_CANDIDATE_DATA_NOTICE_TEXT,
           }
         : null,
+  };
+}
+
+async function candidateCapabilities(
+  databaseUrl: string,
+  tokenHash: string,
+  sessionId: string,
+  profile: 'durable-staging' | 'disposable',
+): Promise<Readonly<{ ai: boolean; execution: boolean }>> {
+  if (profile === 'durable-staging') return { ai: false, execution: false };
+  const [ai, execution] = await Promise.allSettled([
+    readCandidateAiCapability(databaseUrl, tokenHash, sessionId),
+    readCandidateExecutionCapability(databaseUrl, tokenHash, sessionId),
+  ]);
+  return {
+    ai: ai.status === 'fulfilled' && ai.value === true,
+    execution: execution.status === 'fulfilled' && execution.value === true,
   };
 }
 
@@ -474,15 +497,23 @@ export async function r26CandidateRead(
     requireSessionId(sessionId);
     const config = requireEnabledConfig();
     const token = requireBearer(request);
+    const tokenHash = createHash('sha256').update(token, 'utf8').digest('hex');
     const view = await runCommand(config, {
-      tokenHash: createHash('sha256').update(token, 'utf8').digest('hex'),
+      tokenHash,
       sessionId,
       action: 'read',
     });
+    const capabilities = await candidateCapabilities(
+      config.databaseUrl,
+      tokenHash,
+      sessionId,
+      config.profile,
+    );
     return Response.json(
       candidateResponse(
         view as R26CandidateView & Record<string, unknown>,
         config.profile,
+        capabilities,
       ),
       { status: 200, headers: responseHeaders },
     );
@@ -500,19 +531,27 @@ export async function r26CandidateAction(
     const config = requireEnabledConfig();
     requireSameOrigin(request, config.publicOrigin);
     const token = requireBearer(request);
+    const tokenHash = createHash('sha256').update(token, 'utf8').digest('hex');
     const body = parseActionBody(
       await readBoundedJson(request),
       config.profile === 'durable-staging',
     );
     const view = await runCommand(config, {
-      tokenHash: createHash('sha256').update(token, 'utf8').digest('hex'),
+      tokenHash,
       sessionId,
       ...body,
     });
+    const capabilities = await candidateCapabilities(
+      config.databaseUrl,
+      tokenHash,
+      sessionId,
+      config.profile,
+    );
     return Response.json(
       candidateResponse(
         view as R26CandidateView & Record<string, unknown>,
         config.profile,
+        capabilities,
       ),
       { status: 200, headers: responseHeaders },
     );

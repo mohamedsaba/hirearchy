@@ -1858,6 +1858,11 @@ export async function stagingOrganizationSessionPageGet(
       membership.role === 'reviewer' &&
       s.status === 'SUBMITTED' &&
       s.visibilityScope === 'assigned_to_reviewer';
+    const isSubmittedSession = s.status === 'SUBMITTED';
+    const isRecruiterIssuedSession =
+      membership.role === 'recruiter' &&
+      s.visibilityScope === 'issued_by_recruiter';
+    const invitationManagementUrl = `/r23/organizations/${safeOrgId}/builder?issuedSession=${encodeURIComponent(s.sessionId)}`;
 
     const content = `
       <header>
@@ -1895,8 +1900,13 @@ export async function stagingOrganizationSessionPageGet(
 
         ${
           isSubmittedReviewerSession
-            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence workbench (read only)</a></p>`
-            : `<section aria-labelledby="unsubmitted-evidence-notice-title" data-testid="staging-unsubmitted-evidence-unavailable">
+            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
+            : isSubmittedSession
+              ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
+                  <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>
+                  <p role="status">This session has been submitted. Submitted evidence and reviewer notes are available only to the reviewer assigned to this session.</p>
+                </section>`
+              : `<section aria-labelledby="unsubmitted-evidence-notice-title" data-testid="staging-unsubmitted-evidence-unavailable">
                 <h3 id="unsubmitted-evidence-notice-title">Candidate evidence &amp; review workbench status</h3>
                 <p role="status">Unsubmitted evidence is unavailable. Candidate execution and live AI-provider operations are disabled in the R2.15 staging slice; evidence reconstruction opens only after a session is in <code>SUBMITTED</code> status.</p>
                 ${
@@ -1926,10 +1936,14 @@ export async function stagingOrganizationSessionPageGet(
           }
         </section>
 
-        <section aria-labelledby="candidate-token-recovery-title" data-testid="staging-candidate-invitation-unavailable">
-          <h3 id="candidate-token-recovery-title">Candidate link &amp; token status</h3>
-          <p>Availability: <code>not_issued_in_staging</code></p>
-          <p role="status">No candidate invitation token or candidate workspace link is issued in the R2.15 internal staging slice. Candidate runtime execution and live AI-provider operations remain disabled.</p>
+        <section aria-labelledby="candidate-token-recovery-title" data-testid="staging-candidate-invitation-management">
+          <h3 id="candidate-token-recovery-title">Candidate invitation</h3>
+          ${
+            isRecruiterIssuedSession
+              ? `<p role="status">The issuing recruiter manages this candidate invitation, including recovery and revocation.</p>
+                 <p><a href="${safeHtml(invitationManagementUrl)}" data-testid="manage-candidate-invitation-link">Manage candidate invitation</a></p>`
+              : `<p role="status">Candidate invitation links are managed by the issuing recruiter. Contact them for access or a replacement link.</p>`
+          }
         </section>
         <p><a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a></p>
       </section>
@@ -2784,9 +2798,7 @@ function requiredInvitationExpiry(value: unknown): string {
   const timestamp = Date.parse(value);
   if (
     !Number.isFinite(timestamp) ||
-    new Date(timestamp).toISOString() !== value ||
-    timestamp <= Date.now() ||
-    timestamp > Date.now() + 30 * 24 * 60 * 60 * 1000
+    new Date(timestamp).toISOString() !== value
   ) {
     throw new StagingBadRequest();
   }
@@ -3861,7 +3873,8 @@ export async function stagingObservationsApiPost(
     ]);
     const { csrfHash } = requireOriginAndCsrf(request, body);
     const validation = validateCreateObservationInput(body);
-    if (!validation.valid || !validation.value) {
+    const validatedInput = validation.value;
+    if (!validation.valid || !validatedInput) {
       return Response.json(
         {
           error: {
@@ -3880,6 +3893,9 @@ export async function stagingObservationsApiPost(
       );
     }
 
+    const proofArgs = JSON.parse(
+      JSON.stringify({ organizationId, sessionId, input: validatedInput }),
+    ) as StagingProofArgs;
     return await withStagingBrowserSession(
       request,
       csrfHash,
@@ -3897,7 +3913,7 @@ export async function stagingObservationsApiPost(
           config,
           identity,
           'evidence.observation.create',
-          { organizationId, sessionId, input: validation.value },
+          proofArgs,
         )) as RawStagingObservation;
         const observation = mapStagingObservation(
           raw,
@@ -4042,7 +4058,8 @@ export async function stagingObservationApiPatch(
     allowedFields(body, ['csrf', 'expectedVersion', 'body']);
     const { csrfHash } = requireOriginAndCsrf(request, body);
     const validation = validateUpdateObservationInput(body);
-    if (!validation.valid || !validation.value) {
+    const validatedInput = validation.value;
+    if (!validation.valid || !validatedInput) {
       return Response.json(
         {
           error: {
@@ -4061,6 +4078,14 @@ export async function stagingObservationApiPatch(
       );
     }
 
+    const proofArgs = JSON.parse(
+      JSON.stringify({
+        organizationId,
+        sessionId,
+        observationId,
+        input: validatedInput,
+      }),
+    ) as StagingProofArgs;
     return await withStagingBrowserSession(
       request,
       csrfHash,
@@ -4078,7 +4103,7 @@ export async function stagingObservationApiPatch(
           config,
           identity,
           'evidence.observation.update',
-          { organizationId, sessionId, observationId, input: validation.value },
+          proofArgs,
         )) as RawStagingObservation;
         const observation = mapStagingObservation(
           raw,
@@ -4302,7 +4327,8 @@ async function stagingReviewPacketMutation(
       operation === 'review.packet.save'
         ? validateSaveDraftInput(body)
         : validateFinalizePacketInput(body);
-    if (!validation.valid || !validation.value) {
+    const validatedInput = validation.value;
+    if (!validation.valid || !validatedInput) {
       return Response.json(
         {
           error: {
@@ -4321,6 +4347,9 @@ async function stagingReviewPacketMutation(
       );
     }
 
+    const proofArgs = JSON.parse(
+      JSON.stringify({ organizationId, sessionId, input: validatedInput }),
+    ) as StagingProofArgs;
     return await withStagingBrowserSession(
       request,
       csrfHash,
@@ -4338,7 +4367,7 @@ async function stagingReviewPacketMutation(
           config,
           identity,
           operation,
-          { organizationId, sessionId, input: validation.value },
+          proofArgs,
         )) as { reviewPacket?: R210ReviewPacket } | null;
         if (!raw?.reviewPacket) throw new StagingUnavailable();
         return attachRefreshedCookie(

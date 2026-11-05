@@ -125,8 +125,9 @@ describe('authenticated staging boundary', () => {
       '/r27/api/organizations/org-1/sessions/session-1/review-packet',
     ]) {
       expect(
-        proxy(new NextRequest(`http://localhost${path}`, { method: 'PUT' }))
-          .headers.get('x-middleware-next'),
+        proxy(
+          new NextRequest(`http://localhost${path}`, { method: 'PUT' }),
+        ).headers.get('x-middleware-next'),
       ).toBe('1');
     }
 
@@ -155,11 +156,23 @@ describe('authenticated staging boundary', () => {
       ['/r26/api/candidate/session-1', 'PUT'],
       ['/r26/api/candidate/session-1', 'DELETE'],
       ['/api/candidate/sessions/example/terminal/exec', 'POST'],
-      ['/r27/api/organizations/org-1/sessions/session-1/observations', 'DELETE'],
-      ['/r27/api/organizations/org-1/sessions/session-1/observations/obs-1', 'POST'],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/observations',
+        'DELETE',
+      ],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/observations/obs-1',
+        'POST',
+      ],
       ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'POST'],
-      ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'DELETE'],
-      ['/r27/api/organizations/org-1/sessions/session-1/review-packet/finalize', 'PUT'],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/review-packet',
+        'DELETE',
+      ],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/review-packet/finalize',
+        'PUT',
+      ],
     ] as const) {
       const blocked = proxy(
         new NextRequest(`http://localhost${path}`, { method }),
