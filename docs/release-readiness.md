@@ -14,19 +14,19 @@ The accepted internal demo will use an expiring and revocable candidate link sho
 
 ## Current PR #5 evidence
 
-**Current source head:** `2bf59713e3d6ccd9c18e46db71d2de8dba467524`
+**Merged source head:** `2bf59713e3d6ccd9c18e46db71d2de8dba467524`
 
-**Pull request:** [#5](https://github.com/mohamedsaba/hirearchy/pull/5) remains open, draft, and unmerged at the current head. Its description still contains a superseded request to keep it draft pending founder acceptance. A PR metadata update returned 403; an issue-API fallback was rejected by automatic review. No workaround was used.
+**Pull request:** [#5](https://github.com/mohamedsaba/hirearchy/pull/5) is merged. Its source head is `2bf59713e3d6ccd9c18e46db71d2de8dba467524`; the protected merge commit is `1a919b40ab45f9788a8cf0f785d33449379b7098` (merged 2026-11-05). The normal merge included the accepted source head. `origin/main` now points to the merge commit; the old base was `580c286c9308645aba31a12f2a54d872552b69f3`.
 
-**Consolidation result:** internal acceptance covers this exact head as an authenticated internal staging foundation only. The native mark-ready mutation was denied by GitHub with `Resource not accessible by integration`; PR #5 remains draft. Merge was not attempted. The protected `main` base remains `580c286c9308645aba31a12f2a54d872552b69f3`; no synchronization or bypass occurred. The complete recruiter-to-candidate-to-evidence-to-human-review demo and all later release levels remain NO-GO.
+**Accepted scope:** authenticated internal staging foundation only. PR #5 did not integrate candidate activity or evaluator review writes. The complete recruiter-to-candidate-to-evidence-to-human-review demo and all later release levels remain NO-GO.
 
-The launcher safety correction and Node test naming fix are included in the current head. All four required checks passed on that exact commit:
+All four required checks passed on the exact merged source head before merge:
 
 - [Verify run 42081956863](https://github.com/mohamedsaba/hirearchy/actions/runs/42081956863) — format, lint, types, tests, build, and scenario-runtime checks passed.
 - [Executor PostgreSQL run 42081956900](https://github.com/mohamedsaba/hirearchy/actions/runs/42081956900) — dependency audit, PostgreSQL checks, real-Docker, authenticated staging/recovery, and recruiter-to-evidence checks passed.
-- Required contexts are green: `verify`, `dependency-audit`, `postgres`, and `real-docker`.
+- Required contexts: `verify`, `dependency-audit`, `postgres`, and `real-docker`.
 
-For the launcher correction, `node --test tests/staging/launcher-safety.mjs` passed 3/3. Syntax, Prettier, and diff checks passed; that focused check did not launch real Docker. The earlier [Verify run 42073541602](https://github.com/mohamedsaba/hirearchy/actions/runs/42073541602) and [Executor PostgreSQL run 42073541820](https://github.com/mohamedsaba/hirearchy/actions/runs/42073541820) apply only to `94a57bd71be52e5ef6bfafaee50c4d45a8198409` and are historical evidence, not checks for the current head. Branch metadata confirms four required contexts: verify, dependency-audit, postgres, and real-docker. Required-review protection details remain unknown because the repository API returned 403.
+The launcher safety correction and Node test naming fix are included in the merged source. `node --test tests/staging/launcher-safety.mjs` passed 3/3; syntax, Prettier, and diff checks passed. That focused check did not launch real Docker. The earlier [Verify run 42073541602](https://github.com/mohamedsaba/hirearchy/actions/runs/42073541602) and [Executor PostgreSQL run 42073541820](https://github.com/mohamedsaba/hirearchy/actions/runs/42073541820) apply only to `94a57bd71be52e5ef6bfafaee50c4d45a8198409` and are historical evidence.
 
 ### What PR #5 supports
 
