@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import {
+  APPROVED_BROWSER_EVIDENCE_FILES,
+  CANDIDATE_INVITATION_MASK_SELECTOR,
+  assertBrowserEvidenceDirectory,
+  assertNoSensitiveScreenshotContent,
+  prepareBrowserEvidenceDirectory,
+} from './browser-evidence-privacy.mjs';
 
 function loadPlaywright() {
   const require = createRequire(import.meta.url);
@@ -67,19 +73,91 @@ async function saveBrowserEvidence(
   filename,
   options = {},
 ) {
-  assert.match(
-    filename,
-    /^\d{2}-[a-z0-9-]+\.png$/,
-    'Browser evidence names must be fixed, numbered PNG files',
-  );
-  await mkdir(browserEvidenceDir, { recursive: true, mode: 0o700 });
-  await chmod(browserEvidenceDir, 0o700);
+  if (!APPROVED_BROWSER_EVIDENCE_FILES.includes(filename)) {
+    throw new Error(
+      'Browser evidence name is not in the approved eight-image set.',
+    );
+  }
+  const {
+    maskSelectors = [],
+    protectedValues = [],
+    maskableValues = [],
+    ...screenshotOptions
+  } = options;
+  const masks = [];
+  for (const selector of maskSelectors) {
+    const locator = page.locator(selector);
+    if ((await locator.count()) === 0) {
+      throw new Error(
+        'A required screenshot mask did not match a rendered field.',
+      );
+    }
+    masks.push(locator);
+  }
+  const surface = await page.evaluate((selectors) => {
+    const isRendered = (element) => {
+      if (element instanceof HTMLInputElement && element.type === 'hidden') {
+        return false;
+      }
+      if (element.getClientRects().length === 0) return false;
+      for (let current = element; current; current = current.parentElement) {
+        const style = window.getComputedStyle(current);
+        if (
+          current.hidden ||
+          style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          Number(style.opacity) === 0
+        ) {
+          return false;
+        }
+        if (current === document.body) break;
+      }
+      return true;
+    };
+    const coveredBy = (element) =>
+      selectors.find(
+        (selector) => element.matches(selector) || element.closest(selector),
+      ) ?? null;
+    const fields = Array.from(
+      document.querySelectorAll('input, textarea, [contenteditable="true"]'),
+    )
+      .filter(isRendered)
+      .map((element) => ({
+        value:
+          element instanceof HTMLInputElement ||
+          element instanceof HTMLTextAreaElement
+            ? element.value
+            : (element.innerText ?? element.textContent ?? ''),
+        maskSelector: coveredBy(element),
+      }));
+    const urls = Array.from(document.querySelectorAll('a[href], area[href]'))
+      .filter(isRendered)
+      .map((element) => ({
+        value: element.href,
+        maskSelector: coveredBy(element),
+      }));
+    return { text: document.body?.innerText ?? '', fields, urls };
+  }, maskSelectors);
+  const cookies = await page.context().cookies();
+  const pageUrl = new URL(page.url());
+  pageUrl.hash = '';
+  surface.urls.push({ value: pageUrl.toString(), maskSelector: null });
+  assertNoSensitiveScreenshotContent(surface, {
+    protectedValues: [
+      ...protectedValues,
+      ...cookies.map((cookie) => cookie.value),
+    ],
+    maskableValues,
+    maskSelectors,
+  });
+
   await page.screenshot({
     path: join(browserEvidenceDir, filename),
     type: 'png',
     fullPage: false,
     animations: 'disabled',
-    ...options,
+    ...screenshotOptions,
+    ...(masks.length > 0 ? { mask: masks } : {}),
   });
 }
 
@@ -106,6 +184,7 @@ export async function checkCandidateReviewBrowserAcceptance({
   appUrl: initialAppUrl,
   browserEvidenceDir,
   users,
+  screenshotSensitiveValues = [],
   organizationId,
   sessionId,
   stopApp,
@@ -129,6 +208,18 @@ export async function checkCandidateReviewBrowserAcceptance({
     'string',
     'A private browser evidence directory is required',
   );
+  if (
+    !Array.isArray(screenshotSensitiveValues) ||
+    screenshotSensitiveValues.length === 0 ||
+    screenshotSensitiveValues.some(
+      (value) => typeof value !== 'string' || value.length === 0,
+    )
+  ) {
+    throw new Error(
+      'Synthetic infrastructure secrets are required for screenshot privacy checks.',
+    );
+  }
+  await prepareBrowserEvidenceDirectory(browserEvidenceDir);
 
   const { chromium } = loadPlaywright();
   const browser = await chromium.launch({
@@ -256,6 +347,24 @@ export async function checkCandidateReviewBrowserAcceptance({
       candidateLinkIsSafe,
       'The active candidate link must be same-origin and target this session; token details are kept out of test output',
     );
+    const candidateUrlHash = new URL(candidateUrl).hash.slice(1);
+    let decodedCandidateBearer = candidateUrlHash;
+    try {
+      decodedCandidateBearer = decodeURIComponent(candidateUrlHash);
+    } catch {
+      // Keep the raw fragment for matching without exposing it in diagnostics.
+    }
+    const candidateMaskableValues = [
+      candidateUrl,
+      candidateUrlHash,
+      decodedCandidateBearer,
+    ].filter(
+      (value, index, values) => value && values.indexOf(value) === index,
+    );
+    const screenshotProtectedValues = [
+      ...screenshotSensitiveValues,
+      ...users.map((user) => user?.password).filter(Boolean),
+    ];
     assert.equal(
       await recruiterPage
         .locator('[data-testid="recovered-candidate-invitation-panel"] time')
@@ -283,11 +392,9 @@ export async function checkCandidateReviewBrowserAcceptance({
       browserEvidenceDir,
       '01-recruiter-invitation.png',
       {
-        mask: [
-          recruiterPage.locator(
-            '[data-testid="candidate-invitation-link"], [data-testid="candidate-workspace-link"]',
-          ),
-        ],
+        protectedValues: screenshotProtectedValues,
+        maskableValues: candidateMaskableValues,
+        maskSelectors: [CANDIDATE_INVITATION_MASK_SELECTOR],
         maskColor: '#111827',
       },
     );
@@ -345,6 +452,10 @@ export async function checkCandidateReviewBrowserAcceptance({
       candidatePage,
       browserEvidenceDir,
       '02-candidate-prestart.png',
+      {
+        protectedValues: screenshotProtectedValues,
+        maskableValues: candidateMaskableValues,
+      },
     );
     await assertNoHorizontalOverflow(candidatePage, 'Candidate prestart view');
 
@@ -528,6 +639,10 @@ export async function checkCandidateReviewBrowserAcceptance({
           candidatePage,
           browserEvidenceDir,
           `0${index + 3}-candidate-saved-${viewport.name}.png`,
+          {
+            protectedValues: screenshotProtectedValues,
+            maskableValues: candidateMaskableValues,
+          },
         );
       }
       await candidatePage.setViewportSize({ width: 1280, height: 900 });
@@ -670,6 +785,10 @@ export async function checkCandidateReviewBrowserAcceptance({
       candidatePage,
       browserEvidenceDir,
       '06-candidate-submitted.png',
+      {
+        protectedValues: screenshotProtectedValues,
+        maskableValues: candidateMaskableValues,
+      },
     );
     await candidatePage.unroute(`**/r26/api/candidate/${sessionId}`);
 
@@ -850,6 +969,10 @@ export async function checkCandidateReviewBrowserAcceptance({
       reviewerPage,
       browserEvidenceDir,
       '07-evaluator-chronology.png',
+      {
+        protectedValues: screenshotProtectedValues,
+        maskableValues: candidateMaskableValues,
+      },
     );
     await reviewerPage.setViewportSize({ width: 1280, height: 900 });
     const observationText = `Observed saved revisions for session ${sessionId.slice(-8)}.`;
@@ -952,6 +1075,10 @@ export async function checkCandidateReviewBrowserAcceptance({
       reviewerPage,
       browserEvidenceDir,
       '08-evaluator-finalized-review.png',
+      {
+        protectedValues: screenshotProtectedValues,
+        maskableValues: candidateMaskableValues,
+      },
     );
     assert.match(
       await reloadedReviewPacket
@@ -960,7 +1087,8 @@ export async function checkCandidateReviewBrowserAcceptance({
       /no automatic score or verdict/i,
     );
 
-    return { passed: true, sessionId };
+    await assertBrowserEvidenceDirectory(browserEvidenceDir);
+    return { passed: true, sessionId, appUrl };
   } finally {
     heldSaveResponseRelease?.();
     heldRevokeResponseRelease?.();
