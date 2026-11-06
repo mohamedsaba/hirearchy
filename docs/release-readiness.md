@@ -47,14 +47,16 @@ Source anchors: `apps/web/src/staging/server.ts`, `apps/web/src/staging/browser.
 
 ## Current PR #6 evidence
 
-**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The last verified public head is `02bba91a289f767754e0609db5cce0d35eb9f1f5`. The following workflow results apply to that head; a later path-limited source update is pending fresh CI and must not be treated as a passed or merged version.
+**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The current public head is `4b7085630ac3d0c992de192b05b5d1872f9da6c3`; fresh CI and the complete browser/recovery journey on a combined head remain pending.
 
-- [Verify run 42199508267](https://github.com/mohamedsaba/hirearchy/actions/runs/42199508267) failed on three legacy R2.14 execution-UI fixtures that lacked capability fields; 132 test files and 1,111 tests passed.
-- [Executor PostgreSQL run 42199507362](https://github.com/mohamedsaba/hirearchy/actions/runs/42199507362): dependency audit and PostgreSQL checks passed. The real-Docker job passed executor checks and built the production app, then failed on a PostgreSQL proof-security permission error (`42501`) before the browser journey.
-- The fixture correction at local source commit `958b4e9` passed its focused check 9/9. The SQL failure has safe fixed-label diagnostics for investigation, but its cause is unknown and the permission issue is not verified as fixed. Combined local privacy, candidate-key, and launcher checks passed 16/16; these checks do not replace CI or browser acceptance.
-- The eight-image privacy-guarded synthetic screenshot export is implemented locally, but GitHub rejected publishing the workflow-file change because the connected write credential lacks workflow scope. The path-limited PR update omits that workflow change. The founder chose to defer screenshot export/upload for now; no artifact was uploaded or visually reviewed. No further workflow authorization is pending, and this does not block core CI or browser acceptance.
+- [Verify run 42206841873](https://github.com/mohamedsaba/hirearchy/actions/runs/42206841873) passed on the current public head.
+- [Executor PostgreSQL run 42206841825](https://github.com/mohamedsaba/hirearchy/actions/runs/42206841825) passed PostgreSQL and dependency-audit checks. Its real-Docker job failed at test 15 before staging on a hidden pending-observation condition.
+- The observer-guard/resource-fixture correction at local source commit `dabfab5340e3f8e14f3a67cca02bf92b8f0c592d` passed the full restricted-executor check, 30/30, with no cancellations. This did not change the production timeout.
+- The membership fix (`5012e7e`) and exact-source test (`4b70856`) passed the 256 MiB PostgreSQL proof, including reviewer-target locks, denied writes, and runtime deny-list checks. These focused checks have not yet passed through full staging CI.
+- Earlier [Verify run 42199508267](https://github.com/mohamedsaba/hirearchy/actions/runs/42199508267) and [Executor run 42199507362](https://github.com/mohamedsaba/hirearchy/actions/runs/42199507362) are historical diagnostics. The first `session.open` permission failure (`42501`) on source head `9785273` is not the current public head's failure.
+- Screenshot export/upload remains deferred by the founder; no screenshots were uploaded or visually reviewed. A local build attempt was stopped by its 900 MiB memory cap after an out-of-memory result, so visual acceptance remains pending.
 
-Fresh CI on the next exact public SHA and the complete browser/recovery journey remain pending. Visual review of screenshots is also pending because export is deferred, but it is not a blocker for the core engineering checks. Do not infer success from the local focused checks or earlier PR #5 CI.
+Do not infer success from focused local checks, earlier PR #5 CI, or a different source head. All release levels remain NO-GO until the current source passes the complete browser, recovery, and visual acceptance gates.
 
 ## Reusable next integration seam
 
@@ -83,7 +85,7 @@ Run these on the accepted post-PR base, serially where they use Docker, PostgreS
 - `npm run test:staging` — authenticated persistent staging, browser acceptance, and recovery rehearsal. Extend this acceptance to cover the new candidate and review path before calling the demo complete.
 - `node scripts/test-r214-integration.mjs` — existing disposable PostgreSQL and real-Docker candidate/execution bridge; supplemental evidence only.
 
-No tests, servers, migrations, database reads, or deployment were run for this documentation refresh. The four green required contexts listed above are historical PR #5 evidence only. PR #6's current failed and pending checks are recorded in the section above. Hosting and any currently running external deployment were not verified in this review.
+No tests, servers, migrations, database reads, or deployment were run for this documentation refresh. The four green required contexts listed above are historical PR #5 evidence only. PR #6's current mixed and pending checks are recorded in the section above. Hosting and any currently running external deployment were not verified in this review.
 
 ## Blocking operational and product decisions
 
