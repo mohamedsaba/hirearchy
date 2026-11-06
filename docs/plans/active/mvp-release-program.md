@@ -86,6 +86,8 @@ Proposed client-safe DTO exports live in `apps/web/src/r26-candidate/contract.ts
 
 Only the assigned reviewer may inspect evidence for a submitted session. Preserve author-private observations, optimistic review-packet versioning, and existing review finalization semantics. Do not add evaluator scores, rankings, automatic verdicts, or candidate competence labels. Keep AI, code execution, and email disabled in the durable demo; do not enable disposable runtime flags.
 
+The staging verifier owner uses column-only `UPDATE(id)` privileges on assessment sessions and reviewer assignments to acquire the existing `FOR SHARE` locks. Narrow `FOR UPDATE` RLS policies require the verified organization, active reviewer assignment, and submitted session, with `WITH CHECK (false)` denying every row update. Runtime roles receive no added update privilege.
+
 ### Proposed backend ownership and DTO map
 
 - `apps/web/app/r23/api/organizations/[organizationId]/sessions/[sessionId]/candidate-token/route.ts`: add method-specific POST/GET/DELETE handlers. Export a client-safe `R23CandidateInvitationResponse` with `{ sessionId, status, expiresAt, candidatePath }` for POST/GET and `{ sessionId, status: "revoked" }` for DELETE. Reuse verified R23 recruiter identity, selected organization authorization, CSRF/Origin, and `Idempotency-Key`; do not call legacy SQLite token storage.

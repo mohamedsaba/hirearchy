@@ -20,6 +20,7 @@ import { captureRelease } from '../tests/staging/release.mjs';
 import {
   checkInstallerBoundary,
   checkProofBoundary,
+  checkReviewerRowLockBoundary,
 } from '../tests/staging/security.mjs';
 import { checkBrowserAcceptance } from '../tests/staging/browser.mjs';
 const name = `hirearchy-r215-${randomBytes(6).toString('hex')}`;
@@ -629,6 +630,14 @@ try {
     state,
     admin: rollback.admin,
     provisioned,
+  });
+  stage = 'reviewer row-lock privilege boundary';
+  await checkReviewerRowLockBoundary({
+    admin: rollback.admin,
+    organizationId,
+    sessionId: submittedSessionId,
+    reviewerPrincipalId: provisioned.users[1].principalId,
+    issuerPrincipalId: provisioned.users[0].principalId,
   });
   stage = 'browser acceptance workflow';
   const browserAcceptance = await checkBrowserAcceptance({

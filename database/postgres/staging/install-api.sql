@@ -345,6 +345,23 @@ CREATE POLICY staging_verifier_assessment_session_select
       )
     )
   );
+-- SELECT ... FOR SHARE needs UPDATE privilege; USING scopes locks and WITH CHECK rejects writes.
+DROP POLICY IF EXISTS staging_verifier_assessment_session_lock ON hirearchy.assessment_sessions;
+CREATE POLICY staging_verifier_assessment_session_lock
+  ON hirearchy.assessment_sessions
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND status = 'SUBMITTED'
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = assessment_sessions.organization_id
+        AND assignment.session_id = assessment_sessions.id
+        AND assignment.reviewer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+        AND assignment.revoked_at IS NULL
+    )
+  )
+  WITH CHECK (false);
 DROP POLICY IF EXISTS staging_verifier_assessment_session_insert ON hirearchy.assessment_sessions;
 CREATE POLICY staging_verifier_assessment_session_insert
   ON hirearchy.assessment_sessions
@@ -365,6 +382,22 @@ CREATE POLICY staging_verifier_reviewer_assignment_select
       OR assigned_by_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
     )
   );
+DROP POLICY IF EXISTS staging_verifier_reviewer_assignment_lock ON hirearchy.reviewer_assignments;
+CREATE POLICY staging_verifier_reviewer_assignment_lock
+  ON hirearchy.reviewer_assignments
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND reviewer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND revoked_at IS NULL
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = reviewer_assignments.organization_id
+        AND session.id = reviewer_assignments.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  )
+  WITH CHECK (false);
 DROP POLICY IF EXISTS staging_verifier_reviewer_assignment_insert ON hirearchy.reviewer_assignments;
 CREATE POLICY staging_verifier_reviewer_assignment_insert
   ON hirearchy.reviewer_assignments
@@ -789,6 +822,8 @@ GRANT SELECT, INSERT ON hirearchy.assessment_drafts,
 GRANT SELECT, INSERT ON hirearchy.assessment_sessions,
   hirearchy.reviewer_assignments,
   hirearchy.assessment_issuances TO staging_verifier_owner;
+GRANT UPDATE (id) ON hirearchy.assessment_sessions TO staging_verifier_owner;
+GRANT UPDATE (id) ON hirearchy.reviewer_assignments TO staging_verifier_owner;
 REVOKE ALL ON hirearchy.candidate_token_envelopes,
   hirearchy.candidate_invitation_requests,
   hirearchy.candidate_data_consents,
