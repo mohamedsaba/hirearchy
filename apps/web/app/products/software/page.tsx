@@ -2,24 +2,25 @@ import { Site, Kicker, Button, ContactCta } from '../../home/site';
 export const metadata = {
   title: 'Hirearchy Software',
   description:
-    'See engineering work in context through real tasks, a visible record and human review.',
+    'Internal demo in development for role-relevant engineering work, saved revisions and human review. AI assistance and code execution are unavailable.',
 };
 export default function SoftwarePage() {
   return (
     <Site dark>
       <section className="ct-page-hero ct-page-hero--dark ct-reveal">
-        <Kicker>Hirearchy Software / First product</Kicker>
+        <Kicker>Hirearchy Software / Internal demo in development</Kicker>
         <h1 className="ct-enter">
           See engineering
           <br />
           work in context.
         </h1>
         <p>
-          A candidate works on a real engineering task. Observable events become
-          an inspectable record. People decide what that evidence means.
+          The intended demo has candidates work on a role-relevant engineering
+          task, save workspace revisions and submit for assigned evaluator
+          review. AI assistance and code execution are unavailable.
         </p>
-        <Button href="/contact?topic=software" light>
-          Start a conversation
+        <Button href="#demo-limits" light>
+          See demo limits
         </Button>
       </section>
       <section className="ct-editorial ct-editorial--lilac ct-reveal">
@@ -27,20 +28,19 @@ export default function SoftwarePage() {
         <div className="ct-record-grid">
           <article className="ct-record ct-enter">
             <Kicker>Illustrative task</Kicker>
-            <h3>Investigate a failing test.</h3>
+            <h3>Make a focused engineering change.</h3>
             <p>
-              Read the existing code, make a change and check the result. The
-              problem provides the context; the candidate chooses how to
-              approach it.
+              Read the task and starter workspace, make and save a revision,
+              then submit the work. The assigned evaluator reviews the saved
+              record.
             </p>
           </article>
           <article className="ct-record ct-enter">
-            <Kicker>Illustrative record</Kicker>
+            <Kicker>Intended demo record</Kicker>
             <ol>
-              <li>Command executed</li>
-              <li>Workspace change captured</li>
-              <li>Test output recorded</li>
-              <li>Submission recorded</li>
+              <li>Workspace revision saved</li>
+              <li>Candidate submission recorded</li>
+              <li>Evaluator observation linked to its source</li>
             </ol>
           </article>
         </div>
@@ -63,8 +63,8 @@ export default function SoftwarePage() {
             <span>02</span>
             <h3>Inspectable sources.</h3>
             <p>
-              Open the underlying commands, changes and outputs. Keep
-              observations connected to their sources.
+              Review saved revisions and submitted work. Keep human observations
+              connected to the evidence they describe.
             </p>
           </li>
           <li className="ct-enter">
@@ -77,15 +77,20 @@ export default function SoftwarePage() {
           </li>
         </ol>
       </section>
-      <section className="ct-editorial ct-editorial--lilac ct-reveal">
-        <h2 className="ct-enter">AI use is part of the context.</h2>
+      <section
+        className="ct-editorial ct-editorial--lilac ct-reveal"
+        id="demo-limits"
+      >
+        <h2 className="ct-enter">What this internal demo supports</h2>
         <p className="ct-enter">
-          Observable AI interactions can be included in the record. Using AI
-          heavily, lightly or not at all carries no automatic positive or
-          negative judgement. People review the evidence in context.
+          The internal demo does not provide integrated AI assistance or run
+          candidate code. It is being prepared to record saved workspace
+          revisions and submissions for human review; it will not infer whether
+          code came from AI or any other source. Customer access is not open
+          yet.
         </p>
       </section>
-      <ContactCta title="Start with real engineering work." />
+      <ContactCta title="Customer access is not open yet." />
     </Site>
   );
 }

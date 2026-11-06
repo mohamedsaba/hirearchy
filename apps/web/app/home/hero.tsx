@@ -52,7 +52,7 @@ export function Hero() {
         <span>
           <strong>Hirearchy Software</strong>
           <ProductCaption action="Explore Software">
-            First product
+            Internal demo
           </ProductCaption>
         </span>
         <Arrow />
