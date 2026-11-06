@@ -188,7 +188,10 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [view, setView] = useState<R26CandidateGetResponse | null>(null);
   const viewRef = useRef<R26CandidateGetResponse | null>(null);
-  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [acceptedConsent, setAcceptedConsent] = useState<{
+    sessionId: string;
+    digest: string;
+  } | null>(null);
   const [selectedPathState, setSelectedPath] = useState('');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
@@ -206,6 +209,11 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [clockNow, setClockNow] = useState(0);
   const refreshInFlight = useRef(false);
+  const consentAccepted = Boolean(
+    view?.dataNotice &&
+    acceptedConsent?.sessionId === sessionId &&
+    acceptedConsent?.digest === view.dataNotice.digest,
+  );
 
   const [aiView, setAiView] = useState<R212CandidateAiView | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -382,10 +390,6 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     setLoadFailure('');
     setAccessUnavailable(false);
   }, []);
-
-  useEffect(() => {
-    setConsentAccepted(false);
-  }, [view?.dataNotice?.digest]);
 
   const callApi = useCallback(
     async (
@@ -1154,9 +1158,17 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                     <label>
                       <input
                         checked={consentAccepted}
-                        onChange={(event) =>
-                          setConsentAccepted(event.target.checked)
-                        }
+                        onChange={(event) => {
+                          const dataNotice = view.dataNotice;
+                          setAcceptedConsent(
+                            event.target.checked && dataNotice
+                              ? {
+                                  sessionId,
+                                  digest: dataNotice.digest,
+                                }
+                              : null,
+                          );
+                        }}
                         type="checkbox"
                       />{' '}
                       I acknowledge and agree to this data-use notice.

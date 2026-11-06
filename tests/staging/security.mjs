@@ -242,4 +242,56 @@ export async function checkInstallerBoundary(admin, installerSql) {
   } finally {
     await admin.query('DROP SCHEMA r23');
   }
+
+  const roleSettings = [
+    {
+      name: 'missing fixed search path',
+      configure: 'ALTER ROLE app_candidate_gateway RESET search_path',
+      restore: 'ALTER ROLE app_candidate_gateway SET search_path=pg_catalog',
+    },
+    {
+      name: 'additional search path',
+      configure:
+        'ALTER ROLE app_candidate_gateway SET search_path=pg_catalog,public',
+      restore: 'ALTER ROLE app_candidate_gateway SET search_path=pg_catalog',
+    },
+    {
+      name: 'caller identity setting',
+      configure:
+        "ALTER ROLE app_candidate_gateway SET app.current_principal_id='forged'",
+      restore:
+        'ALTER ROLE app_candidate_gateway RESET app.current_principal_id',
+    },
+    {
+      name: 'database-specific override',
+      configure:
+        'ALTER ROLE app_candidate_gateway IN DATABASE postgres SET search_path=pg_catalog',
+      restore:
+        'ALTER ROLE app_candidate_gateway IN DATABASE postgres RESET search_path',
+    },
+  ];
+  for (const setting of roleSettings) {
+    try {
+      await admin.query(setting.configure);
+      let roleFailure;
+      try {
+        await admin.query(installerSql);
+      } catch (error) {
+        roleFailure = error;
+      }
+      await admin.query('ROLLBACK');
+      assert(roleFailure, `installer must reject ${setting.name}`);
+      assert.match(
+        roleFailure.message,
+        /app_candidate_gateway is missing or unsafe/,
+      );
+      const { rows } = await admin.query(
+        "SELECT pg_catalog.to_regnamespace('staging') AS staging_schema, (SELECT pg_catalog.count(*)::pg_catalog.int4 FROM hirearchy.durable_candidate_installation) AS durable_markers",
+      );
+      assert.deepEqual(rows, [{ staging_schema: null, durable_markers: 0 }]);
+    } finally {
+      await admin.query('ROLLBACK');
+      await admin.query(setting.restore);
+    }
+  }
 }

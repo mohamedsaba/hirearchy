@@ -8,6 +8,17 @@ DECLARE
   gateway_role record;
   candidate_gateway_role record;
 BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_namespace
+    WHERE nspname = ANY (ARRAY[
+      'r23', 'r24', 'r25', 'r26', 'r27', 'r28', 'r29',
+      'r210', 'r211', 'r212', 'r213'
+    ]::pg_catalog.name[])
+  ) THEN
+    RAISE EXCEPTION 'Disposable R23-R213 fixture schema exists; staging API installation is refused';
+  END IF;
+
   SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,
          rolcreaterole, rolreplication, rolinherit, rolconfig
     INTO owner_role
@@ -48,8 +59,14 @@ BEGIN
      OR candidate_gateway_role.rolsuper OR candidate_gateway_role.rolbypassrls
      OR candidate_gateway_role.rolcreatedb OR candidate_gateway_role.rolcreaterole
      OR candidate_gateway_role.rolreplication OR candidate_gateway_role.rolinherit
-     OR candidate_gateway_role.rolconfig IS NOT NULL
-     OR EXISTS (SELECT 1 FROM pg_catalog.pg_db_role_setting WHERE setrole = candidate_gateway_role.oid)
+     OR candidate_gateway_role.rolconfig IS DISTINCT FROM
+       ARRAY['search_path=pg_catalog']::pg_catalog.text[]
+     OR EXISTS (
+       SELECT 1 FROM pg_catalog.pg_db_role_setting
+       WHERE setrole = candidate_gateway_role.oid
+         AND (setdatabase <> 0 OR setconfig IS DISTINCT FROM
+           ARRAY['search_path=pg_catalog']::pg_catalog.text[])
+     )
      OR EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members WHERE roleid = candidate_gateway_role.oid OR member = candidate_gateway_role.oid) THEN
     RAISE EXCEPTION 'app_candidate_gateway is missing or unsafe';
   END IF;
@@ -76,16 +93,6 @@ BEGIN
     RAISE EXCEPTION 'GoTrue auth.sessions is missing required identity or expiry columns';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_namespace
-    WHERE nspname = ANY (ARRAY[
-      'r23', 'r24', 'r25', 'r26', 'r27', 'r28', 'r29',
-      'r210', 'r211', 'r212', 'r213'
-    ]::pg_catalog.name[])
-  ) THEN
-    RAISE EXCEPTION 'Disposable R23-R213 fixture schema exists; staging API installation is refused';
-  END IF;
 
   IF pg_catalog.to_regclass('hirearchy.durable_candidate_installation') IS NULL
      OR pg_catalog.to_regprocedure('hirearchy.r26_candidate_lifecycle_ready()') IS NULL

@@ -1,7 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type {
   R23CandidateInvitationResponse,
   R23CandidateInvitationRevocationResponse,
@@ -35,6 +41,7 @@ export interface AssessmentBuilderClientProps {
   organizationId: string;
   csrfToken: string;
   initialDraft: R211AssessmentDraft | null;
+  initialIssuedSessionId?: string | null;
   reviewers?: AssessmentBuilderReviewerOption[];
   isAuthenticatedStaging?: boolean;
 }
@@ -116,10 +123,13 @@ export function AssessmentBuilderClient({
   organizationId,
   csrfToken,
   initialDraft,
+  initialIssuedSessionId = null,
   reviewers = [],
   isAuthenticatedStaging = false,
 }: AssessmentBuilderClientProps) {
-  const [stage, setStage] = useState<BuilderStage>('define');
+  const [stage, setStage] = useState<BuilderStage>(
+    isAuthenticatedStaging && initialIssuedSessionId ? 'issue' : 'define',
+  );
 
   // Draft state
   const [definitionId, setDefinitionId] = useState<string | undefined>(
@@ -206,20 +216,38 @@ export function AssessmentBuilderClient({
     reviewerPrincipalId?: string | null;
     candidateTokenIssued?: boolean;
   } | null>(null);
-  const [recoveredSessionId, setRecoveredSessionId] = useState<string | null>(
-    null,
-  );
-  const [recoveryContextError, setRecoveryContextError] = useState<
-    string | null
-  >(null);
+  const [recoveryContext, setRecoveryContext] = useState(() => {
+    let sessionId: string | null = null;
+    let error: string | null = null;
+    if (isAuthenticatedStaging && typeof initialIssuedSessionId === 'string') {
+      if (/^sess_[A-Za-z0-9_-]{1,128}$/.test(initialIssuedSessionId)) {
+        sessionId = initialIssuedSessionId;
+      } else {
+        error =
+          'This saved session reference is not valid. Return to the organization workspace and open an issued session again.';
+      }
+    }
+    return {
+      organizationId,
+      assessmentId: initialDraft?.definitionId ?? null,
+      sessionId,
+      error,
+    };
+  });
   const [issuanceError, setIssuanceError] = useState<string | null>(null);
-  const [invitation, setInvitation] =
-    useState<R23CandidateInvitationResponse | null>(null);
-  const [invitationLoading, setInvitationLoading] = useState(false);
-  const [invitationBusy, setInvitationBusy] = useState(false);
+  const [invitationState, setInvitationState] = useState<{
+    contextKey: string;
+    invitation: R23CandidateInvitationResponse;
+  } | null>(null);
+  const [invitationLoadedContextKey, setInvitationLoadedContextKey] =
+    useState('');
+  const [invitationBusyOperations, setInvitationBusyOperations] = useState<
+    { contextKey: string; operationId: number }[]
+  >([]);
   const [invitationExpiresAtInput, setInvitationExpiresAtInput] = useState('');
   const [invitationExpiryMin, setInvitationExpiryMin] = useState('');
   const [invitationExpiryMax, setInvitationExpiryMax] = useState('');
+  const invitationExpiryContextRef = useRef('');
   const [invitationExpiryError, setInvitationExpiryError] = useState<
     string | null
   >(null);
@@ -227,22 +255,121 @@ export function AssessmentBuilderClient({
   const [invitationMessage, setInvitationMessage] = useState<string | null>(
     null,
   );
-  const [invitationRetryPending, setInvitationRetryPending] = useState(false);
+  const [invitationRetryState, setInvitationRetryState] = useState<{
+    contextKey: string;
+    pending: boolean;
+  } | null>(null);
   const [invitationNeedsRefresh, setInvitationNeedsRefresh] = useState(false);
   const [invitationRefreshVersion, setInvitationRefreshVersion] = useState(0);
-  const invitationCreateIntentRef = useRef<InvitationCreateIntent | null>(null);
+  const invitationCreateIntentsRef = useRef(
+    new Map<string, InvitationCreateIntent>(),
+  );
   const [appOrigin, setAppOrigin] = useState('');
   const [invitationCopyMessage, setInvitationCopyMessage] = useState<
     string | null
   >(null);
+  const [invitationFeedbackContextKey, setInvitationFeedbackContextKey] =
+    useState('');
+  const invitationOperationIdRef = useRef(0);
 
   const [idempotencyKey] = useState(
     () => `r211-issue-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
   );
+  const currentAssessmentId = initialDraft?.definitionId ?? null;
+  const recoveryContextIsCurrent =
+    recoveryContext.organizationId === organizationId &&
+    recoveryContext.assessmentId === currentAssessmentId;
+  const recoveredSessionId = recoveryContextIsCurrent
+    ? recoveryContext.sessionId
+    : null;
+  const recoveryContextError = recoveryContextIsCurrent
+    ? recoveryContext.error
+    : null;
   const currentSessionId = issuedSession?.sessionId ?? recoveredSessionId;
-  const initialOrganizationIdRef = useRef(organizationId);
-  const initialAssessmentIdRef = useRef(initialDraft?.definitionId ?? null);
-  const invitationContextKey = `${organizationId}\u0000${initialDraft?.definitionId ?? ''}\u0000${currentSessionId ?? ''}`;
+  const invitationContextKey = `${organizationId}\u0000${currentAssessmentId ?? ''}\u0000${currentSessionId ?? ''}`;
+  const invitation =
+    invitationState?.contextKey === invitationContextKey
+      ? invitationState.invitation
+      : null;
+  const invitationFeedbackIsCurrent =
+    invitationFeedbackContextKey === invitationContextKey;
+  const currentInvitationError = invitationFeedbackIsCurrent
+    ? invitationError
+    : null;
+  const currentInvitationMessage = invitationFeedbackIsCurrent
+    ? invitationMessage
+    : null;
+  const currentInvitationCopyMessage = invitationFeedbackIsCurrent
+    ? invitationCopyMessage
+    : null;
+  const currentInvitationNeedsRefresh = invitationFeedbackIsCurrent
+    ? invitationNeedsRefresh
+    : false;
+  const currentInvitationRetryPending = invitationFeedbackIsCurrent
+    ? invitationRetryState?.contextKey === invitationContextKey &&
+      invitationRetryState.pending
+    : false;
+  const currentInvitationBusy = invitationFeedbackIsCurrent
+    ? invitationBusyOperations.some(
+        (operation) => operation.contextKey === invitationContextKey,
+      )
+    : false;
+  const invitationLoading = Boolean(
+    isAuthenticatedStaging &&
+    currentSessionId &&
+    invitationLoadedContextKey !== invitationContextKey,
+  );
+  const setInvitation = (value: R23CandidateInvitationResponse) =>
+    setInvitationState({ contextKey: invitationContextKey, invitation: value });
+  const beginInvitationOperation = (contextKey: string) => {
+    const operationId = ++invitationOperationIdRef.current;
+    setInvitationBusyOperations((current) => [
+      ...current,
+      { contextKey, operationId },
+    ]);
+    return operationId;
+  };
+  const finishInvitationOperation = (
+    contextKey: string,
+    operationId: number,
+  ) => {
+    setInvitationBusyOperations((current) =>
+      current.filter(
+        (operation) =>
+          operation.contextKey !== contextKey ||
+          operation.operationId !== operationId,
+      ),
+    );
+  };
+  const setInvitationRetryPendingForContext = (
+    contextKey: string,
+    pending: boolean,
+  ) => {
+    setInvitationRetryState((current) =>
+      pending
+        ? { contextKey, pending: true }
+        : current?.contextKey === contextKey
+          ? null
+          : current,
+    );
+  };
+  const initializeInvitationExpiry = useCallback(
+    (contextKey: string, expiresAt: string | null) => {
+      const now = new Date();
+      const defaultExpiry = new Date(
+        now.getTime() + defaultInvitationLifetimeMs,
+      );
+      const maxExpiry = new Date(now.getTime() + maxInvitationLifetimeMs);
+      setInvitationExpiryMin(toLocalDateTimeInput(now));
+      setInvitationExpiryMax(toLocalDateTimeInput(maxExpiry));
+      setInvitationExpiresAtInput(
+        toLocalDateTimeInput(expiresAt ? new Date(expiresAt) : defaultExpiry),
+      );
+      setInvitationExpiryError(null);
+      invitationExpiryContextRef.current = contextKey;
+    },
+    [],
+  );
   const invitationContextRef = useRef({
     key: invitationContextKey,
     generation: 0,
@@ -254,98 +381,15 @@ export function AssessmentBuilderClient({
       key: invitationContextKey,
       generation: invitationContextRef.current.generation + 1,
     };
-    setInvitationBusy(false);
   }, [invitationContextKey]);
 
   useEffect(() => {
-    const now = new Date();
-    const defaultExpiry = new Date(now.getTime() + defaultInvitationLifetimeMs);
-    const maxExpiry = new Date(now.getTime() + maxInvitationLifetimeMs);
-    setInvitationExpiryMin(toLocalDateTimeInput(now));
-    setInvitationExpiryMax(toLocalDateTimeInput(maxExpiry));
-    setInvitationExpiresAtInput(toLocalDateTimeInput(defaultExpiry));
-    setAppOrigin(window.location.origin);
-  }, []);
-
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const sessionId = url.searchParams.get('issuedSession');
-    if (initialOrganizationIdRef.current !== organizationId) {
-      initialOrganizationIdRef.current = organizationId;
-      url.searchParams.delete('issuedSession');
-      window.history.replaceState(window.history.state, '', url);
-      setRecoveredSessionId(null);
-      setRecoveryContextError(null);
-      setInvitation(null);
-      setInvitationError(null);
-      setInvitationMessage(null);
-      invitationCreateIntentRef.current = null;
-      setInvitationRetryPending(false);
-      setInvitationNeedsRefresh(false);
-      setStage('define');
-      return;
-    }
-    if (!isAuthenticatedStaging) {
-      if (sessionId) {
-        url.searchParams.delete('issuedSession');
-        window.history.replaceState(window.history.state, '', url);
-      }
-      setRecoveredSessionId(null);
-      setRecoveryContextError(null);
-      return;
-    }
-    if (!sessionId) {
-      setRecoveredSessionId(null);
-      setRecoveryContextError(null);
-      return;
-    }
-    if (!/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
-      setRecoveryContextError(
-        'This saved session reference is not valid. Return to the organization workspace and open an issued session again.',
-      );
-      setStage('issue');
-      return;
-    }
-    setRecoveryContextError(null);
-    if (!issuedSession) {
-      setRecoveredSessionId(sessionId);
-      setStage('issue');
-    }
-  }, [isAuthenticatedStaging, issuedSession, organizationId]);
-
-  useEffect(() => {
-    const assessmentId = initialDraft?.definitionId ?? null;
-    if (initialAssessmentIdRef.current === assessmentId) return;
-    initialAssessmentIdRef.current = assessmentId;
-    const url = new URL(window.location.href);
-    url.searchParams.delete('issuedSession');
-    window.history.replaceState(window.history.state, '', url);
-    setRecoveredSessionId(null);
-    setRecoveryContextError(null);
-    setInvitation(null);
-    setInvitationError(null);
-    setInvitationMessage(null);
-    invitationCreateIntentRef.current = null;
-    setInvitationRetryPending(false);
-    setInvitationNeedsRefresh(false);
-    setStage('define');
-  }, [initialDraft?.definitionId]);
-
-  useEffect(() => {
     const sessionId = currentSessionId;
-    if (!isAuthenticatedStaging || !sessionId) {
-      setInvitation(null);
-      setInvitationLoading(false);
-      return;
-    }
+    if (!isAuthenticatedStaging || !sessionId) return;
 
     let active = true;
+    const contextKey = invitationContextKey;
     const endpoint = `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`;
-    setInvitation(null);
-    setInvitationLoading(true);
-    setInvitationError(null);
-    setInvitationMessage(null);
-    setInvitationCopyMessage(null);
 
     void fetch(endpoint, {
       method: 'GET',
@@ -367,16 +411,45 @@ export function AssessmentBuilderClient({
           throw new Error('SESSION_MISMATCH');
         }
         if (active) {
-          setInvitation(result);
+          setInvitationState({ contextKey, invitation: result });
+          setInvitationFeedbackContextKey(contextKey);
           setInvitationNeedsRefresh(false);
-          if (result.status !== 'not_created') {
-            invitationCreateIntentRef.current = null;
-            setInvitationRetryPending(false);
+          setInvitationError(null);
+          setInvitationMessage(null);
+          setInvitationCopyMessage(null);
+          setInvitationExpiryError(null);
+          setAppOrigin(window.location.origin);
+          if (invitationExpiryContextRef.current !== contextKey) {
+            const unresolvedIntent =
+              invitationCreateIntentsRef.current.get(contextKey);
+            initializeInvitationExpiry(
+              contextKey,
+              result.status === 'not_created'
+                ? (unresolvedIntent?.expiresAt ?? null)
+                : result.expiresAt,
+            );
+          }
+          if (result.status === 'not_created') {
+            const unresolvedIntent =
+              invitationCreateIntentsRef.current.get(contextKey);
+            setInvitationRetryPendingForContext(
+              contextKey,
+              unresolvedIntent !== undefined,
+            );
+            if (unresolvedIntent) {
+              setInvitationExpiresAtInput(
+                toLocalDateTimeInput(new Date(unresolvedIntent.expiresAt)),
+              );
+            }
+          } else {
+            invitationCreateIntentsRef.current.delete(contextKey);
+            setInvitationRetryPendingForContext(contextKey, false);
           }
         }
       })
       .catch((error: unknown) => {
         if (active) {
+          setInvitationFeedbackContextKey(contextKey);
           setInvitationError(
             error instanceof Error && error.message === 'SESSION_UNAVAILABLE'
               ? 'This issued session is not available in this organization, or your access has changed. The assessment draft is preserved; no new session was issued.'
@@ -388,7 +461,7 @@ export function AssessmentBuilderClient({
         }
       })
       .finally(() => {
-        if (active) setInvitationLoading(false);
+        if (active) setInvitationLoadedContextKey(contextKey);
       });
 
     return () => {
@@ -396,8 +469,10 @@ export function AssessmentBuilderClient({
     };
   }, [
     currentSessionId,
+    invitationContextKey,
     invitationRefreshVersion,
     isAuthenticatedStaging,
+    initializeInvitationExpiry,
     organizationId,
   ]);
 
@@ -621,8 +696,12 @@ export function AssessmentBuilderClient({
         url.searchParams.set('issuedSession', data.sessionId);
         window.history.replaceState(window.history.state, '', url);
       }
-      setRecoveredSessionId(null);
-      setRecoveryContextError(null);
+      setRecoveryContext({
+        organizationId,
+        assessmentId: currentAssessmentId,
+        sessionId: null,
+        error: null,
+      });
 
       setIssuedSession({
         sessionId: data.sessionId,
@@ -653,13 +732,15 @@ export function AssessmentBuilderClient({
     const url = new URL(window.location.href);
     url.searchParams.delete('issuedSession');
     window.history.replaceState(window.history.state, '', url);
-    setRecoveredSessionId(null);
-    setRecoveryContextError(null);
-    setInvitation(null);
+    setRecoveryContext({
+      organizationId,
+      assessmentId: currentAssessmentId,
+      sessionId: null,
+      error: null,
+    });
     setInvitationError(null);
     setInvitationMessage(null);
-    invitationCreateIntentRef.current = null;
-    setInvitationRetryPending(false);
+    setInvitationFeedbackContextKey(invitationContextKey);
     setInvitationNeedsRefresh(false);
   };
 
@@ -670,6 +751,8 @@ export function AssessmentBuilderClient({
 
   const refreshInvitationStatus = () => {
     if (!currentSessionId) return;
+    setInvitationFeedbackContextKey(invitationContextKey);
+    setInvitationLoadedContextKey('');
     setInvitationNeedsRefresh(true);
     setInvitationRefreshVersion((version) => version + 1);
   };
@@ -681,8 +764,8 @@ export function AssessmentBuilderClient({
       invitation.status !== 'active' ||
       !invitation.expiresAt ||
       !invitation.candidatePath ||
-      invitationNeedsRefresh ||
-      invitationBusy
+      currentInvitationNeedsRefresh ||
+      currentInvitationBusy
     ) {
       return null;
     }
@@ -694,20 +777,21 @@ export function AssessmentBuilderClient({
     if (
       !isAuthenticatedStaging ||
       !sessionId ||
-      invitationBusy ||
+      currentInvitationBusy ||
       invitationLoading ||
       !invitation ||
       invitation.sessionId !== sessionId ||
-      (invitation.status !== 'not_created' && !invitationRetryPending)
+      (invitation.status !== 'not_created' && !currentInvitationRetryPending)
     ) {
       return;
     }
+    setInvitationFeedbackContextKey(invitationContextKey);
 
     const operationGeneration = invitationContextRef.current.generation;
     const isCurrentContext = () =>
       invitationContextRef.current.generation === operationGeneration;
 
-    let intent = invitationCreateIntentRef.current;
+    let intent = invitationCreateIntentsRef.current.get(invitationContextKey);
     if (!intent) {
       const expiryMs = Date.parse(invitationExpiresAtInput);
       const now = Date.now();
@@ -729,11 +813,12 @@ export function AssessmentBuilderClient({
         idempotencyKey: `r23-invitation-${crypto.randomUUID()}`,
         expiresAt: new Date(expiryMs).toISOString(),
       };
-      invitationCreateIntentRef.current = intent;
+      invitationCreateIntentsRef.current.set(invitationContextKey, intent);
     }
 
     const endpoint = `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`;
-    setInvitationBusy(true);
+    setInvitationFeedbackContextKey(invitationContextKey);
+    const busyOperationId = beginInvitationOperation(invitationContextKey);
     setInvitationError(null);
     setInvitationExpiryError(null);
     setInvitationMessage(null);
@@ -755,15 +840,15 @@ export function AssessmentBuilderClient({
 
       if (!response.ok) {
         if (response.status >= 500) {
-          setInvitationRetryPending(true);
+          setInvitationRetryPendingForContext(invitationContextKey, true);
           setInvitationError(
             'The invitation result could not be confirmed. Retry the same request or reload its status before sharing a link.',
           );
           return;
         }
 
-        invitationCreateIntentRef.current = null;
-        setInvitationRetryPending(false);
+        invitationCreateIntentsRef.current.delete(invitationContextKey);
+        setInvitationRetryPendingForContext(invitationContextKey, false);
         if (response.status === 400 || response.status === 422) {
           setInvitationNeedsRefresh(false);
           setInvitationExpiryError(
@@ -792,15 +877,15 @@ export function AssessmentBuilderClient({
       const result: R23CandidateInvitationResponse = await response.json();
       if (!isCurrentContext()) return;
       if (result.sessionId !== sessionId) {
-        setInvitationRetryPending(true);
+        setInvitationRetryPendingForContext(invitationContextKey, true);
         setInvitationError(
           'The invitation result could not be matched to this session. Reload its status before sharing a link.',
         );
         return;
       }
 
-      invitationCreateIntentRef.current = null;
-      setInvitationRetryPending(false);
+      invitationCreateIntentsRef.current.delete(invitationContextKey);
+      setInvitationRetryPendingForContext(invitationContextKey, false);
       setInvitation(result);
       if (
         result.status === 'active' &&
@@ -824,13 +909,13 @@ export function AssessmentBuilderClient({
       }
     } catch {
       if (isCurrentContext()) {
-        setInvitationRetryPending(true);
+        setInvitationRetryPendingForContext(invitationContextKey, true);
         setInvitationError(
           'The invitation result could not be confirmed. Retry the same request or reload its status before sharing a link.',
         );
       }
     } finally {
-      if (isCurrentContext()) setInvitationBusy(false);
+      finishInvitationOperation(invitationContextKey, busyOperationId);
     }
   };
 
@@ -841,7 +926,7 @@ export function AssessmentBuilderClient({
       !sessionId ||
       invitation?.status !== 'active' ||
       invitation.sessionId !== sessionId ||
-      invitationBusy
+      currentInvitationBusy
     ) {
       return;
     }
@@ -851,7 +936,8 @@ export function AssessmentBuilderClient({
       invitationContextRef.current.generation === operationGeneration;
 
     const endpoint = `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`;
-    setInvitationBusy(true);
+    setInvitationFeedbackContextKey(invitationContextKey);
+    const busyOperationId = beginInvitationOperation(invitationContextKey);
     setInvitationNeedsRefresh(true);
     setInvitationError(null);
     setInvitationMessage(null);
@@ -893,7 +979,7 @@ export function AssessmentBuilderClient({
         );
       }
     } finally {
-      if (isCurrentContext()) setInvitationBusy(false);
+      finishInvitationOperation(invitationContextKey, busyOperationId);
     }
   };
 
@@ -901,6 +987,7 @@ export function AssessmentBuilderClient({
     const operationGeneration = invitationContextRef.current.generation;
     const candidatePath = confirmedCandidatePathFor(currentSessionId);
     if (!candidatePath || !appOrigin) return;
+    setInvitationFeedbackContextKey(invitationContextKey);
 
     const invitationUrl = absoluteInvitationUrl(candidatePath, appOrigin);
     if (!invitationUrl) return;
@@ -1014,7 +1101,7 @@ export function AssessmentBuilderClient({
         {invitationLoading ? (
           <p role="status">Checking invitation status…</p>
         ) : null}
-        {invitationError ? (
+        {currentInvitationError ? (
           <div
             className="assessment-feedback assessment-feedback-error"
             role="alert"
@@ -1024,10 +1111,12 @@ export function AssessmentBuilderClient({
                 : 'candidate-invitation-error'
             }
           >
-            {invitationError}
+            {currentInvitationError}
           </div>
         ) : null}
-        {invitationMessage ? <p role="status">{invitationMessage}</p> : null}
+        {currentInvitationMessage ? (
+          <p role="status">{currentInvitationMessage}</p>
+        ) : null}
 
         {currentInvitation?.status === 'not_created' ? (
           <div>
@@ -1055,7 +1144,9 @@ export function AssessmentBuilderClient({
                     ? 'candidate-invitation-expiry-error'
                     : undefined
                 }
-                disabled={invitationBusy || invitationRetryPending}
+                disabled={
+                  currentInvitationBusy || currentInvitationRetryPending
+                }
                 onChange={(event) => {
                   setInvitationExpiresAtInput(event.target.value);
                   setInvitationExpiryError(null);
@@ -1072,15 +1163,16 @@ export function AssessmentBuilderClient({
               className="button button-primary"
               data-testid="candidate-invitation-create"
               disabled={
-                invitationBusy ||
+                currentInvitationBusy ||
                 invitationLoading ||
-                (invitationNeedsRefresh && !invitationRetryPending)
+                (currentInvitationNeedsRefresh &&
+                  !currentInvitationRetryPending)
               }
               onClick={() => void createCandidateInvitation()}
             >
-              {invitationBusy
+              {currentInvitationBusy
                 ? 'Creating invitation…'
-                : invitationRetryPending
+                : currentInvitationRetryPending
                   ? 'Retry invitation creation'
                   : 'Create candidate invitation'}
             </button>
@@ -1089,7 +1181,7 @@ export function AssessmentBuilderClient({
 
         {currentInvitation?.status === 'active' ? (
           <div>
-            {invitationNeedsRefresh ? (
+            {currentInvitationNeedsRefresh ? (
               <p role="status">
                 Invitation status is being confirmed. The link stays hidden
                 until confirmation.
@@ -1123,16 +1215,16 @@ export function AssessmentBuilderClient({
                   type="button"
                   className="button button-secondary"
                   data-testid="candidate-invitation-copy"
-                  disabled={invitationBusy}
+                  disabled={currentInvitationBusy}
                   onClick={() => void copyCandidateInvitation()}
                 >
                   Copy candidate link
                 </button>
-                {invitationCopyMessage ? (
-                  <p role="status">{invitationCopyMessage}</p>
+                {currentInvitationCopyMessage ? (
+                  <p role="status">{currentInvitationCopyMessage}</p>
                 ) : null}
               </>
-            ) : invitationNeedsRefresh ? null : (
+            ) : currentInvitationNeedsRefresh ? null : (
               <p role="alert">
                 The active invitation link could not be confirmed. Reload status
                 before sharing it.
@@ -1142,11 +1234,11 @@ export function AssessmentBuilderClient({
               type="button"
               className="button button-secondary"
               data-testid="candidate-invitation-revoke"
-              disabled={invitationBusy}
+              disabled={currentInvitationBusy}
               onClick={() => void revokeCandidateInvitation()}
               style={{ marginLeft: '8px' }}
             >
-              {invitationBusy ? 'Updating…' : 'Revoke candidate access'}
+              {currentInvitationBusy ? 'Updating…' : 'Revoke candidate access'}
             </button>
           </div>
         ) : null}
@@ -1173,12 +1265,14 @@ export function AssessmentBuilderClient({
           </p>
         ) : null}
 
-        {currentInvitation || invitationError || invitationNeedsRefresh ? (
+        {currentInvitation ||
+        currentInvitationError ||
+        currentInvitationNeedsRefresh ? (
           <button
             type="button"
             className="button button-secondary"
             data-testid="candidate-invitation-refresh"
-            disabled={invitationLoading || invitationBusy}
+            disabled={invitationLoading || currentInvitationBusy}
             onClick={refreshInvitationStatus}
           >
             Reload invitation status
