@@ -270,6 +270,26 @@ CREATE POLICY staging_verifier_membership_select
     )
   );
 
+-- SELECT ... FOR SHARE needs UPDATE privilege; limit it to the caller's active
+-- membership or the exact active reviewer selected by a validated issue request.
+DROP POLICY IF EXISTS staging_verifier_membership_lock ON hirearchy.organization_memberships;
+CREATE POLICY staging_verifier_membership_lock
+  ON hirearchy.organization_memberships
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND status = 'active'
+    AND revoked_at IS NULL
+    AND (
+      principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+      OR (
+        principal_id = NULLIF(pg_catalog.current_setting('staging.reviewer_principal_id', true), '')::pg_catalog.uuid
+        AND role = 'reviewer'
+      )
+    )
+  )
+  WITH CHECK (false);
+
 DROP POLICY IF EXISTS staging_verifier_assessment_definition_select ON hirearchy.assessment_definitions;
 CREATE POLICY staging_verifier_assessment_definition_select
   ON hirearchy.assessment_definitions
@@ -814,6 +834,7 @@ GRANT USAGE ON SCHEMA hirearchy TO staging_verifier_owner;
 GRANT SELECT ON hirearchy.application_principals,
   hirearchy.organization_memberships,
   hirearchy.staging_verification_keys TO staging_verifier_owner;
+GRANT UPDATE (id) ON hirearchy.organization_memberships TO staging_verifier_owner;
 GRANT SELECT, INSERT, DELETE ON hirearchy.staging_proof_nonces TO staging_verifier_owner;
 GRANT SELECT, INSERT, UPDATE (expires_at, revoked_at)
   ON hirearchy.staging_sessions TO staging_verifier_owner;
