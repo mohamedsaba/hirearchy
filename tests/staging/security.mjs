@@ -57,8 +57,10 @@ export async function checkProofBoundary(
     assert.match(predicate, /staging\.(principal_id|subject_id)/);
     if (policy.tablename !== 'application_principals')
       assert.match(predicate, /staging\.organization_id/);
-    if (policy.policyname === 'staging_verifier_assessment_session_lock')
+    if (policy.policyname === 'staging_verifier_assessment_session_lock') {
       assert.equal(policy.with_check, 'false');
+      assert.match(policy.qual, /staging\.session_id/);
+    }
   }
   const { rows: privileges } = await admin.query(
     "SELECT has_schema_privilege('app_evaluator','hirearchy','USAGE') AS evaluator,has_schema_privilege('r23_gateway','hirearchy','USAGE') AS gateway",
@@ -257,8 +259,10 @@ export async function checkReviewerRowLockBoundary({
       assert.equal(policy.with_check, 'false');
     }
     assert.match(policies[0].qual, /staging\.principal_id/);
+    assert.match(policies[0].qual, /staging\.session_id/);
     assert.match(policies[0].qual, /revoked_at IS NULL/);
     assert.match(policies[1].qual, /staging\.principal_id/);
+    assert.match(policies[1].qual, /staging\.session_id/);
     assert.match(policies[1].qual, /revoked_at IS NULL/);
 
     const { rows: privileges } = await admin.query(
@@ -312,13 +316,18 @@ export async function checkReviewerRowLockBoundary({
       organizationContext,
       principalContext,
       targetSessionId,
+      requestSessionContext = targetSessionId,
     ) {
       await admin.query('BEGIN');
       try {
         await admin.query('SET LOCAL ROLE staging_verifier_owner');
         await admin.query(
-          "SELECT pg_catalog.set_config('staging.organization_id',$1,true),pg_catalog.set_config('staging.principal_id',$2,true)",
-          [organizationContext ?? '', principalContext ?? ''],
+          "SELECT pg_catalog.set_config('staging.organization_id',$1,true),pg_catalog.set_config('staging.principal_id',$2,true),pg_catalog.set_config('staging.session_id',$3,true)",
+          [
+            organizationContext ?? '',
+            principalContext ?? '',
+            requestSessionContext ?? '',
+          ],
         );
         const sessionPlain = await admin.query(
           'SELECT status FROM hirearchy.assessment_sessions WHERE organization_id=$1::uuid AND id=$2',
@@ -378,6 +387,20 @@ export async function checkReviewerRowLockBoundary({
         assignmentLock: 0,
       },
     );
+    assert.deepEqual(
+      await lockCounts(
+        organizationId,
+        reviewerPrincipalId,
+        sessionId,
+        createdSessionId,
+      ),
+      {
+        sessionPlain: 1,
+        sessionLock: 0,
+        assignmentPlain: 1,
+        assignmentLock: 0,
+      },
+    );
     for (const [organizationContext, principalContext] of [
       [organizationId, null],
       [null, reviewerPrincipalId],
@@ -392,6 +415,15 @@ export async function checkReviewerRowLockBoundary({
         },
       );
     }
+    assert.deepEqual(
+      await lockCounts(organizationId, reviewerPrincipalId, sessionId, null),
+      {
+        sessionPlain: 1,
+        sessionLock: 0,
+        assignmentPlain: 1,
+        assignmentLock: 0,
+      },
+    );
     assert.deepEqual(
       await lockCounts(organizationId, reviewerPrincipalId, createdSessionId),
       {
@@ -416,8 +448,8 @@ export async function checkReviewerRowLockBoundary({
       try {
         await admin.query('SET LOCAL ROLE staging_verifier_owner');
         await admin.query(
-          "SELECT pg_catalog.set_config('staging.organization_id',$1,true),pg_catalog.set_config('staging.principal_id',$2,true)",
-          [organizationId, reviewerPrincipalId],
+          "SELECT pg_catalog.set_config('staging.organization_id',$1,true),pg_catalog.set_config('staging.principal_id',$2,true),pg_catalog.set_config('staging.session_id',$3,true)",
+          [organizationId, reviewerPrincipalId, sessionId],
         );
         await assert.rejects(admin.query(sql, parameters), {
           code: '42501',

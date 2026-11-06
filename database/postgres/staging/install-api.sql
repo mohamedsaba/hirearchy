@@ -352,6 +352,7 @@ CREATE POLICY staging_verifier_assessment_session_lock
   FOR UPDATE TO staging_verifier_owner
   USING (
     organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
     AND status = 'SUBMITTED'
     AND EXISTS (
       SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
@@ -388,6 +389,7 @@ CREATE POLICY staging_verifier_reviewer_assignment_lock
   FOR UPDATE TO staging_verifier_owner
   USING (
     organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
     AND reviewer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
     AND revoked_at IS NULL
     AND EXISTS (
