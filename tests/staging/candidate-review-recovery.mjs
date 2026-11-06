@@ -37,8 +37,16 @@ export async function candidateReviewRecoveryHash(
                 WHERE organization_id=$1::pg_catalog.uuid AND session_id=$2 AND expires_at IS NOT NULL AND revoked_at IS NOT NULL) AS revoked_invitation,
        EXISTS (SELECT 1 FROM hirearchy.evaluator_review_packets
                 WHERE organization_id=$1::pg_catalog.uuid AND session_id=$2 AND status='FINALIZED' AND finalized_at IS NOT NULL AND final_digest IS NOT NULL) AS finalized_packet,
-       EXISTS (SELECT 1 FROM hirearchy.evaluator_review_packet_history
-                WHERE organization_id=$1::pg_catalog.uuid AND session_id=$2 AND status='FINALIZED' AND final_digest IS NOT NULL) AS finalized_history`,
+       EXISTS (SELECT 1 FROM hirearchy.evaluator_review_packet_history AS prior
+               JOIN hirearchy.evaluator_review_packets AS packet
+                 ON packet.id = prior.packet_id
+                WHERE prior.organization_id=$1::pg_catalog.uuid
+                  AND prior.session_id=$2
+                  AND packet.status='FINALIZED'
+                  AND prior.status='DRAFT'
+                  AND prior.version=packet.version - 1
+                  AND prior.finalized_at IS NULL
+                  AND prior.final_digest IS NULL) AS prior_draft_history`,
     [organizationId, sessionId],
   );
   const state = rows[0];
@@ -49,7 +57,7 @@ export async function candidateReviewRecoveryHash(
     'submission',
     'revoked_invitation',
     'finalized_packet',
-    'finalized_history',
+    'prior_draft_history',
   ]) {
     if (!state[field]) {
       throw new Error(
