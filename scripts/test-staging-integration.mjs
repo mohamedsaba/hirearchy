@@ -8,7 +8,7 @@ import {
   randomUUID,
 } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -22,16 +22,28 @@ import {
   checkProofBoundary,
   checkReviewerRowLockBoundary,
 } from '../tests/staging/security.mjs';
-import { checkBrowserAcceptance } from '../tests/staging/browser.mjs';
+import {
+  checkBrowserAcceptance,
+  createActiveCandidateInvitationFingerprint,
+  verifyCandidateInvitationRecovery,
+} from '../tests/staging/browser.mjs';
+import {
+  candidateReviewApiHash,
+  candidateReviewRecoveryHash,
+} from '../tests/staging/candidate-review-recovery.mjs';
 const name = `hirearchy-r215-${randomBytes(6).toString('hex')}`;
 const image = 'hirearchy-staging-postgres-local';
 const authImage =
   'supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b';
 const password = randomBytes(32).toString('hex');
 const candidatePassword = randomBytes(32).toString('hex');
+const candidateTokenEncryptionKey = randomBytes(32).toString('base64');
 const jwtSecret = randomBytes(48).toString('hex');
 const issuer = 'https://auth.hirearchy.test/auth/v1';
 const keys = generateKeyPairSync('ed25519');
+const proofPrivateKey = keys.privateKey
+  .export({ format: 'der', type: 'pkcs8' })
+  .toString('base64');
 const artifact = new URL(`../.data/${name}/`, import.meta.url);
 const browserEvidence = new URL('browser-evidence/', artifact);
 const docker = (...args) =>
@@ -309,11 +321,8 @@ async function startApp(
         STAGING_AUTH_AUDIENCE: 'authenticated',
         STAGING_DATABASE_URL: `postgres://r23_gateway:${password}@127.0.0.1:${target.port}/postgres`,
         STAGING_CANDIDATE_DATABASE_URL: `postgres://app_candidate_gateway:${candidatePassword}@127.0.0.1:${target.port}/postgres`,
-        STAGING_PROOF_PRIVATE_KEY:
-          proofKey ??
-          keys.privateKey
-            .export({ format: 'der', type: 'pkcs8' })
-            .toString('base64'),
+        HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY: candidateTokenEncryptionKey,
+        STAGING_PROOF_PRIVATE_KEY: proofKey ?? proofPrivateKey,
         STAGING_PROOF_ISSUER: 'hirearchy-staging',
         STAGING_PROOF_AUDIENCE: 'hirearchy-postgres',
         STAGING_PROOF_KEY_ID: 'rehearsal-1',
@@ -564,9 +573,9 @@ try {
     JSON.stringify({
       jwtSecret,
       password,
-      privateKey: keys.privateKey
-        .export({ format: 'der', type: 'pkcs8' })
-        .toString('base64'),
+      candidatePassword,
+      candidateTokenEncryptionKey,
+      privateKey: proofPrivateKey,
     }),
     { mode: 0o600 },
   );
@@ -639,6 +648,40 @@ try {
     reviewerPrincipalId: provisioned.users[1].principalId,
     issuerPrincipalId: provisioned.users[0].principalId,
   });
+  stage = 'unstarted invitation encryption-recovery fixture';
+  const invitationRecruiter = await login(
+    rollbackAuth,
+    input.users[0].email,
+    userPassword,
+  );
+  await call(appUrl, invitationRecruiter, 'session.open', { organizationId });
+  const { assessmentId: invitationAssessmentId } = await call(
+    appUrl,
+    invitationRecruiter,
+    'assessment.create',
+    { organizationId, content: state.content },
+  );
+  await call(appUrl, invitationRecruiter, 'assessment.validate', {
+    organizationId,
+    assessmentId: invitationAssessmentId,
+  });
+  const { sessionId: activeInvitationSessionId } = await call(
+    appUrl,
+    invitationRecruiter,
+    'assessment.issue',
+    {
+      organizationId,
+      assessmentId: invitationAssessmentId,
+      reviewerPrincipalId: provisioned.users[1].principalId,
+    },
+  );
+  const activeInvitationFingerprint =
+    await createActiveCandidateInvitationFingerprint({
+      appUrl,
+      user: input.users[0],
+      organizationId,
+      sessionId: activeInvitationSessionId,
+    });
   stage = 'browser acceptance workflow';
   const browserAcceptance = await checkBrowserAcceptance({
     appUrl,
@@ -653,14 +696,161 @@ try {
     authUrl: rollbackAuth,
     submittedSessionId,
     browserEvidenceDir: browserEvidence.pathname,
+    screenshotSensitiveValues: [
+      password,
+      candidatePassword,
+      userPassword,
+      jwtSecret,
+      proofPrivateKey,
+      candidateTokenEncryptionKey,
+    ],
   });
   appUrl = browserAcceptance.appUrl;
+  const reviewedSessionId = browserAcceptance.reviewedSessionId;
+  assert.equal(
+    reviewedSessionId,
+    browserAcceptance.newlyIssuedSessionId,
+    'The browser flow must return the reviewed session ID',
+  );
+  stage = 'candidate-review recovery snapshot assertions';
+  const originalCandidateReviewHash = await candidateReviewRecoveryHash(
+    rollback.admin,
+    organizationId,
+    reviewedSessionId,
+  );
+  const baselineRecruiter = await login(
+    rollbackAuth,
+    input.users[0].email,
+    userPassword,
+  );
+  const baselineReviewer = await login(
+    rollbackAuth,
+    input.users[1].email,
+    userPassword,
+  );
+  await call(appUrl, baselineRecruiter, 'session.open', { organizationId });
+  await call(appUrl, baselineReviewer, 'session.open', { organizationId });
+  const originalEvidence = await call(
+    appUrl,
+    baselineReviewer,
+    'evidence.read',
+    {
+      organizationId,
+      sessionId: reviewedSessionId,
+    },
+  );
+  const originalReview = await call(appUrl, baselineReviewer, 'review.read', {
+    organizationId,
+    sessionId: reviewedSessionId,
+  });
+  const originalReviewerReadHash = candidateReviewApiHash(
+    originalEvidence,
+    originalReview,
+  );
+
+  stage = 'candidate-review backup and independent restore';
+  await stopApp();
+  const candidateReviewDump = execFileSync(
+    'docker',
+    [
+      'exec',
+      rollback.container,
+      'pg_dump',
+      '-U',
+      'postgres',
+      '-Fc',
+      'postgres',
+    ],
+    { maxBuffer: 32 * 1024 * 1024 },
+  );
+  const candidateReviewDumpPath = new URL(
+    `candidate-review-${randomBytes(6).toString('hex')}.dump`,
+    artifact,
+  );
+  const candidateReviewDumpDigest = createHash('sha256')
+    .update(candidateReviewDump)
+    .digest('hex');
+  await writeFile(candidateReviewDumpPath, candidateReviewDump, {
+    mode: 0o600,
+    flag: 'wx',
+  });
+  await chmod(candidateReviewDumpPath, 0o600);
+  const savedCandidateReviewDump = await readFile(candidateReviewDumpPath);
+  if (
+    !savedCandidateReviewDump.equals(candidateReviewDump) ||
+    createHash('sha256').update(savedCandidateReviewDump).digest('hex') !==
+      candidateReviewDumpDigest
+  ) {
+    throw new Error('Saved candidate-review snapshot failed byte verification');
+  }
+  const candidateReviewRecovery = await restore(
+    savedCandidateReviewDump,
+    'candidate-review-recovery',
+  );
+  const candidateReviewAuth = await auth(
+    candidateReviewRecovery,
+    'candidate-review-recovery',
+  );
+  appUrl = await startApp(
+    candidateReviewRecovery,
+    candidateReviewAuth,
+    undefined,
+    restoredRelease,
+  );
+  const recoveredRecruiter = await login(
+    candidateReviewAuth,
+    input.users[0].email,
+    userPassword,
+  );
+  const recoveredReviewer = await login(
+    candidateReviewAuth,
+    input.users[1].email,
+    userPassword,
+  );
+  await call(appUrl, recoveredRecruiter, 'session.open', { organizationId });
+  await call(appUrl, recoveredReviewer, 'session.open', { organizationId });
+  const recoveredEvidence = await call(
+    appUrl,
+    recoveredReviewer,
+    'evidence.read',
+    { organizationId, sessionId: reviewedSessionId },
+  );
+  const recoveredReview = await call(appUrl, recoveredReviewer, 'review.read', {
+    organizationId,
+    sessionId: reviewedSessionId,
+  });
+  if (
+    candidateReviewApiHash(recoveredEvidence, recoveredReview) !==
+    originalReviewerReadHash
+  ) {
+    throw new Error(
+      'Authorized reviewer evidence/review changed after restore',
+    );
+  }
+  const recoveredCandidateReviewHash = await candidateReviewRecoveryHash(
+    candidateReviewRecovery.admin,
+    organizationId,
+    reviewedSessionId,
+  );
+  if (recoveredCandidateReviewHash !== originalCandidateReviewHash) {
+    throw new Error('Candidate-review database rows changed after restore');
+  }
+  await verifyCandidateInvitationRecovery({
+    appUrl,
+    user: input.users[0],
+    organizationId,
+    activeSessionId: activeInvitationSessionId,
+    revokedSessionId: reviewedSessionId,
+    expectedActiveFingerprint: activeInvitationFingerprint,
+  });
   await writeFile(
     new URL('result.json', artifact),
     JSON.stringify(
       {
         passed: true,
         image: docker('image', 'inspect', image, '--format', '{{.Id}}'),
+        recovery:
+          'The initial journey and completed candidate/reviewer workflow were independently restored from PostgreSQL snapshots; the protected candidate invitation key remained stable.',
         limitation:
           'Failed signing-key configuration and corrupt production artifact rolled back to retained release archive and matching snapshot; arbitrary schema downgrade is not supported.',
       },
@@ -669,7 +859,7 @@ try {
     ),
   );
   console.log(
-    `Persistent staging journey/restart/restore passed. Private recovery artifacts: ${artifact.pathname}`,
+    `Persistent staging journey and candidate-review recovery passed. Private recovery artifacts: ${artifact.pathname}`,
   );
 } catch (error) {
   await writeFile(

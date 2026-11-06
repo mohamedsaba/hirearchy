@@ -17,6 +17,181 @@ function loadPlaywright() {
   throw new Error('Unable to resolve Playwright module');
 }
 
+async function signInAndSelectOrganization(page, appUrl, user, organizationId) {
+  const organization = organizationId.toLowerCase();
+  await page.goto(`${appUrl}/r23/login`);
+  await page.waitForLoadState('domcontentloaded');
+  await page.locator('input[name="email"]').fill(user.email);
+  await page.locator('input[name="password"]').fill(user.password);
+  await page.locator('button[type="submit"]').click();
+  await page.waitForURL('**/r23/organizations');
+  await page.waitForLoadState('domcontentloaded');
+
+  const selectForm = page.locator('form').filter({
+    has: page.locator(`input[value="${organization}"]`),
+  });
+  assert.ok(
+    (await selectForm.count()) > 0,
+    'Fresh recruiter login must include the authorized organization',
+  );
+  await selectForm.locator('button[type="submit"]').click();
+  await page.waitForURL(`**/r23/organizations/${organization}`);
+  await page.waitForLoadState('domcontentloaded');
+}
+
+async function withRecruiterPage({ appUrl, user, organizationId }, callback) {
+  const { chromium } = loadPlaywright();
+  const browser = await chromium.launch({
+    headless: true,
+    ...(process.env.R23_CHROMIUM_PATH
+      ? { executablePath: process.env.R23_CHROMIUM_PATH }
+      : {}),
+  });
+  let context;
+  try {
+    context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await signInAndSelectOrganization(page, appUrl, user, organizationId);
+    return await callback(page);
+  } finally {
+    await context?.close();
+    await browser.close();
+  }
+}
+
+async function readCandidateInvitationStatus(page, organizationId, sessionId) {
+  return page.evaluate(
+    async ({ organization, session }) => {
+      const response = await fetch(
+        `/r23/api/organizations/${encodeURIComponent(organization)}/sessions/${encodeURIComponent(session)}/candidate-token`,
+        { method: 'GET', cache: 'no-store' },
+      );
+      return { status: response.status, body: await response.json() };
+    },
+    { organization: organizationId, session: sessionId },
+  );
+}
+
+function candidateInvitationFingerprint(candidatePath, expiresAt, sessionId) {
+  if (
+    typeof candidatePath !== 'string' ||
+    !candidatePath.startsWith(`/r26/candidate/${sessionId}#`) ||
+    typeof expiresAt !== 'string' ||
+    !Number.isFinite(Date.parse(expiresAt))
+  ) {
+    throw new Error('Active candidate invitation response is incomplete');
+  }
+  return createHash('sha256')
+    .update(candidatePath, 'utf8')
+    .update('\0')
+    .update(expiresAt, 'utf8')
+    .digest('hex');
+}
+
+export async function createActiveCandidateInvitationFingerprint({
+  appUrl,
+  user,
+  organizationId,
+  sessionId,
+}) {
+  return withRecruiterPage({ appUrl, user, organizationId }, async (page) => {
+    const builderUrl =
+      `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder` +
+      `?issuedSession=${encodeURIComponent(sessionId)}`;
+    await page.goto(builderUrl);
+    await page.getByTestId('recovered-session-id').waitFor({
+      timeout: 20_000,
+    });
+    assert.equal(
+      (await page.getByTestId('recovered-session-id').textContent()).trim(),
+      sessionId,
+      'Recovered issued session must match the active invitation fixture',
+    );
+    await page.getByTestId('candidate-invitation-create').click();
+    await page.getByTestId('candidate-invitation-link').waitFor({
+      timeout: 20_000,
+    });
+    const result = await readCandidateInvitationStatus(
+      page,
+      organizationId,
+      sessionId,
+    );
+    assert.equal(result.status, 200, 'Invitation status GET must succeed');
+    assert.equal(result.body?.sessionId, sessionId);
+    assert.equal(result.body?.status, 'active');
+    return candidateInvitationFingerprint(
+      result.body?.candidatePath,
+      result.body?.expiresAt,
+      sessionId,
+    );
+  });
+}
+
+export async function verifyCandidateInvitationRecovery({
+  appUrl,
+  user,
+  organizationId,
+  activeSessionId,
+  revokedSessionId,
+  expectedActiveFingerprint,
+}) {
+  return withRecruiterPage({ appUrl, user, organizationId }, async (page) => {
+    const builderBase = `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder`;
+    await page.goto(
+      `${builderBase}?issuedSession=${encodeURIComponent(activeSessionId)}`,
+    );
+    await page.getByTestId('recovered-session-id').waitFor({
+      timeout: 20_000,
+    });
+    const activeResult = await readCandidateInvitationStatus(
+      page,
+      organizationId,
+      activeSessionId,
+    );
+    assert.equal(
+      activeResult.status,
+      200,
+      'Invitation status GET must succeed',
+    );
+    assert.equal(activeResult.body?.sessionId, activeSessionId);
+    assert.equal(activeResult.body?.status, 'active');
+    const recoveredFingerprint = candidateInvitationFingerprint(
+      activeResult.body?.candidatePath,
+      activeResult.body?.expiresAt,
+      activeSessionId,
+    );
+    if (recoveredFingerprint !== expectedActiveFingerprint) {
+      throw new Error('Recovered active invitation fingerprint changed');
+    }
+
+    await page.goto(
+      `${builderBase}?issuedSession=${encodeURIComponent(revokedSessionId)}`,
+    );
+    await page.getByTestId('recovered-session-id').waitFor({
+      timeout: 20_000,
+    });
+    const revokedResult = await readCandidateInvitationStatus(
+      page,
+      organizationId,
+      revokedSessionId,
+    );
+    assert.equal(
+      revokedResult.status,
+      200,
+      'Invitation status GET must succeed',
+    );
+    assert.equal(revokedResult.body?.sessionId, revokedSessionId);
+    assert.equal(revokedResult.body?.status, 'revoked');
+    if (revokedResult.body?.candidatePath !== null) {
+      throw new Error('Recovered revoked invitation returned a candidate path');
+    }
+    return true;
+  });
+}
+
 async function assertExpiredInvitationReplay({
   admin,
   page,
@@ -241,6 +416,7 @@ export async function checkBrowserAcceptance({
   authUrl,
   submittedSessionId,
   browserEvidenceDir,
+  screenshotSensitiveValues,
 }) {
   let appUrl = initialAppUrl;
   const { chromium } = loadPlaywright();
@@ -1000,6 +1176,7 @@ export async function checkBrowserAcceptance({
       startApp: captureStartApp,
       source,
       authUrl,
+      screenshotSensitiveValues,
     });
     assert.equal(candidateReview.passed, true);
     appUrl =
@@ -1021,6 +1198,7 @@ export async function checkBrowserAcceptance({
     return {
       passed: true,
       newlyIssuedSessionId,
+      reviewedSessionId,
       appUrl,
     };
   } finally {

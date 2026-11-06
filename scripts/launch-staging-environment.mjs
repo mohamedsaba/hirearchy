@@ -6,13 +6,28 @@ import {
   randomBytes,
   createHmac,
 } from 'node:crypto';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  open as openFile,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
-const dataDir = join(rootDir, '.data', 'local-staging');
+const dataRoot = join(rootDir, '.data');
+const dataDir = join(dataRoot, 'local-staging');
+const candidateTokenEncryptionKeyPath = join(
+  dataDir,
+  'candidate-token-encryption.key',
+);
+const candidateTokenEncryptionKeyVariable =
+  'HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY';
 
 const networkName = 'hirearchy-local-staging-net';
 const pgContainer = 'hirearchy-local-staging-pg';
@@ -126,11 +141,163 @@ async function sqlFile(relativePath) {
   return readFile(join(rootDir, relativePath), 'utf8');
 }
 
+async function ensureCandidateKeyDirectory() {
+  await mkdir(dataRoot, { recursive: true, mode: 0o700 });
+  const rootStat = await lstat(dataRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new Error('Refusing unsafe local staging data directory.');
+  }
+  if (
+    typeof process.getuid === 'function' &&
+    rootStat.uid !== process.getuid()
+  ) {
+    throw new Error(
+      'Refusing local staging data directory owned by another user.',
+    );
+  }
+
+  await mkdir(dataDir, { recursive: true, mode: 0o700 });
+  const directoryStat = await lstat(dataDir);
+  if (
+    !directoryStat.isDirectory() ||
+    directoryStat.isSymbolicLink() ||
+    (directoryStat.mode & 0o077) !== 0 ||
+    (typeof process.getuid === 'function' &&
+      directoryStat.uid !== process.getuid())
+  ) {
+    throw new Error('Refusing unprotected local candidate-key directory.');
+  }
+}
+
+function validateCandidateTokenEncryptionKey(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^[A-Za-z0-9+/]{43}=$/.test(value) ||
+    Buffer.from(value, 'base64').length !== 32 ||
+    Buffer.from(value, 'base64').toString('base64') !== value
+  ) {
+    throw new Error(
+      `${candidateTokenEncryptionKeyVariable} must be canonical base64 for exactly 32 bytes.`,
+    );
+  }
+  return value;
+}
+
+async function readStoredCandidateTokenEncryptionKey() {
+  if (typeof fsConstants.O_NOFOLLOW !== 'number') {
+    throw new Error(
+      'Local candidate-key storage requires no-follow file opens.',
+    );
+  }
+  let handle;
+  try {
+    handle = await openFile(
+      candidateTokenEncryptionKeyPath,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+    );
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw new Error('Stored local candidate token encryption key is unsafe.');
+  }
+  try {
+    const fileStat = await handle.stat();
+    if (
+      !fileStat.isFile() ||
+      (fileStat.mode & 0o777) !== 0o600 ||
+      (typeof process.getuid === 'function' &&
+        fileStat.uid !== process.getuid())
+    ) {
+      throw new Error(
+        'Stored local candidate token encryption key is unprotected.',
+      );
+    }
+    const contents = await handle.readFile({ encoding: 'utf8' });
+    const value = contents.endsWith('\n') ? contents.slice(0, -1) : contents;
+    if (value.includes('\n') || value.includes('\r')) {
+      throw new Error(
+        'Stored local candidate token encryption key is invalid.',
+      );
+    }
+    return validateCandidateTokenEncryptionKey(value);
+  } finally {
+    await handle.close();
+  }
+}
+
+async function storeCandidateTokenEncryptionKey(value) {
+  let handle;
+  try {
+    handle = await openFile(
+      candidateTokenEncryptionKeyPath,
+      fsConstants.O_WRONLY |
+        fsConstants.O_CREAT |
+        fsConstants.O_EXCL |
+        fsConstants.O_NOFOLLOW,
+      0o600,
+    );
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      const existing = await readStoredCandidateTokenEncryptionKey();
+      if (existing === value) return existing;
+      throw new Error(
+        'Local candidate token encryption key changed during setup.',
+      );
+    }
+    throw new Error('Unable to create protected local candidate token key.');
+  }
+  try {
+    await handle.chmod(0o600);
+    await handle.writeFile(`${value}\n`, { encoding: 'utf8' });
+    await handle.sync();
+    const fileStat = await handle.stat();
+    if (
+      !fileStat.isFile() ||
+      (fileStat.mode & 0o777) !== 0o600 ||
+      (typeof process.getuid === 'function' &&
+        fileStat.uid !== process.getuid())
+    ) {
+      throw new Error('Created local candidate token key is unprotected.');
+    }
+    return value;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function loadOrCreateCandidateTokenEncryptionKey(adminClient) {
+  const existing = await readStoredCandidateTokenEncryptionKey();
+  const configured = process.env[candidateTokenEncryptionKeyVariable];
+  if (existing !== null) {
+    if (
+      configured !== undefined &&
+      validateCandidateTokenEncryptionKey(configured) !== existing
+    ) {
+      throw new Error(
+        'Configured candidate token encryption key does not match the protected local key.',
+      );
+    }
+    return existing;
+  }
+
+  const { rows } = await adminClient.query(
+    'SELECT EXISTS (SELECT 1 FROM hirearchy.candidate_token_envelopes) AS has_envelopes',
+  );
+  if (rows[0].has_envelopes) {
+    throw new Error(
+      'Candidate token encryption key is missing while encrypted invitations exist; restore the original protected key before starting.',
+    );
+  }
+  const value = validateCandidateTokenEncryptionKey(
+    configured ?? randomBytes(32).toString('base64'),
+  );
+  return storeCandidateTokenEncryptionKey(value);
+}
+
 await preflightResources();
 const { Client } = await import('pg');
 const { applyMigrations } = await import('../database/postgres/migrate.mjs');
 const { provisionStaging } = await import('./provision-staging.mjs');
-await mkdir(dataDir, { recursive: true, mode: 0o700 });
+await ensureCandidateKeyDirectory();
 
 console.log('Creating Docker network...');
 docker('network', 'create', networkName);
@@ -213,6 +380,8 @@ const migratorClient = new Client({
 await migratorClient.connect();
 await applyMigrations(migratorClient);
 await migratorClient.end();
+const candidateTokenEncryptionKey =
+  await loadOrCreateCandidateTokenEncryptionKey(adminClient);
 
 console.log('Creating auth roles...');
 await adminClient.query(
@@ -343,6 +512,7 @@ const appEnv = {
   STAGING_AUTH_AUDIENCE: 'authenticated',
   STAGING_DATABASE_URL: `postgres://r23_gateway:${postgresPassword}@127.0.0.1:${pgPort}/postgres`,
   STAGING_CANDIDATE_DATABASE_URL: `postgres://app_candidate_gateway:${candidatePassword}@127.0.0.1:${pgPort}/postgres`,
+  HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY: candidateTokenEncryptionKey,
   STAGING_PROOF_PRIVATE_KEY: keys.privateKey
     .export({ format: 'der', type: 'pkcs8' })
     .toString('base64'),
