@@ -67,6 +67,9 @@ describe('authenticated staging boundary', () => {
       '/r23/api/organizations/org-1/sessions',
       '/r23/api/organizations/org-1/sessions/session-1',
       '/r23/api/organizations/org-1/sessions/session-1/assignments',
+      '/r23/api/organizations/org-1/sessions/session-1/candidate-token',
+      '/r26/candidate/session-1',
+      '/r26/api/candidate/session-1',
       '/r27/organizations/org-1/sessions/session-1',
       '/r27/api/organizations/org-1/sessions/session-1/evidence',
       '/r27/api/organizations/org-1/sessions/session-1/evidence/revisions/rev-1',
@@ -83,6 +86,18 @@ describe('authenticated staging boundary', () => {
       ).toBe('1');
     }
 
+    // Candidate page and main candidate API are available only on read methods.
+    for (const [path, method] of [
+      ['/r26/candidate/session-1', 'HEAD'],
+      ['/r26/api/candidate/session-1', 'HEAD'],
+    ] as const) {
+      expect(
+        proxy(
+          new NextRequest(`http://localhost${path}`, { method }),
+        ).headers.get('x-middleware-next'),
+      ).toBe('1');
+    }
+
     // Allowed browser POST routes
     for (const path of [
       '/api/staging/v1',
@@ -92,6 +107,10 @@ describe('authenticated staging boundary', () => {
       '/r23/organization',
       '/r23/api/organizations/org-1/assessments/validate',
       '/r23/api/organizations/org-1/sessions',
+      '/r23/api/organizations/org-1/sessions/session-1/candidate-token',
+      '/r27/api/organizations/org-1/sessions/session-1/observations',
+      '/r27/api/organizations/org-1/sessions/session-1/review-packet/finalize',
+      '/r26/api/candidate/session-1',
     ]) {
       expect(
         proxy(
@@ -101,13 +120,22 @@ describe('authenticated staging boundary', () => {
     }
 
     // Allowed browser PUT routes
+    for (const path of [
+      '/r23/api/organizations/org-1/assessments/draft',
+      '/r27/api/organizations/org-1/sessions/session-1/review-packet',
+    ]) {
+      expect(
+        proxy(
+          new NextRequest(`http://localhost${path}`, { method: 'PUT' }),
+        ).headers.get('x-middleware-next'),
+      ).toBe('1');
+    }
+
     expect(
       proxy(
         new NextRequest(
-          'http://localhost/r23/api/organizations/org-1/assessments/draft',
-          {
-            method: 'PUT',
-          },
+          'http://localhost/r27/api/organizations/org-1/sessions/session-1/observations/00000000-0000-4000-8000-000000000001',
+          { method: 'PATCH' },
         ),
       ).headers.get('x-middleware-next'),
     ).toBe('1');
@@ -120,12 +148,31 @@ describe('authenticated staging boundary', () => {
       ['/api/evaluator/assessments/preview', 'POST'],
       ['/api/evaluator/assessments', 'POST'],
       ['/r26/candidate', 'GET'],
+      ['/r26/candidate/session-1', 'POST'],
       ['/r26/api/candidate/example/execution', 'POST'],
       ['/r26/api/candidate/example/ai', 'POST'],
+      ['/r26/api/candidate/session-1/execution', 'GET'],
+      ['/r26/api/candidate/session-1/ai', 'GET'],
+      ['/r26/api/candidate/session-1', 'PUT'],
+      ['/r26/api/candidate/session-1', 'DELETE'],
       ['/api/candidate/sessions/example/terminal/exec', 'POST'],
-      ['/r27/api/organizations/org-1/sessions/session-1/observations', 'POST'],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/observations',
+        'DELETE',
+      ],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/observations/obs-1',
+        'POST',
+      ],
       ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'POST'],
-      ['/r27/api/organizations/org-1/sessions/session-1/review-packet', 'PUT'],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/review-packet',
+        'DELETE',
+      ],
+      [
+        '/r27/api/organizations/org-1/sessions/session-1/review-packet/finalize',
+        'PUT',
+      ],
     ] as const) {
       const blocked = proxy(
         new NextRequest(`http://localhost${path}`, { method }),

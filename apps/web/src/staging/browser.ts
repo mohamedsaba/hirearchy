@@ -13,6 +13,15 @@ import type {
   R23Session,
 } from '../../../../database/postgres/r23/adapter.mjs';
 import type {
+  R23CandidateInvitationResponse,
+  R23CandidateInvitationRevocationResponse,
+} from '../r23-auth/contract';
+import {
+  decryptCandidateToken,
+  encryptCandidateToken,
+  loadCandidateTokenEncryptionKey,
+} from '../sessions/candidate-token-storage.mjs';
+import type {
   R27Evidence,
   R27EvidenceQuery,
 } from '../../../../database/postgres/r27/contract.mjs';
@@ -70,6 +79,14 @@ import type {
   R29EvaluatorObservation,
   R29ObservationHistoryEntry,
 } from '../r29-observations/presentation';
+import {
+  validateCreateObservationInput,
+  validateUpdateObservationInput,
+} from '../r29-observations/presentation';
+import {
+  validateFinalizePacketInput,
+  validateSaveDraftInput,
+} from '../r210-review-packets/presentation';
 import { isAuthenticatedStaging } from '../runtime/profile';
 import {
   dispatchVerifiedStagingOperation,
@@ -102,6 +119,9 @@ class StagingNotFound extends Error {
 }
 class StagingUnavailable extends Error {
   readonly code = 'AUTH_UNAVAILABLE';
+}
+class StagingInvitationConflict extends Error {
+  readonly code = 'INVITATION_CONFLICT';
 }
 
 type StagingBrowserSessionPayload = Readonly<{
@@ -529,6 +549,41 @@ function errorDetails(error: unknown): {
   message: string;
 } {
   const code = getSqlErrorCode(error);
+  if (code === 'R2901' || code === 'R2101') {
+    return {
+      status: 400,
+      code: 'INVALID_REQUEST',
+      message: 'Check the request and try again.',
+    };
+  }
+  if (code === 'R2902' || code === 'R2102') {
+    return {
+      status: 400,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'The referenced evidence does not exist in this session.',
+    };
+  }
+  if (code === 'R2904' || code === 'R2104') {
+    return {
+      status: 409,
+      code: 'CONCURRENCY_CONFLICT',
+      message: 'This item changed concurrently. Refresh and try again.',
+    };
+  }
+  if (code === 'R2103') {
+    return {
+      status: 400,
+      code: 'INVALID_REQUEST',
+      message: 'The review packet needs a summary and a grounded citation.',
+    };
+  }
+  if (code === 'R2105') {
+    return {
+      status: 409,
+      code: 'FINALIZED_PACKET_IMMUTABLE',
+      message: 'This review packet is finalized and immutable.',
+    };
+  }
   if (error instanceof StagingBadRequest || code === '22023') {
     return {
       status: 400,
@@ -558,6 +613,13 @@ function errorDetails(error: unknown): {
       status: 403,
       code: 'ACCESS_DENIED',
       message: 'Access was denied.',
+    };
+  }
+  if (error instanceof StagingInvitationConflict) {
+    return {
+      status: 409,
+      code: 'INVITATION_CONFLICT',
+      message: 'This invitation cannot be changed or reused.',
     };
   }
   if (code === '23505') {
@@ -1796,6 +1858,11 @@ export async function stagingOrganizationSessionPageGet(
       membership.role === 'reviewer' &&
       s.status === 'SUBMITTED' &&
       s.visibilityScope === 'assigned_to_reviewer';
+    const isSubmittedSession = s.status === 'SUBMITTED';
+    const isRecruiterIssuedSession =
+      membership.role === 'recruiter' &&
+      s.visibilityScope === 'issued_by_recruiter';
+    const invitationManagementUrl = `/r23/organizations/${safeOrgId}/builder?issuedSession=${encodeURIComponent(s.sessionId)}`;
 
     const content = `
       <header>
@@ -1833,8 +1900,13 @@ export async function stagingOrganizationSessionPageGet(
 
         ${
           isSubmittedReviewerSession
-            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence workbench (read only)</a></p>`
-            : `<section aria-labelledby="unsubmitted-evidence-notice-title" data-testid="staging-unsubmitted-evidence-unavailable">
+            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
+            : isSubmittedSession
+              ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
+                  <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>
+                  <p role="status">This session has been submitted. Submitted evidence and reviewer notes are available only to the reviewer assigned to this session.</p>
+                </section>`
+              : `<section aria-labelledby="unsubmitted-evidence-notice-title" data-testid="staging-unsubmitted-evidence-unavailable">
                 <h3 id="unsubmitted-evidence-notice-title">Candidate evidence &amp; review workbench status</h3>
                 <p role="status">Unsubmitted evidence is unavailable. Candidate execution and live AI-provider operations are disabled in the R2.15 staging slice; evidence reconstruction opens only after a session is in <code>SUBMITTED</code> status.</p>
                 ${
@@ -1864,10 +1936,14 @@ export async function stagingOrganizationSessionPageGet(
           }
         </section>
 
-        <section aria-labelledby="candidate-token-recovery-title" data-testid="staging-candidate-invitation-unavailable">
-          <h3 id="candidate-token-recovery-title">Candidate link &amp; token status</h3>
-          <p>Availability: <code>not_issued_in_staging</code></p>
-          <p role="status">No candidate invitation token or candidate workspace link is issued in the R2.15 internal staging slice. Candidate runtime execution and live AI-provider operations remain disabled.</p>
+        <section aria-labelledby="candidate-token-recovery-title" data-testid="staging-candidate-invitation-management">
+          <h3 id="candidate-token-recovery-title">Candidate invitation</h3>
+          ${
+            isRecruiterIssuedSession
+              ? `<p role="status">The issuing recruiter manages this candidate invitation, including recovery and revocation.</p>
+                 <p><a href="${safeHtml(invitationManagementUrl)}" data-testid="manage-candidate-invitation-link">Manage candidate invitation</a></p>`
+              : `<p role="status">Candidate invitation links are managed by the issuing recruiter. Contact them for access or a replacement link.</p>`
+          }
         </section>
         <p><a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a></p>
       </section>
@@ -2717,6 +2793,310 @@ export async function stagingAssessmentIssuanceApiPost(
   }
 }
 
+function requiredInvitationExpiry(value: unknown): string {
+  if (typeof value !== 'string') throw new StagingBadRequest();
+  const timestamp = Date.parse(value);
+  if (
+    !Number.isFinite(timestamp) ||
+    new Date(timestamp).toISOString() !== value
+  ) {
+    throw new StagingBadRequest();
+  }
+  return value;
+}
+
+function invitationResponse(
+  raw: unknown,
+  sessionId: string,
+  encryptionKey: Buffer,
+): R23CandidateInvitationResponse {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new StagingUnavailable();
+  }
+  const value = raw as Record<string, unknown>;
+  if (
+    value.sessionId !== sessionId ||
+    !['not_created', 'active', 'expired', 'revoked', 'unmanaged'].includes(
+      String(value.status),
+    ) ||
+    (value.expiresAt !== null && typeof value.expiresAt !== 'string')
+  ) {
+    throw new StagingUnavailable();
+  }
+  const status = value.status as R23CandidateInvitationResponse['status'];
+  const expiresAt = value.expiresAt as string | null;
+  if (status !== 'active') {
+    return { sessionId, status, expiresAt, candidatePath: null };
+  }
+  if (
+    !expiresAt ||
+    !Number.isFinite(Date.parse(expiresAt)) ||
+    Date.parse(expiresAt) <= Date.now() ||
+    typeof value.candidateTokenCiphertext !== 'string'
+  ) {
+    return {
+      sessionId,
+      status: 'expired',
+      expiresAt,
+      candidatePath: null,
+    };
+  }
+  const candidateToken = decryptCandidateToken(
+    value.candidateTokenCiphertext,
+    sessionId,
+    encryptionKey,
+  );
+  return {
+    sessionId,
+    status,
+    expiresAt,
+    candidatePath: `/r26/candidate/${encodeURIComponent(sessionId)}#${candidateToken}`,
+  };
+}
+
+function candidateInvitationJson(
+  value: unknown,
+  status: number,
+  refreshedSessionCookie: string | null,
+): Response {
+  return attachRefreshedCookie(
+    Response.json(value, {
+      status,
+      headers: {
+        'Cache-Control': 'private, no-store, max-age=0',
+        'Content-Type': 'application/json; charset=utf-8',
+        'Referrer-Policy': 'no-referrer',
+      },
+    }),
+    refreshedSessionCookie,
+  );
+}
+
+async function requireInvitationRecruiter(
+  config: StagingConfiguration,
+  identity: R23VerifiedIdentity,
+  session: StagingBrowserSessionPayload,
+  organizationId: string,
+): Promise<void> {
+  if (session.selectedOrganizationId !== organizationId) {
+    throw new StagingForbidden();
+  }
+  const context = await fetchOrganizationContext(
+    config,
+    identity,
+    organizationId,
+  );
+  if (context.role !== 'recruiter') throw new StagingForbidden();
+}
+
+export async function stagingCandidateInvitationApiPost(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'POST',
+    headers: jsonHeaders,
+  });
+  try {
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+    ) {
+      throw new StagingBadRequest();
+    }
+    const organizationId = targetOrganizationId.toLowerCase();
+    const body = await parseBody(request, false);
+    allowedFields(body, ['expiresAt', 'csrf']);
+    const { csrfHash } = requireOriginAndCsrf(request, body);
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (
+      !idempotencyKey ||
+      idempotencyKey.length > 128 ||
+      !/^[A-Za-z0-9._~-]{1,128}$/.test(idempotencyKey)
+    ) {
+      throw new StagingBadRequest();
+    }
+    const expiresAt = requiredInvitationExpiry(body.expiresAt);
+    const encryptionKey = loadCandidateTokenEncryptionKey();
+
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        await requireInvitationRecruiter(
+          config,
+          identity,
+          session,
+          organizationId,
+        );
+        const candidateToken = randomBytes(32).toString('base64url');
+        const raw = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'candidate.invitation.create',
+          {
+            organizationId,
+            sessionId,
+            expiresAt,
+            idempotencyKey,
+            candidateTokenHash: digest(candidateToken),
+            candidateTokenCiphertext: encryptCandidateToken(
+              candidateToken,
+              sessionId,
+              encryptionKey,
+            ),
+          },
+        )) as Record<string, unknown> | null;
+        if (raw?.conflict === 'IDEMPOTENCY_CONFLICT') {
+          return candidateInvitationJson(
+            {
+              error: {
+                code: 'IDEMPOTENCY_CONFLICT',
+                message:
+                  'This idempotency key was used for another invitation request.',
+              },
+            },
+            409,
+            refreshedSessionCookie,
+          );
+        }
+        if (raw?.conflict === 'INVITATION_ALREADY_EXISTS') {
+          return candidateInvitationJson(
+            {
+              error: {
+                code: 'INVITATION_ALREADY_EXISTS',
+                message:
+                  'Recover or revoke the current invitation before creating another.',
+              },
+            },
+            409,
+            refreshedSessionCookie,
+          );
+        }
+        const result = invitationResponse(raw, sessionId, encryptionKey);
+        return candidateInvitationJson(
+          result,
+          raw?.replayed === true ? 200 : 201,
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function stagingCandidateInvitationApiGet(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'GET',
+    headers: jsonHeaders,
+  });
+  try {
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId) ||
+      new URL(request.url).search
+    ) {
+      throw new StagingBadRequest();
+    }
+    const organizationId = targetOrganizationId.toLowerCase();
+    const csrf = requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+    const encryptionKey = loadCandidateTokenEncryptionKey();
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        await requireInvitationRecruiter(
+          config,
+          identity,
+          session,
+          organizationId,
+        );
+        const raw = await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'candidate.invitation.get',
+          { organizationId, sessionId },
+        );
+        return candidateInvitationJson(
+          invitationResponse(raw, sessionId, encryptionKey),
+          200,
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function stagingCandidateInvitationApiDelete(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'DELETE',
+    headers: jsonHeaders,
+  });
+  try {
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+    ) {
+      throw new StagingBadRequest();
+    }
+    const organizationId = targetOrganizationId.toLowerCase();
+    const body = await parseBody(request, true);
+    allowedFields(body, ['csrf']);
+    const { csrfHash } = requireOriginAndCsrf(request, body);
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        await requireInvitationRecruiter(
+          config,
+          identity,
+          session,
+          organizationId,
+        );
+        const raw = await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'candidate.invitation.revoke',
+          { organizationId, sessionId },
+        );
+        if (
+          !raw ||
+          typeof raw !== 'object' ||
+          Array.isArray(raw) ||
+          (raw as Record<string, unknown>).sessionId !== sessionId ||
+          !['revoked', 'not_created', 'unmanaged'].includes(
+            String((raw as Record<string, unknown>).status),
+          )
+        ) {
+          throw new StagingUnavailable();
+        }
+        const result = raw as R23CandidateInvitationRevocationResponse;
+        return candidateInvitationJson(result, 200, refreshedSessionCookie);
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
 function readR27EvidenceQuery(request: Request): R27EvidenceQuery {
   const params = new URL(request.url).searchParams;
   if (
@@ -2817,6 +3197,30 @@ type RawStagingEvidencePayload = {
     recordedAt: string;
   }>;
   captureLimitation?: string;
+};
+
+type RawStagingObservation = {
+  id: string;
+  evidenceSourceType?: string;
+  sourceType?: string;
+  eventSequence: string | number;
+  filePath: string | null;
+  fileVersion: string | number | null;
+  evidenceDigest: string;
+  body: string;
+  version: string | number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type RawStagingObservationHistory = {
+  historyId: string;
+  observationId: string;
+  version: string | number;
+  body: string;
+  validFrom: string;
+  validUntil: string;
+  recordedAt: string;
 };
 
 function extractStarterFilesFromSnapshot(
@@ -3305,45 +3709,61 @@ function mapStagingObservations(
   authorPrincipalId: string,
 ): R29EvaluatorObservation[] {
   const historyList = raw.observationHistory ?? [];
-  return (raw.observations ?? []).map((obs) => {
-    const sourceType = (obs.sourceType ??
-      obs.evidenceSourceType ??
-      'timeline_event') as R29EvidenceSourceType;
-    const matchingHistory: R29ObservationHistoryEntry[] = historyList
-      .filter((h) => h.observationId === obs.id)
-      .map((h) => ({
-        historyId: h.historyId,
-        observationId: h.observationId,
-        version: Number(h.version),
-        body: h.body,
-        evidenceSourceType: sourceType,
-        eventSequence: String(obs.eventSequence),
-        filePath: obs.filePath ?? null,
-        fileVersion: obs.fileVersion != null ? String(obs.fileVersion) : null,
-        evidenceDigest: obs.evidenceDigest,
-        visibility: 'private' as const,
-        validFrom: h.validFrom,
-        validUntil: h.validUntil,
-        recordedAt: h.recordedAt,
-      }));
-    return {
-      id: obs.id,
+  return (raw.observations ?? []).map((obs) =>
+    mapStagingObservation(
+      obs,
+      historyList,
       organizationId,
       sessionId,
       authorPrincipalId,
+    ),
+  );
+}
+
+function mapStagingObservation(
+  obs: RawStagingObservation,
+  historyList: readonly RawStagingObservationHistory[],
+  organizationId: string,
+  sessionId: string,
+  authorPrincipalId: string,
+): R29EvaluatorObservation {
+  const sourceType = (obs.sourceType ??
+    obs.evidenceSourceType ??
+    'timeline_event') as R29EvidenceSourceType;
+  const matchingHistory: R29ObservationHistoryEntry[] = historyList
+    .filter((h) => h.observationId === obs.id)
+    .map((h) => ({
+      historyId: h.historyId,
+      observationId: h.observationId,
+      version: Number(h.version),
+      body: h.body,
       evidenceSourceType: sourceType,
       eventSequence: String(obs.eventSequence),
       filePath: obs.filePath ?? null,
       fileVersion: obs.fileVersion != null ? String(obs.fileVersion) : null,
       evidenceDigest: obs.evidenceDigest,
-      body: obs.body,
-      version: Number(obs.version),
       visibility: 'private' as const,
-      createdAt: obs.createdAt,
-      updatedAt: obs.updatedAt,
-      history: matchingHistory,
-    };
-  });
+      validFrom: h.validFrom,
+      validUntil: h.validUntil,
+      recordedAt: h.recordedAt,
+    }));
+  return {
+    id: obs.id,
+    organizationId,
+    sessionId,
+    authorPrincipalId,
+    evidenceSourceType: sourceType,
+    eventSequence: String(obs.eventSequence),
+    filePath: obs.filePath ?? null,
+    fileVersion: obs.fileVersion != null ? String(obs.fileVersion) : null,
+    evidenceDigest: obs.evidenceDigest,
+    body: obs.body,
+    version: Number(obs.version),
+    visibility: 'private',
+    createdAt: obs.createdAt,
+    updatedAt: obs.updatedAt,
+    history: matchingHistory,
+  };
 }
 
 export async function stagingObservationsApiGet(
@@ -3392,16 +3812,121 @@ export async function stagingObservationsApiGet(
           sessionId,
           orgContext.principalId,
         );
+        const writable = raw.session.status === 'SUBMITTED';
         return attachRefreshedCookie(
           Response.json(
             {
               observations,
-              writesEnabled: false,
-              writesUnavailableReason:
-                'Private observation creation and editing are disabled in the R2.15 internal staging slice (read-only access).',
+              writesEnabled: writable,
+              ...(writable
+                ? {}
+                : {
+                    writesUnavailableReason:
+                      'Private observations are available after the candidate session is submitted.',
+                  }),
             },
             {
               status: 200,
+              headers: {
+                'Cache-Control': 'private, no-store, max-age=0',
+                'Content-Type': 'application/json; charset=utf-8',
+              },
+            },
+          ),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function stagingObservationsApiPost(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'POST',
+    headers: jsonHeaders,
+  });
+  try {
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+    ) {
+      throw new StagingBadRequest();
+    }
+    const organizationId = targetOrganizationId.toLowerCase();
+    const body = await parseBody(request, false, 65536);
+    allowedFields(body, [
+      'csrf',
+      'evidenceSourceType',
+      'eventSequence',
+      'filePath',
+      'fileVersion',
+      'evidenceDigest',
+      'body',
+    ]);
+    const { csrfHash } = requireOriginAndCsrf(request, body);
+    const validation = validateCreateObservationInput(body);
+    const validatedInput = validation.value;
+    if (!validation.valid || !validatedInput) {
+      return Response.json(
+        {
+          error: {
+            code: 'INVALID_REQUEST',
+            message:
+              validation.errors?.join(' ') ?? 'Invalid observation input.',
+          },
+        },
+        {
+          status: 400,
+          headers: {
+            'Cache-Control': 'private, no-store, max-age=0',
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        },
+      );
+    }
+
+    const proofArgs = JSON.parse(
+      JSON.stringify({ organizationId, sessionId, input: validatedInput }),
+    ) as StagingProofArgs;
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        if (session.selectedOrganizationId !== organizationId) {
+          throw new StagingForbidden();
+        }
+        const orgContext = await fetchOrganizationContext(
+          config,
+          identity,
+          organizationId,
+        );
+        if (orgContext.role !== 'reviewer') throw new StagingForbidden();
+        const raw = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'evidence.observation.create',
+          proofArgs,
+        )) as RawStagingObservation;
+        const observation = mapStagingObservation(
+          raw,
+          [],
+          organizationId,
+          sessionId,
+          orgContext.principalId,
+        );
+        return attachRefreshedCookie(
+          Response.json(
+            { observation },
+            {
+              status: 201,
               headers: {
                 'Cache-Control': 'private, no-store, max-age=0',
                 'Content-Type': 'application/json; charset=utf-8',
@@ -3487,7 +4012,109 @@ export async function stagingObservationApiGet(
         }
         return attachRefreshedCookie(
           Response.json(
-            { observation: match, writesEnabled: false },
+            {
+              observation: match,
+              writesEnabled: raw.session.status === 'SUBMITTED',
+            },
+            {
+              status: 200,
+              headers: {
+                'Cache-Control': 'private, no-store, max-age=0',
+                'Content-Type': 'application/json; charset=utf-8',
+              },
+            },
+          ),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function stagingObservationApiPatch(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+  observationId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'PATCH',
+    headers: jsonHeaders,
+  });
+  try {
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId) ||
+      !UUID.test(observationId)
+    ) {
+      throw new StagingBadRequest();
+    }
+    const organizationId = targetOrganizationId.toLowerCase();
+    const body = await parseBody(request, false, 65536);
+    allowedFields(body, ['csrf', 'expectedVersion', 'body']);
+    const { csrfHash } = requireOriginAndCsrf(request, body);
+    const validation = validateUpdateObservationInput(body);
+    const validatedInput = validation.value;
+    if (!validation.valid || !validatedInput) {
+      return Response.json(
+        {
+          error: {
+            code: 'INVALID_REQUEST',
+            message:
+              validation.errors?.join(' ') ?? 'Invalid observation update.',
+          },
+        },
+        {
+          status: 400,
+          headers: {
+            'Cache-Control': 'private, no-store, max-age=0',
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        },
+      );
+    }
+
+    const proofArgs = JSON.parse(
+      JSON.stringify({
+        organizationId,
+        sessionId,
+        observationId,
+        input: validatedInput,
+      }),
+    ) as StagingProofArgs;
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        if (session.selectedOrganizationId !== organizationId) {
+          throw new StagingForbidden();
+        }
+        const orgContext = await fetchOrganizationContext(
+          config,
+          identity,
+          organizationId,
+        );
+        if (orgContext.role !== 'reviewer') throw new StagingForbidden();
+        const raw = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'evidence.observation.update',
+          proofArgs,
+        )) as RawStagingObservation;
+        const observation = mapStagingObservation(
+          raw,
+          [],
+          organizationId,
+          sessionId,
+          orgContext.principalId,
+        );
+        return attachRefreshedCookie(
+          Response.json(
+            { observation },
             {
               status: 200,
               headers: {
@@ -3545,6 +4172,7 @@ export async function stagingReviewPacketApiGet(
           'review.read',
           { organizationId, sessionId },
         )) as {
+          status?: string;
           packets?: Array<{
             id: string;
             status: 'DRAFT' | 'FINALIZED';
@@ -3632,9 +4260,13 @@ export async function stagingReviewPacketApiGet(
           Response.json(
             {
               reviewPacket,
-              writesEnabled: false,
-              writesUnavailableReason:
-                'Review packet draft saving and finalization are disabled in the R2.15 internal staging slice (read-only access).',
+              writesEnabled: raw.status === 'SUBMITTED',
+              ...(raw.status === 'SUBMITTED'
+                ? {}
+                : {
+                    writesUnavailableReason:
+                      'Review packets are available after the candidate session is submitted.',
+                  }),
             },
             {
               status: 200,
@@ -3651,4 +4283,137 @@ export async function stagingReviewPacketApiGet(
   } catch (error) {
     return failureResponse(jsonRequest, error);
   }
+}
+
+async function stagingReviewPacketMutation(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+  method: 'PUT' | 'POST',
+  operation: 'review.packet.save' | 'review.packet.finalize',
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method,
+    headers: jsonHeaders,
+  });
+  try {
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+    ) {
+      throw new StagingBadRequest();
+    }
+    const organizationId = targetOrganizationId.toLowerCase();
+    const body = await parseBody(request, false, 131072);
+    allowedFields(
+      body,
+      operation === 'review.packet.save'
+        ? [
+            'csrf',
+            'summary',
+            'strengths',
+            'concerns',
+            'unresolvedQuestions',
+            'referencedObservationIds',
+            'referencedEvidence',
+            'expectedVersion',
+          ]
+        : ['csrf', 'expectedVersion'],
+    );
+    const { csrfHash } = requireOriginAndCsrf(request, body);
+    const validation =
+      operation === 'review.packet.save'
+        ? validateSaveDraftInput(body)
+        : validateFinalizePacketInput(body);
+    const validatedInput = validation.value;
+    if (!validation.valid || !validatedInput) {
+      return Response.json(
+        {
+          error: {
+            code: 'INVALID_REQUEST',
+            message:
+              validation.errors?.join(' ') ?? 'Invalid review packet input.',
+          },
+        },
+        {
+          status: 400,
+          headers: {
+            'Cache-Control': 'private, no-store, max-age=0',
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        },
+      );
+    }
+
+    const proofArgs = JSON.parse(
+      JSON.stringify({ organizationId, sessionId, input: validatedInput }),
+    ) as StagingProofArgs;
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        if (session.selectedOrganizationId !== organizationId) {
+          throw new StagingForbidden();
+        }
+        const orgContext = await fetchOrganizationContext(
+          config,
+          identity,
+          organizationId,
+        );
+        if (orgContext.role !== 'reviewer') throw new StagingForbidden();
+        const raw = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          operation,
+          proofArgs,
+        )) as { reviewPacket?: R210ReviewPacket } | null;
+        if (!raw?.reviewPacket) throw new StagingUnavailable();
+        return attachRefreshedCookie(
+          Response.json(
+            { reviewPacket: raw.reviewPacket },
+            {
+              status: 200,
+              headers: {
+                'Cache-Control': 'private, no-store, max-age=0',
+                'Content-Type': 'application/json; charset=utf-8',
+              },
+            },
+          ),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export function stagingReviewPacketApiPut(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  return stagingReviewPacketMutation(
+    request,
+    targetOrganizationId,
+    sessionId,
+    'PUT',
+    'review.packet.save',
+  );
+}
+
+export function stagingReviewPacketFinalizeApiPost(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  return stagingReviewPacketMutation(
+    request,
+    targetOrganizationId,
+    sessionId,
+    'POST',
+    'review.packet.finalize',
+  );
 }

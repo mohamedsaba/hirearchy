@@ -8,6 +8,7 @@ import { Client, Pool } from 'pg';
 
 const POSTGRES_IMAGE =
   'postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777';
+const FIXTURE_MEMORY_BYTES = 256 * 1024 * 1024;
 const LABEL_PREFIX = 'com.hirearchy.restricted-executor.test';
 const DOCKER_ENV = Object.freeze({
   LANG: 'C.UTF-8',
@@ -179,6 +180,12 @@ export async function startPostgresFixture({ schemaSql }) {
     ) {
       throw new Error('Fixture container ownership mismatch.');
     }
+    if (
+      hostConfig.Memory !== FIXTURE_MEMORY_BYTES ||
+      hostConfig.MemorySwap !== FIXTURE_MEMORY_BYTES
+    ) {
+      throw new Error('Disposable PostgreSQL resource limit changed.');
+    }
     return { id: observedId, labels: observedLabels, hostConfig, mounts };
   }
 
@@ -348,6 +355,10 @@ export async function startPostgresFixture({ schemaSql }) {
         `127.0.0.1:${selectedPort}:5432`,
         '--env',
         'POSTGRES_PASSWORD',
+        '--memory',
+        String(FIXTURE_MEMORY_BYTES),
+        '--memory-swap',
+        String(FIXTURE_MEMORY_BYTES),
         '--mount',
         `type=volume,src=${volume.name},dst=/var/lib/postgresql/data`,
         POSTGRES_IMAGE,

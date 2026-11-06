@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { randomUUID } from 'node:crypto';
 
 function loadPlaywright() {
   const require = createRequire(import.meta.url);
@@ -15,6 +15,389 @@ function loadPlaywright() {
     }
   }
   throw new Error('Unable to resolve Playwright module');
+}
+
+async function signInAndSelectOrganization(page, appUrl, user, organizationId) {
+  const organization = organizationId.toLowerCase();
+  await page.goto(`${appUrl}/r23/login`);
+  await page.waitForLoadState('domcontentloaded');
+  await page.locator('input[name="email"]').fill(user.email);
+  await page.locator('input[name="password"]').fill(user.password);
+  await page.locator('button[type="submit"]').click();
+  await page.waitForURL('**/r23/organizations');
+  await page.waitForLoadState('domcontentloaded');
+
+  const selectForm = page.locator('form').filter({
+    has: page.locator(`input[value="${organization}"]`),
+  });
+  assert.ok(
+    (await selectForm.count()) > 0,
+    'Fresh recruiter login must include the authorized organization',
+  );
+  await selectForm.locator('button[type="submit"]').click();
+  await page.waitForURL(`**/r23/organizations/${organization}`);
+  await page.waitForLoadState('domcontentloaded');
+}
+
+async function withRecruiterPage({ appUrl, user, organizationId }, callback) {
+  const { chromium } = loadPlaywright();
+  const browser = await chromium.launch({
+    headless: true,
+    ...(process.env.R23_CHROMIUM_PATH
+      ? { executablePath: process.env.R23_CHROMIUM_PATH }
+      : {}),
+  });
+  let context;
+  try {
+    context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await signInAndSelectOrganization(page, appUrl, user, organizationId);
+    return await callback(page);
+  } finally {
+    await context?.close();
+    await browser.close();
+  }
+}
+
+async function readCandidateInvitationStatus(page, organizationId, sessionId) {
+  return page.evaluate(
+    async ({ organization, session }) => {
+      const response = await fetch(
+        `/r23/api/organizations/${encodeURIComponent(organization)}/sessions/${encodeURIComponent(session)}/candidate-token`,
+        { method: 'GET', cache: 'no-store' },
+      );
+      return { status: response.status, body: await response.json() };
+    },
+    { organization: organizationId, session: sessionId },
+  );
+}
+
+function candidateInvitationFingerprint(candidatePath, expiresAt, sessionId) {
+  if (
+    typeof candidatePath !== 'string' ||
+    !candidatePath.startsWith(`/r26/candidate/${sessionId}#`) ||
+    typeof expiresAt !== 'string' ||
+    !Number.isFinite(Date.parse(expiresAt))
+  ) {
+    throw new Error('Active candidate invitation response is incomplete');
+  }
+  return createHash('sha256')
+    .update(candidatePath, 'utf8')
+    .update('\0')
+    .update(expiresAt, 'utf8')
+    .digest('hex');
+}
+
+export async function createActiveCandidateInvitationFingerprint({
+  appUrl,
+  user,
+  organizationId,
+  sessionId,
+}) {
+  return withRecruiterPage({ appUrl, user, organizationId }, async (page) => {
+    const builderUrl =
+      `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder` +
+      `?issuedSession=${encodeURIComponent(sessionId)}`;
+    await page.goto(builderUrl);
+    await page.getByTestId('recovered-session-id').waitFor({
+      timeout: 20_000,
+    });
+    assert.equal(
+      (await page.getByTestId('recovered-session-id').textContent()).trim(),
+      sessionId,
+      'Recovered issued session must match the active invitation fixture',
+    );
+    await page.getByTestId('candidate-invitation-create').click();
+    await page.getByTestId('candidate-invitation-link').waitFor({
+      timeout: 20_000,
+    });
+    const result = await readCandidateInvitationStatus(
+      page,
+      organizationId,
+      sessionId,
+    );
+    assert.equal(result.status, 200, 'Invitation status GET must succeed');
+    assert.equal(result.body?.sessionId, sessionId);
+    assert.equal(result.body?.status, 'active');
+    return candidateInvitationFingerprint(
+      result.body?.candidatePath,
+      result.body?.expiresAt,
+      sessionId,
+    );
+  });
+}
+
+export async function verifyCandidateInvitationRecovery({
+  appUrl,
+  user,
+  organizationId,
+  activeSessionId,
+  revokedSessionId,
+  expectedActiveFingerprint,
+}) {
+  return withRecruiterPage({ appUrl, user, organizationId }, async (page) => {
+    const builderBase = `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder`;
+    await page.goto(
+      `${builderBase}?issuedSession=${encodeURIComponent(activeSessionId)}`,
+    );
+    await page.getByTestId('recovered-session-id').waitFor({
+      timeout: 20_000,
+    });
+    const activeResult = await readCandidateInvitationStatus(
+      page,
+      organizationId,
+      activeSessionId,
+    );
+    assert.equal(
+      activeResult.status,
+      200,
+      'Invitation status GET must succeed',
+    );
+    assert.equal(activeResult.body?.sessionId, activeSessionId);
+    assert.equal(activeResult.body?.status, 'active');
+    const recoveredFingerprint = candidateInvitationFingerprint(
+      activeResult.body?.candidatePath,
+      activeResult.body?.expiresAt,
+      activeSessionId,
+    );
+    if (recoveredFingerprint !== expectedActiveFingerprint) {
+      throw new Error('Recovered active invitation fingerprint changed');
+    }
+
+    await page.goto(
+      `${builderBase}?issuedSession=${encodeURIComponent(revokedSessionId)}`,
+    );
+    await page.getByTestId('recovered-session-id').waitFor({
+      timeout: 20_000,
+    });
+    const revokedResult = await readCandidateInvitationStatus(
+      page,
+      organizationId,
+      revokedSessionId,
+    );
+    assert.equal(
+      revokedResult.status,
+      200,
+      'Invitation status GET must succeed',
+    );
+    assert.equal(revokedResult.body?.sessionId, revokedSessionId);
+    assert.equal(revokedResult.body?.status, 'revoked');
+    if (revokedResult.body?.candidatePath !== null) {
+      throw new Error('Recovered revoked invitation returned a candidate path');
+    }
+    return true;
+  });
+}
+
+async function assertExpiredInvitationReplay({
+  admin,
+  page,
+  context,
+  appUrl,
+  organizationId,
+  sessionId,
+  recruiterPrincipalId,
+}) {
+  const sessionRows = await admin.query(
+    `SELECT organization_id::pg_catalog.text AS organization_id,
+            issuer_principal_id::pg_catalog.text AS issuer_principal_id
+       FROM hirearchy.assessment_sessions
+      WHERE id = $1`,
+    [sessionId],
+  );
+  assert.equal(sessionRows.rows.length, 1);
+  const session = sessionRows.rows[0];
+  assert.equal(session.organization_id, organizationId.toLowerCase());
+  assert.equal(session.issuer_principal_id, recruiterPrincipalId);
+  const existingEnvelope = await admin.query(
+    'SELECT 1 FROM hirearchy.candidate_token_envelopes WHERE session_id = $1',
+    [sessionId],
+  );
+  assert.equal(existingEnvelope.rows.length, 0);
+
+  const idempotencyKey = `expired-replay.${randomUUID()}`;
+  const expiresAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const createdAt = new Date(Date.parse(expiresAt) - 24 * 60 * 60 * 1000);
+  const requestHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        expiresAt,
+        organizationId: session.organization_id,
+        sessionId,
+      }),
+      'utf8',
+    )
+    .digest('hex');
+  const tokenHash = randomBytes(32).toString('hex');
+  await admin.query(
+    `INSERT INTO hirearchy.candidate_token_envelopes (
+       organization_id, session_id, candidate_token_hash,
+       candidate_token_ciphertext, created_at, expires_at
+     ) VALUES (
+       $1::pg_catalog.uuid, $2, $3, 'synthetic-expired-envelope',
+       $4::pg_catalog.timestamptz, $5::pg_catalog.timestamptz
+     )`,
+    [session.organization_id, sessionId, tokenHash, createdAt, expiresAt],
+  );
+  await admin.query(
+    `INSERT INTO hirearchy.candidate_invitation_requests (
+       organization_id, idempotency_key, session_id, issuer_principal_id,
+       request_hash, expires_at
+     ) VALUES ($1::pg_catalog.uuid, $2, $3, $4::pg_catalog.uuid, $5, $6::pg_catalog.timestamptz)`,
+    [
+      session.organization_id,
+      idempotencyKey,
+      sessionId,
+      session.issuer_principal_id,
+      requestHash,
+      expiresAt,
+    ],
+  );
+
+  const csrf = (await context.cookies(appUrl)).find(
+    (cookie) => cookie.name === '__Host-r23-csrf',
+  )?.value;
+  assert.ok(csrf, 'Recruiter CSRF cookie must be present');
+  const result = await page.evaluate(
+    async ({
+      organizationId: orgId,
+      sessionId: issuedSessionId,
+      csrf,
+      idempotencyKey,
+      expiresAt,
+    }) => {
+      const response = await fetch(
+        `/r23/api/organizations/${encodeURIComponent(orgId)}/sessions/${encodeURIComponent(issuedSessionId)}/candidate-token`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKey,
+            'X-CSRF-Token': csrf,
+          },
+          body: JSON.stringify({ csrf, expiresAt }),
+          cache: 'no-store',
+        },
+      );
+      return { status: response.status, body: await response.json() };
+    },
+    { organizationId, sessionId, csrf, idempotencyKey, expiresAt },
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, {
+    sessionId,
+    status: 'expired',
+    expiresAt,
+    candidatePath: null,
+  });
+}
+
+async function reviewWriteCounts(admin, organizationId, sessionId) {
+  const { rows } = await admin.query(
+    `SELECT
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_observations
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS observations,
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_observation_history
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS observation_history,
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_review_packets
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS review_packets,
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.evaluator_review_packet_history
+         WHERE organization_id = $1::pg_catalog.uuid AND session_id = $2) AS review_packet_history`,
+    [organizationId, sessionId],
+  );
+  return rows[0];
+}
+
+async function assertUnassignedReviewerWritesDenied({
+  browser,
+  appUrl,
+  user,
+  organizationId,
+  sessionId,
+  admin,
+}) {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${appUrl}/r23/login`);
+    await page.locator('input[name="email"]').fill(user.email);
+    await page.locator('input[name="password"]').fill(user.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL('**/r23/organizations');
+    const selectForm = page.locator('form').filter({
+      has: page.locator(`input[value="${organizationId.toLowerCase()}"]`),
+    });
+    await selectForm.locator('button[type="submit"]').click();
+    await page.waitForURL(
+      `**/r23/organizations/${organizationId.toLowerCase()}`,
+    );
+
+    const csrf = (await context.cookies(appUrl)).find(
+      (cookie) => cookie.name === '__Host-r23-csrf',
+    )?.value;
+    assert.ok(csrf, 'Unassigned reviewer CSRF cookie must be present');
+    const before = await reviewWriteCounts(admin, organizationId, sessionId);
+    const basePath = `/r27/api/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(sessionId)}`;
+    const observationStatus = await page.evaluate(
+      async ({ basePath, csrf }) => {
+        const response = await fetch(`${basePath}/observations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrf,
+          },
+          body: JSON.stringify({
+            csrf,
+            evidenceSourceType: 'timeline_event',
+            eventSequence: '1',
+            evidenceDigest: '0'.repeat(64),
+            body: 'Unassigned reviewer write must be rejected.',
+          }),
+        });
+        return response.status;
+      },
+      { basePath, csrf },
+    );
+    assert.equal(observationStatus, 403);
+
+    const packetStatus = await page.evaluate(
+      async ({ basePath, csrf }) => {
+        const response = await fetch(`${basePath}/review-packet`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrf,
+          },
+          body: JSON.stringify({
+            csrf,
+            summary: 'Unassigned reviewer write must be rejected.',
+            strengths: [],
+            concerns: [],
+            unresolvedQuestions: [],
+            referencedObservationIds: [],
+            referencedEvidence: [],
+          }),
+        });
+        return response.status;
+      },
+      { basePath, csrf },
+    );
+    assert.equal(packetStatus, 403);
+    assert.deepEqual(
+      await reviewWriteCounts(admin, organizationId, sessionId),
+      before,
+      'Denied unassigned reviewer writes must not change observations, review packets, or history',
+    );
+  } finally {
+    await context.close();
+  }
 }
 
 /**
@@ -32,6 +415,8 @@ export async function checkBrowserAcceptance({
   source,
   authUrl,
   submittedSessionId,
+  browserEvidenceDir,
+  screenshotSensitiveValues,
 }) {
   let appUrl = initialAppUrl;
   const { chromium } = loadPlaywright();
@@ -309,13 +694,13 @@ export async function checkBrowserAcceptance({
         .click();
       await recruiterPage.waitForSelector('[data-testid="issuance-success"]');
 
-      // Verify candidate link unavailable notice is present
-      const candidateNotice = recruiterPage.locator(
-        '[data-testid="candidate-invitation-unavailable-notice"]',
+      // Candidate links are created only through the explicit invitation panel.
+      const candidateInvitationPanel = recruiterPage.locator(
+        '[data-testid="candidate-invitation-panel"]',
       );
       assert.ok(
-        await candidateNotice.isVisible(),
-        'Candidate invitation unavailable notice must be explicitly displayed',
+        await candidateInvitationPanel.isVisible(),
+        'Candidate invitation controls must be visible after authenticated issuance',
       );
 
       newlyIssuedSessionId = (
@@ -328,20 +713,38 @@ export async function checkBrowserAcceptance({
         /^sess_[0-9a-f-]{36}$/i,
         'Issued session ID must match sess_UUID',
       );
-
-      // Verify candidate link is disabled or marked unavailable
-      const candWorkspaceLink = recruiterPage.locator(
-        '[data-testid="candidate-workspace-link"]',
+      assert.equal(
+        new URL(recruiterPage.url()).searchParams.get('issuedSession'),
+        newlyIssuedSessionId,
+        'Issuing an assessment must retain its non-secret session ID in the builder URL',
       );
-      if (await candWorkspaceLink.count()) {
-        const disabledAttr =
-          await candWorkspaceLink.getAttribute('aria-disabled');
-        assert.equal(
-          disabledAttr,
-          'true',
-          'Candidate workspace link must be disabled',
-        );
-      }
+
+      assert.ok(
+        submittedSessionId,
+        'A submitted session is required for the expired invitation replay check',
+      );
+      await assertExpiredInvitationReplay({
+        admin,
+        page: recruiterPage,
+        context: recruiterContext,
+        appUrl,
+        organizationId,
+        sessionId: submittedSessionId,
+        recruiterPrincipalId: provisioned.users[0].principalId,
+      });
+
+      const summaryRes = await recruiterPage.goto(
+        `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}`,
+      );
+      assert.equal(summaryRes.status(), 200);
+      const manageInvitationLink = recruiterPage.locator(
+        '[data-testid="manage-candidate-invitation-link"]',
+      );
+      assert.ok(await manageInvitationLink.isVisible());
+      assert.equal(
+        await manageInvitationLink.getAttribute('href'),
+        `/r23/organizations/${organizationId.toLowerCase()}/builder?issuedSession=${encodeURIComponent(newlyIssuedSessionId)}`,
+      );
 
       // Return to session list and verify newly issued session is displayed
       await recruiterPage.goto(
@@ -434,6 +837,12 @@ export async function checkBrowserAcceptance({
         'Session status CREATED or Issued must be visible',
       );
       assert.ok(
+        summaryText.includes(
+          'Candidate invitation links are managed by the issuing recruiter.',
+        ),
+        'Assigned reviewer must see that candidate invitation access is recruiter-managed',
+      );
+      assert.ok(
         summaryText.includes(provisioned.users[1].principalId),
         'Assigned reviewer principal ID must be visible',
       );
@@ -521,6 +930,23 @@ export async function checkBrowserAcceptance({
         'Browser Acceptance [6/8]: Testing private reviewer data isolation on SUBMITTED session...',
       );
 
+      const recruiterSubmittedSummary = await recruiterPage.goto(
+        `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/sessions/${submittedSessionId}`,
+      );
+      assert.equal(
+        recruiterSubmittedSummary.status(),
+        200,
+        'Recruiter must retain access to the issued session summary after submission',
+      );
+      const recruiterSubmittedSummaryText =
+        await recruiterPage.textContent('body');
+      assert.ok(
+        recruiterSubmittedSummaryText.includes(
+          'This session has been submitted. Submitted evidence and reviewer notes are available only to the reviewer assigned to this session.',
+        ),
+        'Submitted non-reviewer must see the assigned-reviewer access scope',
+      );
+
       // Reviewer 1 visits submitted session
       const rev1Context = await browser.newContext({
         ignoreHTTPSErrors: true,
@@ -549,21 +975,13 @@ export async function checkBrowserAcceptance({
       assert.equal(rev1EvRes.status(), 200);
       await rev1Page.waitForLoadState('domcontentloaded');
 
-      // Switch to Review tab to verify review packet read-only boundary
+      // Switch to Review tab and verify the assigned reviewer can author a draft.
       await rev1Page
         .locator('button[data-workbench-mode-tab="review"]')
         .click();
-      await rev1Page.waitForSelector(
-        '[data-testid="review-packet-writes-unavailable"]',
-        { timeout: 15000 },
-      );
-      const packetWritesNotice1 = rev1Page.locator(
-        '[data-testid="review-packet-writes-unavailable"]',
-      );
-      assert.ok(
-        await packetWritesNotice1.isVisible(),
-        'Review packet writes unavailable notice must be visible',
-      );
+      await rev1Page
+        .getByRole('textbox', { name: 'Review summary' })
+        .waitFor({ timeout: 15000 });
 
       // Verify Reviewer 1 private data is visible and Reviewer 2 private data is absent
       const rev1Text = await rev1Page.textContent('body');
@@ -576,7 +994,7 @@ export async function checkBrowserAcceptance({
         'Reviewer 2 private observation/packet text must NOT be present for Reviewer 1',
       );
 
-      // Switch to Evidence tab to verify observation read-only boundary
+      // Switch to Evidence tab and verify the assigned reviewer can author notes.
       await rev1Page
         .locator('button[data-workbench-mode-tab="evidence"]')
         .click();
@@ -590,17 +1008,9 @@ export async function checkBrowserAcceptance({
         await eventRow.click();
       }
 
-      await rev1Page.waitForSelector(
-        '[data-testid="observation-writes-unavailable"]',
-        { timeout: 15000 },
-      );
-      const obsWritesNotice1 = rev1Page.locator(
-        '[data-testid="observation-writes-unavailable"]',
-      );
-      assert.ok(
-        await obsWritesNotice1.isVisible(),
-        'Observation writes unavailable notice must be visible',
-      );
+      await rev1Page
+        .getByRole('textbox', { name: 'Observation note' })
+        .waitFor({ timeout: 15000 });
 
       // Reviewer 2 visits submitted session
       const rev2Context = await browser.newContext({
@@ -636,10 +1046,9 @@ export async function checkBrowserAcceptance({
       await rev2Page
         .locator('button[data-workbench-mode-tab="review"]')
         .click();
-      await rev2Page.waitForSelector(
-        '[data-testid="review-packet-writes-unavailable"]',
-        { timeout: 15000 },
-      );
+      await rev2Page
+        .getByRole('textbox', { name: 'Review summary' })
+        .waitFor({ timeout: 15000 });
 
       const rev2Text = await rev2Page.textContent('body');
       assert.ok(
@@ -723,14 +1132,6 @@ export async function checkBrowserAcceptance({
         ['POST', '/api/evaluator/assessments'],
         ['POST', `/r26/api/candidate/${newlyIssuedSessionId}/execution`],
         ['POST', `/r26/api/candidate/${newlyIssuedSessionId}/ai`],
-        [
-          'POST',
-          `/r27/api/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}/observations`,
-        ],
-        [
-          'POST',
-          `/r27/api/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}/review-packet`,
-        ],
       ];
 
       for (const [method, path] of blockedRoutes) {
@@ -755,10 +1156,50 @@ export async function checkBrowserAcceptance({
       await recruiterContext.close();
     }
 
+    console.log(
+      'Browser Acceptance [9/9]: Testing durable candidate and assigned-reviewer workflow...',
+    );
+    const { checkCandidateReviewBrowserAcceptance } =
+      await import('./candidate-review-browser.mjs');
+    let restartedAppUrl = null;
+    const captureStartApp = async (...args) => {
+      restartedAppUrl = await startApp(...args);
+      return restartedAppUrl;
+    };
+    const candidateReview = await checkCandidateReviewBrowserAcceptance({
+      appUrl,
+      browserEvidenceDir,
+      users,
+      organizationId,
+      sessionId: newlyIssuedSessionId,
+      stopApp,
+      startApp: captureStartApp,
+      source,
+      authUrl,
+      screenshotSensitiveValues,
+    });
+    assert.equal(candidateReview.passed, true);
+    appUrl =
+      typeof candidateReview.appUrl === 'string'
+        ? candidateReview.appUrl
+        : (restartedAppUrl ?? appUrl);
+    const reviewedSessionId = candidateReview.sessionId ?? newlyIssuedSessionId;
+    assert.equal(reviewedSessionId, newlyIssuedSessionId);
+    await assertUnassignedReviewerWritesDenied({
+      browser,
+      appUrl,
+      user: otherReviewerUser,
+      organizationId,
+      sessionId: reviewedSessionId,
+      admin,
+    });
+
     console.log('✓ All browser acceptance checks passed successfully.');
     return {
       passed: true,
       newlyIssuedSessionId,
+      reviewedSessionId,
+      appUrl,
     };
   } finally {
     await browser.close();

@@ -147,7 +147,7 @@ export function Header() {
         </Link>
       </nav>
       <Link className="ct-start" href="/products/software" prefetch={false}>
-        Start with Software
+        Explore Software
       </Link>
     </header>
   );
@@ -245,15 +245,16 @@ export function Path({
   );
 }
 export function ContactCta({
-  title = 'Let’s talk about real work.',
+  title = 'The Software demo is in development.',
 }: {
   title?: string;
 }) {
   return (
     <section className="ct-contact-cta ct-reveal">
-      <Kicker>Start a conversation</Kicker>
+      <Kicker>Product preview</Kicker>
       <h2>{title}</h2>
-      <Button href="/contact">Get in touch</Button>
+      <p>Customer access and demo requests are not open yet.</p>
+      <Button href="/products/software#demo-limits">Explore Software</Button>
     </section>
   );
 }

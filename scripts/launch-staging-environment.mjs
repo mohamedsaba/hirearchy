@@ -6,13 +6,16 @@ import {
   randomBytes,
   createHmac,
 } from 'node:crypto';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
-const dataDir = join(rootDir, '.data', 'local-staging');
+const dataRoot = join(rootDir, '.data');
+const dataDir = join(dataRoot, 'local-staging');
+const candidateTokenEncryptionKeyVariable =
+  'HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY';
 
 const networkName = 'hirearchy-local-staging-net';
 const pgContainer = 'hirearchy-local-staging-pg';
@@ -21,6 +24,7 @@ const pgPort = 5433;
 const authPort = 9998;
 const appPort = 3005;
 const postgresPassword = 'staging-local-password-123';
+const candidatePassword = randomBytes(32).toString('hex');
 const jwtSecret = 'staging-local-jwt-secret-at-least-32-chars-long!';
 const image = 'hirearchy-staging-postgres-local:latest';
 const authImage = 'supabase/gotrue:v2.197.0';
@@ -126,10 +130,11 @@ async function sqlFile(relativePath) {
 }
 
 await preflightResources();
+const { loadOrCreateLocalCandidateTokenEncryptionKey } =
+  await import('./local-candidate-key.mjs');
 const { Client } = await import('pg');
 const { applyMigrations } = await import('../database/postgres/migrate.mjs');
 const { provisionStaging } = await import('./provision-staging.mjs');
-await mkdir(dataDir, { recursive: true, mode: 0o700 });
 
 console.log('Creating Docker network...');
 docker('network', 'create', networkName);
@@ -198,7 +203,7 @@ for (const file of [
 }
 
 await adminClient.query(
-  `ALTER ROLE hirearchy_migrator PASSWORD '${postgresPassword}'; ALTER ROLE r23_gateway PASSWORD '${postgresPassword}'`,
+  `ALTER ROLE hirearchy_migrator PASSWORD '${postgresPassword}'; ALTER ROLE r23_gateway PASSWORD '${postgresPassword}'; ALTER ROLE app_candidate_gateway PASSWORD '${candidatePassword}'`,
 );
 
 console.log('Applying database migrations...');
@@ -212,6 +217,13 @@ const migratorClient = new Client({
 await migratorClient.connect();
 await applyMigrations(migratorClient);
 await migratorClient.end();
+const candidateTokenEncryptionKey =
+  await loadOrCreateLocalCandidateTokenEncryptionKey({
+    dataRoot,
+    dataDirectory: dataDir,
+    adminClient,
+    configuredKey: process.env[candidateTokenEncryptionKeyVariable],
+  });
 
 console.log('Creating auth roles...');
 await adminClient.query(
@@ -341,6 +353,8 @@ const appEnv = {
   STAGING_AUTH_ISSUER: authExternalUrl,
   STAGING_AUTH_AUDIENCE: 'authenticated',
   STAGING_DATABASE_URL: `postgres://r23_gateway:${postgresPassword}@127.0.0.1:${pgPort}/postgres`,
+  STAGING_CANDIDATE_DATABASE_URL: `postgres://app_candidate_gateway:${candidatePassword}@127.0.0.1:${pgPort}/postgres`,
+  HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY: candidateTokenEncryptionKey,
   STAGING_PROOF_PRIVATE_KEY: keys.privateKey
     .export({ format: 'der', type: 'pkcs8' })
     .toString('base64'),

@@ -15,8 +15,11 @@ import { python } from '@codemirror/lang-python';
 import type {
   R26CandidateEvent,
   R26CandidateFileView,
-  R26CandidateView,
 } from '../../../../../../database/postgres/r26/adapter.mjs';
+import type {
+  R26CandidateActivationInput,
+  R26CandidateGetResponse,
+} from '../../../../src/r26-candidate/contract';
 import type { R212CandidateAiView } from '../../../../src/r212-ai/contract';
 import type {
   R213CandidateExecutionView,
@@ -101,6 +104,34 @@ function formatDuration(milliseconds: number): string {
   return `${remainingSeconds} sec remaining`;
 }
 
+function timestampMilliseconds(
+  value: string | null | undefined,
+): number | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function earliestTimestamp(values: readonly (number | null)[]): number | null {
+  const timestamps = values.filter((value): value is number => value !== null);
+  return timestamps.length > 0 ? Math.min(...timestamps) : null;
+}
+
+function formatDateTime(timestamp: number | null): string {
+  return timestamp === null
+    ? 'time unavailable'
+    : new Date(timestamp).toLocaleString();
+}
+
+function isCandidateAccessUnavailable(error: unknown): boolean {
+  const failure = error as ApiFailure;
+  return (
+    failure.status === 401 ||
+    failure.status === 404 ||
+    failure.code === 'CANDIDATE_ACCESS_DENIED'
+  );
+}
+
 function scenarioText(
   scenario: Readonly<Record<string, unknown>>,
   key: 'title' | 'brief' | 'filePath',
@@ -155,8 +186,12 @@ function makeDraft(file: R26CandidateFileView): Draft {
 
 export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const [token, setToken] = useState<string | null | undefined>(undefined);
-  const [view, setView] = useState<R26CandidateView | null>(null);
-  const viewRef = useRef<R26CandidateView | null>(null);
+  const [view, setView] = useState<R26CandidateGetResponse | null>(null);
+  const viewRef = useRef<R26CandidateGetResponse | null>(null);
+  const [acceptedConsent, setAcceptedConsent] = useState<{
+    sessionId: string;
+    digest: string;
+  } | null>(null);
   const [selectedPathState, setSelectedPath] = useState('');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
@@ -165,13 +200,20 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   );
   const [conflictLatest, setConflictLatest] =
     useState<R26CandidateFileView | null>(null);
+  const [saveConflict, setSaveConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [loadFailure, setLoadFailure] = useState('');
+  const [accessUnavailable, setAccessUnavailable] = useState(false);
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [clockNow, setClockNow] = useState(0);
   const refreshInFlight = useRef(false);
+  const consentAccepted = Boolean(
+    view?.dataNotice &&
+    acceptedConsent?.sessionId === sessionId &&
+    acceptedConsent?.digest === view.dataNotice.digest,
+  );
 
   const [aiView, setAiView] = useState<R212CandidateAiView | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -180,34 +222,43 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const [lastAiPrompt, setLastAiPrompt] = useState<string | null>(null);
   const aiMessagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchAiView = useCallback(async () => {
-    if (!token) return;
-    try {
-      const response = await fetch(
-        `/r26/api/candidate/${encodeURIComponent(sessionId)}/ai`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
+  const fetchAiView = useCallback(
+    async (capabilityEnabled = viewRef.current?.capabilities.ai) => {
+      if (!token || capabilityEnabled !== true) return;
+      try {
+        const response = await fetch(
+          `/r26/api/candidate/${encodeURIComponent(sessionId)}/ai`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-store',
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
           },
-          cache: 'no-store',
-          credentials: 'omit',
-          referrerPolicy: 'no-referrer',
-        },
-      );
-      if (response.ok) {
-        const data = (await response.json()) as R212CandidateAiView;
-        setAiView(data);
+        );
+        if (response.ok) {
+          const data = (await response.json()) as R212CandidateAiView;
+          setAiView(data);
+        }
+      } catch {
+        // Non-blocking
       }
-    } catch {
-      // Non-blocking
-    }
-  }, [sessionId, token]);
+    },
+    [sessionId, token],
+  );
 
   const sendAiPrompt = useCallback(
     async (promptToSend?: string) => {
       const prompt = (promptToSend ?? aiPrompt).trim();
-      if (!prompt || !token || aiSubmitting) return;
+      if (
+        !prompt ||
+        !token ||
+        viewRef.current?.capabilities.ai !== true ||
+        aiSubmitting
+      )
+        return;
 
       setAiSubmitting(true);
       setAiError(null);
@@ -266,6 +317,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
 
   const [executionView, setExecutionView] =
     useState<R213CandidateExecutionView | null>(null);
+  const [executionViewLoading, setExecutionViewLoading] = useState(false);
   const [executionRunning, setExecutionRunning] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(
@@ -277,29 +329,37 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const executionRequestIdRef = useRef<string>(requestId());
   const lastExecutedDigestRef = useRef<string | null>(null);
 
-  const fetchExecutionView = useCallback(async () => {
-    if (!token) return;
-    try {
-      const response = await fetch(
-        `/r26/api/candidate/${encodeURIComponent(sessionId)}/execution`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
+  const fetchExecutionView = useCallback(
+    async (capabilityEnabled = viewRef.current?.capabilities.execution) => {
+      if (!token || capabilityEnabled !== true) return;
+      setExecutionViewLoading(true);
+      try {
+        const response = await fetch(
+          `/r26/api/candidate/${encodeURIComponent(sessionId)}/execution`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-store',
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
           },
-          cache: 'no-store',
-          credentials: 'omit',
-          referrerPolicy: 'no-referrer',
-        },
-      );
-      if (response.ok) {
-        const data = (await response.json()) as R213CandidateExecutionView;
-        setExecutionView(data);
+        );
+        if (response.ok) {
+          const data = (await response.json()) as R213CandidateExecutionView;
+          setExecutionView(data);
+        } else {
+          setExecutionView(null);
+        }
+      } catch {
+        setExecutionView(null);
+      } finally {
+        setExecutionViewLoading(false);
       }
-    } catch {
-      // Non-blocking
-    }
-  }, [sessionId, token]);
+    },
+    [sessionId, token],
+  );
 
   const latestExecution: R213RecordedOperation | null = useMemo(() => {
     if (!executionView?.operations || executionView.operations.length === 0)
@@ -321,19 +381,21 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
       (latestExecution as { isSynthetic?: boolean }).isSynthetic === false),
   );
 
-  const applyView = useCallback((next: R26CandidateView) => {
+  const applyView = useCallback((next: R26CandidateGetResponse) => {
     viewRef.current = next;
     setView(next);
+    if (next.status === 'SUBMITTED') setPendingSubmit(null);
     setServerOffsetMs(Date.parse(next.serverNow) - Date.now());
     setClockNow(Date.now());
     setLoadFailure('');
+    setAccessUnavailable(false);
   }, []);
 
   const callApi = useCallback(
     async (
       method: 'GET' | 'POST',
       body?: Readonly<Record<string, unknown>>,
-    ): Promise<R26CandidateView> => {
+    ): Promise<R26CandidateGetResponse> => {
       if (!token)
         throw Object.assign(new Error('Candidate link required.'), {
           status: 401,
@@ -352,9 +414,12 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           referrerPolicy: 'no-referrer',
         },
       );
-      const result: unknown = await response.json().catch(() => null);
-      if (!response.ok) throw errorFromResponse(response.status, result);
-      return result as R26CandidateView;
+      if (!response.ok) {
+        const result: unknown = await response.json().catch(() => null);
+        throw errorFromResponse(response.status, result);
+      }
+      const result: R26CandidateGetResponse = await response.json();
+      return result;
     },
     [sessionId, token],
   );
@@ -421,15 +486,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
       .then((next) => {
         if (active) {
           applyView(next);
-          void fetchAiView();
-          void fetchExecutionView();
+          void fetchAiView(next.capabilities.ai);
+          void fetchExecutionView(next.capabilities.execution);
         }
       })
       .catch((error: unknown) => {
         if (!active) return;
         const failure = error as ApiFailure;
         setLoadFailure(
-          failure.status === 401 || failure.status === 404
+          isCandidateAccessUnavailable(failure)
             ? 'This candidate link is not available for this assessment.'
             : 'The isolated candidate workspace could not be loaded. Reload to try again.',
         );
@@ -442,21 +507,48 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     };
   }, [applyView, callApi, fetchAiView, fetchExecutionView, token]);
 
+  const draftPath = draft?.path;
   const refresh = useCallback(async () => {
-    if (!token || refreshInFlight.current) return;
+    if (!token || accessUnavailable || refreshInFlight.current) return;
     refreshInFlight.current = true;
     try {
-      applyView(await callApi('GET'));
-      void fetchAiView();
-      void fetchExecutionView();
-    } catch {
+      const next = await callApi('GET');
+      applyView(next);
+      if (saveConflict && draftPath) {
+        const latest = next.files.find((file) => file.path === draftPath);
+        if (latest) setConflictLatest(latest);
+      }
+      void fetchAiView(next.capabilities.ai);
+      void fetchExecutionView(next.capabilities.execution);
+    } catch (error) {
+      const failure = error as ApiFailure;
+      if (
+        failure.status === 401 ||
+        failure.status === 404 ||
+        failure.code === 'CANDIDATE_ACCESS_DENIED'
+      ) {
+        setAccessUnavailable(true);
+        setMessage(
+          'Candidate access is no longer available. Saved work remains with the assigned hiring team. Contact the recruiter if you need help.',
+        );
+        return;
+      }
       setMessage(
         'The latest saved state could not be refreshed. Your current editor content is still here.',
       );
     } finally {
       refreshInFlight.current = false;
     }
-  }, [applyView, callApi, fetchAiView, fetchExecutionView, token]);
+  }, [
+    accessUnavailable,
+    applyView,
+    callApi,
+    draftPath,
+    fetchAiView,
+    fetchExecutionView,
+    saveConflict,
+    token,
+  ]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -506,30 +598,77 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const scenarioTitle = scenarioText(scenario, 'title') || 'Assessment task';
   const brief = scenarioText(scenario, 'brief');
   const criteria = scenarioList(scenario, 'acceptanceCriteria');
+  const serverAdjustedNow = clockNow + serverOffsetMs;
+  const invitationExpiryMs = timestampMilliseconds(view?.invitationExpiresAt);
+  const sessionDeadlineMs = timestampMilliseconds(view?.deadline);
+  const activeAccessEndsAtMs =
+    view?.status === 'ACTIVE'
+      ? earliestTimestamp([invitationExpiryMs, sessionDeadlineMs])
+      : invitationExpiryMs;
   const remainingMs =
-    view?.deadline && view.status === 'ACTIVE'
-      ? Date.parse(view.deadline) - (clockNow + serverOffsetMs)
+    view?.status === 'ACTIVE' && activeAccessEndsAtMs !== null
+      ? activeAccessEndsAtMs - serverAdjustedNow
       : null;
+  const invitationExpired =
+    invitationExpiryMs !== null && serverAdjustedNow >= invitationExpiryMs;
+  const sessionTimeExpired =
+    view?.status === 'ACTIVE' &&
+    sessionDeadlineMs !== null &&
+    serverAdjustedNow >= sessionDeadlineMs;
+  const invitationEndsAccess =
+    invitationExpiryMs !== null &&
+    (sessionDeadlineMs === null || invitationExpiryMs <= sessionDeadlineMs);
   const submitted = view?.status === 'SUBMITTED';
   const canEdit =
-    view?.status === 'ACTIVE' && remainingMs !== null && remainingMs > 0;
+    view?.status === 'ACTIVE' &&
+    remainingMs !== null &&
+    remainingMs > 0 &&
+    !accessUnavailable;
+  const editorLocked = Boolean(
+    !canEdit ||
+    pendingSubmit ||
+    saveConflict ||
+    conflictLatest ||
+    (busy && !pendingSave) ||
+    (pendingSave && !busy),
+  );
   const isSubmittedOrExpired = Boolean(
     view?.status === 'SUBMITTED' ||
-    (view?.status === 'ACTIVE' && remainingMs !== null && remainingMs <= 0),
+    accessUnavailable ||
+    pendingSubmit ||
+    invitationExpired ||
+    sessionTimeExpired,
   );
   const isBudgetExhausted = Boolean(
     aiView && aiView.enabled && aiView.remainingInteractions <= 0,
   );
   const aiInputDisabled = Boolean(
     aiSubmitting ||
+    pendingSubmit ||
+    view?.capabilities.ai !== true ||
     isSubmittedOrExpired ||
     isBudgetExhausted ||
     !aiView?.enabled ||
     view?.status === 'CREATED',
   );
 
+  const canRunChecks = Boolean(
+    token &&
+    view?.capabilities.execution === true &&
+    executionView?.terminalEnabled === true &&
+    executionView.remainingExecutions > 0 &&
+    canEdit &&
+    !pendingSubmit &&
+    !busy &&
+    !accessUnavailable &&
+    !isDirty &&
+    !pendingSave &&
+    !saveConflict &&
+    !executionRunning,
+  );
+
   const runChecks = useCallback(async () => {
-    if (!token || !view || executionRunning || isDirty || pendingSave) return;
+    if (!canRunChecks || !token || !view) return;
     setExecutionRunning(true);
     setExecutionError(null);
 
@@ -589,25 +728,40 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     } finally {
       setExecutionRunning(false);
     }
-  }, [
-    executionRunning,
-    fetchExecutionView,
-    isDirty,
-    pendingSave,
-    sessionId,
-    token,
-    view,
-  ]);
+  }, [canRunChecks, fetchExecutionView, sessionId, token, view]);
 
   const activate = async () => {
+    if (!view || (view.dataNotice && !consentAccepted)) {
+      setMessage(
+        'Review the data-use notice and confirm it before activating.',
+      );
+      return;
+    }
     setBusy(true);
     setMessage('');
     try {
-      applyView(await callApi('POST', { action: 'activate', input: {} }));
+      const input: R26CandidateActivationInput = view.dataNotice
+        ? {
+            consent: {
+              version: view.dataNotice.version,
+              digest: view.dataNotice.digest,
+              accepted: true,
+            },
+          }
+        : {};
+      const next = await callApi('POST', { action: 'activate', input });
+      applyView(next);
       setMessage('Assessment activated. Your time has started.');
-      void fetchAiView();
-      void fetchExecutionView();
+      void fetchAiView(next.capabilities.ai);
+      void fetchExecutionView(next.capabilities.execution);
     } catch (error) {
+      if (isCandidateAccessUnavailable(error)) {
+        setAccessUnavailable(true);
+        setMessage(
+          'Candidate access is no longer available. Contact the recruiter if you need help.',
+        );
+        return;
+      }
       setMessage(
         (error as Error).message || 'The assessment could not be activated.',
       );
@@ -616,95 +770,175 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     }
   };
 
-  const retrySave = async (intent: PendingSave) => {
-    setBusy(true);
-    setMessage('');
-    try {
-      const next = await callApi('POST', { action: 'save', input: intent });
-      const saved = next.files.find((file) => file.path === intent.path);
-      applyView(next);
-      if (saved) {
-        if (saved.content === intent.content) {
-          setDraft((current) =>
-            current?.path === intent.path
-              ? {
-                  ...current,
-                  baseContent: saved.content,
-                  baseVersion: saved.version,
-                  baseDigest: saved.digest,
-                }
-              : current,
+  const retrySave = useCallback(
+    async (intent: PendingSave, automatic = false) => {
+      setBusy(true);
+      setMessage('');
+      try {
+        const next = await callApi('POST', { action: 'save', input: intent });
+        const saved = next.files.find((file) => file.path === intent.path);
+        applyView(next);
+        if (saved) {
+          if (saved.content === intent.content) {
+            setDraft((current) =>
+              current?.path === intent.path
+                ? {
+                    ...current,
+                    baseContent: saved.content,
+                    baseVersion: saved.version,
+                    baseDigest: saved.digest,
+                  }
+                : current,
+            );
+          } else {
+            setConflictLatest(saved);
+            setSaveConflict(true);
+          }
+        }
+        if (!saved) {
+          setPendingSave(intent);
+          setMessage(
+            'The save response did not confirm this file. Retry the same save to verify it safely.',
           );
+          return;
+        }
+        setPendingSave(null);
+        if (saved?.content === intent.content) {
+          setConflictLatest(null);
+          setMessage(
+            automatic ? 'Changes saved automatically.' : 'Work saved.',
+          );
+        } else if (saved) {
+          setMessage(
+            'Your save was accepted, and a newer saved version now exists. Your draft is preserved; resolve the version conflict before saving again.',
+          );
+        }
+      } catch (error) {
+        const failure = error as ApiFailure;
+        if (isCandidateAccessUnavailable(failure)) {
+          setPendingSave(null);
+          setAccessUnavailable(true);
+          setMessage(
+            'Candidate access ended before this draft could be confirmed. The draft is still visible here, but it may not be saved; keep this page open and contact the recruiter.',
+          );
+        } else if (failure.status === 409) {
+          setPendingSave(null);
+          setSaveConflict(true);
+          const latestView = await callApi('GET').catch(() => null);
+          if (latestView) {
+            const latest = latestView.files.find(
+              (file) => file.path === intent.path,
+            );
+            applyView(latestView);
+            if (latest) setConflictLatest(latest);
+          }
+          setMessage(
+            'Another saved version is available. Your draft is preserved; resolve the conflict before saving again.',
+          );
+        } else if (failure.status && failure.status < 500) {
+          setPendingSave(null);
+          setMessage(failure.message || 'The work could not be saved.');
         } else {
-          setConflictLatest(saved);
-        }
-      }
-      setPendingSave(null);
-      if (saved?.content === intent.content) {
-        setConflictLatest(null);
-        setMessage('Work saved.');
-      } else if (saved) {
-        setMessage(
-          'Your save was accepted, and a newer saved version now exists. Your draft is preserved; resolve the version conflict before saving again.',
-        );
-      } else {
-        setMessage('Work saved.');
-      }
-    } catch (error) {
-      const failure = error as ApiFailure;
-      if (failure.status === 409) {
-        setPendingSave(null);
-        const latestView = await callApi('GET').catch(() => null);
-        if (latestView) {
-          const latest = latestView.files.find(
-            (file) => file.path === intent.path,
+          setPendingSave(intent);
+          setMessage(
+            'The save outcome is unknown. Retry the same save to confirm it safely.',
           );
-          applyView(latestView);
-          if (latest) setConflictLatest(latest);
         }
-        setMessage(
-          'Another saved version is available. Choose how to resolve the conflict before saving again.',
-        );
-      } else if (failure.status && failure.status < 500) {
-        setPendingSave(null);
-        setMessage(failure.message || 'The work could not be saved.');
-      } else {
-        setPendingSave(intent);
-        setMessage(
-          'The save outcome is unknown. Retry the same save to confirm it safely.',
-        );
+      } finally {
+        setBusy(false);
       }
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+    [applyView, callApi],
+  );
 
-  const save = async () => {
-    if (!currentDraft || !isDirty || !canEdit || busy || !activeFile) return;
-    if (pendingSave) {
-      await retrySave(pendingSave);
+  const save = useCallback(
+    async (automatic = false) => {
+      if (
+        !currentDraft ||
+        !isDirty ||
+        !canEdit ||
+        pendingSubmit ||
+        busy ||
+        !activeFile
+      )
+        return;
+      if (saveConflict) return;
+      if (pendingSave) {
+        await retrySave(pendingSave);
+        return;
+      }
+      const intent: PendingSave = {
+        requestId: requestId(),
+        path: currentDraft.path,
+        content: currentDraft.content,
+        expectedVersion: currentDraft.baseVersion,
+      };
+      setPendingSave(intent);
+      await retrySave(intent, automatic);
+    },
+    [
+      activeFile,
+      busy,
+      canEdit,
+      currentDraft,
+      isDirty,
+      pendingSave,
+      pendingSubmit,
+      retrySave,
+      saveConflict,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      !currentDraft ||
+      !isDirty ||
+      !canEdit ||
+      busy ||
+      pendingSubmit ||
+      pendingSave ||
+      saveConflict ||
+      conflictLatest
+    ) {
       return;
     }
-    const intent: PendingSave = {
-      requestId: requestId(),
-      path: currentDraft.path,
-      content: currentDraft.content,
-      expectedVersion: currentDraft.baseVersion,
+
+    const timeout = window.setTimeout(() => void save(true), 700);
+    return () => window.clearTimeout(timeout);
+  }, [
+    busy,
+    canEdit,
+    conflictLatest,
+    currentDraft,
+    isDirty,
+    pendingSave,
+    pendingSubmit,
+    saveConflict,
+    save,
+  ]);
+
+  useEffect(() => {
+    if (!isDirty && !pendingSave && !pendingSubmit) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
     };
-    setPendingSave(intent);
-    await retrySave(intent);
-  };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [isDirty, pendingSave, pendingSubmit]);
 
   const loadLatestVersion = () => {
     if (!conflictLatest) return;
     setSelectedPath(conflictLatest.path);
     setDraft(makeDraft(conflictLatest));
     setConflictLatest(null);
+    setSaveConflict(false);
     setMessage('Loaded the latest saved version.');
   };
 
   const saveDraftAgainstLatest = async () => {
-    if (!conflictLatest || !currentDraft || !canEdit || busy) return;
+    if (!conflictLatest || !currentDraft || !canEdit || pendingSubmit || busy)
+      return;
     const intent: PendingSave = {
       requestId: requestId(),
       path: conflictLatest.path,
@@ -718,18 +952,28 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
       baseDigest: conflictLatest.digest,
     });
     setConflictLatest(null);
+    setSaveConflict(false);
     setPendingSave(intent);
     await retrySave(intent);
   };
 
   const submit = async () => {
-    if (!view || !canEdit || busy || !view.workspaceDigest) return;
-    if (isDirty) {
-      setMessage('Save your changes before submitting the assessment.');
+    if (!view || busy || !view.workspaceDigest) return;
+    if (!pendingSubmit && !canEdit) return;
+    if (!pendingSubmit && isDirty) {
+      setMessage(
+        'Your latest edits are being saved automatically. Wait until they are saved before submitting.',
+      );
       return;
     }
-    if (pendingSave) {
-      setMessage('Confirm the pending save before submitting the assessment.');
+    if (!pendingSubmit && pendingSave) {
+      setMessage(
+        'Confirm the pending save with Retry save before submitting the assessment.',
+      );
+      return;
+    }
+    if (!pendingSubmit && saveConflict) {
+      setMessage('Resolve the saved-version conflict before submitting.');
       return;
     }
     const intent = pendingSubmit ?? {
@@ -740,14 +984,21 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     setBusy(true);
     setMessage('');
     try {
-      applyView(await callApi('POST', { action: 'submit', input: intent }));
+      const next = await callApi('POST', { action: 'submit', input: intent });
+      applyView(next);
       setPendingSubmit(null);
       setMessage('Assessment submitted. Your saved work is now read-only.');
-      void fetchAiView();
-      void fetchExecutionView();
+      void fetchAiView(next.capabilities.ai);
+      void fetchExecutionView(next.capabilities.execution);
     } catch (error) {
       const failure = error as ApiFailure;
-      if (failure.status && failure.status < 500) {
+      if (isCandidateAccessUnavailable(failure)) {
+        setPendingSubmit(null);
+        setAccessUnavailable(true);
+        setMessage(
+          'Candidate access is no longer available. Submission could not be confirmed; contact the recruiter.',
+        );
+      } else if (failure.status && failure.status < 500) {
         setPendingSubmit(null);
         if (failure.status === 409) await refresh();
         setMessage(failure.message || 'The assessment could not be submitted.');
@@ -789,20 +1040,32 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         </div>
         <div className="r26-header-status">
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
-            <p className="r26-timer" aria-label="Assessment timer">
+            <p
+              className="r26-timer"
+              aria-label="Workspace access time remaining"
+            >
               <span>Time remaining</span>
               <strong>{formatDuration(remainingMs)}</strong>
+              <span>
+                Access ends no later than {formatDateTime(activeAccessEndsAtMs)}
+              </span>
             </p>
           ) : null}
           {view ? (
             <span
-              className={`r26-status r26-status-${view.status.toLowerCase()}`}
+              className={`r26-status r26-status-${accessUnavailable || invitationExpired || sessionTimeExpired ? 'expired' : view.status.toLowerCase()}`}
             >
-              {view.status === 'CREATED'
-                ? 'Ready to start'
-                : view.status === 'ACTIVE'
-                  ? 'In progress'
-                  : 'Submitted'}
+              {accessUnavailable
+                ? 'Access unavailable'
+                : invitationExpired && view.status !== 'SUBMITTED'
+                  ? 'Invitation expired'
+                  : sessionTimeExpired
+                    ? 'Time limit ended'
+                    : view.status === 'CREATED'
+                      ? 'Ready to start'
+                      : view.status === 'ACTIVE'
+                        ? 'In progress'
+                        : 'Submitted'}
             </span>
           ) : null}
         </div>
@@ -810,7 +1073,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
 
       <div
         className="r26-workspace"
-        data-ai-enabled={aiView?.enabled ? 'true' : 'false'}
+        data-ai-enabled={
+          view?.capabilities.ai === true && aiView?.enabled ? 'true' : 'false'
+        }
       >
         <aside className="r26-task-panel" aria-label="Assessment task">
           {loading ? <p role="status">Loading assessment…</p> : null}
@@ -830,6 +1095,33 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           ) : null}
           {view ? (
             <>
+              {accessUnavailable ? (
+                <div className="r26-notice r26-notice-error" role="alert">
+                  <strong>Candidate access is no longer available</strong>
+                  <p>
+                    {isDirty || pendingSave
+                      ? 'This draft may not have been saved. Keep this page open and contact the recruiter before closing it.'
+                      : 'Saved work remains with the assigned hiring team. Contact the recruiter if you need help.'}
+                  </p>
+                </div>
+              ) : null}
+              {!accessUnavailable &&
+              view.status === 'ACTIVE' &&
+              remainingMs !== null &&
+              remainingMs <= 0 ? (
+                <div className="r26-notice r26-notice-error" role="alert">
+                  <strong>
+                    {invitationEndsAccess
+                      ? 'Candidate invitation expired'
+                      : 'Assessment time limit ended'}
+                  </strong>
+                  <p>
+                    Candidate access is closed. Saved work remains with the
+                    assigned hiring team; contact the recruiter if you need
+                    help.
+                  </p>
+                </div>
+              ) : null}
               <p className="r26-eyebrow">Engineering assessment</p>
               <h1>{scenarioTitle}</h1>
               {brief ? (
@@ -852,20 +1144,72 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   </ul>
                 </section>
               ) : null}
+              {view.dataNotice ? (
+                <section
+                  className="r26-notice"
+                  aria-labelledby="candidate-data-use-title"
+                  data-testid="candidate-data-use-notice"
+                >
+                  <strong id="candidate-data-use-title">
+                    Data use and consent
+                  </strong>
+                  <p>{view.dataNotice.text}</p>
+                  {view.status === 'CREATED' ? (
+                    <label>
+                      <input
+                        checked={consentAccepted}
+                        onChange={(event) => {
+                          const dataNotice = view.dataNotice;
+                          setAcceptedConsent(
+                            event.target.checked && dataNotice
+                              ? {
+                                  sessionId,
+                                  digest: dataNotice.digest,
+                                }
+                              : null,
+                          );
+                        }}
+                        type="checkbox"
+                      />{' '}
+                      I acknowledge and agree to this data-use notice.
+                    </label>
+                  ) : null}
+                </section>
+              ) : null}
               {view.status === 'CREATED' ? (
                 <div className="r26-prestart">
                   <p>
                     Your assessment timer starts when you activate this
                     workspace.
+                    {view.invitationExpiresAt ? (
+                      <>
+                        {' '}
+                        This invitation expires at{' '}
+                        <time dateTime={view.invitationExpiresAt}>
+                          {formatDateTime(invitationExpiryMs)}
+                        </time>
+                        .
+                      </>
+                    ) : null}
                   </p>
                   <button
                     className="r26-button r26-button-primary"
-                    disabled={busy}
+                    disabled={
+                      busy ||
+                      accessUnavailable ||
+                      invitationExpired ||
+                      Boolean(view.dataNotice && !consentAccepted)
+                    }
                     onClick={() => void activate()}
                     type="button"
                   >
                     {busy ? 'Activating…' : 'Activate assessment'}
                   </button>
+                  {view.dataNotice && !consentAccepted ? (
+                    <p role="status">
+                      Confirm the data-use notice to activate your assessment.
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
               {submitted ? (
@@ -896,7 +1240,8 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   </li>
                   <li>
                     <span>Terminal</span>
-                    {executionView?.terminalEnabled ? (
+                    {view.capabilities.execution &&
+                    executionView?.terminalEnabled ? (
                       <div className="r26-capability-detail">
                         <strong data-testid="terminal-capability-status">
                           Available (Synthetic Test Lane)
@@ -906,15 +1251,28 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                           {executionView.maxExecutions} runs remaining
                         </span>
                       </div>
-                    ) : (
+                    ) : view.capabilities.execution &&
+                      !executionView &&
+                      executionViewLoading ? (
                       <strong data-testid="terminal-capability-status">
-                        Unavailable
+                        Checking availability…
                       </strong>
+                    ) : (
+                      <div className="r26-capability-detail">
+                        <strong data-testid="terminal-capability-status">
+                          Unavailable
+                        </strong>
+                        {!view.capabilities.execution ? (
+                          <span className="r26-capability-note">
+                            Code execution is unavailable in this demo.
+                          </span>
+                        ) : null}
+                      </div>
                     )}
                   </li>
                   <li>
                     <span>AI assistance</span>
-                    {aiView?.enabled ? (
+                    {view.capabilities.ai && aiView?.enabled ? (
                       <div className="r26-capability-detail">
                         <strong>Available (Synthetic Test Lane)</strong>
                         <span data-testid="ai-budget-badge">
@@ -922,11 +1280,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                           {aiView.totalInteractionsAllowed} questions remaining
                         </span>
                       </div>
+                    ) : view.capabilities.ai && !aiView ? (
+                      <strong>Checking availability…</strong>
                     ) : (
                       <div className="r26-capability-detail">
                         <strong>Unavailable</strong>
                         <span className="r26-capability-note">
-                          AI assistance is disabled for this assessment.
+                          {view.capabilities.ai
+                            ? 'AI assistance is disabled for this assessment.'
+                            : 'AI assistance is unavailable in this demo.'}
                         </span>
                       </div>
                     )}
@@ -934,15 +1296,17 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   <li>
                     <span>Verification</span>
                     <strong data-testid="verification-status-badge">
-                      {latestExecution
-                        ? `Executed (${latestExecution.status})`
-                        : 'Not run'}
+                      {!view.capabilities.execution
+                        ? 'Unavailable in this demo'
+                        : latestExecution
+                          ? `Executed (${latestExecution.status})`
+                          : 'Not run'}
                     </strong>
                   </li>
                 </ul>
                 <p>
-                  This isolated workspace records saved file changes, synthetic
-                  verification receipts, and candidate interactions.
+                  This workspace records saved code changes, task activity, and
+                  submission for the assigned hiring team’s review.
                 </p>
               </section>
               <section
@@ -986,7 +1350,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 <span className="sr-only">Workspace file</span>
                 <select
                   aria-label="Workspace file"
-                  disabled={busy || isDirty}
+                  aria-describedby="candidate-file-save-hint"
+                  disabled={
+                    busy ||
+                    isDirty ||
+                    Boolean(pendingSave) ||
+                    Boolean(pendingSubmit) ||
+                    saveConflict ||
+                    Boolean(conflictLatest)
+                  }
                   onChange={(event) => {
                     setSelectedPath(event.target.value);
                     setConflictLatest(null);
@@ -1000,36 +1372,62 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                     </option>
                   ))}
                 </select>
+                <span
+                  id="candidate-file-save-hint"
+                  className="r26-capability-note"
+                >
+                  {saveConflict
+                    ? 'Resolve the saved-version conflict before switching files.'
+                    : pendingSave
+                      ? 'Confirm the pending save before switching files.'
+                      : isDirty || busy
+                        ? 'Wait for the current file to save before switching files.'
+                        : 'Changes save automatically after you pause editing.'}
+                </span>
               </label>
             ) : null}
           </div>
 
-          {conflictLatest ? (
+          {saveConflict ? (
             <div className="r26-conflict" role="alert">
               <div>
                 <strong>Saved version changed</strong>
                 <p>
-                  Your draft remains here. Choose whether to load the latest
-                  version or save your draft on top of it.
+                  {conflictLatest
+                    ? 'Your draft remains here. Choose whether to load the latest version or save your draft on top of it.'
+                    : 'Your draft remains here, but the latest saved version could not be loaded. Retry loading it before saving or submitting.'}
                 </p>
               </div>
               <div className="r26-conflict-actions">
-                <button
-                  className="r26-button r26-button-secondary"
-                  disabled={busy}
-                  onClick={loadLatestVersion}
-                  type="button"
-                >
-                  Load latest saved version
-                </button>
-                <button
-                  className="r26-button r26-button-primary"
-                  disabled={busy || !canEdit}
-                  onClick={() => void saveDraftAgainstLatest()}
-                  type="button"
-                >
-                  Save my draft against latest version
-                </button>
+                {conflictLatest ? (
+                  <>
+                    <button
+                      className="r26-button r26-button-secondary"
+                      disabled={busy}
+                      onClick={loadLatestVersion}
+                      type="button"
+                    >
+                      Load latest saved version
+                    </button>
+                    <button
+                      className="r26-button r26-button-primary"
+                      disabled={busy || !canEdit}
+                      onClick={() => void saveDraftAgainstLatest()}
+                      type="button"
+                    >
+                      Save my draft against latest version
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="r26-button r26-button-secondary"
+                    disabled={busy || accessUnavailable}
+                    onClick={() => void refresh()}
+                    type="button"
+                  >
+                    Reload latest saved version
+                  </button>
+                )}
               </div>
             </div>
           ) : null}
@@ -1041,10 +1439,10 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 : 'Activate the assessment to load the workspace files'}
             </span>
             <div>
-              {canEdit && activeFile ? (
+              {canEdit && !pendingSubmit && activeFile ? (
                 <button
                   className="r26-button r26-button-primary"
-                  disabled={busy || !isDirty}
+                  disabled={busy || !isDirty || saveConflict}
                   onClick={() => void save()}
                   type="button"
                 >
@@ -1055,10 +1453,19 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                       : 'Save work'}
                 </button>
               ) : null}
-              {canEdit ? (
+              {canEdit || pendingSubmit ? (
                 <button
                   className="r26-button r26-button-secondary"
-                  disabled={busy || isDirty || Boolean(pendingSave)}
+                  disabled={
+                    busy ||
+                    (!pendingSubmit &&
+                      (isDirty || Boolean(pendingSave) || saveConflict))
+                  }
+                  aria-describedby={
+                    isDirty || pendingSave || saveConflict
+                      ? 'candidate-submit-save-status'
+                      : undefined
+                  }
                   onClick={() => void submit()}
                   type="button"
                 >
@@ -1070,6 +1477,31 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 </button>
               ) : null}
             </div>
+            {pendingSubmit ? (
+              <p
+                className="r26-capability-note"
+                role="status"
+                data-testid="candidate-submit-uncertain"
+              >
+                {busy
+                  ? 'Submission is being confirmed. Editing and other actions are paused.'
+                  : 'The submission outcome is unknown. Your workspace is read-only until you retry the same submission.'}
+              </p>
+            ) : canEdit && (isDirty || pendingSave || saveConflict) ? (
+              <p
+                id="candidate-submit-save-status"
+                className="r26-capability-note"
+                role="status"
+              >
+                {saveConflict
+                  ? 'Submission is paused until you resolve the saved-version conflict.'
+                  : pendingSave && busy
+                    ? 'Submission is paused while the current save finishes.'
+                    : pendingSave
+                      ? 'Submission is paused. Retry the same save to confirm its result first.'
+                      : 'Submission is paused while your latest edits save automatically.'}
+              </p>
+            ) : null}
           </div>
 
           {message ? (
@@ -1087,7 +1519,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           ) : activeFile && currentDraft ? (
             <div
               className="r26-code-editor"
-              data-readonly={canEdit ? 'false' : 'true'}
+              data-readonly={editorLocked ? 'true' : 'false'}
             >
               <CodeMirror
                 aria-label="Edit file"
@@ -1097,13 +1529,12 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   highlightActiveLine: false,
                 }}
                 className="r26-code-mirror"
-                editable={Boolean(canEdit && !busy && !pendingSave)}
+                editable={!editorLocked}
                 extensions={[
                   ...fileExtensions(activeFile.path),
                   EditorView.contentAttributes.of({
                     'aria-label': 'Edit file',
-                    'aria-readonly':
-                      canEdit && !busy && !pendingSave ? 'false' : 'true',
+                    'aria-readonly': editorLocked ? 'true' : 'false',
                     spellcheck: 'false',
                   }),
                 ]}
@@ -1119,7 +1550,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   });
                   setMessage('');
                 }}
-                readOnly={!canEdit || busy || Boolean(pendingSave)}
+                readOnly={editorLocked}
                 value={currentDraft.content}
               />
             </div>
@@ -1132,10 +1563,22 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           {view && view.status === 'ACTIVE' ? (
             <div className="r26-draft-state" role="status">
               <span
-                className={isDirty ? 'r26-dot r26-dot-unsaved' : 'r26-dot'}
+                className={
+                  isDirty || pendingSave ? 'r26-dot r26-dot-unsaved' : 'r26-dot'
+                }
                 aria-hidden="true"
               />
-              {isDirty ? 'Unsaved changes' : 'All changes saved'}
+              {accessUnavailable
+                ? 'Access ended — the current draft may not be saved'
+                : saveConflict
+                  ? 'Save conflict — your draft is preserved'
+                  : pendingSave && busy
+                    ? 'Saving changes…'
+                    : pendingSave
+                      ? 'Save outcome unknown — retry the same save to confirm'
+                      : isDirty
+                        ? 'Unsaved changes — saving automatically…'
+                        : 'All changes saved'}
             </div>
           ) : null}
           {submitted ? (
@@ -1156,7 +1599,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           ) : null}
 
           {/* R2.13 Candidate Workspace Execution Panel */}
-          {view && view.status !== 'CREATED' ? (
+          {view && view.status !== 'CREATED' && view.capabilities.execution ? (
             <section
               className="r26-execution-panel"
               aria-label="Automated Checks"
@@ -1193,7 +1636,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                       className="r26-execution-version"
                       data-testid="execution-workspace-version"
                     >
-                      Saved version {activeFile?.version ?? '1'} · Digest{' '}
+                      Saved version {activeFile?.version ?? 'Unknown'} · Digest{' '}
                       {view.workspaceDigest
                         ? view.workspaceDigest.slice(0, 8)
                         : '—'}
@@ -1202,23 +1645,17 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                       className="r26-execution-budget-pill"
                       data-testid="execution-panel-budget"
                     >
-                      {executionView
+                      {executionView?.terminalEnabled
                         ? `${executionView.remainingExecutions} of ${executionView.maxExecutions} runs remaining`
-                        : '10 of 10 runs remaining'}
+                        : executionViewLoading
+                          ? 'Checking run availability…'
+                          : 'Run availability could not be confirmed'}
                     </span>
                   </div>
                   <button
                     className="r26-button r26-button-primary r26-run-checks-btn"
                     data-testid="run-checks-button"
-                    disabled={
-                      !canEdit ||
-                      busy ||
-                      isDirty ||
-                      Boolean(pendingSave) ||
-                      executionRunning ||
-                      (executionView !== null &&
-                        executionView.remainingExecutions <= 0)
-                    }
+                    disabled={!canRunChecks}
                     onClick={() => void runChecks()}
                     type="button"
                   >
@@ -1580,101 +2017,90 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           ) : null}
         </section>
 
-        <aside
-          className={`r26-ai-panel ${!aiView?.enabled ? 'r26-ai-panel-disabled' : ''}`}
-          aria-label="AI Assistance"
-          data-testid="candidate-ai-panel"
-        >
-          <div className="r26-ai-heading">
-            <div>
-              <p
-                className="r26-eyebrow"
-                style={{ color: 'rgba(255,255,255,0.7)', margin: 0 }}
-              >
-                AI Assistance
-              </p>
-              <h2>Synthetic Assistant (Test Lane)</h2>
+        {view ? (
+          <aside
+            className={`r26-ai-panel ${view.capabilities.ai !== true || !aiView?.enabled ? 'r26-ai-panel-disabled' : ''}`}
+            aria-label="AI assistance"
+            data-testid="candidate-ai-panel"
+          >
+            <div className="r26-ai-heading">
+              <div>
+                <p
+                  className="r26-eyebrow"
+                  style={{ color: 'rgba(255,255,255,0.7)', margin: 0 }}
+                >
+                  AI Assistance
+                </p>
+                <h2>
+                  {view.capabilities.ai
+                    ? 'Synthetic Assistant (Test Lane)'
+                    : 'Unavailable in this demo'}
+                </h2>
+              </div>
+              {view.capabilities.ai && aiView?.enabled ? (
+                <span
+                  className="r26-ai-budget-pill"
+                  data-testid="ai-panel-budget"
+                  title="Remaining questions in budget"
+                >
+                  {aiView.remainingInteractions} of{' '}
+                  {aiView.totalInteractionsAllowed} remaining
+                </span>
+              ) : null}
             </div>
-            {aiView?.enabled ? (
-              <span
-                className="r26-ai-budget-pill"
-                data-testid="ai-panel-budget"
-                title="Remaining questions in budget"
-              >
-                {aiView.remainingInteractions} of{' '}
-                {aiView.totalInteractionsAllowed} remaining
-              </span>
-            ) : null}
-          </div>
 
-          {!aiView ? (
-            <div className="r26-ai-disabled-body">
-              <p>Loading AI assistance…</p>
-            </div>
-          ) : !aiView.enabled ? (
-            <div
-              className="r26-ai-disabled-body"
-              data-testid="ai-disabled-notice"
-            >
-              <p>AI assistance is disabled for this assessment.</p>
-            </div>
-          ) : (
-            <>
+            {!view.capabilities.ai ? (
               <div
-                className="r26-ai-messages"
-                role="log"
-                aria-live="polite"
-                data-testid="ai-messages-container"
+                className="r26-ai-disabled-body"
+                data-testid="ai-disabled-notice"
               >
-                {aiView.interactions.length === 0 ? (
-                  <div className="r26-ai-empty">
-                    <p>No questions asked yet.</p>
-                    <p className="r26-ai-hint">
-                      Ask questions regarding the task, requirements, or
-                      architecture. Answers are generated factually by the
-                      Synthetic Assistant test lane.
-                    </p>
-                  </div>
-                ) : (
-                  aiView.interactions.map((interaction) => (
-                    <div
-                      key={interaction.interactionId || interaction.requestId}
-                      className="r26-ai-thread"
-                      data-testid={`ai-interaction-${interaction.requestId}`}
-                    >
+                <p>AI assistance is unavailable in this demo.</p>
+              </div>
+            ) : !aiView ? (
+              <div className="r26-ai-disabled-body">
+                <p>Loading AI assistance…</p>
+              </div>
+            ) : !aiView.enabled ? (
+              <div
+                className="r26-ai-disabled-body"
+                data-testid="ai-disabled-notice"
+              >
+                <p>AI assistance is disabled for this assessment.</p>
+              </div>
+            ) : (
+              <>
+                <div
+                  className="r26-ai-messages"
+                  role="log"
+                  aria-live="polite"
+                  data-testid="ai-messages-container"
+                >
+                  {aiView.interactions.length === 0 ? (
+                    <div className="r26-ai-empty">
+                      <p>No questions asked yet.</p>
+                      <p className="r26-ai-hint">
+                        Ask questions regarding the task, requirements, or
+                        architecture. Answers are generated factually by the
+                        Synthetic Assistant test lane.
+                      </p>
+                    </div>
+                  ) : (
+                    aiView.interactions.map((interaction) => (
                       <div
-                        className="r26-ai-message r26-ai-message-candidate"
-                        data-testid="ai-candidate-message"
+                        key={interaction.interactionId || interaction.requestId}
+                        className="r26-ai-thread"
+                        data-testid={`ai-interaction-${interaction.requestId}`}
                       >
-                        <div className="r26-ai-meta">
-                          <strong>You</strong>
-                          {interaction.createdAt ? (
-                            <time dateTime={interaction.createdAt}>
-                              {new Date(
-                                interaction.createdAt,
-                              ).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                              })}
-                            </time>
-                          ) : null}
-                        </div>
-                        <p>{interaction.candidatePrompt}</p>
-                      </div>
-
-                      {interaction.status === 'COMPLETED' &&
-                      interaction.assistantResponse ? (
                         <div
-                          className="r26-ai-message r26-ai-message-assistant"
-                          data-testid="ai-assistant-message"
+                          className="r26-ai-message r26-ai-message-candidate"
+                          data-testid="ai-candidate-message"
                         >
                           <div className="r26-ai-meta">
-                            <strong>Synthetic Assistant (Test Lane)</strong>
-                            {interaction.completedAt ? (
-                              <time dateTime={interaction.completedAt}>
+                            <strong>You</strong>
+                            {interaction.createdAt ? (
+                              <time dateTime={interaction.createdAt}>
                                 {new Date(
-                                  interaction.completedAt,
+                                  interaction.createdAt,
                                 ).toLocaleTimeString([], {
                                   hour: '2-digit',
                                   minute: '2-digit',
@@ -1683,142 +2109,170 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                               </time>
                             ) : null}
                           </div>
-                          <p>{interaction.assistantResponse}</p>
+                          <p>{interaction.candidatePrompt}</p>
                         </div>
-                      ) : interaction.status === 'FAILED' ? (
-                        <div
-                          className="r26-ai-message r26-ai-message-failed"
-                          data-testid="ai-failed-message"
-                        >
-                          <div className="r26-ai-meta">
-                            <strong>
-                              Synthetic Assistant (Test Lane) — Error
-                            </strong>
+
+                        {interaction.status === 'COMPLETED' &&
+                        interaction.assistantResponse ? (
+                          <div
+                            className="r26-ai-message r26-ai-message-assistant"
+                            data-testid="ai-assistant-message"
+                          >
+                            <div className="r26-ai-meta">
+                              <strong>Synthetic Assistant (Test Lane)</strong>
+                              {interaction.completedAt ? (
+                                <time dateTime={interaction.completedAt}>
+                                  {new Date(
+                                    interaction.completedAt,
+                                  ).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                  })}
+                                </time>
+                              ) : null}
+                            </div>
+                            <p>{interaction.assistantResponse}</p>
                           </div>
-                          <p>
-                            {interaction.errorMessage ||
-                              interaction.failureReason ||
-                              'Failed to generate response.'}
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-                <div ref={aiMessagesEndRef} />
-              </div>
+                        ) : interaction.status === 'FAILED' ? (
+                          <div
+                            className="r26-ai-message r26-ai-message-failed"
+                            data-testid="ai-failed-message"
+                          >
+                            <div className="r26-ai-meta">
+                              <strong>
+                                Synthetic Assistant (Test Lane) — Error
+                              </strong>
+                            </div>
+                            <p>
+                              {interaction.errorMessage ||
+                                interaction.failureReason ||
+                                'Failed to generate response.'}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+                  <div ref={aiMessagesEndRef} />
+                </div>
 
-              {aiSubmitting ? (
-                <div
-                  className="r26-ai-loading"
-                  role="status"
-                  data-testid="ai-loading-indicator"
-                >
-                  <span className="r26-ai-spinner" aria-hidden="true" />
-                  <span>Generating response from Synthetic Assistant…</span>
-                </div>
-              ) : null}
-
-              {aiError ? (
-                <div
-                  className="r26-notice r26-notice-error"
-                  role="alert"
-                  style={{ margin: '0 1rem 0.5rem' }}
-                  data-testid="ai-error-notice"
-                >
-                  <strong>Error</strong>
-                  <p>{aiError}</p>
-                  {lastAiPrompt &&
-                  !aiSubmitting &&
-                  !isBudgetExhausted &&
-                  !isSubmittedOrExpired ? (
-                    <button
-                      type="button"
-                      className="r26-button r26-button-secondary"
-                      onClick={() => void sendAiPrompt(lastAiPrompt)}
-                      style={{ marginTop: '0.4rem', alignSelf: 'flex-start' }}
-                    >
-                      Retry
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {isSubmittedOrExpired ? (
-                <div
-                  className="r26-notice"
-                  style={{ margin: '0 1rem 0.75rem' }}
-                  data-testid="ai-finality-notice"
-                >
-                  <strong>Assessment concluded</strong>
-                  <p>
-                    {view?.closureReason === 'timeout' ||
-                    (remainingMs !== null && remainingMs <= 0)
-                      ? 'Assessment time has expired. AI assistance is now closed.'
-                      : 'Assessment has been submitted. AI assistance is read-only.'}
-                  </p>
-                </div>
-              ) : isBudgetExhausted ? (
-                <div
-                  className="r26-notice"
-                  style={{ margin: '0 1rem 0.75rem' }}
-                  data-testid="ai-budget-exhausted-notice"
-                >
-                  <strong>Interaction budget exhausted</strong>
-                  <p>
-                    You have reached the maximum allowance of{' '}
-                    {aiView.totalInteractionsAllowed} questions for this
-                    assessment.
-                  </p>
-                </div>
-              ) : view?.status === 'CREATED' ? (
-                <div
-                  className="r26-notice"
-                  style={{ margin: '0 1rem 0.75rem' }}
-                  data-testid="ai-prestart-notice"
-                >
-                  <strong>Assessment not active</strong>
-                  <p>Activate the assessment above to ask questions.</p>
-                </div>
-              ) : (
-                <form
-                  className="r26-ai-composer"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void sendAiPrompt();
-                  }}
-                >
-                  <label htmlFor="r26-ai-prompt-input" className="sr-only">
-                    Ask the Synthetic Assistant
-                  </label>
-                  <textarea
-                    id="r26-ai-prompt-input"
-                    className="r26-ai-textarea"
-                    placeholder="Ask a question about your task (max 4,000 characters)…"
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    disabled={aiInputDisabled}
-                    maxLength={4000}
-                    rows={3}
-                  />
-                  <div className="r26-ai-composer-footer">
-                    <span className="r26-ai-char-counter">
-                      {aiPrompt.length} / 4,000
-                    </span>
-                    <button
-                      type="submit"
-                      className="r26-button r26-button-primary"
-                      disabled={aiInputDisabled || !aiPrompt.trim()}
-                      data-testid="ai-submit-button"
-                    >
-                      {aiSubmitting ? 'Sending…' : 'Ask Assistant'}
-                    </button>
+                {aiSubmitting ? (
+                  <div
+                    className="r26-ai-loading"
+                    role="status"
+                    data-testid="ai-loading-indicator"
+                  >
+                    <span className="r26-ai-spinner" aria-hidden="true" />
+                    <span>Generating response from Synthetic Assistant…</span>
                   </div>
-                </form>
-              )}
-            </>
-          )}
-        </aside>
+                ) : null}
+
+                {aiError ? (
+                  <div
+                    className="r26-notice r26-notice-error"
+                    role="alert"
+                    style={{ margin: '0 1rem 0.5rem' }}
+                    data-testid="ai-error-notice"
+                  >
+                    <strong>Error</strong>
+                    <p>{aiError}</p>
+                    {lastAiPrompt &&
+                    !aiSubmitting &&
+                    !isBudgetExhausted &&
+                    !isSubmittedOrExpired ? (
+                      <button
+                        type="button"
+                        className="r26-button r26-button-secondary"
+                        onClick={() => void sendAiPrompt(lastAiPrompt)}
+                        style={{ marginTop: '0.4rem', alignSelf: 'flex-start' }}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {isSubmittedOrExpired ? (
+                  <div
+                    className="r26-notice"
+                    style={{ margin: '0 1rem 0.75rem' }}
+                    data-testid="ai-finality-notice"
+                  >
+                    <strong>Assessment concluded</strong>
+                    <p>
+                      {pendingSubmit
+                        ? 'Submission is being confirmed. AI actions are paused.'
+                        : view?.closureReason === 'timeout' ||
+                            (remainingMs !== null && remainingMs <= 0)
+                          ? 'Assessment time has expired. AI assistance is now closed.'
+                          : submitted
+                            ? 'Assessment has been submitted. AI assistance is read-only.'
+                            : 'Candidate actions are paused.'}
+                    </p>
+                  </div>
+                ) : isBudgetExhausted ? (
+                  <div
+                    className="r26-notice"
+                    style={{ margin: '0 1rem 0.75rem' }}
+                    data-testid="ai-budget-exhausted-notice"
+                  >
+                    <strong>Interaction budget exhausted</strong>
+                    <p>
+                      You have reached the maximum allowance of{' '}
+                      {aiView.totalInteractionsAllowed} questions for this
+                      assessment.
+                    </p>
+                  </div>
+                ) : view?.status === 'CREATED' ? (
+                  <div
+                    className="r26-notice"
+                    style={{ margin: '0 1rem 0.75rem' }}
+                    data-testid="ai-prestart-notice"
+                  >
+                    <strong>Assessment not active</strong>
+                    <p>Activate the assessment above to ask questions.</p>
+                  </div>
+                ) : (
+                  <form
+                    className="r26-ai-composer"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void sendAiPrompt();
+                    }}
+                  >
+                    <label htmlFor="r26-ai-prompt-input" className="sr-only">
+                      Ask the Synthetic Assistant
+                    </label>
+                    <textarea
+                      id="r26-ai-prompt-input"
+                      className="r26-ai-textarea"
+                      placeholder="Ask a question about your task (max 4,000 characters)…"
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      disabled={aiInputDisabled}
+                      maxLength={4000}
+                      rows={3}
+                    />
+                    <div className="r26-ai-composer-footer">
+                      <span className="r26-ai-char-counter">
+                        {aiPrompt.length} / 4,000
+                      </span>
+                      <button
+                        type="submit"
+                        className="r26-button r26-button-primary"
+                        disabled={aiInputDisabled || !aiPrompt.trim()}
+                        data-testid="ai-submit-button"
+                      >
+                        {aiSubmitting ? 'Sending…' : 'Ask Assistant'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </>
+            )}
+          </aside>
+        ) : null}
       </div>
     </main>
   );

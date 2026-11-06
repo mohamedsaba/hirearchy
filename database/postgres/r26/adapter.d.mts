@@ -14,6 +14,12 @@ export type R26CandidateSubmitInput = Readonly<{
   expectedWorkspaceDigest: string;
 }>;
 
+export type R26CandidateActivationConsent = Readonly<{
+  version: 'candidate-data-v1';
+  digest: string;
+  accepted: true;
+}>;
+
 export type R26CandidateScenario = Readonly<{
   id: string;
   version: string;
@@ -87,7 +93,9 @@ export type R26CandidateCommand =
     })
   | (R26CandidateCommandBase & {
       action: 'activate';
-      input: Readonly<Record<string, never>>;
+      input:
+        | Readonly<Record<string, never>>
+        | Readonly<{ consent: R26CandidateActivationConsent }>;
     })
   | (R26CandidateCommandBase & {
       action: 'save';
@@ -112,5 +120,6 @@ export declare class R26CandidateError extends Error {
 export declare function createR26CandidateAdapter(
   options: Readonly<{
     connectionString: string;
+    requireLifecycleMarker?: boolean;
   }>,
 ): R26CandidateAdapter;

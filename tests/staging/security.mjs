@@ -18,7 +18,14 @@ export async function checkProofBoundary(
   privateKey,
   token,
   organizationId,
+  onCheckpoint = () => {},
 ) {
+  const checkpoint = (label) =>
+    onCheckpoint(`database proof security / ${label}`);
+  const claims = JSON.parse(
+    Buffer.from(token.split('.')[1], 'base64url').toString(),
+  );
+  checkpoint('policy metadata');
   const { rows: policies } = await admin.query(
     `SELECT tablename,policyname,roles::text[] AS roles,cmd,qual,with_check FROM pg_policies WHERE schemaname='hirearchy' AND tablename IN ('application_principals','organization_memberships','assessment_sessions') AND 'staging_verifier_owner'=ANY(roles) ORDER BY policyname`,
   );
@@ -31,8 +38,18 @@ export async function checkProofBoundary(
         ['staging_verifier_owner'],
       ],
       [
+        'staging_verifier_assessment_session_lock',
+        'UPDATE',
+        ['staging_verifier_owner'],
+      ],
+      [
         'staging_verifier_assessment_session_select',
         'SELECT',
+        ['staging_verifier_owner'],
+      ],
+      [
+        'staging_verifier_membership_lock',
+        'UPDATE',
         ['staging_verifier_owner'],
       ],
       [
@@ -52,14 +69,179 @@ export async function checkProofBoundary(
     assert.match(predicate, /staging\.(principal_id|subject_id)/);
     if (policy.tablename !== 'application_principals')
       assert.match(predicate, /staging\.organization_id/);
+    if (policy.policyname === 'staging_verifier_assessment_session_lock') {
+      assert.equal(policy.with_check, 'false');
+      assert.match(policy.qual, /staging\.session_id/);
+    }
+    if (policy.policyname === 'staging_verifier_membership_lock') {
+      assert.equal(policy.with_check, 'false');
+      assert.match(policy.qual, /staging\.organization_id/);
+      assert.match(policy.qual, /staging\.principal_id/);
+      assert.match(policy.qual, /staging\.reviewer_principal_id/);
+      assert.match(policy.qual, /role = 'reviewer'/);
+      assert.match(policy.qual, /status = 'active'/);
+      assert.match(policy.qual, /revoked_at IS NULL/);
+      assert.doesNotMatch(policy.qual, /list_organization_reviewers/);
+    }
   }
+  checkpoint('schema privilege metadata');
   const { rows: privileges } = await admin.query(
-    "SELECT has_schema_privilege('app_evaluator','hirearchy','USAGE') AS evaluator,has_schema_privilege('r23_gateway','hirearchy','USAGE') AS gateway",
+    `SELECT has_schema_privilege('app_evaluator','hirearchy','USAGE') AS evaluator,
+            has_schema_privilege('r23_gateway','hirearchy','USAGE') AS gateway,
+            has_table_privilege('staging_verifier_owner','hirearchy.organization_memberships','UPDATE') AS membership_table_update,
+            has_column_privilege('staging_verifier_owner','hirearchy.organization_memberships','id','UPDATE') AS membership_id_update,
+            has_column_privilege('staging_verifier_owner','hirearchy.organization_memberships','role','UPDATE') AS membership_role_update`,
   );
-  assert.deepEqual(privileges, [{ evaluator: false, gateway: false }]);
-  const claims = JSON.parse(
-    Buffer.from(token.split('.')[1], 'base64url').toString(),
+  assert.deepEqual(privileges, [
+    {
+      evaluator: false,
+      gateway: false,
+      membership_table_update: false,
+      membership_id_update: true,
+      membership_role_update: false,
+    },
+  ]);
+  checkpoint('membership row-lock boundary');
+  const { rows: callerPrincipalRows } = await admin.query(
+    'SELECT id::pg_catalog.text AS id FROM hirearchy.application_principals WHERE auth_user_id=$1::pg_catalog.uuid',
+    [claims.sub],
   );
+  assert.equal(callerPrincipalRows.length, 1);
+  const callerPrincipalId = callerPrincipalRows[0].id;
+  const { rows: reviewerRows } = await admin.query(
+    `SELECT principal_id::pg_catalog.text AS id
+       FROM hirearchy.organization_memberships
+      WHERE organization_id=$1::pg_catalog.uuid
+        AND principal_id <> $2::pg_catalog.uuid
+        AND role='reviewer' AND status='active' AND revoked_at IS NULL
+      ORDER BY principal_id
+      LIMIT 1`,
+    [organizationId, callerPrincipalId],
+  );
+  assert.equal(reviewerRows.length, 1);
+  const reviewerPrincipalId = reviewerRows[0].id;
+
+  async function membershipLockRows({
+    organizationContext = organizationId,
+    principalContext = callerPrincipalId,
+    reviewerContext = null,
+    targetPrincipalId,
+    membershipStatus,
+    revokeMembership = false,
+  }) {
+    await admin.query('BEGIN');
+    try {
+      if (membershipStatus !== undefined) {
+        await admin.query(
+          'UPDATE hirearchy.organization_memberships SET status=$3 WHERE organization_id=$1::pg_catalog.uuid AND principal_id=$2::pg_catalog.uuid',
+          [organizationId, targetPrincipalId, membershipStatus],
+        );
+      }
+      if (revokeMembership) {
+        await admin.query(
+          'UPDATE hirearchy.organization_memberships SET revoked_at=pg_catalog.clock_timestamp() WHERE organization_id=$1::pg_catalog.uuid AND principal_id=$2::pg_catalog.uuid',
+          [organizationId, targetPrincipalId],
+        );
+      }
+      await admin.query('SET LOCAL ROLE staging_verifier_owner');
+      await admin.query(
+        `SELECT pg_catalog.set_config('staging.organization_id',$1,true),
+                pg_catalog.set_config('staging.principal_id',$2,true),
+                pg_catalog.set_config('staging.reviewer_principal_id',$3,true)`,
+        [
+          organizationContext ?? '',
+          principalContext ?? '',
+          reviewerContext ?? '',
+        ],
+      );
+      const { rowCount } = await admin.query(
+        `SELECT role
+           FROM hirearchy.organization_memberships
+          WHERE organization_id=$1::pg_catalog.uuid
+            AND principal_id=$2::pg_catalog.uuid
+          FOR SHARE`,
+        [organizationId, targetPrincipalId],
+      );
+      await admin.query('ROLLBACK');
+      return rowCount;
+    } catch (error) {
+      await admin.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    }
+  }
+
+  assert.equal(
+    await membershipLockRows({ targetPrincipalId: callerPrincipalId }),
+    1,
+    'an active caller may lock their own membership',
+  );
+  assert.equal(
+    await membershipLockRows({
+      reviewerContext: reviewerPrincipalId,
+      targetPrincipalId: reviewerPrincipalId,
+    }),
+    1,
+    'a recruiter may lock the exact active reviewer selected for issuance',
+  );
+  for (const context of [
+    { organizationContext: randomUUID(), targetPrincipalId: callerPrincipalId },
+    { principalContext: randomUUID(), targetPrincipalId: callerPrincipalId },
+    {
+      reviewerContext: randomUUID(),
+      targetPrincipalId: reviewerPrincipalId,
+    },
+    {
+      principalContext: reviewerPrincipalId,
+      reviewerContext: callerPrincipalId,
+      targetPrincipalId: callerPrincipalId,
+    },
+    {
+      organizationContext: null,
+      principalContext: null,
+      targetPrincipalId: callerPrincipalId,
+    },
+    {
+      reviewerContext: reviewerPrincipalId,
+      targetPrincipalId: reviewerPrincipalId,
+      membershipStatus: 'inactive',
+    },
+    {
+      reviewerContext: reviewerPrincipalId,
+      targetPrincipalId: reviewerPrincipalId,
+      revokeMembership: true,
+    },
+  ]) {
+    assert.equal(await membershipLockRows(context), 0);
+  }
+  await admin.query('BEGIN');
+  try {
+    await admin.query('SET LOCAL ROLE staging_verifier_owner');
+    await admin.query(
+      `SELECT pg_catalog.set_config('staging.organization_id',$1,true),
+              pg_catalog.set_config('staging.principal_id',$2,true)`,
+      [organizationId, callerPrincipalId],
+    );
+    await assert.rejects(
+      admin.query(
+        `UPDATE hirearchy.organization_memberships SET id=id
+          WHERE organization_id=$1::pg_catalog.uuid
+            AND principal_id=$2::pg_catalog.uuid`,
+        [organizationId, callerPrincipalId],
+      ),
+      { code: '42501' },
+    );
+  } finally {
+    await admin.query('ROLLBACK');
+  }
+  const { rows: unchangedMemberships } = await admin.query(
+    `SELECT pg_catalog.count(*)=2
+              AND pg_catalog.bool_and(status='active' AND revoked_at IS NULL) AS unchanged
+       FROM hirearchy.organization_memberships
+      WHERE organization_id=$1::pg_catalog.uuid
+        AND principal_id=ANY($2::pg_catalog.uuid[])`,
+    [organizationId, [callerPrincipalId, reviewerPrincipalId]],
+  );
+  assert.deepEqual(unchangedMemberships, [{ unchanged: true }]);
   const now = Math.floor(Date.now() / 1000);
   const proof = (changes = {}) =>
     Buffer.from(
@@ -88,20 +270,24 @@ export async function checkProofBoundary(
     assert.rejects(execute(payload, signature), (error) =>
       ['28000', '42501', '23505', '22023'].includes(error.code),
     );
+  checkpoint('direct verification-key table access denied');
   await assert.rejects(
     gateway.query('SELECT * FROM hirearchy.staging_verification_keys'),
     { code: '42501' },
   );
+  checkpoint('direct verifier-role switch denied');
   await assert.rejects(gateway.query('SET ROLE staging_verifier_owner'), {
     code: '42501',
   });
+  checkpoint('verified principal scope setup');
   await gateway.query(
     "SELECT set_config('staging.subject_id',$1,false),set_config('staging.organization_id',$2,false)",
     [claims.sub, organizationId],
   );
   const valid = proof();
+  checkpoint('invalid signature denied');
   await rejected(valid, Buffer.alloc(64));
-  for (const changes of [
+  const rejectedProofChanges = [
     { iss: 'untrusted' },
     { aud: 'elsewhere' },
     { kid: 'missing' },
@@ -115,56 +301,68 @@ export async function checkProofBoundary(
     { injectedSubject: randomUUID() },
     { op: 'unavailable' },
     { v: 2 },
-  ])
+  ];
+  for (const [index, changes] of rejectedProofChanges.entries()) {
+    checkpoint(`invalid proof claim ${index + 1} denied`);
     await rejected(proof(changes));
+  }
+  checkpoint('first verified session open');
   await execute(valid);
+  checkpoint('proof replay denied');
   await rejected(valid);
+  checkpoint('revoke original signing key');
   await admin.query(
     "UPDATE hirearchy.staging_verification_keys SET revoked_at=now() WHERE key_id='rehearsal-1'",
   );
+  checkpoint('revoked signing key proof denied');
   await rejected(proof());
   const rotated = generateKeyPairSync('ed25519');
+  checkpoint('rotated signing key installation');
   await admin.query(
     "INSERT INTO hirearchy.staging_verification_keys(key_id,issuer,audience,public_key,valid_from,valid_until) VALUES('rehearsal-2','hirearchy-staging','hirearchy-postgres',$1,now()-interval '1 minute',now()+interval '1 day')",
     [rotated.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32)],
   );
   const next = proof({ kid: 'rehearsal-2' });
+  checkpoint('rotated signing key session open');
   await execute(next, sign(null, next, rotated.privateKey));
+  checkpoint('original signing key restored');
   await admin.query(
     "UPDATE hirearchy.staging_verification_keys SET revoked_at=NULL WHERE key_id='rehearsal-1'",
   );
 
+  checkpoint('read authentication expiry');
   const originalExpiry = (
     await admin.query('SELECT not_after FROM auth.sessions WHERE id=$1', [
       claims.session_id,
     ])
   ).rows[0].not_after;
+  checkpoint('shorten authentication expiry');
   await admin.query(
     "UPDATE auth.sessions SET not_after=now()+interval '30 seconds' WHERE id=$1",
     [claims.session_id],
   );
+  checkpoint('session expiry bound');
   await execute(proof());
   const boundedSession = await admin.query(
     'SELECT app.expires_at <= auth.not_after AS bounded FROM hirearchy.staging_sessions app JOIN auth.sessions auth ON auth.id=app.auth_session_id WHERE app.auth_session_id=$1 AND app.organization_id=$2',
     [claims.session_id, organizationId],
   );
   assert.equal(boundedSession.rows[0].bounded, true);
+  checkpoint('expire authentication session');
   await admin.query(
     "UPDATE auth.sessions SET not_after=now()-interval '1 second' WHERE id=$1",
     [claims.session_id],
   );
+  checkpoint('expired authentication session denied');
   await rejected(proof());
+  checkpoint('restore authentication expiry');
   await admin.query('UPDATE auth.sessions SET not_after=$1 WHERE id=$2', [
     originalExpiry,
     claims.session_id,
   ]);
 
+  checkpoint('create second organization scope');
   const secondOrganizationId = randomUUID();
-  const { rows: principalRows } = await admin.query(
-    'SELECT id FROM hirearchy.application_principals WHERE auth_user_id=$1',
-    [claims.sub],
-  );
-  assert.equal(principalRows.length, 1);
   await admin.query('INSERT INTO hirearchy.organizations(id) VALUES($1)', [
     secondOrganizationId,
   ]);
@@ -172,13 +370,14 @@ export async function checkProofBoundary(
     `INSERT INTO hirearchy.organization_memberships
        (organization_id, principal_id, role, status, joined_at, version)
      VALUES ($1, $2, 'recruiter', 'active', pg_catalog.clock_timestamp(), 1)`,
-    [secondOrganizationId, principalRows[0].id],
+    [secondOrganizationId, callerPrincipalId],
   );
   const secondOpen = proof({
     kid: 'rehearsal-2',
     jti: randomUUID(),
     args: { organizationId: secondOrganizationId },
   });
+  checkpoint('second organization session open');
   await execute(secondOpen, sign(null, secondOpen, rotated.privateKey));
   const revoke = proof({
     kid: 'rehearsal-2',
@@ -186,7 +385,9 @@ export async function checkProofBoundary(
     op: 'session.revoke',
     args: { organizationId: secondOrganizationId },
   });
+  checkpoint('second organization session revoke');
   await execute(revoke, sign(null, revoke, rotated.privateKey));
+  checkpoint('verify per-organization session states');
   const { rows: sessionRows } = await admin.query(
     `SELECT organization_id, revoked_at IS NOT NULL AS revoked
        FROM hirearchy.staging_sessions
@@ -203,6 +404,273 @@ export async function checkProofBoundary(
       left.organization_id.localeCompare(right.organization_id),
     ),
   );
+}
+
+export async function checkReviewerRowLockBoundary({
+  admin,
+  organizationId,
+  sessionId,
+  reviewerPrincipalId,
+  issuerPrincipalId,
+}) {
+  const createdSessionId = `sess_lock_probe_${randomUUID().replaceAll('-', '')}`;
+  const createdAssignmentId = randomUUID();
+  await admin.query(
+    'INSERT INTO hirearchy.assessment_sessions(id,organization_id,issuer_principal_id) VALUES($1,$2,$3)',
+    [createdSessionId, organizationId, issuerPrincipalId],
+  );
+  await admin.query(
+    'INSERT INTO hirearchy.reviewer_assignments(id,organization_id,session_id,reviewer_principal_id,assigned_by_principal_id) VALUES($1,$2,$3,$4,$5)',
+    [
+      createdAssignmentId,
+      organizationId,
+      createdSessionId,
+      reviewerPrincipalId,
+      issuerPrincipalId,
+    ],
+  );
+
+  try {
+    const { rows: policies } = await admin.query(
+      `SELECT tablename,cmd,roles::text[] AS roles,qual,with_check
+         FROM pg_policies
+        WHERE schemaname='hirearchy'
+          AND policyname IN ('staging_verifier_assessment_session_lock','staging_verifier_reviewer_assignment_lock')
+        ORDER BY policyname`,
+    );
+    assert.deepEqual(
+      policies.map((policy) => [policy.tablename, policy.cmd, policy.roles]),
+      [
+        ['assessment_sessions', 'UPDATE', ['staging_verifier_owner']],
+        ['reviewer_assignments', 'UPDATE', ['staging_verifier_owner']],
+      ],
+    );
+    for (const policy of policies) {
+      assert.match(policy.qual, /staging\.organization_id/);
+      assert.match(policy.qual, /SUBMITTED/);
+      assert.equal(policy.with_check, 'false');
+    }
+    assert.match(policies[0].qual, /staging\.principal_id/);
+    assert.match(policies[0].qual, /staging\.session_id/);
+    assert.match(policies[0].qual, /revoked_at IS NULL/);
+    assert.match(policies[1].qual, /staging\.principal_id/);
+    assert.match(policies[1].qual, /staging\.session_id/);
+    assert.match(policies[1].qual, /revoked_at IS NULL/);
+
+    const { rows: privileges } = await admin.query(
+      `SELECT
+         has_table_privilege('staging_verifier_owner','hirearchy.assessment_sessions','UPDATE') AS session_table_update,
+         has_column_privilege('staging_verifier_owner','hirearchy.assessment_sessions','id','UPDATE') AS session_id_update,
+         has_column_privilege('staging_verifier_owner','hirearchy.assessment_sessions','status','UPDATE') AS session_status_update,
+         has_table_privilege('staging_verifier_owner','hirearchy.reviewer_assignments','UPDATE') AS assignment_table_update,
+         has_column_privilege('staging_verifier_owner','hirearchy.reviewer_assignments','id','UPDATE') AS assignment_id_update,
+         has_column_privilege('staging_verifier_owner','hirearchy.reviewer_assignments','revoked_at','UPDATE') AS assignment_revoked_update`,
+    );
+    assert.deepEqual(privileges, [
+      {
+        session_table_update: false,
+        session_id_update: true,
+        session_status_update: false,
+        assignment_table_update: false,
+        assignment_id_update: true,
+        assignment_revoked_update: false,
+      },
+    ]);
+    const { rows: runtimePrivileges } = await admin.query(
+      `SELECT role_name,
+              has_table_privilege(role_name,'hirearchy.assessment_sessions','UPDATE')
+                OR has_column_privilege(role_name,'hirearchy.assessment_sessions','id','UPDATE')
+                OR has_table_privilege(role_name,'hirearchy.organization_memberships','UPDATE')
+                OR has_column_privilege(role_name,'hirearchy.organization_memberships','id','UPDATE')
+                OR has_table_privilege(role_name,'hirearchy.reviewer_assignments','UPDATE')
+                OR has_column_privilege(role_name,'hirearchy.reviewer_assignments','id','UPDATE') AS has_update
+         FROM unnest(ARRAY['app_candidate_gateway','app_evaluator','app_control_worker','r23_gateway']) AS role_name
+        ORDER BY role_name`,
+    );
+    assert.deepEqual(runtimePrivileges, [
+      { role_name: 'app_candidate_gateway', has_update: false },
+      { role_name: 'app_control_worker', has_update: false },
+      { role_name: 'app_evaluator', has_update: false },
+      { role_name: 'r23_gateway', has_update: false },
+    ]);
+    const { rows: roleFlags } = await admin.query(
+      `SELECT rolcanlogin,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb
+         FROM pg_catalog.pg_roles WHERE rolname='staging_verifier_owner'`,
+    );
+    assert.deepEqual(roleFlags, [
+      {
+        rolcanlogin: false,
+        rolsuper: false,
+        rolbypassrls: false,
+        rolcreaterole: false,
+        rolcreatedb: false,
+      },
+    ]);
+
+    async function lockCounts(
+      organizationContext,
+      principalContext,
+      targetSessionId,
+      requestSessionContext = targetSessionId,
+    ) {
+      await admin.query('BEGIN');
+      try {
+        await admin.query('SET LOCAL ROLE staging_verifier_owner');
+        await admin.query(
+          "SELECT pg_catalog.set_config('staging.organization_id',$1,true),pg_catalog.set_config('staging.principal_id',$2,true),pg_catalog.set_config('staging.session_id',$3,true)",
+          [
+            organizationContext ?? '',
+            principalContext ?? '',
+            requestSessionContext ?? '',
+          ],
+        );
+        const sessionPlain = await admin.query(
+          'SELECT status FROM hirearchy.assessment_sessions WHERE organization_id=$1::uuid AND id=$2',
+          [organizationId, targetSessionId],
+        );
+        const sessionLock = await admin.query(
+          'SELECT status FROM hirearchy.assessment_sessions WHERE organization_id=$1::uuid AND id=$2 FOR SHARE',
+          [organizationId, targetSessionId],
+        );
+        const assignmentPlain = await admin.query(
+          'SELECT id FROM hirearchy.reviewer_assignments WHERE organization_id=$1::uuid AND session_id=$2 AND reviewer_principal_id=$3::uuid AND revoked_at IS NULL',
+          [organizationId, targetSessionId, reviewerPrincipalId],
+        );
+        const assignmentLock = await admin.query(
+          'SELECT id FROM hirearchy.reviewer_assignments WHERE organization_id=$1::uuid AND session_id=$2 AND reviewer_principal_id=$3::uuid AND revoked_at IS NULL FOR SHARE',
+          [organizationId, targetSessionId, reviewerPrincipalId],
+        );
+        await admin.query('COMMIT');
+        return {
+          sessionPlain: sessionPlain.rowCount,
+          sessionLock: sessionLock.rowCount,
+          assignmentPlain: assignmentPlain.rowCount,
+          assignmentLock: assignmentLock.rowCount,
+        };
+      } catch (error) {
+        await admin.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      }
+    }
+
+    const authorized = await lockCounts(
+      organizationId,
+      reviewerPrincipalId,
+      sessionId,
+    );
+    assert.deepEqual(authorized, {
+      sessionPlain: 1,
+      sessionLock: 1,
+      assignmentPlain: 1,
+      assignmentLock: 1,
+    });
+    assert.deepEqual(
+      await lockCounts(randomUUID(), reviewerPrincipalId, sessionId),
+      {
+        sessionPlain: 0,
+        sessionLock: 0,
+        assignmentPlain: 0,
+        assignmentLock: 0,
+      },
+    );
+    assert.deepEqual(
+      await lockCounts(organizationId, issuerPrincipalId, sessionId),
+      {
+        sessionPlain: 1,
+        sessionLock: 0,
+        assignmentPlain: 1,
+        assignmentLock: 0,
+      },
+    );
+    assert.deepEqual(
+      await lockCounts(
+        organizationId,
+        reviewerPrincipalId,
+        sessionId,
+        createdSessionId,
+      ),
+      {
+        sessionPlain: 1,
+        sessionLock: 0,
+        assignmentPlain: 1,
+        assignmentLock: 0,
+      },
+    );
+    for (const [organizationContext, principalContext] of [
+      [organizationId, null],
+      [null, reviewerPrincipalId],
+    ]) {
+      assert.deepEqual(
+        await lockCounts(organizationContext, principalContext, sessionId),
+        {
+          sessionPlain: 0,
+          sessionLock: 0,
+          assignmentPlain: 0,
+          assignmentLock: 0,
+        },
+      );
+    }
+    assert.deepEqual(
+      await lockCounts(organizationId, reviewerPrincipalId, sessionId, null),
+      {
+        sessionPlain: 1,
+        sessionLock: 0,
+        assignmentPlain: 1,
+        assignmentLock: 0,
+      },
+    );
+    assert.deepEqual(
+      await lockCounts(organizationId, reviewerPrincipalId, createdSessionId),
+      {
+        sessionPlain: 1,
+        sessionLock: 0,
+        assignmentPlain: 1,
+        assignmentLock: 0,
+      },
+    );
+
+    for (const [sql, parameters] of [
+      [
+        'UPDATE hirearchy.assessment_sessions SET id=id WHERE organization_id=$1::uuid AND id=$2',
+        [organizationId, sessionId],
+      ],
+      [
+        'UPDATE hirearchy.reviewer_assignments SET id=id WHERE organization_id=$1::uuid AND session_id=$2 AND reviewer_principal_id=$3::uuid',
+        [organizationId, sessionId, reviewerPrincipalId],
+      ],
+    ]) {
+      await admin.query('BEGIN');
+      try {
+        await admin.query('SET LOCAL ROLE staging_verifier_owner');
+        await admin.query(
+          "SELECT pg_catalog.set_config('staging.organization_id',$1,true),pg_catalog.set_config('staging.principal_id',$2,true),pg_catalog.set_config('staging.session_id',$3,true)",
+          [organizationId, reviewerPrincipalId, sessionId],
+        );
+        await assert.rejects(admin.query(sql, parameters), {
+          code: '42501',
+        });
+      } finally {
+        await admin.query('ROLLBACK');
+      }
+    }
+    const { rows: unchanged } = await admin.query(
+      `SELECT (SELECT status FROM hirearchy.assessment_sessions WHERE organization_id=$1 AND id=$2) AS session_status,
+              (SELECT revoked_at IS NULL FROM hirearchy.reviewer_assignments WHERE organization_id=$1 AND session_id=$2 AND reviewer_principal_id=$3) AS assignment_active`,
+      [organizationId, sessionId, reviewerPrincipalId],
+    );
+    assert.deepEqual(unchanged, [
+      { session_status: 'SUBMITTED', assignment_active: true },
+    ]);
+  } finally {
+    await admin.query(
+      'DELETE FROM hirearchy.reviewer_assignments WHERE organization_id=$1 AND id=$2',
+      [organizationId, createdAssignmentId],
+    );
+    await admin.query(
+      'DELETE FROM hirearchy.assessment_sessions WHERE organization_id=$1 AND id=$2',
+      [organizationId, createdSessionId],
+    );
+  }
 }
 
 export async function checkInstallerBoundary(admin, installerSql) {
@@ -241,5 +709,57 @@ export async function checkInstallerBoundary(admin, installerSql) {
     );
   } finally {
     await admin.query('DROP SCHEMA r23');
+  }
+
+  const roleSettings = [
+    {
+      name: 'missing fixed search path',
+      configure: 'ALTER ROLE app_candidate_gateway RESET search_path',
+      restore: 'ALTER ROLE app_candidate_gateway SET search_path=pg_catalog',
+    },
+    {
+      name: 'additional search path',
+      configure:
+        'ALTER ROLE app_candidate_gateway SET search_path=pg_catalog,public',
+      restore: 'ALTER ROLE app_candidate_gateway SET search_path=pg_catalog',
+    },
+    {
+      name: 'caller identity setting',
+      configure:
+        "ALTER ROLE app_candidate_gateway SET app.current_principal_id='forged'",
+      restore:
+        'ALTER ROLE app_candidate_gateway RESET app.current_principal_id',
+    },
+    {
+      name: 'database-specific override',
+      configure:
+        'ALTER ROLE app_candidate_gateway IN DATABASE postgres SET search_path=pg_catalog',
+      restore:
+        'ALTER ROLE app_candidate_gateway IN DATABASE postgres RESET search_path',
+    },
+  ];
+  for (const setting of roleSettings) {
+    try {
+      await admin.query(setting.configure);
+      let roleFailure;
+      try {
+        await admin.query(installerSql);
+      } catch (error) {
+        roleFailure = error;
+      }
+      await admin.query('ROLLBACK');
+      assert(roleFailure, `installer must reject ${setting.name}`);
+      assert.match(
+        roleFailure.message,
+        /app_candidate_gateway is missing or unsafe/,
+      );
+      const { rows } = await admin.query(
+        "SELECT pg_catalog.to_regnamespace('staging') AS staging_schema, (SELECT pg_catalog.count(*)::pg_catalog.int4 FROM hirearchy.durable_candidate_installation) AS durable_markers",
+      );
+      assert.deepEqual(rows, [{ staging_schema: null, durable_markers: 0 }]);
+    } finally {
+      await admin.query('ROLLBACK');
+      await admin.query(setting.restore);
+    }
   }
 }

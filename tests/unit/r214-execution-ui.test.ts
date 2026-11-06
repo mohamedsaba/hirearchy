@@ -416,8 +416,17 @@ describe('R2.14 Candidate Client Execution Panel UI Rendering', () => {
             ),
           );
         }
+        const candidateView = {
+          ...baseMockCandidateView,
+          invitationExpiresAt: null,
+          capabilities: {
+            ai: false,
+            execution: executionView.terminalEnabled === true,
+          },
+          dataNotice: null,
+        };
         return Promise.resolve(
-          new Response(JSON.stringify(baseMockCandidateView), {
+          new Response(JSON.stringify(candidateView), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),

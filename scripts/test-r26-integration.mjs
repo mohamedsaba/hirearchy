@@ -22,6 +22,7 @@ const auth = `${network}-auth`;
 const password = randomBytes(32).toString('hex');
 const runtimePassword = randomBytes(32).toString('hex');
 const jwtSecret = randomBytes(48).toString('hex');
+const postgresOnly = process.env.R26_POSTGRES_ONLY === '1';
 const issuer = 'https://auth.hirearchy.test/auth/v1';
 const audience = 'authenticated';
 const docker = (...args) =>
@@ -59,7 +60,8 @@ let authOwner;
 let stage = 'startup';
 
 try {
-  for (const image of [pgImage, authImage]) docker('image', 'inspect', image);
+  for (const image of postgresOnly ? [pgImage] : [pgImage, authImage])
+    docker('image', 'inspect', image);
   stage = 'disposable network';
   docker('network', 'create', network);
   docker(
@@ -131,70 +133,81 @@ try {
   await applyMigrations(migrator);
   await migrator.end();
   migrator = undefined;
-  docker(
-    'run',
-    '-d',
-    '--name',
-    auth,
-    '--network',
-    network,
-    '-p',
-    '127.0.0.1::9999',
-    ...Object.entries({
-      GOTRUE_API_HOST: '0.0.0.0',
-      PORT: '9999',
-      API_EXTERNAL_URL: issuer,
-      GOTRUE_SITE_URL: 'https://hirearchy.example.test',
-      GOTRUE_DB_DRIVER: 'postgres',
-      GOTRUE_DB_DATABASE_URL: `postgres://supabase_auth_admin:${password}@db:5432/postgres?sslmode=disable`,
-      GOTRUE_DB_NAMESPACE: 'auth',
-      GOTRUE_JWT_SECRET: jwtSecret,
-      GOTRUE_JWT_ISSUER: issuer,
-      GOTRUE_JWT_EXP: '3600',
-      GOTRUE_JWT_AUD: audience,
-      GOTRUE_JWT_DEFAULT_GROUP_NAME: audience,
-      GOTRUE_DISABLE_SIGNUP: 'false',
-      GOTRUE_MAILER_AUTOCONFIRM: 'true',
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true',
-    }).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
-    authImage,
-  );
-  stage = 'Auth readiness';
-  const authPort = /^127\.0\.0\.1:(\d+)$/.exec(
-    docker('port', auth, '9999/tcp'),
-  );
-  assert(authPort, 'loopback-only Auth');
-  const authUrl = `http://127.0.0.1:${authPort[1]}`;
-  await waitFor(
-    async () =>
-      (await fetch(`${authUrl}/health`, { signal: AbortSignal.timeout(1000) }))
-        .ok,
-  );
-  const users = {
-    a: { email: `evaluator-a-${network}@acme.example`, password },
-    b: { email: `reviewer-b-${network}@beta.example`, password },
-    ab: { email: `evaluator-ab-${network}@shared.example`, password },
-    revoked: { email: `revoked-a-${network}@acme.example`, password },
-    recruiterA2: { email: `recruiter-a2-${network}@acme.example`, password },
-    recruiterEmpty: {
-      email: `recruiter-empty-${network}@acme.example`,
-      password,
-    },
-    adminA: { email: `admin-a-${network}@acme.example`, password },
-    recruiterB: { email: `recruiter-b-${network}@beta.example`, password },
-  };
-  const authCall = async (path, body) => {
-    const response = await fetch(`${authUrl}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(5000),
-    });
-    assert(response.ok, 'synthetic Auth operation');
-    return response.json();
-  };
-  stage = 'synthetic signup';
-  for (const user of Object.values(users)) await authCall('/signup', user);
+  let authUrl;
+  let users;
+  let authCall;
+  if (!postgresOnly) {
+    docker(
+      'run',
+      '-d',
+      '--name',
+      auth,
+      '--network',
+      network,
+      '-p',
+      '127.0.0.1::9999',
+      ...Object.entries({
+        GOTRUE_API_HOST: '0.0.0.0',
+        PORT: '9999',
+        API_EXTERNAL_URL: issuer,
+        GOTRUE_SITE_URL: 'https://hirearchy.example.test',
+        GOTRUE_DB_DRIVER: 'postgres',
+        GOTRUE_DB_DATABASE_URL: `postgres://supabase_auth_admin:${password}@db:5432/postgres?sslmode=disable`,
+        GOTRUE_DB_NAMESPACE: 'auth',
+        GOTRUE_JWT_SECRET: jwtSecret,
+        GOTRUE_JWT_ISSUER: issuer,
+        GOTRUE_JWT_EXP: '3600',
+        GOTRUE_JWT_AUD: audience,
+        GOTRUE_JWT_DEFAULT_GROUP_NAME: audience,
+        GOTRUE_DISABLE_SIGNUP: 'false',
+        GOTRUE_MAILER_AUTOCONFIRM: 'true',
+        GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true',
+      }).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
+      authImage,
+    );
+    stage = 'Auth readiness';
+    const authPort = /^127\.0\.0\.1:(\d+)$/.exec(
+      docker('port', auth, '9999/tcp'),
+    );
+    assert(authPort, 'loopback-only Auth');
+    authUrl = `http://127.0.0.1:${authPort[1]}`;
+    await waitFor(
+      async () =>
+        (
+          await fetch(`${authUrl}/health`, {
+            signal: AbortSignal.timeout(1000),
+          })
+        ).ok,
+    );
+    users = {
+      a: { email: `evaluator-a-${network}@acme.example`, password },
+      b: { email: `reviewer-b-${network}@beta.example`, password },
+      ab: { email: `evaluator-ab-${network}@shared.example`, password },
+      revoked: { email: `revoked-a-${network}@acme.example`, password },
+      recruiterA2: {
+        email: `recruiter-a2-${network}@acme.example`,
+        password,
+      },
+      recruiterEmpty: {
+        email: `recruiter-empty-${network}@acme.example`,
+        password,
+      },
+      adminA: { email: `admin-a-${network}@acme.example`, password },
+      recruiterB: { email: `recruiter-b-${network}@beta.example`, password },
+    };
+    authCall = async (path, body) => {
+      const response = await fetch(`${authUrl}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(5000),
+      });
+      assert(response.ok, 'synthetic Auth operation');
+      return response.json();
+    };
+    stage = 'synthetic signup';
+    for (const user of Object.values(users)) await authCall('/signup', user);
+  }
   stage = 'R2.3 + R2.4 + R2.6 fixture schema install';
   await admin.query(
     readFileSync(
@@ -223,28 +236,34 @@ try {
     runtimePassword,
     candidateTokenKey,
   });
-  stage = 'R2.6 Next.js + PostgreSQL + HTTPS Browser verification';
-  await runR25RequestAndBrowserChecks({
-    admin,
-    connection,
-    password,
-    runtimePassword,
-    authUrl,
-    issuer,
-    audience,
-    users,
-    authCall,
-    candidateTokenKey,
-    extraEnv: {
-      HIREARCHY_R26_DISPOSABLE: '1',
-      R26_DATABASE_URL: `postgres://app_candidate_gateway:${runtimePassword}@127.0.0.1:${connection.port}/postgres`,
-    },
-    candidateChecks: runR26BrowserCandidateChecks,
-    evidenceDir: process.env.R26_EVIDENCE_DIR,
-  });
-  console.log(
-    'PASS R2.6 actual-role candidate lifecycle/finality and real Next.js HTTPS editing/restart/submission journey',
-  );
+  if (postgresOnly) {
+    console.log(
+      'PASS R2.6 actual-role candidate PostgreSQL lifecycle/finality checks',
+    );
+  } else {
+    stage = 'R2.6 Next.js + PostgreSQL + HTTPS Browser verification';
+    await runR25RequestAndBrowserChecks({
+      admin,
+      connection,
+      password,
+      runtimePassword,
+      authUrl,
+      issuer,
+      audience,
+      users,
+      authCall,
+      candidateTokenKey,
+      extraEnv: {
+        HIREARCHY_R26_DISPOSABLE: '1',
+        R26_DATABASE_URL: `postgres://app_candidate_gateway:${runtimePassword}@127.0.0.1:${connection.port}/postgres`,
+      },
+      candidateChecks: runR26BrowserCandidateChecks,
+      evidenceDir: process.env.R26_EVIDENCE_DIR,
+    });
+    console.log(
+      'PASS R2.6 actual-role candidate lifecycle/finality and real Next.js HTTPS editing/restart/submission journey',
+    );
+  }
 } catch (error) {
   console.error(
     `R2.6 failed during ${stage} (${error instanceof assert.AssertionError ? 'assertion' : 'fixture/protocol'})`,
