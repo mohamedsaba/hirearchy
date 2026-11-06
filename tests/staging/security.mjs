@@ -484,13 +484,14 @@ export async function checkReviewerRowLockBoundary({
                 OR has_column_privilege(role_name,'hirearchy.organization_memberships','id','UPDATE')
                 OR has_table_privilege(role_name,'hirearchy.reviewer_assignments','UPDATE')
                 OR has_column_privilege(role_name,'hirearchy.reviewer_assignments','id','UPDATE') AS has_update
-         FROM unnest(ARRAY['app_candidate_gateway','app_evaluator','app_control_worker']) AS role_name
+         FROM unnest(ARRAY['app_candidate_gateway','app_evaluator','app_control_worker','r23_gateway']) AS role_name
         ORDER BY role_name`,
     );
     assert.deepEqual(runtimePrivileges, [
       { role_name: 'app_candidate_gateway', has_update: false },
       { role_name: 'app_control_worker', has_update: false },
       { role_name: 'app_evaluator', has_update: false },
+      { role_name: 'r23_gateway', has_update: false },
     ]);
     const { rows: roleFlags } = await admin.query(
       `SELECT rolcanlogin,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb
