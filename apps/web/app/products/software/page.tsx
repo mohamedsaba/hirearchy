@@ -36,7 +36,7 @@ export default function SoftwarePage() {
             </p>
           </article>
           <article className="ct-record ct-enter">
-            <Kicker>Intended demo record</Kicker>
+            <Kicker>Illustrative record</Kicker>
             <ol>
               <li>Workspace revision saved</li>
               <li>Candidate submission recorded</li>
@@ -83,11 +83,10 @@ export default function SoftwarePage() {
       >
         <h2 className="ct-enter">What this internal demo supports</h2>
         <p className="ct-enter">
-          The internal demo does not provide integrated AI assistance or run
-          candidate code. It is being prepared to record saved workspace
-          revisions and submissions for human review; it will not infer whether
-          code came from AI or any other source. Customer access is not open
-          yet.
+          Integrated AI assistance and code execution are unavailable in this
+          internal demo. AI use carries no automatic positive or negative
+          judgement, and the demo does not infer whether code came from AI or
+          any other source. Customer access is not open yet.
         </p>
       </section>
       <ContactCta title="Customer access is not open yet." />

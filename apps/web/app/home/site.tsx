@@ -245,19 +245,16 @@ export function Path({
   );
 }
 export function ContactCta({
-  title = 'Customer access is not open yet.',
+  title = 'The Software demo is in development.',
 }: {
   title?: string;
 }) {
   return (
     <section className="ct-contact-cta ct-reveal">
-      <Kicker>Internal demo</Kicker>
+      <Kicker>Product preview</Kicker>
       <h2>{title}</h2>
-      <p>
-        The demo uses synthetic data. AI assistance and code execution are
-        unavailable.
-      </p>
-      <Button href="/products/software#demo-limits">See demo limits</Button>
+      <p>Customer access and demo requests are not open yet.</p>
+      <Button href="/products/software#demo-limits">Explore Software</Button>
     </section>
   );
 }
