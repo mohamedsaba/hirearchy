@@ -1,8 +1,8 @@
 # MVP release readiness
 
-- **As of:** 2026-11-05
+- **As of:** 2026-11-06
 - **Authority:** [active MVP release program](plans/active/mvp-release-program.md)
-- **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #5 is a useful internal staging foundation; it does not yet connect candidate work or human review writes.
+- **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #5 is an accepted internal staging foundation. PR #6 remains draft and unmerged; its candidate and human-review workflow is not accepted.
 
 This is the single current record for release status and evidence. It contains no credentials, candidate data, private recovery artifact locations, or unverified commercial claims.
 
@@ -10,7 +10,7 @@ This is the single current record for release status and evidence. It contains n
 
 The master development mandate selects PostgreSQL for the release product path. The target is one Next.js modular monolith, GoTrue user identity, the verified app-signed proof boundary, PostgreSQL persistence, and a separately controlled candidate execution boundary. Legacy SQLite schemas and data remain preserved until a migration or retirement is tested and recoverable; no SQLite fallback is part of the release path.
 
-The accepted internal demo will use an expiring and revocable candidate link shown to an authenticated recruiter. It will not send email. Live AI and code execution remain disabled in the durable staging profile until their service, privacy, security, and operational gates are separately accepted.
+The proposed internal demo uses expiring and revocable candidate and reviewer links shown to an authorized team member. It sends no invitation email; GoTrue signup confirmation and password recovery still require configured SMTP. Live AI and code execution remain disabled in the durable staging profile until their service, privacy, security, and operational gates are separately accepted.
 
 ## Current PR #5 evidence
 
@@ -45,14 +45,25 @@ The launcher safety correction and Node test naming fix are included in the merg
 
 Source anchors: `apps/web/src/staging/server.ts`, `apps/web/src/staging/browser.ts`, `apps/web/src/runtime/profile.ts`, `database/postgres/migrations/0014_staging_proof_state.sql`, `database/postgres/migrations/0015_staging_dispatch_api.sql`, and `tests/staging/journey.mjs`.
 
+## Current PR #6 evidence
+
+**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The last verified public head is `02bba91a289f767754e0609db5cce0d35eb9f1f5`. The following workflow results apply to that head; a later path-limited source update is pending fresh CI and must not be treated as a passed or merged version.
+
+- [Verify run 42199508267](https://github.com/mohamedsaba/hirearchy/actions/runs/42199508267) failed on three legacy R2.14 execution-UI fixtures that lacked capability fields; 132 test files and 1,111 tests passed.
+- [Executor PostgreSQL run 42199507362](https://github.com/mohamedsaba/hirearchy/actions/runs/42199507362): dependency audit and PostgreSQL checks passed. The real-Docker job passed executor checks and built the production app, then failed on a PostgreSQL proof-security permission error (`42501`) before the browser journey.
+- The fixture correction at local source commit `958b4e9` passed its focused check 9/9. The SQL failure has safe fixed-label diagnostics for investigation, but its cause is unknown and the permission issue is not verified as fixed. Combined local privacy, candidate-key, and launcher checks passed 16/16; these checks do not replace CI or browser acceptance.
+- The eight-image privacy-guarded synthetic screenshot export is implemented locally, but GitHub rejected publishing the workflow-file change because the connected write credential lacks workflow scope. The path-limited PR update omits that workflow change. The founder chose to defer screenshot export/upload for now; no artifact was uploaded or visually reviewed. No further workflow authorization is pending, and this does not block core CI or browser acceptance.
+
+Fresh CI on the next exact public SHA and the complete browser/recovery journey remain pending. Visual review of screenshots is also pending because export is deferred, but it is not a blocker for the core engineering checks. Do not infer success from the local focused checks or earlier PR #5 CI.
+
 ## Reusable next integration seam
 
 - **Recruiter:** `/r23/login` and `/r23/organizations/...` use GoTrue authentication, organization membership, assessment draft/validate/issue, and reviewer assignment.
 - **Candidate:** `apps/web/src/r26-candidate/server.ts` and the R26 PostgreSQL adapter implement bearer-token scoped activation, workspace read/save/submit, and finality. Migrations 0003–0005 define the candidate token envelope, workspace, event, operation, submission, and revision data.
 - **Restricted execution:** R2.14 connects approved execution operations to the restricted executor service. `node scripts/test-r214-integration.mjs` is a disposable development integration, not the durable staging profile or a production security certification.
-- **Evaluator evidence and review:** R27 provides submitted evidence reads; R210 stores structured human review packets. The R2.15 staging proof allowlist and routes currently block candidate operations and evaluator writes. Bridge only explicit proof-bound operations; never accept a browser-supplied subject or enable disposable runtime flags in durable mode.
+- **Evaluator evidence and review:** R27 provides submitted evidence reads; R210 stores structured human review packets. PR #5's R2.15 staging allowlist blocks candidate operations and evaluator writes. PR #6's source bridges these operations but remains unaccepted; never accept a browser-supplied subject or enable disposable runtime flags in durable mode.
 
-The immediate next slice is therefore token issue/recovery and revocation through the verified PostgreSQL identity boundary, followed by the existing R26 candidate edit/save/resume/submit service, assigned-reviewer evidence, and retained human review. Keep AI and execution visibly disabled.
+The immediate gate is to obtain fresh CI on the exact published PR #6 head, then complete the candidate/reviewer browser and recovery acceptance. Keep AI and execution visibly disabled.
 
 ## Release gates
 
@@ -72,16 +83,16 @@ Run these on the accepted post-PR base, serially where they use Docker, PostgreS
 - `npm run test:staging` — authenticated persistent staging, browser acceptance, and recovery rehearsal. Extend this acceptance to cover the new candidate and review path before calling the demo complete.
 - `node scripts/test-r214-integration.mjs` — existing disposable PostgreSQL and real-Docker candidate/execution bridge; supplemental evidence only.
 
-No tests, servers, migrations, database reads, or deployment were run for this documentation refresh. The focused launcher check and current-head CI above are reported by the orchestrator; all four required contexts passed. Hosting and any currently running external deployment were not verified in this review.
+No tests, servers, migrations, database reads, or deployment were run for this documentation refresh. The four green required contexts listed above are historical PR #5 evidence only. PR #6's current failed and pending checks are recorded in the section above. Hosting and any currently running external deployment were not verified in this review.
 
 ## Blocking operational and product decisions
 
 - **Deployment:** No production or cloud deployment is evidenced by PR #5. Choose and approve a supported hosting/reverse-proxy/TLS design; establish persistent PostgreSQL and GoTrue operations, secret rotation, monitoring, and rollback before external use. Do not incur charges or publish a service without the mandate's approval.
 - **Recovery:** The local staging suite records separate-instance restore and release rollback coverage. Off-host backup independence, backup retention, managed-provider restore, and rollback on a production-like host remain unverified. Database dumps alone do not restore cluster roles or encryption/signing keys.
-- **Authentication and provisioning:** Prove first-user/organization onboarding and revocation without developer-built database records. Keep identity proof bound to verified GoTrue sessions and current membership.
+- **Authentication and provisioning:** First-team self-service and reviewer invitations remain proposed, not implemented; initial staging organization provisioning is administrator-managed. Keep identity proof bound to verified GoTrue sessions and current membership. Signup confirmation and password recovery require GoTrue SMTP; team invitations do not send email. See the [proposed onboarding ADR](decisions/mvp-first-team-onboarding.md).
 - **Candidate delivery and privacy:** The internal demo may expose an expiring/revocable copy link in the authenticated product UI; it must state that no email is sent. External delivery provider, candidate notice/consent, retention policy, and approved legal text remain release gates.
 - **Execution and AI:** Keep off in durable staging. External candidate code execution needs an independent security and operations acceptance, not only the disposable R2.14 Docker run. Live AI needs a separate privacy/provider and cost decision.
-- **Product truth:** `README.md`, `docs/architecture/system-overview.md`, `docs/handoff/current-state.md`, and `docs/product/non-goals.md` still contain the earlier SQLite prototype boundary or product exclusions. Converge them with the accepted mandate and actual integrated implementation before market-facing claims.
+- **Product truth:** `README.md`, the system overview, current-state handoff, and non-goals now describe the PostgreSQL/GoTrue release direction and preserve SQLite as historical prototype work. First-team onboarding remains a proposal; do not claim self-service setup until its implementation is independently accepted.
 
 ## Decision rule
 
