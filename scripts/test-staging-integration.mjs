@@ -510,7 +510,11 @@ try {
     keys.privateKey,
     recruiter,
     organizationId,
+    (checkpoint) => {
+      stage = checkpoint;
+    },
   );
+  stage = 'database proof security complete';
   let appUrl = await startApp(source, authUrl);
   stage = 'verified application sessions';
   await call(appUrl, recruiter, 'session.open', { organizationId });

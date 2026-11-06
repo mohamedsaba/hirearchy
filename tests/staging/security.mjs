@@ -18,7 +18,11 @@ export async function checkProofBoundary(
   privateKey,
   token,
   organizationId,
+  onCheckpoint = () => {},
 ) {
+  const checkpoint = (label) =>
+    onCheckpoint(`database proof security / ${label}`);
+  checkpoint('policy metadata');
   const { rows: policies } = await admin.query(
     `SELECT tablename,policyname,roles::text[] AS roles,cmd,qual,with_check FROM pg_policies WHERE schemaname='hirearchy' AND tablename IN ('application_principals','organization_memberships','assessment_sessions') AND 'staging_verifier_owner'=ANY(roles) ORDER BY policyname`,
   );
@@ -62,6 +66,7 @@ export async function checkProofBoundary(
       assert.match(policy.qual, /staging\.session_id/);
     }
   }
+  checkpoint('schema privilege metadata');
   const { rows: privileges } = await admin.query(
     "SELECT has_schema_privilege('app_evaluator','hirearchy','USAGE') AS evaluator,has_schema_privilege('r23_gateway','hirearchy','USAGE') AS gateway",
   );
@@ -97,20 +102,24 @@ export async function checkProofBoundary(
     assert.rejects(execute(payload, signature), (error) =>
       ['28000', '42501', '23505', '22023'].includes(error.code),
     );
+  checkpoint('direct verification-key table access denied');
   await assert.rejects(
     gateway.query('SELECT * FROM hirearchy.staging_verification_keys'),
     { code: '42501' },
   );
+  checkpoint('direct verifier-role switch denied');
   await assert.rejects(gateway.query('SET ROLE staging_verifier_owner'), {
     code: '42501',
   });
+  checkpoint('verified principal scope setup');
   await gateway.query(
     "SELECT set_config('staging.subject_id',$1,false),set_config('staging.organization_id',$2,false)",
     [claims.sub, organizationId],
   );
   const valid = proof();
+  checkpoint('invalid signature denied');
   await rejected(valid, Buffer.alloc(64));
-  for (const changes of [
+  const rejectedProofChanges = [
     { iss: 'untrusted' },
     { aud: 'elsewhere' },
     { kid: 'missing' },
@@ -124,50 +133,67 @@ export async function checkProofBoundary(
     { injectedSubject: randomUUID() },
     { op: 'unavailable' },
     { v: 2 },
-  ])
+  ];
+  for (const [index, changes] of rejectedProofChanges.entries()) {
+    checkpoint(`invalid proof claim ${index + 1} denied`);
     await rejected(proof(changes));
+  }
+  checkpoint('first verified session open');
   await execute(valid);
+  checkpoint('proof replay denied');
   await rejected(valid);
+  checkpoint('revoke original signing key');
   await admin.query(
     "UPDATE hirearchy.staging_verification_keys SET revoked_at=now() WHERE key_id='rehearsal-1'",
   );
+  checkpoint('revoked signing key proof denied');
   await rejected(proof());
   const rotated = generateKeyPairSync('ed25519');
+  checkpoint('rotated signing key installation');
   await admin.query(
     "INSERT INTO hirearchy.staging_verification_keys(key_id,issuer,audience,public_key,valid_from,valid_until) VALUES('rehearsal-2','hirearchy-staging','hirearchy-postgres',$1,now()-interval '1 minute',now()+interval '1 day')",
     [rotated.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32)],
   );
   const next = proof({ kid: 'rehearsal-2' });
+  checkpoint('rotated signing key session open');
   await execute(next, sign(null, next, rotated.privateKey));
+  checkpoint('original signing key restored');
   await admin.query(
     "UPDATE hirearchy.staging_verification_keys SET revoked_at=NULL WHERE key_id='rehearsal-1'",
   );
 
+  checkpoint('read authentication expiry');
   const originalExpiry = (
     await admin.query('SELECT not_after FROM auth.sessions WHERE id=$1', [
       claims.session_id,
     ])
   ).rows[0].not_after;
+  checkpoint('shorten authentication expiry');
   await admin.query(
     "UPDATE auth.sessions SET not_after=now()+interval '30 seconds' WHERE id=$1",
     [claims.session_id],
   );
+  checkpoint('session expiry bound');
   await execute(proof());
   const boundedSession = await admin.query(
     'SELECT app.expires_at <= auth.not_after AS bounded FROM hirearchy.staging_sessions app JOIN auth.sessions auth ON auth.id=app.auth_session_id WHERE app.auth_session_id=$1 AND app.organization_id=$2',
     [claims.session_id, organizationId],
   );
   assert.equal(boundedSession.rows[0].bounded, true);
+  checkpoint('expire authentication session');
   await admin.query(
     "UPDATE auth.sessions SET not_after=now()-interval '1 second' WHERE id=$1",
     [claims.session_id],
   );
+  checkpoint('expired authentication session denied');
   await rejected(proof());
+  checkpoint('restore authentication expiry');
   await admin.query('UPDATE auth.sessions SET not_after=$1 WHERE id=$2', [
     originalExpiry,
     claims.session_id,
   ]);
 
+  checkpoint('create second organization scope');
   const secondOrganizationId = randomUUID();
   const { rows: principalRows } = await admin.query(
     'SELECT id FROM hirearchy.application_principals WHERE auth_user_id=$1',
@@ -188,6 +214,7 @@ export async function checkProofBoundary(
     jti: randomUUID(),
     args: { organizationId: secondOrganizationId },
   });
+  checkpoint('second organization session open');
   await execute(secondOpen, sign(null, secondOpen, rotated.privateKey));
   const revoke = proof({
     kid: 'rehearsal-2',
@@ -195,7 +222,9 @@ export async function checkProofBoundary(
     op: 'session.revoke',
     args: { organizationId: secondOrganizationId },
   });
+  checkpoint('second organization session revoke');
   await execute(revoke, sign(null, revoke, rotated.privateKey));
+  checkpoint('verify per-organization session states');
   const { rows: sessionRows } = await admin.query(
     `SELECT organization_id, revoked_at IS NOT NULL AS revoked
        FROM hirearchy.staging_sessions
