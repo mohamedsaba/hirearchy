@@ -1,49 +1,35 @@
-# Hirearchy / Hirearchy Software
+# Hirearchy Software
 
-Hirearchy Software is an early Hirearchy product for observing realistic engineering work. A candidate works in a controlled environment, the system records observable events, and an evaluator reviews a chronological reconstruction and underlying evidence. The product does not score candidates or make hiring decisions.
+Hirearchy Software helps a hiring team review realistic engineering work. A candidate completes a task in a controlled workspace; the system records observable activity and evidence; an assigned human evaluator decides what that evidence means. The product does not score, rank, or make hiring decisions.
 
-This repository contains the product and architecture baseline plus five completed vertical slices spanning candidate work, authoritative evidence capture, and deterministic evaluator reconstruction.
+## Current release state
 
-## Start locally
+PR #5 is merged to protected `main` as `1a919b40ab45f9788a8cf0f785d33449379b7098`. It provides the authenticated PostgreSQL staging foundation for recruiter assessment authoring, issuance, and reviewer assignment. It does not provide the complete candidate-to-human-review journey.
 
-Prerequisites: Node.js 22+ and npm 10+.
+PR #6 is still a draft and unmerged. Its durable candidate and review workflow is not yet accepted: updated CI, browser acceptance, and visual review are pending. See [release readiness](docs/release-readiness.md) for the sole current source of release status and evidence.
 
-```bash
-npm install
-cp .env.example .env.local
-npm run dev
-```
+## Product and architecture
 
-Set a long local `HIREARCHY_EVALUATOR_KEY` in `.env.local`, then open `http://localhost:3000` and create a candidate session. Slice 5 Candidate Work is deterministic and needs no AI provider key. Runtime sessions are stored in `.data/hirearchy.sqlite` by default. A diagnostic endpoint is available at `GET /api/health`.
+The release path is a Next.js modular monolith with PostgreSQL as its durable product store. GoTrue verifies user identity; an app-signed, one-use proof scopes trusted PostgreSQL operations. Organization membership uses recruiter and reviewer roles, with evidence access restricted by organization and reviewer assignment. The draft PR #6 candidate path uses a distinct opaque invitation token and database-checked lifecycle rather than recruiter credentials; it remains pending acceptance.
 
-The repository retains server-only NVIDIA NIM and OpenRouter adapters for explicit synthetic model experiments. Set `NVIDIA_API_KEY` or `OPENROUTER_KEY` only when intentionally running those credential-gated experiments. They are not connected to the application reconstruction runtime, and neither key is sent to the browser or candidate sandbox. Do not use real applicant, personal, sensitive, or confidential data with experimental providers without a separate privacy/provider review.
+Legacy SQLite prototype code, data, and migration history remain preserved. SQLite is not a release fallback and there is no dual-write path. Candidate AI, code execution, and candidate invitation email are off in the internal demo. Basic first-team onboarding is proposed, not implemented; initial organization provisioning still requires an administrator.
 
-## Implemented slices
+## Development checks
 
-The Slice 1 fixture follows this flow:
-
-1. Create a session bound to fixture version `1.0.0`.
-2. Review the brief and explicitly start the session.
-3. Edit and save the one permitted file.
-4. Submit to freeze the server-owned file snapshot.
-5. Open `/evaluator`, authenticate separately, and review the original file, submitted file, and deterministic unified diff.
-
-Slices 1–4 provide immutable submission, sandboxed commands, realistic Scenario 001, authoritative event capture, and deterministic chronological evidence. Slice 5 adds evaluator-only Candidate Work built from typed facts, phase-bounded workspace aggregation, conservative pytest summaries, closed templates, exact citations, and versioned immutable persistence. Its primary surface presents short evidence milestones such as Test run, Code change, Workspace reversion, and Submitted; exact commands and raw output remain one click away and in Technical Chronology. Earlier artifacts retain audit provenance while deterministic v3 is current. Providers are not part of the runtime path. Reconstruction does not score candidates or make evaluator decisions. Candidate AI and a full interactive PTY remain unimplemented.
-
-## Verify changes
+Use Node.js 22 or later and npm 10 or later. Run the repository checks with:
 
 ```bash
 npm run verify
 ```
 
-This runs formatting checks, linting, TypeScript checks, unit tests, and a production build.
+Staging verification requires its provisioned PostgreSQL and GoTrue environment. Follow the [active release plan](docs/plans/active/mvp-release-program.md) and [readiness record](docs/release-readiness.md); do not treat a local SQLite run or the disposable R2.14 executor as durable staging acceptance.
 
-## Where to begin
+## Project map
 
-- Read [AGENTS.md](AGENTS.md) before making changes.
-- Use [ARCHITECTURE.md](ARCHITECTURE.md) as the technical map.
-- Product sources of truth live in `docs/product/`.
-- Scenario rules and the first validation scenario live in `docs/scenarios/`.
-- Substantial work starts with a plan in `docs/plans/active/`.
+- [Product principles](docs/product/product-principles.md), [thesis](docs/product/product-thesis.md), and [non-goals](docs/product/non-goals.md)
+- [System overview](docs/architecture/system-overview.md) and [architecture decisions](docs/decisions/README.md)
+- [Active MVP release plan](docs/plans/active/mvp-release-program.md) and [single release-readiness record](docs/release-readiness.md)
+- [Current-state handoff](docs/handoff/current-state.md)
+- [Scenario rules](docs/scenarios/constitution.md)
 
-Completed work is preserved in `docs/plans/completed/001-first-vertical-slice.md`.
+The earlier SQLite prototype and engineering slices remain in the completed plans as historical implementation evidence.

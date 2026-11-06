@@ -1,45 +1,47 @@
 # System overview
 
-Hirearchy Software is a Next.js modular monolith with SQLite persistence and a Docker isolation boundary for candidate execution.
+Hirearchy Software is a Next.js modular monolith. PostgreSQL is the durable store for the release product path. GoTrue supplies user identity, and the application verifies the live Auth session before signing a short-lived, one-use proof for scoped PostgreSQL operations.
 
 ```text
-Browser
-├── Candidate workspace: server truth + calibrated time + ephemeral UI state
-├── Evaluator: read-only evidence reconstruction and presentation
-└── HTTP API
-    ├── sessions, scenarios, timing, finalization, commands, and AI
-    ├── append-only events and reconstruction
-    ├── SQLite
-    └── Docker candidate environment
+Recruiter and evaluator browser sessions
+  └─ GoTrue identity → app-signed one-use proof → PostgreSQL tenant dispatcher
+       ├─ recruiter authoring, issuance, and assignment
+       └─ assigned evaluator evidence and human review
+
+Candidate browser session
+  └─ opaque invitation bearer → constrained candidate gateway
+       └─ PostgreSQL checks lifecycle, consent, session, and operation
+
+Restricted execution service
+  └─ separate runtime boundary; off in the durable internal demo
 ```
 
-The API owns lifecycle, authorization, event order, timing, and sandbox state. Browser state is never authoritative for those concerns. The application may retain these modules without becoming separate services.
+The candidate path is implemented in draft PR #6 but is not yet accepted on `main`; the diagram describes the intended release boundary, not evidence of a passing end-to-end deployment. PR #5, merged as `1a919b40ab45f9788a8cf0f785d33449379b7098`, is the accepted authenticated staging foundation. See [release readiness](../release-readiness.md) for current CI, browser, recovery, and deployment evidence.
 
-## Candidate lifecycle and workspace
+## Tenant and identity boundary
 
-The only durable lifecycle is `CREATED → ACTIVE → SUBMITTED`. Candidate UX phases are projections, not additional lifecycle states. Server-calibrated timing and persisted `closureReason` protect finality: null on `ACTIVE` is mutable, a non-null value admits irreversible finalization and closes mutations, commands, and new AI admission, and submitted sessions are terminal. Recovery preserves admitted finality; existing AI request replay remains idempotent where supported.
+Organizations scope recruiter and reviewer memberships. Recruiters author, validate, and issue assessments and assign a reviewer. Reviewers can inspect evidence only for sessions assigned to them. The signed proof binds database operations to a live GoTrue user and session; browser-supplied subject or organization values are not trusted as identity. The existing roles are `recruiter` and `reviewer`; there is no generalized administrator-role expansion.
 
-Candidate AI is implemented and integrated as permitted tooling. Its requests and outcomes are observable evidence, not a judgment of candidate quality. The active workspace is server-authoritative; its File API enforces workspace-relative containment inside the sandbox, rejecting traversal and escaping symlinks while preserving contained regular files and internal symlink reads. Local UI state is limited to presentation concerns such as editor buffers, selection, command/AI history, focus, and timing display. In a multi-file workspace, the scenario path is selected only if it is an existing file; otherwise selection is deterministic among existing files, with no fabricated path for an empty workspace.
+Initial organization provisioning is currently administrator-managed. [The proposed first-team onboarding decision](../decisions/mvp-first-team-onboarding.md) limits future self-service to a confirmed GoTrue identity with no active organization memberships. It is a proposal pending review and implementation.
 
-Public issuance resolves only explicitly registered scenarios. Scenario 001 is the only public entry; unsupported IDs are rejected before session persistence or sandbox provisioning. Its enabled AI capability travels from the server-side registry into an immutable session snapshot, which candidate AI admission reads. Browser input cannot change the capability. The prototype currently registers `MockAiProvider`; capability policy and provider runtime are separate concerns.
+## Candidate and evidence flow
 
-## Evaluator reconstruction
+The intended internal demo connects an explicitly issued invitation to a single PostgreSQL candidate session. Candidate access uses an opaque bearer token checked by a distinct constrained gateway, not the recruiter/evaluator proof. PostgreSQL owns invitation expiry and revocation, notice consent, activation, workspace persistence, submission finality, and operation replay. Revoking an invitation closes candidate access while retaining saved workspace and evidence.
 
-Evaluator review is a distinct, read-only surface. Submitted evidence is authorized by the evaluator HTTP-only cookie, then flows through chronological reconstruction, the evidence catalog and typed facts, `buildEvaluatorBriefing`, deterministic grounding, `projectBriefing`, and the evaluator page/UI. The queue exposes submitted review entries, and direct review exposes submitted evidence within that same current evaluator scope; the prototype has no tenant, organization, assignment, evaluator identity, or granular-RBAC model.
+The candidate lifecycle remains `CREATED → ACTIVE → SUBMITTED`. A candidate sees the canonical data-use notice and must affirm consent before activation. Saved code, revisions, task activity, and submission are evidence; they are not automatic judgments. The durable internal demo keeps AI and execution capabilities disabled and sends no candidate invitation email.
 
-The four presentation depths are `GENERALIST_RECRUITER`, `TECHNICAL_RECRUITER`, `ENGINEER`, and `ENGINEERING_MANAGER`. `?depth=` selects a valid role and legacy `?role=` remains accepted; missing or invalid input resolves to the generalist profile. Roles change only presentation and never authorization, evidence truth, or backend evidence access.
+Submitted evidence is read chronologically by the assigned evaluator, who can write and finalize a retained human review. Acceptance criteria, test outcomes, task outcomes, factual evidence, evaluator decision, and candidate competence remain distinct. The system must not create candidate scores, rankings, automatic competence labels, or pass/reject verdicts.
 
-Evidence is distinct from interpretation. The system renders factual chronology, provenance, capture limitations, and recorded outcomes; it does not infer intent, competence, quality, score, rank, pass/fail, recommendation, or hiring verdict. Human evaluators decide what evidence means.
+## Data and runtime boundaries
 
-## Delivery state
+PostgreSQL is the product authority for the release journey. Preserve legacy SQLite prototype code, data, and migration history; do not add a SQLite fallback or dual-write path. A migration or retirement of legacy data requires a tested, recoverable plan.
 
-The accepted engineering baseline is `4a7c9cdbc342130eeb7c29f3374a96fdbbaf4739` (`fix(ai): wire authoritative session capability`). It includes T1A/T1B timing and finality, Candidate Experience C1–C10, Evaluator Experience E1–E6, consolidation G1–G4A, R1 workspace containment, R2 explicit public scenario issuance, and R3 authoritative AI capability configuration.
+The restricted R2.14 executor remains separate from the durable recruiter and candidate database paths. Its disposable integration is not a production security certification. External candidate execution requires its own security and operational acceptance; it is not enabled in the internal demo. Live AI providers and external email delivery also remain off pending separate decisions and evidence.
 
-- G1 normalized shared design tokens without visual behavior change.
-- G2 removed dead legacy evaluator code and CSS.
-- G3/G3A reconciled live evaluator cascade/specificity debt while preserving accepted E6 behavior.
-- G4A removed the Scenario 001-specific candidate fallback and stale homepage slice copy.
+## Current integration boundary
 
-These are corrections and consolidation, not a shared-UI or service architecture redesign. Candidate and evaluator views should remain separate; safe sharing is limited to global tokens, generic primitives, accessibility/reduced-motion behavior, and truly generic test fixtures.
+- **Merged PR #5:** GoTrue-authenticated sign-in, organization selection, PostgreSQL recruiter authoring, validation, issuance, and reviewer assignment through the proof boundary. It does not issue candidate links or enable candidate activity, evaluator review writes, AI, or execution in authenticated staging.
+- **Draft PR #6:** source for the durable invitation, consent, candidate workspace, submitted evidence, and human-review bridge. It remains unmerged; updated CI and browser acceptance are pending. See [release readiness](../release-readiness.md) for current checks and evidence.
+- **Deployment:** no public or production deployment, external candidate workflow, or visual acceptance is established by those source changes.
 
-The baseline is frozen for Hirearchy Brand & Product Design Foundation, followed by Hirearchy Software visual/UI redesign—not another candidate or evaluator feature slice or an architecture refactor.
+Do not duplicate release checklists or reports here. Update [the single readiness record](../release-readiness.md) when a source SHA or acceptance result changes.

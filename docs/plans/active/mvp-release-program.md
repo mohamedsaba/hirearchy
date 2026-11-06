@@ -40,7 +40,7 @@ The existing R2.14 PostgreSQL candidate bridge already has the token-scoped work
 
 ## Priorities
 
-**P0 — Complete product contract:** PostgreSQL recruiter-to-candidate-to-evidence-to-human-review flow; first-team account/organization onboarding or an explicitly bounded administrator-provisioned internal demo; secure candidate invitation and consent; durable submission; tenant and reviewer isolation; restart/recovery; supported single-team deployment path.
+**P0 — Complete product contract:** PostgreSQL recruiter-to-candidate-to-evidence-to-human-review flow; secure candidate invitation and consent; durable submission; tenant and reviewer isolation; restart/recovery; supported single-team deployment path. The proposed first-team flow in [the onboarding ADR](../../decisions/mvp-first-team-onboarding.md) is limited to a confirmed GoTrue identity with no active organization memberships; the founder keeps the recruiter role and an immutable owner binding. Team display names are trimmed to 1–120 Unicode code points (PostgreSQL `char_length` / JavaScript code-point count), reject controls, and are escaped for output; no slug or uniqueness rule is required. Owner-copied invitations grant reviewer only, default to seven days, and allow an explicit expiry up to 30 days; they send no invitation email. GoTrue signup confirmation and password recovery still require provisioned SMTP. Until the ADR is accepted and implemented, organization provisioning remains administrator-only.
 
 **P1 — Credible market demo:** clear recruiter and candidate onboarding, responsive and accessible screens, professional empty/error states, accurate public product claims, sourced competitive positioning, buyer demo materials, and approved privacy/terms copy before publication.
 
