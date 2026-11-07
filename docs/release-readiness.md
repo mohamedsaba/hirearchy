@@ -1,6 +1,6 @@
 # MVP release readiness
 
-- **As of:** 2026-11-06
+- **As of:** 2026-11-07
 - **Authority:** [active MVP release program](plans/active/mvp-release-program.md)
 - **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #5 is an accepted internal staging foundation. PR #6 remains draft and unmerged; its candidate and human-review workflow is not accepted.
 
@@ -47,14 +47,13 @@ Source anchors: `apps/web/src/staging/server.ts`, `apps/web/src/staging/browser.
 
 ## Current PR #6 evidence
 
-**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The current public head is `4b7085630ac3d0c992de192b05b5d1872f9da6c3`; fresh CI and the complete browser/recovery journey on a combined head remain pending.
+**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The last completed CI evidence is for source head `c96332775d9a143d3a8a89d93255b0a14cde6391`; checks on the follow-up source remain pending.
 
-- [Verify run 42206841873](https://github.com/mohamedsaba/hirearchy/actions/runs/42206841873) passed on the current public head.
-- [Executor PostgreSQL run 42206841825](https://github.com/mohamedsaba/hirearchy/actions/runs/42206841825) passed PostgreSQL and dependency-audit checks. Its real-Docker job failed at test 15 before staging on a hidden pending-observation condition.
+- [Verify run 42211649908](https://github.com/mohamedsaba/hirearchy/actions/runs/42211649908) passed on `c96332775d9a143d3a8a89d93255b0a14cde6391`.
+- [Executor PostgreSQL run 42211649923](https://github.com/mohamedsaba/hirearchy/actions/runs/42211649923) passed PostgreSQL and dependency-audit checks. Its real-Docker job passed the executor suite, service check, and production build, then failed during persistent API installation with SQLSTATE `42703`: the installer referenced an `id` column absent from `organization_memberships`.
+- The follow-up fix changes the verifier's column-only row-lock grant to the existing `organization_id` column. Focused validation against the real migration-defined schema reproduced the old `42703`; the current installer and proof-bound security checks passed, including the all-column runtime UPDATE denial. This used synthetic Auth session metadata, not live GoTrue authentication.
 - The observer-guard/resource-fixture correction at local source commit `dabfab5340e3f8e14f3a67cca02bf92b8f0c592d` passed the full restricted-executor check, 30/30, with no cancellations. This did not change the production timeout.
-- The membership fix (`5012e7e`) and exact-source test (`4b70856`) passed the 256 MiB PostgreSQL proof, including reviewer-target locks, denied writes, and runtime deny-list checks. These focused checks have not yet passed through full staging CI.
-- Earlier [Verify run 42199508267](https://github.com/mohamedsaba/hirearchy/actions/runs/42199508267) and [Executor run 42199507362](https://github.com/mohamedsaba/hirearchy/actions/runs/42199507362) are historical diagnostics. The first `session.open` permission failure (`42501`) on source head `9785273` is not the current public head's failure.
-- Screenshot export/upload remains deferred by the founder; no screenshots were uploaded or visually reviewed. A local build attempt was stopped by its 900 MiB memory cap after an out-of-memory result, so visual acceptance remains pending.
+- Full live GoTrue, browser, and recovery validation on the follow-up head remains pending. Screenshot export/upload remains deferred; no screenshots were uploaded or visually reviewed. A local build attempt was stopped by its 900 MiB memory cap after an out-of-memory result, so visual acceptance remains pending.
 
 Do not infer success from focused local checks, earlier PR #5 CI, or a different source head. All release levels remain NO-GO until the current source passes the complete browser, recovery, and visual acceptance gates.
 
@@ -85,7 +84,7 @@ Run these on the accepted post-PR base, serially where they use Docker, PostgreS
 - `npm run test:staging` — authenticated persistent staging, browser acceptance, and recovery rehearsal. Extend this acceptance to cover the new candidate and review path before calling the demo complete.
 - `node scripts/test-r214-integration.mjs` — existing disposable PostgreSQL and real-Docker candidate/execution bridge; supplemental evidence only.
 
-No tests, servers, migrations, database reads, or deployment were run for this documentation refresh. The four green required contexts listed above are historical PR #5 evidence only. PR #6's current mixed and pending checks are recorded in the section above. Hosting and any currently running external deployment were not verified in this review.
+No full verification, live GoTrue, browser, recovery, or deployment run was performed for this documentation refresh. The focused SQL-only validation recorded above used synthetic Auth session metadata and is not live GoTrue acceptance. The four green required contexts listed above are historical PR #5 evidence only. PR #6's last completed CI and pending follow-up checks are recorded above. Hosting and any currently running external deployment were not verified in this review.
 
 ## Blocking operational and product decisions
 
