@@ -153,8 +153,35 @@ export async function createActiveCandidateInvitationFingerprint({
         sessionId,
         'Recovered issued session must match the active invitation fixture',
       );
+      const invitationEndpoint = new URL(
+        `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`,
+        appUrl,
+      ).href;
+      const invitationPost = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          response.url() === invitationEndpoint,
+        { timeout: 20_000 },
+      );
       checkpoint('Candidate invitation create action');
       await page.getByTestId('candidate-invitation-create').click();
+      checkpoint('Candidate invitation create response');
+      const invitationResponse = await invitationPost;
+      const invitationStatus = invitationResponse.status();
+      const invitationErrorCategory =
+        invitationStatus === 400 || invitationStatus === 422
+          ? 'validation'
+          : invitationStatus === 401 || invitationStatus === 403
+            ? 'authorization'
+            : invitationStatus === 409
+              ? 'conflict'
+              : invitationStatus >= 500
+                ? 'server_error'
+                : 'unexpected';
+      assert.ok(
+        invitationStatus === 200 || invitationStatus === 201,
+        `Candidate invitation POST returned HTTP ${invitationStatus} (${invitationErrorCategory})`,
+      );
       checkpoint('Candidate invitation link wait');
       await page.getByTestId('candidate-invitation-link').waitFor({
         timeout: 20_000,
