@@ -130,6 +130,8 @@ async function sqlFile(relativePath) {
 }
 
 await preflightResources();
+const { createLocalAppEnvironment } =
+  await import('./local-app-environment.mjs');
 const { loadOrCreateLocalCandidateTokenEncryptionKey } =
   await import('./local-candidate-key.mjs');
 const { Client } = await import('pg');
@@ -345,8 +347,7 @@ console.log('Provisioned users:', provisioned.users);
 
 // Seed a sample submitted session with private review data for testing evaluator experience
 console.log('Starting Next.js production app on port 3005...');
-const appEnv = {
-  ...process.env,
+const appEnv = createLocalAppEnvironment(process.env, {
   PORT: String(appPort),
   HIREARCHY_RUNTIME_PROFILE: 'staging-authenticated',
   STAGING_AUTH_URL: authExternalUrl,
@@ -362,7 +363,7 @@ const appEnv = {
   STAGING_PROOF_AUDIENCE: proofAudience,
   STAGING_PROOF_KEY_ID: proofKeyId,
   STAGING_PUBLIC_ORIGIN: `http://127.0.0.1:${appPort}`,
-};
+});
 
 const appProcess = spawn(
   process.execPath,

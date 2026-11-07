@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:executor": "node scripts/test-restricted-executor.mjs && node scripts/test-restricted-executor-dispatch.mjs && node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs",
     "test:postgres": "node scripts/test-postgres-foundation.mjs",
-    "test:staging": "node --test tests/staging/launcher-safety.mjs tests/staging/local-candidate-key-check.mjs tests/staging/candidate-review-privacy-check.mjs && node scripts/test-staging-integration.mjs",
+    "test:staging": "node --test tests/staging/launcher-safety.mjs tests/staging/local-candidate-key-check.mjs tests/staging/local-app-environment-check.mjs tests/staging/candidate-review-privacy-check.mjs && node scripts/test-staging-integration.mjs",
     "test:supabase-auth": "node scripts/prove-supabase-auth.mjs",
     "migrate:candidate-token-storage": "node scripts/migrate-candidate-token-storage.mjs",
     "build": "next build apps/web",
