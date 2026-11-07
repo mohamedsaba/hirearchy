@@ -47,13 +47,13 @@ Source anchors: `apps/web/src/staging/server.ts`, `apps/web/src/staging/browser.
 
 ## Current PR #6 evidence
 
-**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The last completed CI evidence is for source head `c96332775d9a143d3a8a89d93255b0a14cde6391`; checks on the follow-up source remain pending.
+**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The last completed CI evidence is for source head `f695f0a1c54102108679ec25ac26f78093a93d07`; checks on the diagnostic follow-up source remain pending.
 
-- [Verify run 42211649908](https://github.com/mohamedsaba/hirearchy/actions/runs/42211649908) passed on `c96332775d9a143d3a8a89d93255b0a14cde6391`.
-- [Executor PostgreSQL run 42211649923](https://github.com/mohamedsaba/hirearchy/actions/runs/42211649923) passed PostgreSQL and dependency-audit checks. Its real-Docker job passed the executor suite, service check, and production build, then failed during persistent API installation with SQLSTATE `42703`: the installer referenced an `id` column absent from `organization_memberships`.
-- The follow-up fix changes the verifier's column-only row-lock grant to the existing `organization_id` column. Focused validation against the real migration-defined schema reproduced the old `42703`; the current installer and proof-bound security checks passed, including the all-column runtime UPDATE denial. This used synthetic Auth session metadata, not live GoTrue authentication.
-- The observer-guard/resource-fixture correction at local source commit `dabfab5340e3f8e14f3a67cca02bf92b8f0c592d` passed the full restricted-executor check, 30/30, with no cancellations. This did not change the production timeout.
-- Full live GoTrue, browser, and recovery validation on the follow-up head remains pending. Screenshot export/upload remains deferred; no screenshots were uploaded or visually reviewed. A local build attempt was stopped by its 900 MiB memory cap after an out-of-memory result, so visual acceptance remains pending.
+- [Verify run 42385163136](https://github.com/mohamedsaba/hirearchy/actions/runs/42385163136) passed on `f695f0a1c54102108679ec25ac26f78093a93d07`.
+- [Executor run 42385163299](https://github.com/mohamedsaba/hirearchy/actions/runs/42385163299) passed dependency-audit, PostgreSQL, restricted-executor, dispatch, service, and build checks. The real-Docker job passed persistent API installation and earlier authenticated SQL/restore steps, then reported `TimeoutError` at `unstarted invitation encryption-recovery fixture`, before the main browser journey. The fixed stage spans several awaits; the exact one that timed out is unknown.
+- The membership row-lock grant now uses the existing `organization_id` column. Bounded validation against the actual migration-defined schema reproduced the old SQLSTATE `42703`, then passed the current installer and proof-bound checks, including denial of runtime UPDATE on every membership column. It used synthetic Auth session metadata, not live GoTrue authentication.
+- The diagnostic follow-up adds only fixed, non-sensitive checkpoint labels for the invitation fixture and its browser recovery steps. Targeted syntax, Prettier, and diff checks passed; fresh CI has not run.
+- Full browser and recovery acceptance remain pending. Screenshot export/upload remains deferred; no screenshots were uploaded or visually reviewed. A local build attempt was stopped by its 900 MiB memory cap after an out-of-memory result, so visual acceptance remains pending.
 
 Do not infer success from focused local checks, earlier PR #5 CI, or a different source head. All release levels remain NO-GO until the current source passes the complete browser, recovery, and visual acceptance gates.
 
