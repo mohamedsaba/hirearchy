@@ -89,7 +89,7 @@ export async function checkProofBoundary(
     `SELECT has_schema_privilege('app_evaluator','hirearchy','USAGE') AS evaluator,
             has_schema_privilege('r23_gateway','hirearchy','USAGE') AS gateway,
             has_table_privilege('staging_verifier_owner','hirearchy.organization_memberships','UPDATE') AS membership_table_update,
-            has_column_privilege('staging_verifier_owner','hirearchy.organization_memberships','id','UPDATE') AS membership_id_update,
+            has_column_privilege('staging_verifier_owner','hirearchy.organization_memberships','organization_id','UPDATE') AS membership_organization_update,
             has_column_privilege('staging_verifier_owner','hirearchy.organization_memberships','role','UPDATE') AS membership_role_update`,
   );
   assert.deepEqual(privileges, [
@@ -97,7 +97,7 @@ export async function checkProofBoundary(
       evaluator: false,
       gateway: false,
       membership_table_update: false,
-      membership_id_update: true,
+      membership_organization_update: true,
       membership_role_update: false,
     },
   ]);
@@ -223,7 +223,7 @@ export async function checkProofBoundary(
     );
     await assert.rejects(
       admin.query(
-        `UPDATE hirearchy.organization_memberships SET id=id
+        `UPDATE hirearchy.organization_memberships SET organization_id=organization_id
           WHERE organization_id=$1::pg_catalog.uuid
             AND principal_id=$2::pg_catalog.uuid`,
         [organizationId, callerPrincipalId],
@@ -480,8 +480,7 @@ export async function checkReviewerRowLockBoundary({
       `SELECT role_name,
               has_table_privilege(role_name,'hirearchy.assessment_sessions','UPDATE')
                 OR has_column_privilege(role_name,'hirearchy.assessment_sessions','id','UPDATE')
-                OR has_table_privilege(role_name,'hirearchy.organization_memberships','UPDATE')
-                OR has_column_privilege(role_name,'hirearchy.organization_memberships','id','UPDATE')
+                OR has_any_column_privilege(role_name,'hirearchy.organization_memberships','UPDATE')
                 OR has_table_privilege(role_name,'hirearchy.reviewer_assignments','UPDATE')
                 OR has_column_privilege(role_name,'hirearchy.reviewer_assignments','id','UPDATE') AS has_update
          FROM unnest(ARRAY['app_candidate_gateway','app_evaluator','app_control_worker','r23_gateway']) AS role_name

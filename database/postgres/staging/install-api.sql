@@ -834,7 +834,7 @@ GRANT USAGE ON SCHEMA hirearchy TO staging_verifier_owner;
 GRANT SELECT ON hirearchy.application_principals,
   hirearchy.organization_memberships,
   hirearchy.staging_verification_keys TO staging_verifier_owner;
-GRANT UPDATE (id) ON hirearchy.organization_memberships TO staging_verifier_owner;
+GRANT UPDATE (organization_id) ON hirearchy.organization_memberships TO staging_verifier_owner;
 GRANT SELECT, INSERT, DELETE ON hirearchy.staging_proof_nonces TO staging_verifier_owner;
 GRANT SELECT, INSERT, UPDATE (expires_at, revoked_at)
   ON hirearchy.staging_sessions TO staging_verifier_owner;
