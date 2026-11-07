@@ -652,23 +652,30 @@ try {
     reviewerPrincipalId: provisioned.users[1].principalId,
     issuerPrincipalId: provisioned.users[0].principalId,
   });
-  stage = 'unstarted invitation encryption-recovery fixture';
+  stage = 'unstarted invitation encryption-recovery fixture / GoTrue login';
   const invitationRecruiter = await login(
     rollbackAuth,
     input.users[0].email,
     userPassword,
   );
+  stage = 'unstarted invitation encryption-recovery fixture / API session.open';
   await call(appUrl, invitationRecruiter, 'session.open', { organizationId });
+  stage =
+    'unstarted invitation encryption-recovery fixture / API assessment.create';
   const { assessmentId: invitationAssessmentId } = await call(
     appUrl,
     invitationRecruiter,
     'assessment.create',
     { organizationId, content: state.content },
   );
+  stage =
+    'unstarted invitation encryption-recovery fixture / API assessment.validate';
   await call(appUrl, invitationRecruiter, 'assessment.validate', {
     organizationId,
     assessmentId: invitationAssessmentId,
   });
+  stage =
+    'unstarted invitation encryption-recovery fixture / API assessment.issue';
   const { sessionId: activeInvitationSessionId } = await call(
     appUrl,
     invitationRecruiter,
@@ -685,6 +692,9 @@ try {
       user: input.users[0],
       organizationId,
       sessionId: activeInvitationSessionId,
+      checkpoint: (step) => {
+        stage = `unstarted invitation encryption-recovery fixture / ${step}`;
+      },
     });
   stage = 'browser acceptance workflow';
   const browserAcceptance = await checkBrowserAcceptance({
@@ -846,6 +856,9 @@ try {
     activeSessionId: activeInvitationSessionId,
     revokedSessionId: reviewedSessionId,
     expectedActiveFingerprint: activeInvitationFingerprint,
+    checkpoint: (step) => {
+      stage = `candidate-review invitation recovery / ${step}`;
+    },
   });
   await writeFile(
     new URL('result.json', artifact),

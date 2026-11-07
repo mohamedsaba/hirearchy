@@ -17,30 +17,52 @@ function loadPlaywright() {
   throw new Error('Unable to resolve Playwright module');
 }
 
-async function signInAndSelectOrganization(page, appUrl, user, organizationId) {
+async function signInAndSelectOrganization(
+  page,
+  appUrl,
+  user,
+  organizationId,
+  checkpoint = () => {},
+) {
   const organization = organizationId.toLowerCase();
+  checkpoint('Browser login page navigation');
   await page.goto(`${appUrl}/r23/login`);
+  checkpoint('Browser login page load');
   await page.waitForLoadState('domcontentloaded');
+  checkpoint('Browser recruiter email entry');
   await page.locator('input[name="email"]').fill(user.email);
+  checkpoint('Browser recruiter password entry');
   await page.locator('input[name="password"]').fill(user.password);
+  checkpoint('Browser recruiter login submit');
   await page.locator('button[type="submit"]').click();
+  checkpoint('Browser organization list navigation');
   await page.waitForURL('**/r23/organizations');
+  checkpoint('Browser organization list load');
   await page.waitForLoadState('domcontentloaded');
 
   const selectForm = page.locator('form').filter({
     has: page.locator(`input[value="${organization}"]`),
   });
+  checkpoint('Browser authorized organization lookup');
   assert.ok(
     (await selectForm.count()) > 0,
     'Fresh recruiter login must include the authorized organization',
   );
+  checkpoint('Browser organization selection submit');
   await selectForm.locator('button[type="submit"]').click();
+  checkpoint('Browser selected organization navigation');
   await page.waitForURL(`**/r23/organizations/${organization}`);
+  checkpoint('Browser selected organization load');
   await page.waitForLoadState('domcontentloaded');
 }
 
-async function withRecruiterPage({ appUrl, user, organizationId }, callback) {
+async function withRecruiterPage(
+  { appUrl, user, organizationId, checkpoint = () => {} },
+  callback,
+) {
+  checkpoint('Playwright module resolution');
   const { chromium } = loadPlaywright();
+  checkpoint('Chromium launch');
   const browser = await chromium.launch({
     headless: true,
     ...(process.env.R23_CHROMIUM_PATH
@@ -49,12 +71,20 @@ async function withRecruiterPage({ appUrl, user, organizationId }, callback) {
   });
   let context;
   try {
+    checkpoint('Browser context creation');
     context = await browser.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: 1280, height: 900 },
     });
+    checkpoint('Browser page creation');
     const page = await context.newPage();
-    await signInAndSelectOrganization(page, appUrl, user, organizationId);
+    await signInAndSelectOrganization(
+      page,
+      appUrl,
+      user,
+      organizationId,
+      checkpoint,
+    );
     return await callback(page);
   } finally {
     await context?.close();
@@ -62,7 +92,14 @@ async function withRecruiterPage({ appUrl, user, organizationId }, callback) {
   }
 }
 
-async function readCandidateInvitationStatus(page, organizationId, sessionId) {
+async function readCandidateInvitationStatus(
+  page,
+  organizationId,
+  sessionId,
+  checkpoint = () => {},
+  checkpointLabel = 'Candidate invitation status GET',
+) {
+  checkpoint(checkpointLabel);
   return page.evaluate(
     async ({ organization, session }) => {
       const response = await fetch(
@@ -96,38 +133,50 @@ export async function createActiveCandidateInvitationFingerprint({
   user,
   organizationId,
   sessionId,
+  checkpoint = () => {},
 }) {
-  return withRecruiterPage({ appUrl, user, organizationId }, async (page) => {
-    const builderUrl =
-      `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder` +
-      `?issuedSession=${encodeURIComponent(sessionId)}`;
-    await page.goto(builderUrl);
-    await page.getByTestId('recovered-session-id').waitFor({
-      timeout: 20_000,
-    });
-    assert.equal(
-      (await page.getByTestId('recovered-session-id').textContent()).trim(),
-      sessionId,
-      'Recovered issued session must match the active invitation fixture',
-    );
-    await page.getByTestId('candidate-invitation-create').click();
-    await page.getByTestId('candidate-invitation-link').waitFor({
-      timeout: 20_000,
-    });
-    const result = await readCandidateInvitationStatus(
-      page,
-      organizationId,
-      sessionId,
-    );
-    assert.equal(result.status, 200, 'Invitation status GET must succeed');
-    assert.equal(result.body?.sessionId, sessionId);
-    assert.equal(result.body?.status, 'active');
-    return candidateInvitationFingerprint(
-      result.body?.candidatePath,
-      result.body?.expiresAt,
-      sessionId,
-    );
-  });
+  return withRecruiterPage(
+    { appUrl, user, organizationId, checkpoint },
+    async (page) => {
+      const builderUrl =
+        `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder` +
+        `?issuedSession=${encodeURIComponent(sessionId)}`;
+      checkpoint('Candidate builder navigation');
+      await page.goto(builderUrl);
+      checkpoint('Candidate builder recovered-session wait');
+      await page.getByTestId('recovered-session-id').waitFor({
+        timeout: 20_000,
+      });
+      checkpoint('Candidate builder recovered-session verification');
+      assert.equal(
+        (await page.getByTestId('recovered-session-id').textContent()).trim(),
+        sessionId,
+        'Recovered issued session must match the active invitation fixture',
+      );
+      checkpoint('Candidate invitation create action');
+      await page.getByTestId('candidate-invitation-create').click();
+      checkpoint('Candidate invitation link wait');
+      await page.getByTestId('candidate-invitation-link').waitFor({
+        timeout: 20_000,
+      });
+      const result = await readCandidateInvitationStatus(
+        page,
+        organizationId,
+        sessionId,
+        checkpoint,
+        'Candidate invitation status GET',
+      );
+      checkpoint('Candidate invitation status validation');
+      assert.equal(result.status, 200, 'Invitation status GET must succeed');
+      assert.equal(result.body?.sessionId, sessionId);
+      assert.equal(result.body?.status, 'active');
+      return candidateInvitationFingerprint(
+        result.body?.candidatePath,
+        result.body?.expiresAt,
+        sessionId,
+      );
+    },
+  );
 }
 
 export async function verifyCandidateInvitationRecovery({
@@ -137,59 +186,75 @@ export async function verifyCandidateInvitationRecovery({
   activeSessionId,
   revokedSessionId,
   expectedActiveFingerprint,
+  checkpoint = () => {},
 }) {
-  return withRecruiterPage({ appUrl, user, organizationId }, async (page) => {
-    const builderBase = `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder`;
-    await page.goto(
-      `${builderBase}?issuedSession=${encodeURIComponent(activeSessionId)}`,
-    );
-    await page.getByTestId('recovered-session-id').waitFor({
-      timeout: 20_000,
-    });
-    const activeResult = await readCandidateInvitationStatus(
-      page,
-      organizationId,
-      activeSessionId,
-    );
-    assert.equal(
-      activeResult.status,
-      200,
-      'Invitation status GET must succeed',
-    );
-    assert.equal(activeResult.body?.sessionId, activeSessionId);
-    assert.equal(activeResult.body?.status, 'active');
-    const recoveredFingerprint = candidateInvitationFingerprint(
-      activeResult.body?.candidatePath,
-      activeResult.body?.expiresAt,
-      activeSessionId,
-    );
-    if (recoveredFingerprint !== expectedActiveFingerprint) {
-      throw new Error('Recovered active invitation fingerprint changed');
-    }
+  return withRecruiterPage(
+    { appUrl, user, organizationId, checkpoint },
+    async (page) => {
+      const builderBase = `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder`;
+      checkpoint('Active invitation recovery builder navigation');
+      await page.goto(
+        `${builderBase}?issuedSession=${encodeURIComponent(activeSessionId)}`,
+      );
+      checkpoint('Active invitation recovery builder wait');
+      await page.getByTestId('recovered-session-id').waitFor({
+        timeout: 20_000,
+      });
+      const activeResult = await readCandidateInvitationStatus(
+        page,
+        organizationId,
+        activeSessionId,
+        checkpoint,
+        'Active invitation recovery status GET',
+      );
+      checkpoint('Active invitation recovery status validation');
+      assert.equal(
+        activeResult.status,
+        200,
+        'Invitation status GET must succeed',
+      );
+      assert.equal(activeResult.body?.sessionId, activeSessionId);
+      assert.equal(activeResult.body?.status, 'active');
+      const recoveredFingerprint = candidateInvitationFingerprint(
+        activeResult.body?.candidatePath,
+        activeResult.body?.expiresAt,
+        activeSessionId,
+      );
+      if (recoveredFingerprint !== expectedActiveFingerprint) {
+        throw new Error('Recovered active invitation fingerprint changed');
+      }
 
-    await page.goto(
-      `${builderBase}?issuedSession=${encodeURIComponent(revokedSessionId)}`,
-    );
-    await page.getByTestId('recovered-session-id').waitFor({
-      timeout: 20_000,
-    });
-    const revokedResult = await readCandidateInvitationStatus(
-      page,
-      organizationId,
-      revokedSessionId,
-    );
-    assert.equal(
-      revokedResult.status,
-      200,
-      'Invitation status GET must succeed',
-    );
-    assert.equal(revokedResult.body?.sessionId, revokedSessionId);
-    assert.equal(revokedResult.body?.status, 'revoked');
-    if (revokedResult.body?.candidatePath !== null) {
-      throw new Error('Recovered revoked invitation returned a candidate path');
-    }
-    return true;
-  });
+      checkpoint('Revoked invitation recovery builder navigation');
+      await page.goto(
+        `${builderBase}?issuedSession=${encodeURIComponent(revokedSessionId)}`,
+      );
+      checkpoint('Revoked invitation recovery builder wait');
+      await page.getByTestId('recovered-session-id').waitFor({
+        timeout: 20_000,
+      });
+      const revokedResult = await readCandidateInvitationStatus(
+        page,
+        organizationId,
+        revokedSessionId,
+        checkpoint,
+        'Revoked invitation recovery status GET',
+      );
+      checkpoint('Revoked invitation recovery status validation');
+      assert.equal(
+        revokedResult.status,
+        200,
+        'Invitation status GET must succeed',
+      );
+      assert.equal(revokedResult.body?.sessionId, revokedSessionId);
+      assert.equal(revokedResult.body?.status, 'revoked');
+      if (revokedResult.body?.candidatePath !== null) {
+        throw new Error(
+          'Recovered revoked invitation returned a candidate path',
+        );
+      }
+      return true;
+    },
+  );
 }
 
 async function assertExpiredInvitationReplay({
