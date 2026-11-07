@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import HomePage from '../../apps/web/app/page';
+import ContactPage from '../../apps/web/app/contact/page';
 import ProductsPage from '../../apps/web/app/products/page';
 import SoftwarePage from '../../apps/web/app/products/software/page';
 import ThinkingPage from '../../apps/web/app/thinking/page';
@@ -9,6 +10,7 @@ import AboutPage from '../../apps/web/app/about/page';
 
 const pages = [
   HomePage,
+  ContactPage,
   ProductsPage,
   SoftwarePage,
   ThinkingPage,
@@ -63,5 +65,13 @@ describe('Hirearchy public website', () => {
     expect(html).toContain('Illustrative task');
     expect(html).toContain('Illustrative record');
     expect(html).toContain('no automatic positive or negative judgement');
+  });
+  it('keeps buyer and demo requests closed without collecting personal data', () => {
+    const html = renderToStaticMarkup(createElement(ContactPage));
+    expect(html).toContain('Buyer and demo requests are not open yet.');
+    expect(html).toContain('does not accept or store messages.');
+    expect(html).not.toMatch(/<(form|input|textarea)\b/);
+    expect(html).toContain('href="/products/software"');
+    expect(html).toContain('href="/products/software#demo-limits"');
   });
 });

@@ -47,6 +47,8 @@ These are the intended browser entry points for the integrated flow. Route avail
 
 The buyer hypothesis is that an engineering manager or technical founder sponsors a pilot and a recruiter operates invitations. This is a segment to investigate, not validated buyer preference. Start with founder-led conversations and a synthetic rehearsal. There is no public self-serve signup, live email, or customer provisioning path.
 
+The public `/contact` page is informational and does not accept or store requests. Opening buyer intake later requires an approved durable PostgreSQL persistence path and an explicit delivery destination; neither is currently wired.
+
 Internal pricing hypothesis only: **US$250 for a fixed 30-day design-partner pilot**, one team, one approved scenario, and up to 10 candidate sessions, credited toward a future small-team plan. Do not publish this price, quote it as an offer, or implement payment. Published competitor attempt prices are not directly comparable; see [competitive positioning](../market/competitive-positioning.md). Hosting, execution, and support costs are unmeasured and must be checked before any pilot is offered. No willingness-to-pay, margin, or customer-interview evidence is claimed.
 
 Do not use real external candidates until the relevant deployment, privacy, retention, support, and security gates are accepted. External code execution remains a separate launch blocker; this demo keeps execution and AI off.
