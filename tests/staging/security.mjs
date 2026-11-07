@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, randomUUID, sign } from 'node:crypto';
+import {
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+  sign,
+} from 'node:crypto';
+import {
+  candidateTokenHash,
+  encryptCandidateToken,
+} from '../../apps/web/src/sessions/candidate-token-storage.mjs';
 
 const canonical = (value) => {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -266,6 +275,10 @@ export async function checkProofBoundary(
       payload,
       signature,
     ]);
+  const dispatchOperation = async (operation, args) => {
+    const result = await execute(proof({ op: operation, args }));
+    return result.rows[0].result;
+  };
   const rejected = async (payload, signature) =>
     assert.rejects(execute(payload, signature), (error) =>
       ['28000', '42501', '23505', '22023'].includes(error.code),
@@ -404,6 +417,138 @@ export async function checkProofBoundary(
       left.organization_id.localeCompare(right.organization_id),
     ),
   );
+
+  checkpoint('candidate invitation issue fixture');
+  const invitationContent = {
+    title: 'Synthetic invitation boundary assessment',
+    brief: 'A bounded proof-bound candidate invitation check.',
+    expectedBehavior: ['The issued session remains unstarted.'],
+    acceptanceCriteria: ['A single active invitation can be created.'],
+    primaryFilePath: 'src/main.ts',
+    starterFiles: [{ path: 'src/main.ts', content: '' }],
+    durationMinutes: 60,
+    terminalEnabled: true,
+    integratedAi: false,
+    rubric: [
+      {
+        id: 'correctness',
+        label: 'Correctness',
+        description: 'Meet the bounded requirement.',
+        weight: 100,
+        applicability: { kind: 'always', rule: 'All cases' },
+      },
+    ],
+  };
+  const createdAssessment = await dispatchOperation('assessment.create', {
+    organizationId,
+    content: invitationContent,
+  });
+  const validatedVersion = {
+    contentDigest: '1'.repeat(64),
+    scenarioId: 'authored-assessment',
+    scenarioVersion: '1.0.0',
+    scenarioTitle: invitationContent.title,
+    scenarioSnapshot: { version: 1 },
+    taskRubricSnapshot: { rubric: [] },
+    durationSeconds: 3600,
+    terminalEnabled: true,
+    integratedAi: false,
+    validationReceipt: {
+      validatedAt: new Date().toISOString(),
+      checks: ['static_fixture'],
+      executionValidationAvailable: false,
+    },
+  };
+  await dispatchOperation('assessment.validate', {
+    organizationId,
+    assessmentId: createdAssessment.assessmentId,
+    content: invitationContent,
+    validatedVersion,
+  });
+  const issuedInvitationSession = await dispatchOperation('assessment.issue', {
+    organizationId,
+    assessmentId: createdAssessment.assessmentId,
+    reviewerPrincipalId,
+  });
+  const invitationSessionId = issuedInvitationSession.sessionId;
+  const invitationExpiresAt = new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const invitationIdempotencyKey = `security-invitation.${randomUUID()}`;
+  const tokenEncryptionKey = randomBytes(32);
+  const candidateToken = randomBytes(32).toString('base64url');
+  const candidateCiphertext = encryptCandidateToken(
+    candidateToken,
+    invitationSessionId,
+    tokenEncryptionKey,
+  );
+  assert.deepEqual(
+    candidateCiphertext.split('.').map((part) => part.length),
+    [2, 16, 58, 22],
+    'The real candidate token encryption helper must produce the accepted envelope shape',
+  );
+  const invitationArgs = {
+    organizationId,
+    sessionId: invitationSessionId,
+    expiresAt: invitationExpiresAt,
+    idempotencyKey: invitationIdempotencyKey,
+    candidateTokenHash: candidateTokenHash(candidateToken),
+    candidateTokenCiphertext: candidateCiphertext,
+  };
+
+  checkpoint('candidate invitation create with encrypted token');
+  const createdInvitation = await dispatchOperation(
+    'candidate.invitation.create',
+    invitationArgs,
+  );
+  assert.equal(createdInvitation.status, 'active');
+  assert.equal(createdInvitation.replayed, false);
+  assert.equal(createdInvitation.candidateTokenCiphertext, candidateCiphertext);
+
+  checkpoint('candidate invitation logical idempotency replay');
+  const replayToken = randomBytes(32).toString('base64url');
+  const replayInvitation = await dispatchOperation(
+    'candidate.invitation.create',
+    {
+      ...invitationArgs,
+      candidateTokenHash: candidateTokenHash(replayToken),
+      candidateTokenCiphertext: encryptCandidateToken(
+        replayToken,
+        invitationSessionId,
+        tokenEncryptionKey,
+      ),
+    },
+  );
+  assert.equal(replayInvitation.status, 'active');
+  assert.equal(replayInvitation.replayed, true);
+  assert.equal(
+    replayInvitation.candidateTokenCiphertext,
+    candidateCiphertext,
+    'An idempotent retry must retain the original encrypted envelope',
+  );
+
+  checkpoint('candidate invitation malformed ciphertext rejected');
+  const malformedCiphertextParts = candidateCiphertext.split('.');
+  malformedCiphertextParts[2] = malformedCiphertextParts[2].slice(0, -1);
+  await assert.rejects(
+    dispatchOperation('candidate.invitation.create', {
+      ...invitationArgs,
+      idempotencyKey: `security-invitation-malformed.${randomUUID()}`,
+      candidateTokenCiphertext: malformedCiphertextParts.join('.'),
+    }),
+    { code: '22023' },
+  );
+  const invitationCounts = await admin.query(
+    `SELECT
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.candidate_token_envelopes
+         WHERE organization_id=$1::pg_catalog.uuid AND session_id=$2) AS envelopes,
+       (SELECT pg_catalog.count(*)::pg_catalog.int4
+          FROM hirearchy.candidate_invitation_requests
+         WHERE organization_id=$1::pg_catalog.uuid AND session_id=$2) AS requests`,
+    [organizationId, invitationSessionId],
+  );
+  assert.deepEqual(invitationCounts.rows, [{ envelopes: 1, requests: 1 }]);
 }
 
 export async function checkReviewerRowLockBoundary({

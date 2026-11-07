@@ -1509,7 +1509,7 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             or not isinstance(token_hash, str)
             or not re.fullmatch(r'[0-9a-f]{64}', token_hash)
             or not isinstance(token_ciphertext, str)
-            or not re.fullmatch(r'v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{22}', token_ciphertext)
+            or not re.fullmatch(r'v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{58}\.[A-Za-z0-9_-]{22}', token_ciphertext)
         ):
             error('Staging request is invalid', '22023')
 

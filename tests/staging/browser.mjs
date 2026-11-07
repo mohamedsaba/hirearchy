@@ -168,19 +168,24 @@ export async function createActiveCandidateInvitationFingerprint({
       checkpoint('Candidate invitation create response');
       const invitationResponse = await invitationPost;
       const invitationStatus = invitationResponse.status();
-      const invitationErrorCategory =
-        invitationStatus === 400 || invitationStatus === 422
-          ? 'validation'
-          : invitationStatus === 401 || invitationStatus === 403
-            ? 'authorization'
-            : invitationStatus === 409
-              ? 'conflict'
-              : invitationStatus >= 500
-                ? 'server_error'
-                : 'unexpected';
+      const invitationResponseCategory =
+        invitationStatus === 200 || invitationStatus === 201
+          ? 'accepted'
+          : invitationStatus === 400 || invitationStatus === 422
+            ? 'validation'
+            : invitationStatus === 401 || invitationStatus === 403
+              ? 'authorization'
+              : invitationStatus === 409
+                ? 'conflict'
+                : invitationStatus >= 500
+                  ? 'server_error'
+                  : 'unexpected';
+      console.info(
+        `Candidate invitation POST status=${invitationStatus} category=${invitationResponseCategory}`,
+      );
       assert.ok(
         invitationStatus === 200 || invitationStatus === 201,
-        `Candidate invitation POST returned HTTP ${invitationStatus} (${invitationErrorCategory})`,
+        `Candidate invitation POST returned HTTP ${invitationStatus} (${invitationResponseCategory})`,
       );
       checkpoint('Candidate invitation link wait');
       await page.getByTestId('candidate-invitation-link').waitFor({
