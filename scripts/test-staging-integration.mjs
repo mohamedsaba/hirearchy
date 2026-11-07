@@ -410,14 +410,73 @@ async function restore(dump, suffix) {
   await migrate(target);
   return target;
 }
+async function createSnapshotManifest({
+  admin,
+  dump,
+  sourceIdentity,
+  release,
+  postgresImageId,
+  authImageId,
+}) {
+  const { rows } = await admin.query(
+    'SELECT version, checksum FROM hirearchy.schema_migrations ORDER BY version',
+  );
+  assert.ok(rows.length > 0, 'Snapshot has an applied migration ledger');
+  const migrationLedger = rows.map(({ version, checksum }) => ({
+    version,
+    checksum,
+  }));
+  assert.ok(
+    migrationLedger.every((migration) =>
+      /^[0-9a-f]{64}$/.test(migration.checksum),
+    ),
+    'Snapshot migration checksums identify exact migration bytes',
+  );
+
+  return {
+    databaseSha256: createHash('sha256').update(dump).digest('hex'),
+    sourceDirty: sourceIdentity.sourceDirty,
+    gitHead: sourceIdentity.gitHead,
+    image: postgresImageId,
+    imageReference: image,
+    authImage: { reference: authImage, imageId: authImageId },
+    migrationLedger,
+    release,
+  };
+}
 try {
   await mkdir(artifact, { recursive: true, mode: 0o700 });
   await mkdir(browserEvidence, { recursive: true, mode: 0o700 });
-  docker('image', 'inspect', image);
-  docker('image', 'inspect', authImage);
+  const postgresImageId = docker(
+    'image',
+    'inspect',
+    image,
+    '--format',
+    '{{.Id}}',
+  );
+  const authImageId = docker(
+    'image',
+    'inspect',
+    authImage,
+    '--format',
+    '{{.Id}}',
+  );
   docker('network', 'create', name);
   networkCreated = true;
   const unpackRelease = await captureRelease(artifact);
+  const sourceIdentity = {
+    sourceDirty: Boolean(
+      execFileSync('git', ['status', '--porcelain'], {
+        encoding: 'utf8',
+      }).trim(),
+    ),
+    gitHead: execFileSync('git', ['rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim(),
+  };
+  const releaseManifest = JSON.parse(
+    await readFile(new URL('release-manifest.json', artifact), 'utf8'),
+  );
   stage = 'fresh database';
   const source = await db(`${name}-source`);
   await bootstrap(source);
@@ -550,27 +609,18 @@ try {
     { maxBuffer: 32 * 1024 * 1024 },
   );
   await writeFile(new URL('database.dump', artifact), dump, { mode: 0o600 });
+  const initialSnapshotManifest = await createSnapshotManifest({
+    admin: source.admin,
+    dump,
+    sourceIdentity,
+    release: releaseManifest,
+    postgresImageId,
+    authImageId,
+  });
   await writeFile(
     new URL('snapshot-manifest.json', artifact),
-    JSON.stringify(
-      {
-        databaseSha256: createHash('sha256').update(dump).digest('hex'),
-        sourceDirty: Boolean(
-          execFileSync('git', ['status', '--porcelain'], {
-            encoding: 'utf8',
-          }).trim(),
-        ),
-        gitHead: execFileSync('git', ['rev-parse', 'HEAD'], {
-          encoding: 'utf8',
-        }).trim(),
-        image: docker('image', 'inspect', image, '--format', '{{.Id}}'),
-        release: JSON.parse(
-          await readFile(new URL('release-manifest.json', artifact), 'utf8'),
-        ),
-      },
-      null,
-      2,
-    ),
+    JSON.stringify(initialSnapshotManifest, null, 2),
+    { encoding: 'utf8', mode: 0o600 },
   );
   await writeFile(
     new URL('private-recovery.json', artifact),
@@ -797,6 +847,24 @@ try {
   ) {
     throw new Error('Saved candidate-review snapshot failed byte verification');
   }
+  const candidateReviewSnapshotManifest = await createSnapshotManifest({
+    admin: rollback.admin,
+    dump: savedCandidateReviewDump,
+    sourceIdentity,
+    release: releaseManifest,
+    postgresImageId,
+    authImageId,
+  });
+  assert.deepEqual(
+    candidateReviewSnapshotManifest.migrationLedger,
+    initialSnapshotManifest.migrationLedger,
+    'Candidate-review snapshot preserves the same applied migration set',
+  );
+  await writeFile(
+    new URL('candidate-review-snapshot-manifest.json', artifact),
+    JSON.stringify(candidateReviewSnapshotManifest, null, 2),
+    { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+  );
   const candidateReviewRecovery = await restore(
     savedCandidateReviewDump,
     'candidate-review-recovery',
@@ -865,7 +933,9 @@ try {
     JSON.stringify(
       {
         passed: true,
-        image: docker('image', 'inspect', image, '--format', '{{.Id}}'),
+        image: postgresImageId,
+        candidateReviewSnapshotManifest:
+          'candidate-review-snapshot-manifest.json',
         recovery:
           'The initial journey and completed candidate/reviewer workflow were independently restored from PostgreSQL snapshots; the protected candidate invitation key remained stable.',
         limitation:
