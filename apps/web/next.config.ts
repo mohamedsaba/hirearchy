@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   experimental: {
     useTypeScriptCli: false,
   },
+  turbopack: {
+    root: process.env.TURBO_ROOT || '/',
+  },
   poweredByHeader: false,
   serverExternalPackages: ['better-sqlite3'],
   outputFileTracingExcludes: {
