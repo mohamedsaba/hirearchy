@@ -817,6 +817,12 @@
 .ct-page-hero--white {
   background: #fff;
 }
+.ct-contact-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
 .ct-page-hero .ct-hero-loop {
   position: absolute;
   width: 28%;
@@ -1348,7 +1354,7 @@
     width: 22px;
     margin-top: 12px;
   }
-  .ct-button {
+  .ct-site .ct-button {
     font-size: 13px;
     padding: 14px 24px;
     gap: 20px;

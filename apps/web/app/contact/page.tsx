@@ -9,20 +9,19 @@ export const metadata = {
 export default function ContactPage() {
   return (
     <Site>
-      <section className="ct-page-hero ct-page-hero--white ct-reveal">
+      <section
+        className="ct-page-hero ct-page-hero--white ct-reveal"
+        style={{ minHeight: 0 }}
+      >
         <Kicker>Contact / Availability</Kicker>
         <h1 className="ct-enter">Buyer and demo requests are not open yet.</h1>
         <p>
           This page is informational only. It does not accept or store messages.
         </p>
-      </section>
-      <section className="ct-editorial ct-editorial--lilac ct-reveal">
-        <h2 className="ct-enter">Explore Hirearchy Software.</h2>
-        <p>
-          Read about the internal demo, what it supports and its current limits.
-        </p>
-        <Button href="/products/software">Explore Software</Button>
-        <Button href="/products/software#demo-limits">See demo limits</Button>
+        <div className="ct-contact-links">
+          <Button href="/products/software">Explore Software</Button>
+          <Button href="/products/software#demo-limits">See demo limits</Button>
+        </div>
       </section>
     </Site>
   );
