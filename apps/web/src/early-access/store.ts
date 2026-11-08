@@ -15,8 +15,6 @@ export interface EarlyAccessSubmissionInput {
     | 'unrealistic_assessments'
     | 'other';
   notes?: string;
-  clientIp?: string;
-  userAgent?: string;
 }
 
 export interface EarlyAccessRecord extends EarlyAccessSubmissionInput {
@@ -24,35 +22,7 @@ export interface EarlyAccessRecord extends EarlyAccessSubmissionInput {
   receivedAt: string;
 }
 
-// In-memory rate limiting map: ip -> array of timestamps
-const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_REQUESTS_PER_WINDOW = 5;
-
-export function checkRateLimit(clientIp: string): {
-  allowed: boolean;
-  retryAfterSeconds?: number;
-} {
-  const now = Date.now();
-  const timestamps = rateLimitMap.get(clientIp) || [];
-
-  // Clean up older timestamps outside window
-  const validTimestamps = timestamps.filter(
-    (t) => now - t < RATE_LIMIT_WINDOW_MS,
-  );
-
-  if (validTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
-    const oldest = validTimestamps[0];
-    const retryAfterSeconds = Math.ceil(
-      (oldest + RATE_LIMIT_WINDOW_MS - now) / 1000,
-    );
-    return { allowed: false, retryAfterSeconds };
-  }
-
-  validTimestamps.push(now);
-  rateLimitMap.set(clientIp, validTimestamps);
-  return { allowed: true };
-}
+let saveQueue = Promise.resolve();
 
 export function getStoragePath(): string {
   if (process.env.EARLY_ACCESS_STORAGE_PATH) {
@@ -65,44 +35,56 @@ export async function readAllEarlyAccessRecords(): Promise<
   EarlyAccessRecord[]
 > {
   const filePath = getStoragePath();
+  let content: string;
   try {
-    if (!fs.existsSync(filePath)) {
-      return [];
-    }
-    const content = await fs.promises.readFile(filePath, 'utf8');
-    return JSON.parse(content) as EarlyAccessRecord[];
+    content = await fs.promises.readFile(filePath, 'utf8');
   } catch (error) {
-    console.error('Failed to read early access store:', error);
-    return [];
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
   }
+  const records: unknown = JSON.parse(content);
+  if (!Array.isArray(records)) {
+    throw new TypeError('Early-access store must contain a JSON array');
+  }
+  return records as EarlyAccessRecord[];
 }
 
-export async function saveEarlyAccessRecord(
+export function saveEarlyAccessRecord(
   input: EarlyAccessSubmissionInput,
 ): Promise<EarlyAccessRecord> {
-  const filePath = getStoragePath();
-  const dir = path.dirname(filePath);
+  const save = saveQueue.then(async () => {
+    const filePath = getStoragePath();
+    const dir = path.dirname(filePath);
 
-  if (!fs.existsSync(dir)) {
-    await fs.promises.mkdir(dir, { recursive: true });
-  }
+    await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
+    try {
+      await fs.promises.chmod(filePath, 0o600);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
 
-  const existing = await readAllEarlyAccessRecords();
-  const record: EarlyAccessRecord = {
-    ...input,
-    id: randomUUID(),
-    receivedAt: new Date().toISOString(),
-  };
+    const existing = await readAllEarlyAccessRecords();
+    const record: EarlyAccessRecord = {
+      ...input,
+      id: randomUUID(),
+      receivedAt: new Date().toISOString(),
+    };
 
-  const updated = [...existing, record];
-  const tempPath = `${filePath}.${randomUUID()}.tmp`;
+    const updated = [...existing, record];
+    const tempPath = `${filePath}.${randomUUID()}.tmp`;
 
-  await fs.promises.writeFile(
-    tempPath,
-    JSON.stringify(updated, null, 2),
-    'utf8',
+    await fs.promises.writeFile(tempPath, JSON.stringify(updated, null, 2), {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    await fs.promises.rename(tempPath, filePath);
+
+    return record;
+  });
+  // shortcut: serialized only in this Node process; use transactional storage before sharing the file across app replicas.
+  saveQueue = save.then(
+    () => undefined,
+    () => undefined,
   );
-  await fs.promises.rename(tempPath, filePath);
-
-  return record;
+  return save;
 }

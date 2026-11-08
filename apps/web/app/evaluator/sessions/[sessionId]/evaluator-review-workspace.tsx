@@ -1516,6 +1516,12 @@ export const EvaluatorReviewWorkspace = (
           closureReason={
             review?.session.closureReason ?? r27Evidence!.closureReason
           }
+          backHref={
+            r27Evidence
+              ? `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId.toLowerCase())}/sessions/${encodeURIComponent(r27Evidence.sessionId)}`
+              : undefined
+          }
+          backLabel={r27Evidence ? '← Back to session summary' : undefined}
         />
         <div className="evaluator-workbench-topline">
           <nav

@@ -16,6 +16,8 @@ export async function checkReadinessBoundary({
   appLog,
   docker,
   waitFor,
+  closeDatabaseClients,
+  reconnectDatabaseClients,
   onCheckpoint = () => {},
 }) {
   const checkpoint = (label) => onCheckpoint(`readiness / ${label}`);
@@ -178,13 +180,17 @@ export async function checkReadinessBoundary({
   assert.equal(restored.status, 200, 'readiness recovers after marker restore');
 
   checkpoint('database outage returns 503 and logs stay redacted');
-  docker('stop', postgresContainer);
+  await closeDatabaseClients();
+  let stopped = false;
   try {
+    docker('stop', postgresContainer);
+    stopped = true;
     const unavailable = await fetch(readinessUrl);
     assert.equal(unavailable.status, 503, 'database outage returns 503');
   } finally {
-    docker('start', postgresContainer);
+    if (stopped) docker('start', postgresContainer);
   }
+  await reconnectDatabaseClients();
   await waitFor(async () => (await fetch(readinessUrl)).status === 200);
   for (const secret of secrets) {
     assert.equal(

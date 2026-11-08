@@ -9,6 +9,8 @@ type EvaluatorHeaderProps = Readonly<{
   sessionDuration?: BriefingSessionDuration;
   submittedAt: string;
   closureReason: SessionClosureReason;
+  backHref?: string;
+  backLabel?: string;
 }>;
 
 export const EvaluatorHeader = ({
@@ -17,10 +19,12 @@ export const EvaluatorHeader = ({
   sessionDuration,
   submittedAt,
   closureReason,
+  backHref = '/evaluator',
+  backLabel = '← Back to reviews',
 }: EvaluatorHeaderProps) => (
   <header className="evaluator-report-heading">
-    <Link className="evaluator-back-link" href="/evaluator">
-      ← Back to reviews
+    <Link className="evaluator-back-link" href={backHref}>
+      {backLabel}
     </Link>
     <h1>{scenarioTitle}</h1>
     <div className="evaluator-report-metadata">

@@ -89,10 +89,8 @@ export default function SoftwarePage() {
             <span>02</span>
             <h3>Inspectable, citable provenance.</h3>
             <p>
-              Every claim in a review packet links directly to an inspectable
-              diff or timeline event. When your hiring team debriefs,
-              discussions are grounded in verifiable code changes rather than
-              subjective recollection.
+              Evaluators can link observations to saved revisions or timeline
+              events, then review the supporting evidence during a debrief.
             </p>
           </li>
           <li className="ct-enter">
@@ -141,9 +139,9 @@ export default function SoftwarePage() {
             </li>
             <li style={{ marginBottom: '12px' }}>
               <strong>Automated Email Delivery (SMTP):</strong> Outbound SMTP
-              email delivery is disabled in staging. Candidate and evaluator
-              session links are provided with direct bearer tokens in the
-              recruiter and evaluator interfaces.
+              delivery is disabled. An authorized recruiter can copy a candidate
+              invitation from the internal demo; evaluators sign in to review
+              assigned sessions.
             </li>
           </ul>
         </div>
@@ -154,7 +152,7 @@ export default function SoftwarePage() {
         style={{ background: 'var(--ct-plum)', color: '#ffffff' }}
         data-testid="software-pilot-cta"
       >
-        <Kicker>Design Partner Program</Kicker>
+        <Kicker>Early access interest</Kicker>
         <h2 style={{ color: '#ffffff' }}>
           Ready to evaluate real engineering work?
         </h2>
@@ -165,9 +163,9 @@ export default function SoftwarePage() {
             margin: '16px auto 28px',
           }}
         >
-          We are currently onboarding select engineering teams into our
-          supervised alpha pilot. Run high-signal, evidence-first technical
-          assessments with zero setup overhead.
+          Request a conversation about future access. The current product is a
+          synthetic internal demo; no hosted pilot or public signup is available
+          yet.
         </p>
         <div className="ct-contact-links" style={{ justifyContent: 'center' }}>
           <Button href="/early-access" light>
