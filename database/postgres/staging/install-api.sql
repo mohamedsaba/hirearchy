@@ -1193,7 +1193,7 @@ BEGIN
 
   v_is_owner := (v_owner_id = p_caller_principal_id);
 
-  SELECT pg_catalog.coalesce(
+  SELECT COALESCE(
     pg_catalog.jsonb_agg(
       pg_catalog.jsonb_build_object(
         'id', id::pg_catalog.text,
@@ -1391,7 +1391,7 @@ BEGIN
     RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
   END IF;
 
-  SELECT pg_catalog.coalesce(
+  SELECT COALESCE(
     pg_catalog.jsonb_agg(
       pg_catalog.jsonb_build_object(
         'principalId', m.principal_id::pg_catalog.text,

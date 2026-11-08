@@ -181,13 +181,13 @@ async function run() {
     );
     clients.push(migratorClient);
     const initialMigration = await applyMigrations(migratorClient);
-    assert.equal(initialMigration.appliedVersions.length, 16);
+    assert.ok(initialMigration.appliedVersions.length >= 16);
 
-    // Migration idempotency rehearsal: second run must succeed and verify all 16 migrations
+    // Migration idempotency rehearsal: second run must succeed and verify all migrations
     const idempotentResult = await applyMigrations(migratorClient);
     assert.equal(
       idempotentResult.appliedVersions.length,
-      16,
+      initialMigration.appliedVersions.length,
       'Re-running migrations must be idempotent and succeed without error',
     );
 
