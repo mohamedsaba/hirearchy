@@ -14,10 +14,15 @@ export const runtime = 'nodejs';
 
 export default async function AssessmentBuilderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ organizationId: string }>;
+  searchParams?: Promise<{ issuedSession?: string | string[] }>;
 }) {
   const { organizationId } = await params;
+  const query = await searchParams;
+  const initialIssuedSessionId =
+    typeof query?.issuedSession === 'string' ? query.issuedSession : null;
   const incomingHeaders = await headers();
   const cookie = incomingHeaders.get('cookie') ?? '';
 
@@ -69,11 +74,17 @@ export default async function AssessmentBuilderPage({
 
   return (
     <AssessmentBuilderClient
+      key={JSON.stringify([
+        organizationId,
+        initialDraft?.definitionId ?? null,
+        initialIssuedSessionId,
+      ])}
       organizationId={organizationId}
       csrfToken={context.csrfToken}
       initialDraft={initialDraft}
       reviewers={contextWithStaging.reviewers ?? []}
       isAuthenticatedStaging={isAuthenticatedStaging()}
+      initialIssuedSessionId={initialIssuedSessionId}
     />
   );
 }

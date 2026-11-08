@@ -6,7 +6,19 @@ DO $preflight$
 DECLARE
   owner_role record;
   gateway_role record;
+  candidate_gateway_role record;
 BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_namespace
+    WHERE nspname = ANY (ARRAY[
+      'r23', 'r24', 'r25', 'r26', 'r27', 'r28', 'r29',
+      'r210', 'r211', 'r212', 'r213'
+    ]::pg_catalog.name[])
+  ) THEN
+    RAISE EXCEPTION 'Disposable R23-R213 fixture schema exists; staging API installation is refused';
+  END IF;
+
   SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,
          rolcreaterole, rolreplication, rolinherit, rolconfig
     INTO owner_role
@@ -37,6 +49,28 @@ BEGIN
     RAISE EXCEPTION 'r23_gateway is missing or unsafe';
   END IF;
 
+  SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,
+         rolcreaterole, rolreplication, rolinherit, rolconfig
+    INTO candidate_gateway_role
+    FROM pg_catalog.pg_roles
+    WHERE rolname = 'app_candidate_gateway';
+  IF NOT FOUND
+     OR NOT candidate_gateway_role.rolcanlogin
+     OR candidate_gateway_role.rolsuper OR candidate_gateway_role.rolbypassrls
+     OR candidate_gateway_role.rolcreatedb OR candidate_gateway_role.rolcreaterole
+     OR candidate_gateway_role.rolreplication OR candidate_gateway_role.rolinherit
+     OR candidate_gateway_role.rolconfig IS DISTINCT FROM
+       ARRAY['search_path=pg_catalog']::pg_catalog.text[]
+     OR EXISTS (
+       SELECT 1 FROM pg_catalog.pg_db_role_setting
+       WHERE setrole = candidate_gateway_role.oid
+         AND (setdatabase <> 0 OR setconfig IS DISTINCT FROM
+           ARRAY['search_path=pg_catalog']::pg_catalog.text[])
+     )
+     OR EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members WHERE roleid = candidate_gateway_role.oid OR member = candidate_gateway_role.oid) THEN
+    RAISE EXCEPTION 'app_candidate_gateway is missing or unsafe';
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_language WHERE lanname = 'plpython3u') THEN
     RAISE EXCEPTION 'plpython3u is not installed';
   END IF;
@@ -59,15 +93,48 @@ BEGIN
     RAISE EXCEPTION 'GoTrue auth.sessions is missing required identity or expiry columns';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_namespace
-    WHERE nspname = ANY (ARRAY[
-      'r23', 'r24', 'r25', 'r26', 'r27', 'r28', 'r29',
-      'r210', 'r211', 'r212', 'r213'
-    ]::pg_catalog.name[])
-  ) THEN
-    RAISE EXCEPTION 'Disposable R23-R213 fixture schema exists; staging API installation is refused';
+
+  IF pg_catalog.to_regclass('hirearchy.durable_candidate_installation') IS NULL
+     OR pg_catalog.to_regprocedure('hirearchy.r26_candidate_lifecycle_ready()') IS NULL
+     OR pg_catalog.to_regprocedure('hirearchy.r26_candidate_command_unchecked(text,text,text,jsonb)') IS NULL
+     OR pg_catalog.to_regprocedure('hirearchy.r26_candidate_command(text,text,text,jsonb)') IS NULL
+     OR NOT pg_catalog.has_function_privilege(
+       'app_candidate_gateway',
+       'hirearchy.r26_candidate_lifecycle_ready()',
+       'EXECUTE'
+     )
+     OR NOT pg_catalog.has_function_privilege(
+       'app_candidate_gateway',
+       'hirearchy.r26_candidate_command(text,text,text,jsonb)',
+       'EXECUTE'
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM hirearchy.schema_migrations
+       WHERE version = '0016' AND applied_by = 'hirearchy_migrator'
+     ) THEN
+    RAISE EXCEPTION 'Durable candidate lifecycle migration must be applied before staging installation';
+  END IF;
+  IF pg_catalog.has_table_privilege(
+       'app_candidate_gateway',
+       'hirearchy.durable_candidate_installation',
+       'INSERT'
+     )
+     OR pg_catalog.has_table_privilege(
+       'app_candidate_gateway',
+       'hirearchy.durable_candidate_installation',
+       'UPDATE'
+     )
+     OR pg_catalog.has_table_privilege(
+       'app_candidate_gateway',
+       'hirearchy.durable_candidate_installation',
+       'DELETE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'app_candidate_gateway',
+       'hirearchy.r26_candidate_command_unchecked(pg_catalog.text,pg_catalog.text,pg_catalog.text,pg_catalog.jsonb)',
+       'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'Candidate runtime has an unsafe lifecycle bypass';
   END IF;
 END
 $preflight$;
@@ -203,6 +270,26 @@ CREATE POLICY staging_verifier_membership_select
     )
   );
 
+-- SELECT ... FOR SHARE needs UPDATE privilege; limit it to the caller's active
+-- membership or the exact active reviewer selected by a validated issue request.
+DROP POLICY IF EXISTS staging_verifier_membership_lock ON hirearchy.organization_memberships;
+CREATE POLICY staging_verifier_membership_lock
+  ON hirearchy.organization_memberships
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND status = 'active'
+    AND revoked_at IS NULL
+    AND (
+      principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+      OR (
+        principal_id = NULLIF(pg_catalog.current_setting('staging.reviewer_principal_id', true), '')::pg_catalog.uuid
+        AND role = 'reviewer'
+      )
+    )
+  )
+  WITH CHECK (false);
+
 DROP POLICY IF EXISTS staging_verifier_assessment_definition_select ON hirearchy.assessment_definitions;
 CREATE POLICY staging_verifier_assessment_definition_select
   ON hirearchy.assessment_definitions
@@ -278,6 +365,24 @@ CREATE POLICY staging_verifier_assessment_session_select
       )
     )
   );
+-- SELECT ... FOR SHARE needs UPDATE privilege; USING scopes locks and WITH CHECK rejects writes.
+DROP POLICY IF EXISTS staging_verifier_assessment_session_lock ON hirearchy.assessment_sessions;
+CREATE POLICY staging_verifier_assessment_session_lock
+  ON hirearchy.assessment_sessions
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND status = 'SUBMITTED'
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = assessment_sessions.organization_id
+        AND assignment.session_id = assessment_sessions.id
+        AND assignment.reviewer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+        AND assignment.revoked_at IS NULL
+    )
+  )
+  WITH CHECK (false);
 DROP POLICY IF EXISTS staging_verifier_assessment_session_insert ON hirearchy.assessment_sessions;
 CREATE POLICY staging_verifier_assessment_session_insert
   ON hirearchy.assessment_sessions
@@ -298,6 +403,23 @@ CREATE POLICY staging_verifier_reviewer_assignment_select
       OR assigned_by_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
     )
   );
+DROP POLICY IF EXISTS staging_verifier_reviewer_assignment_lock ON hirearchy.reviewer_assignments;
+CREATE POLICY staging_verifier_reviewer_assignment_lock
+  ON hirearchy.reviewer_assignments
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND reviewer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND revoked_at IS NULL
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = reviewer_assignments.organization_id
+        AND session.id = reviewer_assignments.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  )
+  WITH CHECK (false);
 DROP POLICY IF EXISTS staging_verifier_reviewer_assignment_insert ON hirearchy.reviewer_assignments;
 CREATE POLICY staging_verifier_reviewer_assignment_insert
   ON hirearchy.reviewer_assignments
@@ -328,6 +450,77 @@ CREATE POLICY staging_verifier_assessment_issuance_select
 DROP POLICY IF EXISTS staging_verifier_assessment_issuance_insert ON hirearchy.assessment_issuances;
 CREATE POLICY staging_verifier_assessment_issuance_insert
   ON hirearchy.assessment_issuances
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND issuer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+  );
+
+DROP POLICY IF EXISTS staging_verifier_candidate_invitation_select ON hirearchy.candidate_token_envelopes;
+CREATE POLICY staging_verifier_candidate_invitation_select
+  ON hirearchy.candidate_token_envelopes
+  FOR SELECT TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = candidate_token_envelopes.organization_id
+        AND session.id = candidate_token_envelopes.session_id
+        AND session.issuer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    )
+  );
+DROP POLICY IF EXISTS staging_verifier_candidate_invitation_insert ON hirearchy.candidate_token_envelopes;
+CREATE POLICY staging_verifier_candidate_invitation_insert
+  ON hirearchy.candidate_token_envelopes
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND expires_at > pg_catalog.clock_timestamp()
+    AND revoked_at IS NULL
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = candidate_token_envelopes.organization_id
+        AND session.id = candidate_token_envelopes.session_id
+        AND session.issuer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+        AND session.status = 'CREATED'
+        AND session.activated_at IS NULL
+    )
+  );
+DROP POLICY IF EXISTS staging_verifier_candidate_invitation_update ON hirearchy.candidate_token_envelopes;
+CREATE POLICY staging_verifier_candidate_invitation_update
+  ON hirearchy.candidate_token_envelopes
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = candidate_token_envelopes.organization_id
+        AND session.id = candidate_token_envelopes.session_id
+        AND session.issuer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    )
+  )
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND expires_at IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = candidate_token_envelopes.organization_id
+        AND session.id = candidate_token_envelopes.session_id
+        AND session.issuer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    )
+  );
+
+DROP POLICY IF EXISTS staging_verifier_candidate_invitation_request_select ON hirearchy.candidate_invitation_requests;
+CREATE POLICY staging_verifier_candidate_invitation_request_select
+  ON hirearchy.candidate_invitation_requests
+  FOR SELECT TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND issuer_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+  );
+DROP POLICY IF EXISTS staging_verifier_candidate_invitation_request_insert ON hirearchy.candidate_invitation_requests;
+CREATE POLICY staging_verifier_candidate_invitation_request_insert
+  ON hirearchy.candidate_invitation_requests
   FOR INSERT TO staging_verifier_owner
   WITH CHECK (
     organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
@@ -411,6 +604,103 @@ CREATE POLICY staging_verifier_observation_history_select
     AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
   );
 
+DROP POLICY IF EXISTS staging_verifier_observation_write ON hirearchy.evaluator_observations;
+CREATE POLICY staging_verifier_observation_write
+  ON hirearchy.evaluator_observations
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.organization_memberships AS membership
+      WHERE membership.organization_id = evaluator_observations.organization_id
+        AND membership.principal_id = evaluator_observations.author_principal_id
+        AND membership.role = 'reviewer'
+        AND membership.status = 'active'
+        AND membership.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = evaluator_observations.organization_id
+        AND assignment.session_id = evaluator_observations.session_id
+        AND assignment.reviewer_principal_id = evaluator_observations.author_principal_id
+        AND assignment.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = evaluator_observations.organization_id
+        AND session.id = evaluator_observations.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  );
+DROP POLICY IF EXISTS staging_verifier_observation_update ON hirearchy.evaluator_observations;
+CREATE POLICY staging_verifier_observation_update
+  ON hirearchy.evaluator_observations
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.organization_memberships AS membership
+      WHERE membership.organization_id = evaluator_observations.organization_id
+        AND membership.principal_id = evaluator_observations.author_principal_id
+        AND membership.role = 'reviewer'
+        AND membership.status = 'active'
+        AND membership.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = evaluator_observations.organization_id
+        AND assignment.session_id = evaluator_observations.session_id
+        AND assignment.reviewer_principal_id = evaluator_observations.author_principal_id
+        AND assignment.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = evaluator_observations.organization_id
+        AND session.id = evaluator_observations.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  )
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+  );
+
+DROP POLICY IF EXISTS staging_verifier_observation_history_write ON hirearchy.evaluator_observation_history;
+CREATE POLICY staging_verifier_observation_history_write
+  ON hirearchy.evaluator_observation_history
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.organization_memberships AS membership
+      WHERE membership.organization_id = evaluator_observation_history.organization_id
+        AND membership.principal_id = evaluator_observation_history.author_principal_id
+        AND membership.role = 'reviewer'
+        AND membership.status = 'active'
+        AND membership.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = evaluator_observation_history.organization_id
+        AND assignment.session_id = evaluator_observation_history.session_id
+        AND assignment.reviewer_principal_id = evaluator_observation_history.author_principal_id
+        AND assignment.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = evaluator_observation_history.organization_id
+        AND session.id = evaluator_observation_history.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  );
+
 DROP POLICY IF EXISTS staging_verifier_review_packet_select ON hirearchy.evaluator_review_packets;
 CREATE POLICY staging_verifier_review_packet_select
   ON hirearchy.evaluator_review_packets
@@ -443,10 +733,108 @@ CREATE POLICY staging_verifier_review_packet_history_select
     AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
   );
 
+DROP POLICY IF EXISTS staging_verifier_review_packet_write ON hirearchy.evaluator_review_packets;
+CREATE POLICY staging_verifier_review_packet_write
+  ON hirearchy.evaluator_review_packets
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.organization_memberships AS membership
+      WHERE membership.organization_id = evaluator_review_packets.organization_id
+        AND membership.principal_id = evaluator_review_packets.author_principal_id
+        AND membership.role = 'reviewer'
+        AND membership.status = 'active'
+        AND membership.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = evaluator_review_packets.organization_id
+        AND assignment.session_id = evaluator_review_packets.session_id
+        AND assignment.reviewer_principal_id = evaluator_review_packets.author_principal_id
+        AND assignment.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = evaluator_review_packets.organization_id
+        AND session.id = evaluator_review_packets.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  );
+DROP POLICY IF EXISTS staging_verifier_review_packet_update ON hirearchy.evaluator_review_packets;
+CREATE POLICY staging_verifier_review_packet_update
+  ON hirearchy.evaluator_review_packets
+  FOR UPDATE TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.organization_memberships AS membership
+      WHERE membership.organization_id = evaluator_review_packets.organization_id
+        AND membership.principal_id = evaluator_review_packets.author_principal_id
+        AND membership.role = 'reviewer'
+        AND membership.status = 'active'
+        AND membership.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = evaluator_review_packets.organization_id
+        AND assignment.session_id = evaluator_review_packets.session_id
+        AND assignment.reviewer_principal_id = evaluator_review_packets.author_principal_id
+        AND assignment.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = evaluator_review_packets.organization_id
+        AND session.id = evaluator_review_packets.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  )
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+  );
+
+DROP POLICY IF EXISTS staging_verifier_review_packet_history_write ON hirearchy.evaluator_review_packet_history;
+CREATE POLICY staging_verifier_review_packet_history_write
+  ON hirearchy.evaluator_review_packet_history
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+    AND session_id = NULLIF(pg_catalog.current_setting('staging.session_id', true), '')
+    AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.organization_memberships AS membership
+      WHERE membership.organization_id = evaluator_review_packet_history.organization_id
+        AND membership.principal_id = evaluator_review_packet_history.author_principal_id
+        AND membership.role = 'reviewer'
+        AND membership.status = 'active'
+        AND membership.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.reviewer_assignments AS assignment
+      WHERE assignment.organization_id = evaluator_review_packet_history.organization_id
+        AND assignment.session_id = evaluator_review_packet_history.session_id
+        AND assignment.reviewer_principal_id = evaluator_review_packet_history.author_principal_id
+        AND assignment.revoked_at IS NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM hirearchy.assessment_sessions AS session
+      WHERE session.organization_id = evaluator_review_packet_history.organization_id
+        AND session.id = evaluator_review_packet_history.session_id
+        AND session.status = 'SUBMITTED'
+    )
+  );
+
 GRANT USAGE ON SCHEMA hirearchy TO staging_verifier_owner;
 GRANT SELECT ON hirearchy.application_principals,
   hirearchy.organization_memberships,
   hirearchy.staging_verification_keys TO staging_verifier_owner;
+GRANT UPDATE (organization_id) ON hirearchy.organization_memberships TO staging_verifier_owner;
 GRANT SELECT, INSERT, DELETE ON hirearchy.staging_proof_nonces TO staging_verifier_owner;
 GRANT SELECT, INSERT, UPDATE (expires_at, revoked_at)
   ON hirearchy.staging_sessions TO staging_verifier_owner;
@@ -457,13 +845,40 @@ GRANT SELECT, INSERT ON hirearchy.assessment_drafts,
 GRANT SELECT, INSERT ON hirearchy.assessment_sessions,
   hirearchy.reviewer_assignments,
   hirearchy.assessment_issuances TO staging_verifier_owner;
+GRANT UPDATE (id) ON hirearchy.assessment_sessions TO staging_verifier_owner;
+GRANT UPDATE (id) ON hirearchy.reviewer_assignments TO staging_verifier_owner;
+REVOKE ALL ON hirearchy.candidate_token_envelopes,
+  hirearchy.candidate_invitation_requests,
+  hirearchy.candidate_data_consents,
+  hirearchy.durable_candidate_installation
+  FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway,
+       app_control_worker, staging_verifier_owner;
+GRANT SELECT, INSERT ON hirearchy.candidate_token_envelopes
+  TO staging_verifier_owner;
+GRANT UPDATE (revoked_at) ON hirearchy.candidate_token_envelopes
+  TO staging_verifier_owner;
+GRANT SELECT, INSERT ON hirearchy.candidate_invitation_requests
+  TO staging_verifier_owner;
 GRANT SELECT ON hirearchy.candidate_session_events,
   hirearchy.candidate_session_submissions,
-  hirearchy.candidate_file_revisions,
-  hirearchy.evaluator_observations,
+  hirearchy.candidate_file_revisions TO staging_verifier_owner;
+REVOKE ALL ON hirearchy.evaluator_observations,
+  hirearchy.evaluator_observation_history,
+  hirearchy.evaluator_review_packets,
+  hirearchy.evaluator_review_packet_history
+  FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway,
+       app_control_worker, staging_verifier_owner;
+GRANT SELECT, INSERT ON hirearchy.evaluator_observations,
   hirearchy.evaluator_observation_history,
   hirearchy.evaluator_review_packets,
   hirearchy.evaluator_review_packet_history TO staging_verifier_owner;
+GRANT UPDATE (body, version, updated_at)
+  ON hirearchy.evaluator_observations TO staging_verifier_owner;
+GRANT UPDATE (
+  status, summary, strengths, concerns, unresolved_questions,
+  referenced_observation_ids, referenced_evidence, version,
+  finalized_at, final_digest, updated_at
+) ON hirearchy.evaluator_review_packets TO staging_verifier_owner;
 
 
 CREATE OR REPLACE FUNCTION staging.dispatch(p_payload pg_catalog.bytea, p_signature pg_catalog.bytea)
@@ -685,6 +1100,7 @@ def current_membership(organization_id, principal_id):
           AND principal_id = $2::pg_catalog.uuid
           AND status = 'active'
           AND revoked_at IS NULL
+        FOR SHARE
         """,
         ['uuid', 'uuid'],
         [organization_id, principal_id],
@@ -737,13 +1153,208 @@ def validate_operation_args(operation, args):
         'assessment.get': (('organizationId', 'assessmentId'), ()),
         'assessment.validate': (('organizationId', 'assessmentId', 'content', 'validatedVersion'), ()),
         'assessment.issue': (('organizationId', 'assessmentId', 'reviewerPrincipalId'), ()),
+        'candidate.invitation.create': (('organizationId', 'sessionId', 'expiresAt', 'idempotencyKey', 'candidateTokenHash', 'candidateTokenCiphertext'), ()),
+        'candidate.invitation.get': (('organizationId', 'sessionId'), ()),
+        'candidate.invitation.revoke': (('organizationId', 'sessionId'), ()),
         'evidence.read': (('organizationId', 'sessionId'), ()),
         'review.read': (('organizationId', 'sessionId'), ()),
+        'evidence.observation.create': (('organizationId', 'sessionId', 'input'), ()),
+        'evidence.observation.update': (('organizationId', 'sessionId', 'observationId', 'input'), ()),
+        'review.packet.save': (('organizationId', 'sessionId', 'input'), ()),
+        'review.packet.finalize': (('organizationId', 'sessionId', 'input'), ()),
     }
     if operation not in schemas:
         error('Staging operation is unavailable', '22023')
     required, optional = schemas[operation]
     require_args(args, required, optional)
+
+def candidate_invitation_view(session_id, replayed=None):
+    rows = run(
+        """
+        SELECT CASE
+                 WHEN envelope.revoked_at IS NOT NULL THEN 'revoked'
+                 WHEN envelope.expires_at IS NULL THEN 'unmanaged'
+                 WHEN envelope.expires_at <= pg_catalog.clock_timestamp() THEN 'expired'
+                 ELSE 'active'
+               END AS status,
+               CASE WHEN envelope.expires_at IS NULL THEN NULL
+                    ELSE pg_catalog.to_char(
+                      envelope.expires_at AT TIME ZONE 'UTC',
+                      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                    ) END AS expires_at,
+               CASE WHEN envelope.revoked_at IS NULL
+                          AND envelope.expires_at > pg_catalog.clock_timestamp()
+                    THEN envelope.candidate_token_ciphertext
+                    ELSE NULL END AS candidate_token_ciphertext
+        FROM hirearchy.candidate_token_envelopes AS envelope
+        WHERE envelope.session_id = $1
+        """,
+        ['text'],
+        [session_id],
+    )
+    if not rows:
+        return {
+            'sessionId': session_id,
+            'status': 'not_created',
+            'expiresAt': None,
+            'candidateTokenCiphertext': None,
+            'replayed': replayed,
+        }
+    return {
+        'sessionId': session_id,
+        'status': rows[0]['status'],
+        'expiresAt': rows[0]['expires_at'],
+        'candidateTokenCiphertext': rows[0]['candidate_token_ciphertext'],
+        'replayed': replayed,
+    }
+
+def validate_review_references(organization_id, session_id, principal_id,
+                              observation_ids, evidence_references):
+    if not isinstance(observation_ids, list) or not isinstance(evidence_references, list):
+        error('Review packet references are invalid', 'R2101')
+    for observation_id in observation_ids:
+        if not is_uuid(observation_id):
+            error('Invalid observation reference', 'R2102')
+        rows = run(
+            """
+            SELECT 1 FROM hirearchy.evaluator_observations
+            WHERE id = $1::pg_catalog.uuid
+              AND organization_id = $2::pg_catalog.uuid
+              AND session_id = $3
+              AND author_principal_id = $4::pg_catalog.uuid
+            """,
+            ['uuid', 'uuid', 'text', 'uuid'],
+            [observation_id, organization_id, session_id, principal_id],
+        )
+        if not rows:
+            error('Invalid observation reference', 'R2102')
+
+    for reference in evidence_references:
+        if not exact_keys(
+            reference,
+            ('evidenceSourceType', 'eventSequence', 'filePath', 'fileVersion', 'evidenceDigest'),
+            ('label',),
+        ):
+            error('Invalid evidence reference', 'R2102')
+        source_type = reference.get('evidenceSourceType')
+        sequence = reference.get('eventSequence')
+        evidence_digest = reference.get('evidenceDigest')
+        if (
+            source_type not in ('timeline_event', 'file_revision')
+            or not isinstance(sequence, str)
+            or not re.fullmatch(r'[1-9][0-9]{0,18}', sequence)
+            or int(sequence) > 9223372036854775807
+            or not isinstance(evidence_digest, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', evidence_digest)
+        ):
+            error('Invalid evidence reference', 'R2102')
+        if source_type == 'timeline_event':
+            if reference.get('filePath') is not None or reference.get('fileVersion') is not None:
+                error('Invalid timeline event reference', 'R2102')
+            rows = run(
+                """
+                SELECT payload FROM hirearchy.candidate_session_events
+                WHERE organization_id = $1::pg_catalog.uuid
+                  AND session_id = $2
+                  AND sequence = $3::pg_catalog.int8
+                """,
+                ['uuid', 'text', 'int8'],
+                [organization_id, session_id, sequence],
+            )
+            if not rows:
+                error('Referenced timeline event not found', 'R2102')
+            payload = json_value(rows[0]['payload'])
+            payload_digest = run(
+                """SELECT pg_catalog.encode(
+                     pg_catalog.sha256(pg_catalog.convert_to($1::pg_catalog.jsonb::pg_catalog.text, 'UTF8')),
+                     'hex'
+                   ) AS value""",
+                ['text'],
+                [json.dumps(payload, ensure_ascii=False)],
+            )[0]['value']
+            if evidence_digest not in (
+                payload.get('digest'), payload.get('scenarioDigest'),
+                payload.get('workspaceDigest'), payload.get('manifestDigest'),
+                payload_digest,
+            ):
+                error('Timeline event evidence digest mismatch', 'R2102')
+        else:
+            file_path = reference.get('filePath')
+            file_version = reference.get('fileVersion')
+            if (
+                not isinstance(file_path, str) or not file_path.strip()
+                or not isinstance(file_version, str)
+                or not re.fullmatch(r'[1-9][0-9]{0,18}', file_version)
+                or int(file_version) > 9223372036854775807
+            ):
+                error('Invalid file revision reference', 'R2102')
+            rows = run(
+                """
+                SELECT content_digest FROM hirearchy.candidate_file_revisions
+                WHERE organization_id = $1::pg_catalog.uuid
+                  AND session_id = $2
+                  AND event_sequence = $3::pg_catalog.int8
+                  AND file_path = $4
+                  AND version = $5::pg_catalog.int8
+                """,
+                ['uuid', 'text', 'int8', 'text', 'int8'],
+                [organization_id, session_id, sequence, file_path, file_version],
+            )
+            if not rows or rows[0]['content_digest'] != evidence_digest:
+                error('File revision evidence digest mismatch', 'R2102')
+
+def staging_review_packet(packet_id):
+    rows = run(
+        """
+        SELECT pg_catalog.jsonb_build_object(
+          'id', packet.id::pg_catalog.text,
+          'organizationId', packet.organization_id::pg_catalog.text,
+          'sessionId', packet.session_id,
+          'authorPrincipalId', packet.author_principal_id::pg_catalog.text,
+          'status', packet.status,
+          'summary', packet.summary,
+          'strengths', packet.strengths,
+          'concerns', packet.concerns,
+          'unresolvedQuestions', packet.unresolved_questions,
+          'referencedObservationIds', packet.referenced_observation_ids,
+          'referencedEvidence', packet.referenced_evidence,
+          'version', packet.version,
+          'createdAt', pg_catalog.to_char(packet.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+          'updatedAt', pg_catalog.to_char(packet.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+          'finalizedAt', CASE WHEN packet.finalized_at IS NULL THEN NULL ELSE pg_catalog.to_char(packet.finalized_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+          'finalDigest', packet.final_digest,
+          'history', COALESCE((
+            SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+              'historyId', history.history_id::pg_catalog.text,
+              'packetId', history.packet_id::pg_catalog.text,
+              'organizationId', history.organization_id::pg_catalog.text,
+              'sessionId', history.session_id,
+              'authorPrincipalId', history.author_principal_id::pg_catalog.text,
+              'status', history.status,
+              'version', history.version,
+              'summary', history.summary,
+              'strengths', history.strengths,
+              'concerns', history.concerns,
+              'unresolvedQuestions', history.unresolved_questions,
+              'referencedObservationIds', history.referenced_observation_ids,
+              'referencedEvidence', history.referenced_evidence,
+              'finalizedAt', CASE WHEN history.finalized_at IS NULL THEN NULL ELSE pg_catalog.to_char(history.finalized_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+              'finalDigest', history.final_digest,
+              'validFrom', pg_catalog.to_char(history.valid_from AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+              'validUntil', pg_catalog.to_char(history.valid_until AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+              'recordedAt', pg_catalog.to_char(history.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+            ) ORDER BY history.version)
+            FROM hirearchy.evaluator_review_packet_history AS history
+            WHERE history.packet_id = packet.id
+          ), '[]'::pg_catalog.jsonb)
+        ) AS packet
+        FROM hirearchy.evaluator_review_packets AS packet
+        WHERE packet.id = $1::pg_catalog.uuid
+        """,
+        ['uuid'],
+        [packet_id],
+    )
+    return json_value(rows[0]['packet']) if rows else None
 
 def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_exp, proof_exp):
     if operation == 'membership.list':
@@ -816,6 +1427,212 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
         return {'opened': True, 'organizationId': organization_id}
 
     require_open_session(auth_session_id, subject_id, principal_id, organization_id, auth_exp)
+
+    if operation in ('candidate.invitation.create', 'candidate.invitation.get', 'candidate.invitation.revoke'):
+        if role != 'recruiter':
+            error('Recruiter membership required', '42501')
+        session_id = args.get('sessionId')
+        if not isinstance(session_id, str) or not re.fullmatch(r'sess_[A-Za-z0-9_-]{1,128}', session_id):
+            error('Staging request is invalid', '22023')
+
+        run(
+            "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))",
+            ['text'],
+            ['r26-candidate:' + session_id],
+        )
+        session_rows = run(
+            """
+            SELECT session.status, session.activated_at
+            FROM hirearchy.assessment_sessions AS session
+            WHERE session.organization_id = $1::pg_catalog.uuid
+              AND session.id = $2
+              AND session.issuer_principal_id = $3::pg_catalog.uuid
+            """,
+            ['uuid', 'text', 'uuid'],
+            [organization_id, session_id, principal_id],
+        )
+        if not session_rows:
+            error('Recruiter-issued assessment is unavailable', '42501')
+
+        if operation == 'candidate.invitation.get':
+            run(
+                """
+                SELECT envelope.session_id
+                FROM hirearchy.candidate_token_envelopes AS envelope
+                WHERE envelope.organization_id = $1::pg_catalog.uuid
+                  AND envelope.session_id = $2
+                FOR UPDATE
+                """,
+                ['uuid', 'text'],
+                [organization_id, session_id],
+            )
+            return candidate_invitation_view(session_id)
+
+        if operation == 'candidate.invitation.revoke':
+            envelope_rows = run(
+                """
+                SELECT expires_at, revoked_at
+                FROM hirearchy.candidate_token_envelopes AS envelope
+                WHERE envelope.organization_id = $1::pg_catalog.uuid
+                  AND envelope.session_id = $2
+                FOR UPDATE
+                """,
+                ['uuid', 'text'],
+                [organization_id, session_id],
+            )
+            if not envelope_rows:
+                return {'sessionId': session_id, 'status': 'not_created'}
+            if envelope_rows[0]['expires_at'] is None:
+                return {'sessionId': session_id, 'status': 'unmanaged'}
+            if envelope_rows[0]['revoked_at'] is None:
+                run(
+                    """
+                    UPDATE hirearchy.candidate_token_envelopes
+                    SET revoked_at = pg_catalog.clock_timestamp()
+                    WHERE organization_id = $1::pg_catalog.uuid
+                      AND session_id = $2
+                      AND revoked_at IS NULL
+                    """,
+                    ['uuid', 'text'],
+                    [organization_id, session_id],
+                )
+            return {'sessionId': session_id, 'status': 'revoked'}
+
+        expires_at = args.get('expiresAt')
+        idempotency_key = args.get('idempotencyKey')
+        token_hash = args.get('candidateTokenHash')
+        token_ciphertext = args.get('candidateTokenCiphertext')
+        if (
+            not isinstance(expires_at, str)
+            or not isinstance(idempotency_key, str)
+            or not re.fullmatch(r'[A-Za-z0-9._~-]{1,128}', idempotency_key)
+            or not isinstance(token_hash, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', token_hash)
+            or not isinstance(token_ciphertext, str)
+            or not re.fullmatch(r'v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{58}\.[A-Za-z0-9_-]{22}', token_ciphertext)
+        ):
+            error('Staging request is invalid', '22023')
+
+        normalized_expiry = run(
+            """
+            SELECT pg_catalog.to_char(
+                     $1::pg_catalog.timestamptz AT TIME ZONE 'UTC',
+                     'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+                   ) AS expires_at
+            """,
+            ['text'],
+            [expires_at],
+        )[0]
+        if normalized_expiry['expires_at'] != expires_at:
+            error('Staging request is invalid', '22023')
+
+        fingerprint_payload = json.dumps(
+            {
+                'organizationId': organization_id,
+                'sessionId': session_id,
+                'expiresAt': expires_at,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(',', ':'),
+        )
+        request_hash = run(
+            "SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to($1, 'UTF8')), 'hex') AS value",
+            ['text'],
+            [fingerprint_payload],
+        )[0]['value']
+        run(
+            "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))",
+            ['text'],
+            ['r26-candidate-invitation-key:' + organization_id + ':' + idempotency_key],
+        )
+        existing_request = run(
+            """
+            SELECT session_id, issuer_principal_id::pg_catalog.text AS issuer_id,
+                   request_hash
+            FROM hirearchy.candidate_invitation_requests
+            WHERE organization_id = $1::pg_catalog.uuid
+              AND idempotency_key = $2
+            """,
+            ['uuid', 'text'],
+            [organization_id, idempotency_key],
+        )
+        if existing_request:
+            prior = existing_request[0]
+            if (
+                prior['session_id'] != session_id
+                or prior['issuer_id'] != principal_id
+                or prior['request_hash'] != request_hash
+            ):
+                return {'conflict': 'IDEMPOTENCY_CONFLICT'}
+            return candidate_invitation_view(session_id, True)
+
+        same_session_request = run(
+            """
+            SELECT idempotency_key
+            FROM hirearchy.candidate_invitation_requests
+            WHERE organization_id = $1::pg_catalog.uuid
+              AND session_id = $2
+            LIMIT 1
+            """,
+            ['uuid', 'text'],
+            [organization_id, session_id],
+        )
+        existing_envelope = run(
+            """
+            SELECT session_id
+            FROM hirearchy.candidate_token_envelopes
+            WHERE organization_id = $1::pg_catalog.uuid
+              AND session_id = $2
+            """,
+            ['uuid', 'text'],
+            [organization_id, session_id],
+        )
+        if same_session_request or existing_envelope:
+            return {'conflict': 'INVITATION_ALREADY_EXISTS'}
+
+        session_state = session_rows[0]
+        if session_state['status'] != 'CREATED' or session_state['activated_at'] is not None:
+            return {'conflict': 'INVITATION_ALREADY_EXISTS'}
+
+        fresh_expiry = run(
+            """
+            SELECT $1::pg_catalog.timestamptz > pg_catalog.clock_timestamp()
+                     AND $1::pg_catalog.timestamptz <= pg_catalog.clock_timestamp() + INTERVAL '30 days'
+                     AS valid
+            """,
+            ['text'],
+            [expires_at],
+        )[0]
+        if not fresh_expiry['valid']:
+            error('Staging request is invalid', '22023')
+
+        run(
+            """
+            INSERT INTO hirearchy.candidate_token_envelopes (
+              organization_id, session_id, candidate_token_hash,
+              candidate_token_ciphertext, expires_at
+            ) VALUES (
+              $1::pg_catalog.uuid, $2, $3, $4, $5::pg_catalog.timestamptz
+            )
+            """,
+            ['uuid', 'text', 'text', 'text', 'text'],
+            [organization_id, session_id, token_hash, token_ciphertext, expires_at],
+        )
+        run(
+            """
+            INSERT INTO hirearchy.candidate_invitation_requests (
+              organization_id, idempotency_key, session_id,
+              issuer_principal_id, request_hash, expires_at
+            ) VALUES (
+              $1::pg_catalog.uuid, $2, $3, $4::pg_catalog.uuid,
+              $5, $6::pg_catalog.timestamptz
+            )
+            """,
+            ['uuid', 'text', 'text', 'uuid', 'text', 'text'],
+            [organization_id, idempotency_key, session_id, principal_id, request_hash, expires_at],
+        )
+        return candidate_invitation_view(session_id, False)
 
     if operation == 'organization.context':
         reviewers = []
@@ -1521,9 +2338,435 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
         )[0]['items']
         return {
             'sessionId': session_id,
+            'status': session['status'],
             'packets': json.loads(packet_rows) if isinstance(packet_rows, str) else packet_rows,
             'history': json.loads(packet_history) if isinstance(packet_history, str) else packet_history,
         }
+
+    review_write_operations = (
+        'evidence.observation.create', 'evidence.observation.update',
+        'review.packet.save', 'review.packet.finalize',
+    )
+    if operation in review_write_operations:
+        if role != 'reviewer':
+            error('Reviewer membership required', '42501')
+        session_id = args.get('sessionId')
+        if not isinstance(session_id, str) or not re.fullmatch(r'sess_[A-Za-z0-9_-]{1,128}', session_id):
+            error('Staging request is invalid', '22023')
+
+        session_rows = run(
+            """
+            SELECT status FROM hirearchy.assessment_sessions
+            WHERE organization_id = $1::pg_catalog.uuid AND id = $2
+            FOR SHARE
+            """,
+            ['uuid', 'text'],
+            [organization_id, session_id],
+        )
+        if not session_rows or session_rows[0]['status'] != 'SUBMITTED':
+            error('Submitted reviewer session is unavailable', '42501')
+        assignment_rows = run(
+            """
+            SELECT id FROM hirearchy.reviewer_assignments
+            WHERE organization_id = $1::pg_catalog.uuid
+              AND session_id = $2
+              AND reviewer_principal_id = $3::pg_catalog.uuid
+              AND revoked_at IS NULL
+            FOR SHARE
+            """,
+            ['uuid', 'text', 'uuid'],
+            [organization_id, session_id, principal_id],
+        )
+        if not assignment_rows:
+            error('Assigned reviewer access required', '42501')
+
+        if operation in ('evidence.observation.create', 'evidence.observation.update'):
+            input = args.get('input')
+            if operation == 'evidence.observation.create':
+                if not exact_keys(
+                    input,
+                    ('evidenceSourceType', 'eventSequence', 'evidenceDigest', 'body'),
+                    ('filePath', 'fileVersion'),
+                ):
+                    error('Observation input is invalid', 'R2901')
+                source_type = input.get('evidenceSourceType')
+                sequence = input.get('eventSequence')
+                evidence_digest = input.get('evidenceDigest')
+                body = input.get('body')
+                file_path = input.get('filePath')
+                file_version = input.get('fileVersion')
+                if (
+                    source_type not in ('timeline_event', 'file_revision')
+                    or not isinstance(sequence, str)
+                    or not re.fullmatch(r'[1-9][0-9]{0,18}', sequence)
+                    or int(sequence) > 9223372036854775807
+                    or not isinstance(evidence_digest, str)
+                    or not re.fullmatch(r'[0-9a-f]{64}', evidence_digest)
+                    or not isinstance(body, str)
+                    or len(body.encode('utf-8')) < 1
+                    or len(body.encode('utf-8')) > 20000
+                ):
+                    error('Observation input is invalid', 'R2901')
+                if source_type == 'timeline_event':
+                    if file_path is not None or file_version is not None:
+                        error('Timeline observation must not specify a file revision', 'R2901')
+                    event_rows = run(
+                        """
+                        SELECT payload FROM hirearchy.candidate_session_events
+                        WHERE organization_id = $1::pg_catalog.uuid
+                          AND session_id = $2
+                          AND sequence = $3::pg_catalog.int8
+                        """,
+                        ['uuid', 'text', 'int8'],
+                        [organization_id, session_id, sequence],
+                    )
+                    if not event_rows:
+                        error('Referenced timeline event not found', 'R2902')
+                    payload = json_value(event_rows[0]['payload'])
+                    digest_rows = run(
+                        """SELECT pg_catalog.encode(
+                             pg_catalog.sha256(pg_catalog.convert_to($1::pg_catalog.jsonb::pg_catalog.text, 'UTF8')),
+                             'hex'
+                           ) AS value""",
+                        ['text'],
+                        [json.dumps(payload, ensure_ascii=False)],
+                    )
+                    if evidence_digest not in (
+                        payload.get('digest'), payload.get('scenarioDigest'),
+                        payload.get('workspaceDigest'), payload.get('manifestDigest'),
+                        digest_rows[0]['value'],
+                    ):
+                        error('Timeline event evidence digest mismatch', 'R2902')
+                    file_path = None
+                    file_version = None
+                else:
+                    if (
+                        not isinstance(file_path, str) or not file_path.strip()
+                        or not isinstance(file_version, str)
+                        or not re.fullmatch(r'[1-9][0-9]{0,18}', file_version)
+                        or int(file_version) > 9223372036854775807
+                    ):
+                        error('File revision observation requires a valid file path and version', 'R2901')
+                    revision_rows = run(
+                        """
+                        SELECT content_digest FROM hirearchy.candidate_file_revisions
+                        WHERE organization_id = $1::pg_catalog.uuid
+                          AND session_id = $2
+                          AND event_sequence = $3::pg_catalog.int8
+                          AND file_path = $4
+                          AND version = $5::pg_catalog.int8
+                        """,
+                        ['uuid', 'text', 'int8', 'text', 'int8'],
+                        [organization_id, session_id, sequence, file_path, file_version],
+                    )
+                    if not revision_rows or revision_rows[0]['content_digest'] != evidence_digest:
+                        error('Referenced file revision or digest is unavailable', 'R2902')
+                rows = run(
+                    """
+                    INSERT INTO hirearchy.evaluator_observations (
+                      organization_id, session_id, author_principal_id,
+                      evidence_source_type, event_sequence, file_path, file_version,
+                      evidence_digest, body, version, visibility
+                    ) VALUES (
+                      $1::pg_catalog.uuid, $2, $3::pg_catalog.uuid, $4,
+                      $5::pg_catalog.int8, $6, $7::pg_catalog.int8,
+                      $8, $9, 1, 'private'
+                    )
+                    RETURNING id::pg_catalog.text AS id,
+                      evidence_source_type, event_sequence::pg_catalog.text AS event_sequence,
+                      file_path, file_version::pg_catalog.text AS file_version,
+                      evidence_digest, body, version,
+                      pg_catalog.to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
+                      pg_catalog.to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+                    """,
+                    ['uuid', 'text', 'uuid', 'text', 'int8', 'text', 'int8', 'text', 'text'],
+                    [organization_id, session_id, principal_id, source_type, sequence,
+                     file_path, file_version, evidence_digest, body],
+                )
+                row = rows[0]
+            else:
+                if not exact_keys(input, ('expectedVersion', 'body')):
+                    error('Observation update input is invalid', 'R2901')
+                expected_version = input.get('expectedVersion')
+                body = input.get('body')
+                observation_id = args.get('observationId')
+                if (
+                    isinstance(expected_version, bool)
+                    or not isinstance(expected_version, int)
+                    or expected_version < 1
+                    or not isinstance(body, str)
+                    or len(body.encode('utf-8')) < 1
+                    or len(body.encode('utf-8')) > 20000
+                    or not is_uuid(observation_id)
+                ):
+                    error('Observation update input is invalid', 'R2901')
+                observation_rows = run(
+                    """
+                    SELECT * FROM hirearchy.evaluator_observations
+                    WHERE id = $1::pg_catalog.uuid
+                      AND organization_id = $2::pg_catalog.uuid
+                      AND session_id = $3
+                      AND author_principal_id = $4::pg_catalog.uuid
+                    FOR UPDATE
+                    """,
+                    ['uuid', 'uuid', 'text', 'uuid'],
+                    [observation_id, organization_id, session_id, principal_id],
+                )
+                if not observation_rows:
+                    error('Observation is unavailable', '42501')
+                old = observation_rows[0]
+                if old['version'] != expected_version:
+                    error('Observation version changed', 'R2904')
+                changed_at = run(
+                    "SELECT pg_catalog.clock_timestamp() AS value"
+                )[0]['value']
+                run(
+                    """
+                    INSERT INTO hirearchy.evaluator_observation_history (
+                      observation_id, organization_id, session_id, author_principal_id,
+                      version, body, evidence_source_type, event_sequence,
+                      file_path, file_version, evidence_digest, visibility,
+                      valid_from, valid_until, recorded_at
+                    ) VALUES (
+                      $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4::pg_catalog.uuid,
+                      $5::pg_catalog.int8, $6, $7, $8::pg_catalog.int8,
+                      $9, $10::pg_catalog.int8, $11, $12,
+                      $13::pg_catalog.timestamptz, $13::pg_catalog.timestamptz,
+                      $13::pg_catalog.timestamptz
+                    )
+                    """,
+                    ['uuid', 'uuid', 'text', 'uuid', 'int8', 'text', 'text', 'int8', 'text', 'int8', 'text', 'text', 'timestamptz'],
+                    [str(old['id']), organization_id, session_id, principal_id,
+                     old['version'], old['body'], old['evidence_source_type'], old['event_sequence'],
+                     old['file_path'], old['file_version'], old['evidence_digest'], old['visibility'], changed_at],
+                )
+                rows = run(
+                    """
+                    UPDATE hirearchy.evaluator_observations
+                    SET body = $2, version = version + 1,
+                        updated_at = $3::pg_catalog.timestamptz
+                    WHERE id = $1::pg_catalog.uuid
+                    RETURNING id::pg_catalog.text AS id,
+                      evidence_source_type, event_sequence::pg_catalog.text AS event_sequence,
+                      file_path, file_version::pg_catalog.text AS file_version,
+                      evidence_digest, body, version,
+                      pg_catalog.to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
+                      pg_catalog.to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+                    """,
+                    ['uuid', 'text', 'timestamptz'],
+                    [observation_id, body, changed_at],
+                )
+                row = rows[0]
+            return {
+                'id': row['id'],
+                'evidenceSourceType': row['evidence_source_type'],
+                'eventSequence': row['event_sequence'],
+                'filePath': row['file_path'],
+                'fileVersion': row['file_version'],
+                'evidenceDigest': row['evidence_digest'],
+                'body': row['body'],
+                'version': row['version'],
+                'createdAt': row['created_at'],
+                'updatedAt': row['updated_at'],
+            }
+
+        packet_input = args.get('input')
+        if operation == 'review.packet.save':
+            if not exact_keys(
+                packet_input,
+                ('summary', 'strengths', 'concerns', 'unresolvedQuestions',
+                 'referencedObservationIds', 'referencedEvidence'),
+                ('expectedVersion',),
+            ):
+                error('Review packet draft input is invalid', 'R2101')
+            summary = packet_input.get('summary')
+            strengths = packet_input.get('strengths')
+            concerns = packet_input.get('concerns')
+            questions = packet_input.get('unresolvedQuestions')
+            observation_ids = packet_input.get('referencedObservationIds')
+            evidence_references = packet_input.get('referencedEvidence')
+            expected_version = packet_input.get('expectedVersion')
+            if (
+                not isinstance(summary, str)
+                or not all(isinstance(items, list) for items in (strengths, concerns, questions, observation_ids, evidence_references))
+                or not all(isinstance(item, str) for items in (strengths, concerns, questions) for item in items)
+                or (expected_version is not None and (
+                    isinstance(expected_version, bool) or not isinstance(expected_version, int) or expected_version < 1
+                ))
+            ):
+                error('Review packet draft input is invalid', 'R2101')
+            validate_review_references(organization_id, session_id, principal_id, observation_ids, evidence_references)
+            packet_rows = run(
+                """
+                SELECT * FROM hirearchy.evaluator_review_packets
+                WHERE organization_id = $1::pg_catalog.uuid
+                  AND session_id = $2
+                  AND author_principal_id = $3::pg_catalog.uuid
+                FOR UPDATE
+                """,
+                ['uuid', 'text', 'uuid'],
+                [organization_id, session_id, principal_id],
+            )
+            encoded = [
+                json.dumps(strengths, ensure_ascii=False),
+                json.dumps(concerns, ensure_ascii=False),
+                json.dumps(questions, ensure_ascii=False),
+                json.dumps(observation_ids, ensure_ascii=False),
+                json.dumps(evidence_references, ensure_ascii=False),
+            ]
+            if packet_rows:
+                packet = packet_rows[0]
+                if packet['status'] == 'FINALIZED':
+                    error('Finalized review packet is immutable', 'R2105')
+                if expected_version is None or packet['version'] != expected_version:
+                    error('Review packet version changed', 'R2104')
+                changed_at = run("SELECT pg_catalog.clock_timestamp() AS value")[0]['value']
+                run(
+                    """
+                    INSERT INTO hirearchy.evaluator_review_packet_history (
+                      packet_id, organization_id, session_id, author_principal_id,
+                      status, version, summary, strengths, concerns, unresolved_questions,
+                      referenced_observation_ids, referenced_evidence, finalized_at,
+                      final_digest, valid_from, valid_until, recorded_at
+                    ) VALUES (
+                      $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4::pg_catalog.uuid,
+                      $5, $6::pg_catalog.int8, $7, $8::pg_catalog.jsonb, $9::pg_catalog.jsonb,
+                      $10::pg_catalog.jsonb, $11::pg_catalog.jsonb, $12::pg_catalog.jsonb,
+                      $13::pg_catalog.timestamptz, $14, $15::pg_catalog.timestamptz,
+                      $16::pg_catalog.timestamptz, $16::pg_catalog.timestamptz
+                    )
+                    """,
+                    ['uuid', 'uuid', 'text', 'uuid', 'text', 'int8', 'text', 'text', 'text', 'text', 'text', 'text', 'timestamptz', 'text', 'timestamptz', 'timestamptz'],
+                    [str(packet['id']), organization_id, session_id, principal_id,
+                     packet['status'], packet['version'], packet['summary'],
+                     json.dumps(json_value(packet['strengths']), ensure_ascii=False),
+                     json.dumps(json_value(packet['concerns']), ensure_ascii=False),
+                     json.dumps(json_value(packet['unresolved_questions']), ensure_ascii=False),
+                     json.dumps(json_value(packet['referenced_observation_ids']), ensure_ascii=False),
+                     json.dumps(json_value(packet['referenced_evidence']), ensure_ascii=False),
+                     packet['finalized_at'], packet['final_digest'], packet['updated_at'], changed_at],
+                )
+                run(
+                    """
+                    UPDATE hirearchy.evaluator_review_packets
+                    SET summary = $2, strengths = $3::pg_catalog.jsonb,
+                        concerns = $4::pg_catalog.jsonb,
+                        unresolved_questions = $5::pg_catalog.jsonb,
+                        referenced_observation_ids = $6::pg_catalog.jsonb,
+                        referenced_evidence = $7::pg_catalog.jsonb,
+                        version = version + 1, updated_at = $8::pg_catalog.timestamptz
+                    WHERE id = $1::pg_catalog.uuid
+                    """,
+                    ['uuid', 'text', 'text', 'text', 'text', 'text', 'text', 'timestamptz'],
+                    [str(packet['id']), summary, encoded[0], encoded[1], encoded[2], encoded[3], encoded[4], changed_at],
+                )
+                packet_id = str(packet['id'])
+            else:
+                if expected_version not in (None, 0, 1):
+                    error('Review packet version changed', 'R2104')
+                rows = run(
+                    """
+                    INSERT INTO hirearchy.evaluator_review_packets (
+                      organization_id, session_id, author_principal_id,
+                      summary, strengths, concerns, unresolved_questions,
+                      referenced_observation_ids, referenced_evidence
+                    ) VALUES (
+                      $1::pg_catalog.uuid, $2, $3::pg_catalog.uuid,
+                      $4, $5::pg_catalog.jsonb, $6::pg_catalog.jsonb,
+                      $7::pg_catalog.jsonb, $8::pg_catalog.jsonb, $9::pg_catalog.jsonb
+                    ) RETURNING id::pg_catalog.text AS id
+                    """,
+                    ['uuid', 'text', 'uuid', 'text', 'text', 'text', 'text', 'text', 'text'],
+                    [organization_id, session_id, principal_id, summary, *encoded],
+                )
+                packet_id = rows[0]['id']
+            return {'reviewPacket': staging_review_packet(packet_id)}
+
+        if not exact_keys(packet_input, ('expectedVersion',)):
+            error('Review packet finalization input is invalid', 'R2101')
+        expected_version = packet_input.get('expectedVersion')
+        if isinstance(expected_version, bool) or not isinstance(expected_version, int) or expected_version < 1:
+            error('Review packet finalization input is invalid', 'R2101')
+        packet_rows = run(
+            """
+            SELECT * FROM hirearchy.evaluator_review_packets
+            WHERE organization_id = $1::pg_catalog.uuid
+              AND session_id = $2
+              AND author_principal_id = $3::pg_catalog.uuid
+            FOR UPDATE
+            """,
+            ['uuid', 'text', 'uuid'],
+            [organization_id, session_id, principal_id],
+        )
+        if not packet_rows:
+            error('Review packet is not available for finalization', 'R2101')
+        packet = packet_rows[0]
+        if packet['status'] == 'FINALIZED':
+            if expected_version in (packet['version'], packet['version'] - 1):
+                return {'reviewPacket': staging_review_packet(str(packet['id']))}
+            error('Review packet version changed', 'R2104')
+        if packet['version'] != expected_version:
+            error('Review packet version changed', 'R2104')
+        obs_refs = json_value(packet['referenced_observation_ids'])
+        evidence_refs = json_value(packet['referenced_evidence'])
+        if (
+            len(packet['summary'].strip().encode('utf-8')) < 10
+            or not (obs_refs or evidence_refs)
+        ):
+            error('Review packet needs a summary and grounded citation', 'R2103')
+        validate_review_references(organization_id, session_id, principal_id, obs_refs, evidence_refs)
+        finalized_at = run(
+            "SELECT pg_catalog.clock_timestamp() AS value"
+        )[0]['value']
+        run(
+            """
+            INSERT INTO hirearchy.evaluator_review_packet_history (
+              packet_id, organization_id, session_id, author_principal_id,
+              status, version, summary, strengths, concerns, unresolved_questions,
+              referenced_observation_ids, referenced_evidence, finalized_at,
+              final_digest, valid_from, valid_until, recorded_at
+            ) VALUES (
+              $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4::pg_catalog.uuid,
+              $5, $6::pg_catalog.int8, $7, $8::pg_catalog.jsonb, $9::pg_catalog.jsonb,
+              $10::pg_catalog.jsonb, $11::pg_catalog.jsonb, $12::pg_catalog.jsonb,
+              $13::pg_catalog.timestamptz, $14, $15::pg_catalog.timestamptz,
+              $16::pg_catalog.timestamptz, $16::pg_catalog.timestamptz
+            )
+            """,
+            ['uuid', 'uuid', 'text', 'uuid', 'text', 'int8', 'text', 'text', 'text', 'text', 'text', 'text', 'timestamptz', 'text', 'timestamptz', 'timestamptz'],
+            [str(packet['id']), organization_id, session_id, principal_id,
+             packet['status'], packet['version'], packet['summary'],
+             json.dumps(json_value(packet['strengths']), ensure_ascii=False),
+             json.dumps(json_value(packet['concerns']), ensure_ascii=False),
+             json.dumps(json_value(packet['unresolved_questions']), ensure_ascii=False),
+             json.dumps(obs_refs, ensure_ascii=False), json.dumps(evidence_refs, ensure_ascii=False),
+             packet['finalized_at'], packet['final_digest'], packet['updated_at'], finalized_at],
+        )
+        run(
+            """
+            UPDATE hirearchy.evaluator_review_packets AS packet
+            SET status = 'FINALIZED', finalized_at = $2::pg_catalog.timestamptz,
+                final_digest = pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+                  pg_catalog.jsonb_build_object(
+                    'id', packet.id::pg_catalog.text,
+                    'organizationId', packet.organization_id::pg_catalog.text,
+                    'sessionId', packet.session_id,
+                    'authorPrincipalId', packet.author_principal_id::pg_catalog.text,
+                    'summary', packet.summary,
+                    'strengths', packet.strengths,
+                    'concerns', packet.concerns,
+                    'unresolvedQuestions', packet.unresolved_questions,
+                    'referencedObservationIds', packet.referenced_observation_ids,
+                    'referencedEvidence', packet.referenced_evidence,
+                    'finalizedAt', pg_catalog.to_char($2::pg_catalog.timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                  )::pg_catalog.text, 'UTF8')), 'hex'),
+                version = packet.version + 1, updated_at = $2::pg_catalog.timestamptz
+            WHERE packet.id = $1::pg_catalog.uuid
+            """,
+            ['uuid', 'timestamptz'],
+            [str(packet['id']), finalized_at],
+        )
+        return {'reviewPacket': staging_review_packet(str(packet['id']))}
 
     error('Staging operation is unavailable', '22023')
 
@@ -1694,5 +2937,95 @@ REVOKE ALL ON SCHEMA hirearchy FROM r23_gateway;
 REVOKE ALL ON ALL TABLES IN SCHEMA hirearchy FROM r23_gateway;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA hirearchy FROM r23_gateway;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA hirearchy FROM r23_gateway;
+
+DO $durable_candidate_marker$
+DECLARE
+  installed_migration record;
+  existing_marker record;
+  marker_table record;
+  guard_owner pg_catalog.name;
+  guard_security_definer pg_catalog.bool;
+BEGIN
+  SELECT checksum, applied_by
+    INTO installed_migration
+    FROM hirearchy.schema_migrations
+   WHERE version = '0016';
+  IF NOT FOUND
+     OR installed_migration.applied_by <> 'hirearchy_migrator'
+     OR installed_migration.checksum !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'Durable candidate lifecycle migration is not verified';
+  END IF;
+
+  SELECT role.rolname, routine.prosecdef
+    INTO guard_owner, guard_security_definer
+    FROM pg_catalog.pg_proc AS routine
+    JOIN pg_catalog.pg_roles AS role ON role.oid = routine.proowner
+   WHERE routine.oid = pg_catalog.to_regprocedure(
+     'hirearchy.r26_candidate_command(pg_catalog.text,pg_catalog.text,pg_catalog.text,pg_catalog.jsonb)'
+   );
+  IF guard_owner IS DISTINCT FROM 'hirearchy_migrator'
+     OR guard_security_definer IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Durable candidate lifecycle guard is missing or unsafe';
+  END IF;
+  SELECT role.rolname AS owner,
+         relation.relrowsecurity,
+         relation.relforcerowsecurity
+    INTO marker_table
+    FROM pg_catalog.pg_class AS relation
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = relation.relnamespace
+    JOIN pg_catalog.pg_roles AS role ON role.oid = relation.relowner
+   WHERE namespace.nspname = 'hirearchy'
+     AND relation.relname = 'durable_candidate_installation'
+     AND relation.relkind = 'r';
+  IF NOT FOUND
+     OR marker_table.owner IS DISTINCT FROM 'hirearchy_migrator'
+     OR marker_table.relrowsecurity IS DISTINCT FROM true
+     OR marker_table.relforcerowsecurity IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Durable candidate installation marker is not protected';
+  END IF;
+  IF pg_catalog.has_function_privilege(
+       'app_candidate_gateway',
+       'hirearchy.r26_candidate_command_unchecked(pg_catalog.text,pg_catalog.text,pg_catalog.text,pg_catalog.jsonb)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_table_privilege(
+       'app_candidate_gateway',
+       'hirearchy.durable_candidate_installation',
+       'INSERT'
+     )
+     OR pg_catalog.has_table_privilege(
+       'app_candidate_gateway',
+       'hirearchy.durable_candidate_installation',
+       'UPDATE'
+     )
+     OR pg_catalog.has_table_privilege(
+       'app_candidate_gateway',
+       'hirearchy.durable_candidate_installation',
+       'DELETE'
+     ) THEN
+    RAISE EXCEPTION 'Candidate runtime has an unsafe lifecycle bypass';
+  END IF;
+
+  INSERT INTO hirearchy.durable_candidate_installation (
+    marker_key, marker_version, migration_version, migration_checksum, installed_by
+  ) VALUES (
+    'durable-candidate-lifecycle-v1', 1, '0016',
+    installed_migration.checksum, current_user
+  )
+  ON CONFLICT (marker_key) DO NOTHING;
+
+  SELECT marker_version, migration_version, migration_checksum
+    INTO existing_marker
+    FROM hirearchy.durable_candidate_installation
+   WHERE marker_key = 'durable-candidate-lifecycle-v1';
+  IF NOT FOUND
+     OR existing_marker.marker_version <> 1
+     OR existing_marker.migration_version <> '0016'
+     OR existing_marker.migration_checksum <> installed_migration.checksum THEN
+    RAISE EXCEPTION 'Durable candidate lifecycle installation marker is inconsistent';
+  END IF;
+END
+$durable_candidate_marker$;
 
 COMMIT;

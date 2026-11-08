@@ -74,6 +74,18 @@ function getClientPool(databaseUrl: string): Pool {
   return cachedPool;
 }
 
+export async function readCandidateAiCapability(
+  databaseUrl: string,
+  tokenHash: string,
+  sessionId: string,
+): Promise<boolean> {
+  const view = await getCandidateAiView(getClientPool(databaseUrl), {
+    tokenHash,
+    sessionId,
+  });
+  return view?.enabled === true;
+}
+
 function requireSessionId(sessionId: string): void {
   if (!SESSION_ID_PATTERN.test(sessionId)) {
     throw new R212RequestError(

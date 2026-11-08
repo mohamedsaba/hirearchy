@@ -1,7 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import type {
+  R23CandidateInvitationResponse,
+  R23CandidateInvitationRevocationResponse,
+} from '../../../../../src/r23-auth/contract';
 import type {
   R211AssessmentDraft,
   R211StarterFile,
@@ -31,11 +41,44 @@ export interface AssessmentBuilderClientProps {
   organizationId: string;
   csrfToken: string;
   initialDraft: R211AssessmentDraft | null;
+  initialIssuedSessionId?: string | null;
   reviewers?: AssessmentBuilderReviewerOption[];
   isAuthenticatedStaging?: boolean;
 }
 
 type BuilderStage = 'define' | 'validate' | 'issue';
+
+type InvitationCreateIntent = Readonly<{
+  idempotencyKey: string;
+  expiresAt: string;
+}>;
+
+const defaultInvitationLifetimeMs = 7 * 24 * 60 * 60 * 1000;
+const maxInvitationLifetimeMs = 30 * 24 * 60 * 60 * 1000;
+
+function toLocalDateTimeInput(date: Date): string {
+  const localDate = new Date(
+    date.getTime() - date.getTimezoneOffset() * 60_000,
+  );
+  return localDate.toISOString().slice(0, 16);
+}
+
+function formatInvitationTime(value: string | null): string {
+  if (!value) return 'time unavailable';
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp).toLocaleString()
+    : 'time unavailable';
+}
+
+function absoluteInvitationUrl(path: string, origin: string): string | null {
+  try {
+    const url = new URL(path, origin);
+    return url.origin === origin ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
 
 const defaultStarterFiles: R211StarterFile[] = [
   {
@@ -80,10 +123,13 @@ export function AssessmentBuilderClient({
   organizationId,
   csrfToken,
   initialDraft,
+  initialIssuedSessionId = null,
   reviewers = [],
   isAuthenticatedStaging = false,
 }: AssessmentBuilderClientProps) {
-  const [stage, setStage] = useState<BuilderStage>('define');
+  const [stage, setStage] = useState<BuilderStage>(
+    isAuthenticatedStaging && initialIssuedSessionId ? 'issue' : 'define',
+  );
 
   // Draft state
   const [definitionId, setDefinitionId] = useState<string | undefined>(
@@ -170,11 +216,265 @@ export function AssessmentBuilderClient({
     reviewerPrincipalId?: string | null;
     candidateTokenIssued?: boolean;
   } | null>(null);
+  const [recoveryContext, setRecoveryContext] = useState(() => {
+    let sessionId: string | null = null;
+    let error: string | null = null;
+    if (isAuthenticatedStaging && typeof initialIssuedSessionId === 'string') {
+      if (/^sess_[A-Za-z0-9_-]{1,128}$/.test(initialIssuedSessionId)) {
+        sessionId = initialIssuedSessionId;
+      } else {
+        error =
+          'This saved session reference is not valid. Return to the organization workspace and open an issued session again.';
+      }
+    }
+    return {
+      organizationId,
+      assessmentId: initialDraft?.definitionId ?? null,
+      sessionId,
+      error,
+    };
+  });
   const [issuanceError, setIssuanceError] = useState<string | null>(null);
+  const [invitationState, setInvitationState] = useState<{
+    contextKey: string;
+    invitation: R23CandidateInvitationResponse;
+  } | null>(null);
+  const [invitationLoadedContextKey, setInvitationLoadedContextKey] =
+    useState('');
+  const [invitationBusyOperations, setInvitationBusyOperations] = useState<
+    { contextKey: string; operationId: number }[]
+  >([]);
+  const [invitationExpiresAtInput, setInvitationExpiresAtInput] = useState('');
+  const [invitationExpiryMin, setInvitationExpiryMin] = useState('');
+  const [invitationExpiryMax, setInvitationExpiryMax] = useState('');
+  const invitationExpiryContextRef = useRef('');
+  const [invitationExpiryError, setInvitationExpiryError] = useState<
+    string | null
+  >(null);
+  const [invitationError, setInvitationError] = useState<string | null>(null);
+  const [invitationMessage, setInvitationMessage] = useState<string | null>(
+    null,
+  );
+  const [invitationRetryState, setInvitationRetryState] = useState<{
+    contextKey: string;
+    pending: boolean;
+  } | null>(null);
+  const [invitationNeedsRefresh, setInvitationNeedsRefresh] = useState(false);
+  const [invitationRefreshVersion, setInvitationRefreshVersion] = useState(0);
+  const invitationCreateIntentsRef = useRef(
+    new Map<string, InvitationCreateIntent>(),
+  );
+  const [appOrigin, setAppOrigin] = useState('');
+  const [invitationCopyMessage, setInvitationCopyMessage] = useState<
+    string | null
+  >(null);
+  const [invitationFeedbackContextKey, setInvitationFeedbackContextKey] =
+    useState('');
+  const invitationOperationIdRef = useRef(0);
 
   const [idempotencyKey] = useState(
     () => `r211-issue-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
   );
+  const currentAssessmentId = initialDraft?.definitionId ?? null;
+  const recoveryContextIsCurrent =
+    recoveryContext.organizationId === organizationId &&
+    recoveryContext.assessmentId === currentAssessmentId;
+  const recoveredSessionId = recoveryContextIsCurrent
+    ? recoveryContext.sessionId
+    : null;
+  const recoveryContextError = recoveryContextIsCurrent
+    ? recoveryContext.error
+    : null;
+  const currentSessionId = issuedSession?.sessionId ?? recoveredSessionId;
+  const invitationContextKey = `${organizationId}\u0000${currentAssessmentId ?? ''}\u0000${currentSessionId ?? ''}`;
+  const invitation =
+    invitationState?.contextKey === invitationContextKey
+      ? invitationState.invitation
+      : null;
+  const invitationFeedbackIsCurrent =
+    invitationFeedbackContextKey === invitationContextKey;
+  const currentInvitationError = invitationFeedbackIsCurrent
+    ? invitationError
+    : null;
+  const currentInvitationMessage = invitationFeedbackIsCurrent
+    ? invitationMessage
+    : null;
+  const currentInvitationCopyMessage = invitationFeedbackIsCurrent
+    ? invitationCopyMessage
+    : null;
+  const currentInvitationNeedsRefresh = invitationFeedbackIsCurrent
+    ? invitationNeedsRefresh
+    : false;
+  const currentInvitationRetryPending = invitationFeedbackIsCurrent
+    ? invitationRetryState?.contextKey === invitationContextKey &&
+      invitationRetryState.pending
+    : false;
+  const currentInvitationBusy = invitationFeedbackIsCurrent
+    ? invitationBusyOperations.some(
+        (operation) => operation.contextKey === invitationContextKey,
+      )
+    : false;
+  const invitationLoading = Boolean(
+    isAuthenticatedStaging &&
+    currentSessionId &&
+    invitationLoadedContextKey !== invitationContextKey,
+  );
+  const setInvitation = (value: R23CandidateInvitationResponse) =>
+    setInvitationState({ contextKey: invitationContextKey, invitation: value });
+  const beginInvitationOperation = (contextKey: string) => {
+    const operationId = ++invitationOperationIdRef.current;
+    setInvitationBusyOperations((current) => [
+      ...current,
+      { contextKey, operationId },
+    ]);
+    return operationId;
+  };
+  const finishInvitationOperation = (
+    contextKey: string,
+    operationId: number,
+  ) => {
+    setInvitationBusyOperations((current) =>
+      current.filter(
+        (operation) =>
+          operation.contextKey !== contextKey ||
+          operation.operationId !== operationId,
+      ),
+    );
+  };
+  const setInvitationRetryPendingForContext = (
+    contextKey: string,
+    pending: boolean,
+  ) => {
+    setInvitationRetryState((current) =>
+      pending
+        ? { contextKey, pending: true }
+        : current?.contextKey === contextKey
+          ? null
+          : current,
+    );
+  };
+  const initializeInvitationExpiry = useCallback(
+    (contextKey: string, expiresAt: string | null) => {
+      const now = new Date();
+      const defaultExpiry = new Date(
+        now.getTime() + defaultInvitationLifetimeMs,
+      );
+      const maxExpiry = new Date(now.getTime() + maxInvitationLifetimeMs);
+      setInvitationExpiryMin(toLocalDateTimeInput(now));
+      setInvitationExpiryMax(toLocalDateTimeInput(maxExpiry));
+      setInvitationExpiresAtInput(
+        toLocalDateTimeInput(expiresAt ? new Date(expiresAt) : defaultExpiry),
+      );
+      setInvitationExpiryError(null);
+      invitationExpiryContextRef.current = contextKey;
+    },
+    [],
+  );
+  const invitationContextRef = useRef({
+    key: invitationContextKey,
+    generation: 0,
+  });
+
+  useLayoutEffect(() => {
+    if (invitationContextRef.current.key === invitationContextKey) return;
+    invitationContextRef.current = {
+      key: invitationContextKey,
+      generation: invitationContextRef.current.generation + 1,
+    };
+  }, [invitationContextKey]);
+
+  useEffect(() => {
+    const sessionId = currentSessionId;
+    if (!isAuthenticatedStaging || !sessionId) return;
+
+    let active = true;
+    const contextKey = invitationContextKey;
+    const endpoint = `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`;
+
+    void fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(
+            response.status === 401 ||
+              response.status === 403 ||
+              response.status === 404
+              ? 'SESSION_UNAVAILABLE'
+              : `HTTP ${response.status}`,
+          );
+        }
+        const result: R23CandidateInvitationResponse = await response.json();
+        if (result.sessionId !== sessionId) {
+          throw new Error('SESSION_MISMATCH');
+        }
+        if (active) {
+          setInvitationState({ contextKey, invitation: result });
+          setInvitationFeedbackContextKey(contextKey);
+          setInvitationNeedsRefresh(false);
+          setInvitationError(null);
+          setInvitationMessage(null);
+          setInvitationCopyMessage(null);
+          setInvitationExpiryError(null);
+          setAppOrigin(window.location.origin);
+          if (invitationExpiryContextRef.current !== contextKey) {
+            const unresolvedIntent =
+              invitationCreateIntentsRef.current.get(contextKey);
+            initializeInvitationExpiry(
+              contextKey,
+              result.status === 'not_created'
+                ? (unresolvedIntent?.expiresAt ?? null)
+                : result.expiresAt,
+            );
+          }
+          if (result.status === 'not_created') {
+            const unresolvedIntent =
+              invitationCreateIntentsRef.current.get(contextKey);
+            setInvitationRetryPendingForContext(
+              contextKey,
+              unresolvedIntent !== undefined,
+            );
+            if (unresolvedIntent) {
+              setInvitationExpiresAtInput(
+                toLocalDateTimeInput(new Date(unresolvedIntent.expiresAt)),
+              );
+            }
+          } else {
+            invitationCreateIntentsRef.current.delete(contextKey);
+            setInvitationRetryPendingForContext(contextKey, false);
+          }
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setInvitationFeedbackContextKey(contextKey);
+          setInvitationError(
+            error instanceof Error && error.message === 'SESSION_UNAVAILABLE'
+              ? 'This issued session is not available in this organization, or your access has changed. The assessment draft is preserved; no new session was issued.'
+              : error instanceof Error && error.message === 'SESSION_MISMATCH'
+                ? 'The issued session reference could not be confirmed. The assessment draft is preserved; no invitation link was shared.'
+                : 'Invitation status could not be loaded. Check it again before creating or sharing a link.',
+          );
+          setInvitationNeedsRefresh(true);
+        }
+      })
+      .finally(() => {
+        if (active) setInvitationLoadedContextKey(contextKey);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    currentSessionId,
+    invitationContextKey,
+    invitationRefreshVersion,
+    isAuthenticatedStaging,
+    initializeInvitationExpiry,
+    organizationId,
+  ]);
 
   // Rubric weights sum
   const rubricTotalWeight = rubric.reduce(
@@ -381,6 +681,28 @@ export function AssessmentBuilderClient({
         return;
       }
 
+      if (
+        typeof data?.sessionId !== 'string' ||
+        !/^sess_[A-Za-z0-9_-]{1,128}$/.test(data.sessionId)
+      ) {
+        setIssuanceError(
+          'The assessment was issued, but its session reference could not be confirmed. Reload the organization session list before continuing.',
+        );
+        return;
+      }
+
+      if (isAuthenticatedStaging) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('issuedSession', data.sessionId);
+        window.history.replaceState(window.history.state, '', url);
+      }
+      setRecoveryContext({
+        organizationId,
+        assessmentId: currentAssessmentId,
+        sessionId: null,
+        error: null,
+      });
+
       setIssuedSession({
         sessionId: data.sessionId,
         candidatePath:
@@ -402,6 +724,284 @@ export function AssessmentBuilderClient({
       );
     } finally {
       setIsIssuing(false);
+    }
+  };
+
+  const clearRecoveredSessionContext = () => {
+    if (issuedSession) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('issuedSession');
+    window.history.replaceState(window.history.state, '', url);
+    setRecoveryContext({
+      organizationId,
+      assessmentId: currentAssessmentId,
+      sessionId: null,
+      error: null,
+    });
+    setInvitationError(null);
+    setInvitationMessage(null);
+    setInvitationFeedbackContextKey(invitationContextKey);
+    setInvitationNeedsRefresh(false);
+  };
+
+  const navigateToDefine = () => {
+    clearRecoveredSessionContext();
+    setStage('define');
+  };
+
+  const refreshInvitationStatus = () => {
+    if (!currentSessionId) return;
+    setInvitationFeedbackContextKey(invitationContextKey);
+    setInvitationLoadedContextKey('');
+    setInvitationNeedsRefresh(true);
+    setInvitationRefreshVersion((version) => version + 1);
+  };
+
+  const confirmedCandidatePathFor = (sessionId: string | null) => {
+    if (
+      !sessionId ||
+      invitation?.sessionId !== sessionId ||
+      invitation.status !== 'active' ||
+      !invitation.expiresAt ||
+      !invitation.candidatePath ||
+      currentInvitationNeedsRefresh ||
+      currentInvitationBusy
+    ) {
+      return null;
+    }
+    return invitation.candidatePath;
+  };
+
+  const createCandidateInvitation = async () => {
+    const sessionId = currentSessionId;
+    if (
+      !isAuthenticatedStaging ||
+      !sessionId ||
+      currentInvitationBusy ||
+      invitationLoading ||
+      !invitation ||
+      invitation.sessionId !== sessionId ||
+      (invitation.status !== 'not_created' && !currentInvitationRetryPending)
+    ) {
+      return;
+    }
+    setInvitationFeedbackContextKey(invitationContextKey);
+
+    const operationGeneration = invitationContextRef.current.generation;
+    const isCurrentContext = () =>
+      invitationContextRef.current.generation === operationGeneration;
+
+    let intent = invitationCreateIntentsRef.current.get(invitationContextKey);
+    if (!intent) {
+      const expiryMs = Date.parse(invitationExpiresAtInput);
+      const now = Date.now();
+      if (!Number.isFinite(expiryMs)) {
+        setInvitationExpiryError('Choose an invitation expiry time.');
+        return;
+      }
+      if (expiryMs <= now) {
+        setInvitationExpiryError('Choose a time in the future.');
+        return;
+      }
+      if (expiryMs > now + maxInvitationLifetimeMs) {
+        setInvitationExpiryError(
+          'Choose an expiry no more than 30 days from now.',
+        );
+        return;
+      }
+      intent = {
+        idempotencyKey: `r23-invitation-${crypto.randomUUID()}`,
+        expiresAt: new Date(expiryMs).toISOString(),
+      };
+      invitationCreateIntentsRef.current.set(invitationContextKey, intent);
+    }
+
+    const endpoint = `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`;
+    setInvitationFeedbackContextKey(invitationContextKey);
+    const busyOperationId = beginInvitationOperation(invitationContextKey);
+    setInvitationError(null);
+    setInvitationExpiryError(null);
+    setInvitationMessage(null);
+    setInvitationNeedsRefresh(true);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'x-csrf-token': csrfToken,
+          Origin: window.location.origin,
+          'Idempotency-Key': intent.idempotencyKey,
+        },
+        body: JSON.stringify({ expiresAt: intent.expiresAt, csrf: csrfToken }),
+        cache: 'no-store',
+      });
+      if (!isCurrentContext()) return;
+
+      if (!response.ok) {
+        if (response.status >= 500) {
+          setInvitationRetryPendingForContext(invitationContextKey, true);
+          setInvitationError(
+            'The invitation result could not be confirmed. Retry the same request or reload its status before sharing a link.',
+          );
+          return;
+        }
+
+        invitationCreateIntentsRef.current.delete(invitationContextKey);
+        setInvitationRetryPendingForContext(invitationContextKey, false);
+        if (response.status === 400 || response.status === 422) {
+          setInvitationNeedsRefresh(false);
+          setInvitationExpiryError(
+            'The selected expiry was not accepted. Choose a future time within 30 days.',
+          );
+        } else if (response.status === 409) {
+          setInvitationNeedsRefresh(true);
+          setInvitationError(
+            'This invitation request could not be confirmed. Reload invitation status before trying again.',
+          );
+          setInvitationRefreshVersion((version) => version + 1);
+        } else if (response.status === 401 || response.status === 403) {
+          setInvitationNeedsRefresh(true);
+          setInvitationError(
+            'You no longer have permission to manage this candidate invitation.',
+          );
+        } else {
+          setInvitationNeedsRefresh(true);
+          setInvitationError(
+            'The candidate invitation could not be created. Reload its status before trying again.',
+          );
+        }
+        return;
+      }
+
+      const result: R23CandidateInvitationResponse = await response.json();
+      if (!isCurrentContext()) return;
+      if (result.sessionId !== sessionId) {
+        setInvitationRetryPendingForContext(invitationContextKey, true);
+        setInvitationError(
+          'The invitation result could not be matched to this session. Reload its status before sharing a link.',
+        );
+        return;
+      }
+
+      invitationCreateIntentsRef.current.delete(invitationContextKey);
+      setInvitationRetryPendingForContext(invitationContextKey, false);
+      setInvitation(result);
+      if (
+        result.status === 'active' &&
+        result.candidatePath &&
+        result.expiresAt
+      ) {
+        setInvitationNeedsRefresh(false);
+        setInvitationExpiresAtInput(
+          toLocalDateTimeInput(new Date(result.expiresAt)),
+        );
+        setInvitationMessage(
+          `Invitation is active until ${formatInvitationTime(result.expiresAt)}. No email was sent; share the link through an approved channel.`,
+        );
+      } else if (result.status === 'active') {
+        setInvitationNeedsRefresh(true);
+        setInvitationError(
+          'The invitation is active, but its link or expiry could not be confirmed. Reload status before sharing it.',
+        );
+      } else {
+        setInvitationNeedsRefresh(false);
+      }
+    } catch {
+      if (isCurrentContext()) {
+        setInvitationRetryPendingForContext(invitationContextKey, true);
+        setInvitationError(
+          'The invitation result could not be confirmed. Retry the same request or reload its status before sharing a link.',
+        );
+      }
+    } finally {
+      finishInvitationOperation(invitationContextKey, busyOperationId);
+    }
+  };
+
+  const revokeCandidateInvitation = async () => {
+    const sessionId = currentSessionId;
+    if (
+      !isAuthenticatedStaging ||
+      !sessionId ||
+      invitation?.status !== 'active' ||
+      invitation.sessionId !== sessionId ||
+      currentInvitationBusy
+    ) {
+      return;
+    }
+
+    const operationGeneration = invitationContextRef.current.generation;
+    const isCurrentContext = () =>
+      invitationContextRef.current.generation === operationGeneration;
+
+    const endpoint = `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/candidate-token`;
+    setInvitationFeedbackContextKey(invitationContextKey);
+    const busyOperationId = beginInvitationOperation(invitationContextKey);
+    setInvitationNeedsRefresh(true);
+    setInvitationError(null);
+    setInvitationMessage(null);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'x-csrf-token': csrfToken,
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({ csrf: csrfToken }),
+        cache: 'no-store',
+      });
+      if (!isCurrentContext()) return;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result: R23CandidateInvitationRevocationResponse =
+        await response.json();
+      if (!isCurrentContext()) return;
+      if (result.sessionId !== sessionId || result.status !== 'revoked') {
+        throw new Error('Revocation result could not be confirmed.');
+      }
+      setInvitation({
+        sessionId,
+        status: 'revoked',
+        expiresAt: invitation.expiresAt,
+        candidatePath: null,
+      });
+      setInvitationNeedsRefresh(false);
+      setInvitationMessage(
+        'Candidate access has been revoked. Saved work remains with the assigned hiring team.',
+      );
+    } catch {
+      if (isCurrentContext()) {
+        setInvitationNeedsRefresh(true);
+        setInvitationError(
+          'Revocation could not be confirmed. Reload invitation status before sharing this link again.',
+        );
+      }
+    } finally {
+      finishInvitationOperation(invitationContextKey, busyOperationId);
+    }
+  };
+
+  const copyCandidateInvitation = async () => {
+    const operationGeneration = invitationContextRef.current.generation;
+    const candidatePath = confirmedCandidatePathFor(currentSessionId);
+    if (!candidatePath || !appOrigin) return;
+    setInvitationFeedbackContextKey(invitationContextKey);
+
+    const invitationUrl = absoluteInvitationUrl(candidatePath, appOrigin);
+    if (!invitationUrl) return;
+    try {
+      await navigator.clipboard.writeText(invitationUrl);
+      if (invitationContextRef.current.generation === operationGeneration) {
+        setInvitationCopyMessage('Candidate invitation link copied.');
+      }
+    } catch {
+      if (invitationContextRef.current.generation === operationGeneration) {
+        setInvitationCopyMessage(
+          'Copy is unavailable here. Select and copy the invitation link below.',
+        );
+      }
     }
   };
 
@@ -488,6 +1088,200 @@ export function AssessmentBuilderClient({
     setAcceptanceCriteria(acceptanceCriteria.filter((_, idx) => idx !== index));
   };
 
+  const activeCandidatePath = confirmedCandidatePathFor(currentSessionId);
+  const candidateInvitationUrl =
+    activeCandidatePath && appOrigin
+      ? absoluteInvitationUrl(activeCandidatePath, appOrigin)
+      : null;
+  const renderCandidateInvitationControls = (recovered = false) => {
+    const currentInvitation =
+      invitation?.sessionId === currentSessionId ? invitation : null;
+    return (
+      <>
+        {invitationLoading ? (
+          <p role="status">Checking invitation status…</p>
+        ) : null}
+        {currentInvitationError ? (
+          <div
+            className="assessment-feedback assessment-feedback-error"
+            role="alert"
+            data-testid={
+              recovered
+                ? 'recovered-session-error'
+                : 'candidate-invitation-error'
+            }
+          >
+            {currentInvitationError}
+          </div>
+        ) : null}
+        {currentInvitationMessage ? (
+          <p role="status">{currentInvitationMessage}</p>
+        ) : null}
+
+        {currentInvitation?.status === 'not_created' ? (
+          <div>
+            <p>
+              No candidate invitation has been created. The link defaults to
+              seven days and can be set to expire within 30 days. No email will
+              be sent.
+            </p>
+            <label
+              htmlFor="candidate-invitation-expires-at"
+              style={{ display: 'block', margin: '12px 0' }}
+            >
+              Invitation expires at
+              <input
+                id="candidate-invitation-expires-at"
+                data-testid="candidate-invitation-expires-at"
+                type="datetime-local"
+                required
+                min={invitationExpiryMin || undefined}
+                max={invitationExpiryMax || undefined}
+                value={invitationExpiresAtInput}
+                aria-invalid={Boolean(invitationExpiryError)}
+                aria-describedby={
+                  invitationExpiryError
+                    ? 'candidate-invitation-expiry-error'
+                    : undefined
+                }
+                disabled={
+                  currentInvitationBusy || currentInvitationRetryPending
+                }
+                onChange={(event) => {
+                  setInvitationExpiresAtInput(event.target.value);
+                  setInvitationExpiryError(null);
+                }}
+              />
+            </label>
+            {invitationExpiryError ? (
+              <p id="candidate-invitation-expiry-error" role="alert">
+                {invitationExpiryError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="button button-primary"
+              data-testid="candidate-invitation-create"
+              disabled={
+                currentInvitationBusy ||
+                invitationLoading ||
+                (currentInvitationNeedsRefresh &&
+                  !currentInvitationRetryPending)
+              }
+              onClick={() => void createCandidateInvitation()}
+            >
+              {currentInvitationBusy
+                ? 'Creating invitation…'
+                : currentInvitationRetryPending
+                  ? 'Retry invitation creation'
+                  : 'Create candidate invitation'}
+            </button>
+          </div>
+        ) : null}
+
+        {currentInvitation?.status === 'active' ? (
+          <div>
+            {currentInvitationNeedsRefresh ? (
+              <p role="status">
+                Invitation status is being confirmed. The link stays hidden
+                until confirmation.
+              </p>
+            ) : (
+              <p>
+                Candidate access is active until{' '}
+                <time dateTime={currentInvitation.expiresAt ?? undefined}>
+                  {formatInvitationTime(currentInvitation.expiresAt)}
+                </time>
+                . No email was sent.
+              </p>
+            )}
+            {candidateInvitationUrl ? (
+              <>
+                <label
+                  htmlFor="candidate-invitation-link"
+                  style={{ display: 'block', margin: '12px 0' }}
+                >
+                  Candidate invitation link
+                  <input
+                    id="candidate-invitation-link"
+                    data-testid="candidate-invitation-link"
+                    type="text"
+                    readOnly
+                    value={candidateInvitationUrl}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  data-testid="candidate-invitation-copy"
+                  disabled={currentInvitationBusy}
+                  onClick={() => void copyCandidateInvitation()}
+                >
+                  Copy candidate link
+                </button>
+                {currentInvitationCopyMessage ? (
+                  <p role="status">{currentInvitationCopyMessage}</p>
+                ) : null}
+              </>
+            ) : currentInvitationNeedsRefresh ? null : (
+              <p role="alert">
+                The active invitation link could not be confirmed. Reload status
+                before sharing it.
+              </p>
+            )}
+            <button
+              type="button"
+              className="button button-secondary"
+              data-testid="candidate-invitation-revoke"
+              disabled={currentInvitationBusy}
+              onClick={() => void revokeCandidateInvitation()}
+              style={{ marginLeft: '8px' }}
+            >
+              {currentInvitationBusy ? 'Updating…' : 'Revoke candidate access'}
+            </button>
+          </div>
+        ) : null}
+
+        {currentInvitation?.status === 'expired' ? (
+          <p role="status">
+            This invitation expired at{' '}
+            {formatInvitationTime(currentInvitation.expiresAt)}. It cannot be
+            renewed here; issue a new session to invite a candidate again.
+          </p>
+        ) : null}
+        {currentInvitation?.status === 'revoked' ? (
+          <p role="status">
+            This invitation has been revoked. Candidate access is blocked and
+            saved work is retained. Issue a new session to invite a candidate
+            again.
+          </p>
+        ) : null}
+        {currentInvitation?.status === 'unmanaged' ? (
+          <p role="status">
+            This session has an older invitation that cannot be recovered or
+            managed in this demo. Issue a new session before inviting a
+            candidate.
+          </p>
+        ) : null}
+
+        {currentInvitation ||
+        currentInvitationError ||
+        currentInvitationNeedsRefresh ? (
+          <button
+            type="button"
+            className="button button-secondary"
+            data-testid="candidate-invitation-refresh"
+            disabled={invitationLoading || currentInvitationBusy}
+            onClick={refreshInvitationStatus}
+          >
+            Reload invitation status
+          </button>
+        ) : null}
+      </>
+    );
+  };
+
   return (
     <div className="assessment-builder-page">
       <main className="assessment-builder-shell">
@@ -525,11 +1319,11 @@ export function AssessmentBuilderClient({
                   fontSize: '0.85rem',
                 }}
               >
-                <strong>Authenticated Staging Mode (R2.15):</strong> Draft
-                persistence, static structural validation, and internal session
-                issuance with evaluator assignment are active. Live AI-provider
-                task generation, candidate workspace execution, and candidate
-                invitation tokens are disabled in this slice.
+                <strong>Internal PostgreSQL demo:</strong> Draft persistence,
+                assessment validation and issuance, evaluator assignment,
+                candidate invitations, workspace capture, submission, and human
+                review are available. AI assistance, code execution, and email
+                are disabled.
               </div>
             ) : null}
           </header>
@@ -543,7 +1337,7 @@ export function AssessmentBuilderClient({
                   aria-current={stage === 'define' ? 'step' : undefined}
                   aria-label="Go to Define stage"
                   className="assessment-stage-button"
-                  onClick={() => setStage('define')}
+                  onClick={navigateToDefine}
                 >
                   <span className="assessment-stage-number">01</span>
                   <span className="assessment-stage-label">Define</span>
@@ -675,6 +1469,9 @@ export function AssessmentBuilderClient({
                     value={templateId}
                     disabled={Boolean(issuedSession)}
                     onChange={(event) => {
+                      if (recoveredSessionId || recoveryContextError) {
+                        clearRecoveredSessionContext();
+                      }
                       setTemplateId(
                         event.target.value as 'custom' | 'reservation-moves-v3',
                       );
@@ -1426,7 +2223,7 @@ export function AssessmentBuilderClient({
                     <button
                       type="button"
                       className="button button-secondary"
-                      onClick={() => setStage('define')}
+                      onClick={navigateToDefine}
                       style={{ flexShrink: 0, marginLeft: '12px' }}
                     >
                       Fix in Define
@@ -1575,7 +2372,7 @@ export function AssessmentBuilderClient({
                   <button
                     type="button"
                     className="button button-secondary"
-                    onClick={() => setStage('define')}
+                    onClick={navigateToDefine}
                   >
                     ← Back to Define
                   </button>
@@ -1613,180 +2410,236 @@ export function AssessmentBuilderClient({
                 className="assessment-stage-content"
                 style={{ padding: '24px' }}
               >
-                {!validatedVersion && (
-                  <div
-                    className="assessment-feedback assessment-feedback-warning"
+                {(recoveredSessionId || recoveryContextError) &&
+                !issuedSession ? (
+                  <section
+                    className="assessment-feedback"
+                    data-testid="recovered-candidate-invitation-panel"
+                    aria-label="Recovered candidate invitation"
                     style={{ marginBottom: '20px' }}
                   >
-                    <span>
-                      You must validate an assessment version before issuing
-                      sessions.
-                    </span>
+                    <h3>Recovered candidate invitation</h3>
+                    <p>
+                      This reference is checked against your authorized
+                      organization session. Refreshing this page does not issue
+                      another session.
+                    </p>
+                    {recoveryContextError ? (
+                      <div
+                        role="alert"
+                        data-testid="recovered-session-error"
+                        className="assessment-feedback assessment-feedback-error"
+                      >
+                        {recoveryContextError}
+                      </div>
+                    ) : null}
+                    {recoveredSessionId &&
+                    invitation?.sessionId === recoveredSessionId ? (
+                      <p>
+                        Session reference:{' '}
+                        <code data-testid="recovered-session-id">
+                          {invitation.sessionId}
+                        </code>
+                      </p>
+                    ) : null}
+                    {renderCandidateInvitationControls(true)}
                     <button
                       type="button"
                       className="button button-secondary"
-                      onClick={() => setStage('validate')}
+                      data-testid="return-to-assessment-draft"
+                      onClick={navigateToDefine}
+                      style={{ marginLeft: '8px' }}
                     >
-                      Go to Validate
+                      Return to assessment draft
                     </button>
-                  </div>
-                )}
+                  </section>
+                ) : null}
 
-                {validatedVersion && !issuedSession && (
-                  <div>
+                {!validatedVersion &&
+                  !recoveredSessionId &&
+                  !recoveryContextError && (
                     <div
-                      style={{
-                        padding: '16px',
-                        border: '1px solid var(--software-border, #e5e7eb)',
-                        borderRadius: '6px',
-                        marginBottom: '20px',
-                        background: 'var(--software-surface, #fff)',
-                      }}
+                      className="assessment-feedback assessment-feedback-warning"
+                      style={{ marginBottom: '20px' }}
                     >
-                      <h3 style={{ margin: '0 0 12px', fontSize: '1.1rem' }}>
-                        Ready to Issue Assessment
-                      </h3>
-                      <p
-                        style={{
-                          margin: '0 0 12px',
-                          fontSize: '0.88rem',
-                          color: 'var(--software-muted)',
-                        }}
-                      >
-                        You are about to issue a candidate session backed by
-                        immutable validated version{' '}
-                        {validatedVersion.versionNumber}.
-                      </p>
-                      <dl
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '160px 1fr',
-                          gap: '6px',
-                          fontSize: '0.85rem',
-                          margin: 0,
-                        }}
-                      >
-                        <dt style={{ color: 'var(--software-muted)' }}>
-                          Assessment Title
-                        </dt>
-                        <dd>
-                          <strong>{validatedVersion.scenarioTitle}</strong>
-                        </dd>
-                        <dt style={{ color: 'var(--software-muted)' }}>
-                          Validated Version
-                        </dt>
-                        <dd>Version {validatedVersion.versionNumber}</dd>
-                        <dt style={{ color: 'var(--software-muted)' }}>
-                          Content Digest
-                        </dt>
-                        <dd style={{ fontFamily: 'monospace' }}>
-                          {formatDigestBadge(validatedVersion.contentDigest)}
-                        </dd>
-                        <dt style={{ color: 'var(--software-muted)' }}>
-                          Time Limit
-                        </dt>
-                        <dd>
-                          {Math.round(validatedVersion.durationSeconds / 60)}{' '}
-                          minutes
-                        </dd>
-                        <dt style={{ color: 'var(--software-muted)' }}>
-                          Idempotency Key
-                        </dt>
-                        <dd>
-                          <code>{idempotencyKey}</code>
-                        </dd>
-                      </dl>
-
-                      {(isAuthenticatedStaging || reviewers.length > 0) && (
-                        <div
-                          style={{
-                            marginTop: '16px',
-                            paddingTop: '16px',
-                            borderTop:
-                              '1px solid var(--software-border, #e5e7eb)',
-                          }}
-                        >
-                          <label
-                            htmlFor="issue-reviewer-select"
-                            style={{
-                              display: 'block',
-                              fontWeight: 600,
-                              marginBottom: '6px',
-                              fontSize: '0.9rem',
-                            }}
-                          >
-                            Assign Authorized Evaluator (Reviewer)
-                          </label>
-                          <select
-                            id="issue-reviewer-select"
-                            name="reviewerPrincipalId"
-                            data-testid="issue-reviewer-select"
-                            value={selectedReviewerPrincipalId}
-                            onChange={(e) =>
-                              setSelectedReviewerPrincipalId(e.target.value)
-                            }
-                            style={{
-                              width: '100%',
-                              padding: '10px 12px',
-                              borderRadius: '6px',
-                              border:
-                                '1px solid var(--software-border, #d1d5db)',
-                              background: 'var(--software-surface, #fff)',
-                              color: 'var(--software-ink, #000)',
-                            }}
-                          >
-                            <option value="">
-                              Select an eligible organization reviewer
-                            </option>
-                            {reviewers.map((r) => (
-                              <option key={r.principalId} value={r.principalId}>
-                                {r.principalId} ({r.role})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-
-                    {issuanceError && (
-                      <div
-                        className="assessment-feedback assessment-feedback-error"
-                        role="alert"
-                        style={{ marginBottom: '16px' }}
-                      >
-                        <span>{issuanceError}</span>
-                      </div>
-                    )}
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        paddingTop: '16px',
-                        borderTop: '1px solid var(--software-border, #e5e7eb)',
-                      }}
-                    >
+                      <span>
+                        You must validate an assessment version before issuing
+                        sessions.
+                      </span>
                       <button
                         type="button"
                         className="button button-secondary"
                         onClick={() => setStage('validate')}
                       >
-                        ← Back to Validate
-                      </button>
-
-                      <button
-                        type="button"
-                        data-testid="issue-assessment-button"
-                        className="button button-primary"
-                        disabled={isIssuing}
-                        onClick={handleIssue}
-                      >
-                        {isIssuing ? 'Issuing session...' : 'Issue assessment'}
+                        Go to Validate
                       </button>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                {validatedVersion &&
+                  !issuedSession &&
+                  !recoveredSessionId &&
+                  !recoveryContextError && (
+                    <div>
+                      <div
+                        style={{
+                          padding: '16px',
+                          border: '1px solid var(--software-border, #e5e7eb)',
+                          borderRadius: '6px',
+                          marginBottom: '20px',
+                          background: 'var(--software-surface, #fff)',
+                        }}
+                      >
+                        <h3 style={{ margin: '0 0 12px', fontSize: '1.1rem' }}>
+                          Ready to Issue Assessment
+                        </h3>
+                        <p
+                          style={{
+                            margin: '0 0 12px',
+                            fontSize: '0.88rem',
+                            color: 'var(--software-muted)',
+                          }}
+                        >
+                          You are about to issue a candidate session backed by
+                          immutable validated version{' '}
+                          {validatedVersion.versionNumber}.
+                        </p>
+                        <dl
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '160px 1fr',
+                            gap: '6px',
+                            fontSize: '0.85rem',
+                            margin: 0,
+                          }}
+                        >
+                          <dt style={{ color: 'var(--software-muted)' }}>
+                            Assessment Title
+                          </dt>
+                          <dd>
+                            <strong>{validatedVersion.scenarioTitle}</strong>
+                          </dd>
+                          <dt style={{ color: 'var(--software-muted)' }}>
+                            Validated Version
+                          </dt>
+                          <dd>Version {validatedVersion.versionNumber}</dd>
+                          <dt style={{ color: 'var(--software-muted)' }}>
+                            Content Digest
+                          </dt>
+                          <dd style={{ fontFamily: 'monospace' }}>
+                            {formatDigestBadge(validatedVersion.contentDigest)}
+                          </dd>
+                          <dt style={{ color: 'var(--software-muted)' }}>
+                            Time Limit
+                          </dt>
+                          <dd>
+                            {Math.round(validatedVersion.durationSeconds / 60)}{' '}
+                            minutes
+                          </dd>
+                          <dt style={{ color: 'var(--software-muted)' }}>
+                            Idempotency Key
+                          </dt>
+                          <dd>
+                            <code>{idempotencyKey}</code>
+                          </dd>
+                        </dl>
+
+                        {(isAuthenticatedStaging || reviewers.length > 0) && (
+                          <div
+                            style={{
+                              marginTop: '16px',
+                              paddingTop: '16px',
+                              borderTop:
+                                '1px solid var(--software-border, #e5e7eb)',
+                            }}
+                          >
+                            <label
+                              htmlFor="issue-reviewer-select"
+                              style={{
+                                display: 'block',
+                                fontWeight: 600,
+                                marginBottom: '6px',
+                                fontSize: '0.9rem',
+                              }}
+                            >
+                              Assign Authorized Evaluator (Reviewer)
+                            </label>
+                            <select
+                              id="issue-reviewer-select"
+                              name="reviewerPrincipalId"
+                              data-testid="issue-reviewer-select"
+                              value={selectedReviewerPrincipalId}
+                              onChange={(e) =>
+                                setSelectedReviewerPrincipalId(e.target.value)
+                              }
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                borderRadius: '6px',
+                                border:
+                                  '1px solid var(--software-border, #d1d5db)',
+                                background: 'var(--software-surface, #fff)',
+                                color: 'var(--software-ink, #000)',
+                              }}
+                            >
+                              <option value="">
+                                Select an eligible organization reviewer
+                              </option>
+                              {reviewers.map((r) => (
+                                <option
+                                  key={r.principalId}
+                                  value={r.principalId}
+                                >
+                                  {r.principalId} ({r.role})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {issuanceError && (
+                        <div
+                          className="assessment-feedback assessment-feedback-error"
+                          role="alert"
+                          style={{ marginBottom: '16px' }}
+                        >
+                          <span>{issuanceError}</span>
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          paddingTop: '16px',
+                          borderTop:
+                            '1px solid var(--software-border, #e5e7eb)',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="button button-secondary"
+                          onClick={() => setStage('validate')}
+                        >
+                          ← Back to Validate
+                        </button>
+
+                        <button
+                          type="button"
+                          data-testid="issue-assessment-button"
+                          className="button button-primary"
+                          disabled={isIssuing}
+                          onClick={handleIssue}
+                        >
+                          {isIssuing
+                            ? 'Issuing session...'
+                            : 'Issue assessment'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Issued Session Success State */}
                 {issuedSession && (
@@ -1858,7 +2711,16 @@ export function AssessmentBuilderClient({
                         ) : null}
                         <dt style={{ fontWeight: 600 }}>Candidate Link:</dt>
                         <dd>
-                          {issuedSession.candidatePath ? (
+                          {isAuthenticatedStaging ? (
+                            <section
+                              className="assessment-feedback"
+                              data-testid="candidate-invitation-panel"
+                              aria-label="Candidate invitation"
+                            >
+                              <h4>Candidate invitation</h4>
+                              {renderCandidateInvitationControls()}
+                            </section>
+                          ) : issuedSession.candidatePath ? (
                             <Link
                               href={issuedSession.candidatePath}
                               data-testid="candidate-workspace-link"
@@ -1884,14 +2746,9 @@ export function AssessmentBuilderClient({
                               }}
                             >
                               <strong>
-                                Candidate invitation token not issued (R2.15
-                                internal staging scope):
+                                Candidate invitation is unavailable:
                               </strong>{' '}
-                              This internal issuance creates a persisted{' '}
-                              <code>CREATED</code> session and assigns the
-                              selected evaluator, but does not issue a candidate
-                              invitation link or enable candidate runtime
-                              execution or live AI.
+                              this session was issued without a candidate link.
                             </div>
                           )}
                         </dd>

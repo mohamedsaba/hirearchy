@@ -207,9 +207,64 @@ export async function checkRuntimeRolesAndDefaultDeny({ admin, pools, ids }) {
   );
   assert.deepEqual(
     functionPrivileges,
-    [{ rolname: 'app_candidate_gateway', proname: 'r26_candidate_command' }],
-    'only the fixed candidate command may be executable by a runtime role',
+    [
+      { rolname: 'app_candidate_gateway', proname: 'r26_candidate_command' },
+      {
+        rolname: 'app_candidate_gateway',
+        proname: 'r26_candidate_lifecycle_ready',
+      },
+    ],
+    'only the candidate command and its lifecycle readiness probe may be executable by runtime roles',
   );
+
+  const { rows: candidateFunctionAccess } = await admin.query(`
+    SELECT EXISTS (
+             SELECT 1
+               FROM pg_catalog.pg_proc AS procedure
+               JOIN pg_catalog.pg_namespace AS schema_row
+                 ON schema_row.oid = procedure.pronamespace
+               CROSS JOIN LATERAL pg_catalog.aclexplode(
+                 COALESCE(
+                   procedure.proacl,
+                   pg_catalog.acldefault('f', procedure.proowner)
+                 )
+               ) AS privilege
+              WHERE schema_row.nspname = 'hirearchy'
+                AND procedure.proname IN (
+                  'r26_candidate_lifecycle_ready',
+                  'r26_candidate_command_unchecked'
+                )
+                AND privilege.grantee = 0
+                AND privilege.privilege_type = 'EXECUTE'
+           ) AS public_execute,
+           pg_catalog.has_function_privilege(
+             'app_candidate_gateway',
+             'hirearchy.r26_candidate_lifecycle_ready()',
+             'EXECUTE'
+           ) AS candidate_probe_execute,
+           pg_catalog.has_function_privilege(
+             'app_evaluator',
+             'hirearchy.r26_candidate_lifecycle_ready()',
+             'EXECUTE'
+           ) AS evaluator_probe_execute,
+           pg_catalog.has_function_privilege(
+             'app_control_worker',
+             'hirearchy.r26_candidate_lifecycle_ready()',
+             'EXECUTE'
+           ) AS worker_probe_execute,
+           pg_catalog.has_function_privilege(
+             'app_candidate_gateway',
+             'hirearchy.r26_candidate_command_unchecked(text,text,text,jsonb)',
+             'EXECUTE'
+           ) AS unchecked_execute
+  `);
+  assert.deepEqual(candidateFunctionAccess[0], {
+    public_execute: false,
+    candidate_probe_execute: true,
+    evaluator_probe_execute: false,
+    worker_probe_execute: false,
+    unchecked_execute: false,
+  });
 
   for (const role of runtimeRoles) {
     const { rows: access } = await admin.query(

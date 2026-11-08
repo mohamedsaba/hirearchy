@@ -78,6 +78,18 @@ function getClientPool(databaseUrl: string): Pool {
   return cachedPool;
 }
 
+export async function readCandidateExecutionCapability(
+  databaseUrl: string,
+  tokenHash: string,
+  sessionId: string,
+): Promise<boolean> {
+  const view = await getCandidateExecutionsView(getClientPool(databaseUrl), {
+    tokenHash,
+    sessionId,
+  });
+  return view?.terminalEnabled === true;
+}
+
 function requireSessionId(sessionId: string): void {
   if (!SESSION_ID_PATTERN.test(sessionId)) {
     throw new R213RequestError(

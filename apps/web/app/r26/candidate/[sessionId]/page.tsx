@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { r26IsEnabled } from '../../../../src/r26-candidate/config';
+import { r26CandidatePageIsAvailable } from '../../../../src/r26-candidate/config';
 import { R26CandidateClient } from './candidate-client';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,10 @@ type CandidatePageProps = Readonly<{
 
 export default async function CandidatePage({ params }: CandidatePageProps) {
   const { sessionId } = await params;
-  if (!r26IsEnabled() || !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
+  if (
+    !r26CandidatePageIsAvailable() ||
+    !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+  ) {
     notFound();
   }
 

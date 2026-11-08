@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 
 const HASH = /^[0-9a-f]{64}$/;
 const SESSION_ID = /^sess_[A-Za-z0-9_-]{1,128}$/;
+const NOTICE_DIGEST = /^[0-9a-f]{64}$/;
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const VERSION = /^(0|[1-9][0-9]{0,18})$/;
 const MAX_VERSION = 9_223_372_036_854_775_807n;
@@ -75,8 +76,25 @@ function validateInput(command) {
   }
 
   const keys = Object.keys(input).sort();
-  if (command.action === 'read' || command.action === 'activate') {
+  if (command.action === 'read') {
     if (keys.length !== 0) throw invalidRequest();
+  } else if (command.action === 'activate') {
+    if (keys.length === 0) return input;
+    const consent = input.consent;
+    if (
+      keys.join(',') !== 'consent' ||
+      !consent ||
+      typeof consent !== 'object' ||
+      Array.isArray(consent) ||
+      Object.getPrototypeOf(consent) !== Object.prototype ||
+      Object.keys(consent).sort().join(',') !== 'accepted,digest,version' ||
+      consent.version !== 'candidate-data-v1' ||
+      typeof consent.digest !== 'string' ||
+      !NOTICE_DIGEST.test(consent.digest) ||
+      consent.accepted !== true
+    ) {
+      throw invalidRequest();
+    }
   } else if (command.action === 'save') {
     if (
       keys.join(',') !== 'content,expectedVersion,path,requestId' ||
@@ -125,9 +143,15 @@ function mapDatabaseError(error) {
   );
 }
 
-export function createR26CandidateAdapter({ connectionString } = {}) {
+export function createR26CandidateAdapter({
+  connectionString,
+  requireLifecycleMarker = false,
+} = {}) {
   if (typeof connectionString !== 'string' || connectionString.trim() === '') {
     throw new TypeError('A PostgreSQL candidate connection string is required');
+  }
+  if (typeof requireLifecycleMarker !== 'boolean') {
+    throw new TypeError('Lifecycle-marker requirement must be a boolean');
   }
 
   const pool = new Pool({
@@ -221,6 +245,19 @@ export function createR26CandidateAdapter({ connectionString } = {}) {
             403,
             'Candidate storage access is denied.',
           );
+        }
+
+        if (requireLifecycleMarker) {
+          const { rows: readinessRows } = await client.query(
+            'SELECT hirearchy.r26_candidate_lifecycle_ready() AS ready',
+          );
+          if (readinessRows[0]?.ready !== true) {
+            throw new R26CandidateError(
+              'CANDIDATE_STORAGE_UNAVAILABLE',
+              503,
+              'Candidate storage is temporarily unavailable.',
+            );
+          }
         }
 
         const { rows } = await client.query(

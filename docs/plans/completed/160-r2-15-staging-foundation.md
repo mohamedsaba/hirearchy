@@ -1,6 +1,6 @@
 # R2.15 internal staging foundation
 
-Status: authenticated internal API implementation and local acceptance verified; draft PR #5 tracks remote CI and founder acceptance. No deployment or external candidates are authorized.
+Status: Completed as an authenticated internal staging foundation. PR #5 source head `2bf59713e3d6ccd9c18e46db71d2de8dba467524` merged to protected `main` as `1a919b40ab45f9788a8cf0f785d33449379b7098` on 2026-11-05; all four required CI contexts passed on the source head. This does not complete candidate lifecycle or the recruiter-to-human-review workflow. No deployment or external candidates are authorized.
 
 ## Acceptance
 
@@ -127,3 +127,7 @@ The supported R2.15 internal staging workflow is now connected to the browser in
 6. **Evaluator evidence access & private isolation:** Evaluators view permitted assessment metadata and a clear unsubmitted state banner for `CREATED` sessions. For submitted sessions, private reviewer observations and review packets remain strictly author-scoped. Review writes and observation writes remain disabled in staging with clear notices.
 7. **Restricted staging route allowlist:** `staging-authenticated` route allowlist in `proxy.ts` strictly permits only the supported browser pages, required static assets, and authentication endpoints; all unpermitted legacy, execution, and AI endpoints return HTTP 503 `STAGING_CAPABILITY_DISABLED`.
 8. **Automated browser acceptance suite:** An 8-phase Chromium browser acceptance test suite (`tests/staging/browser.mjs`) validates sign-in errors, organization selection, recruiter authoring/issuance, role separation, private reviewer isolation, application restart survival, sign-out revocation, and blocked legacy/AI routes. All checks pass cleanly alongside the existing database, migration, proof, restore, and release-recovery tests.
+
+## Final consolidation evidence (2026-11-05)
+
+PR #5 was accepted and merged through the normal protected workflow. Source head `2bf59713e3d6ccd9c18e46db71d2de8dba467524` is included in merge commit `1a919b40ab45f9788a8cf0f785d33449379b7098`. The `verify`, `dependency-audit`, `postgres`, and `real-docker` contexts passed on the exact source head before merge ([verify run 42081956863](https://github.com/mohamedsaba/hirearchy/actions/runs/42081956863); [executor PostgreSQL run 42081956900](https://github.com/mohamedsaba/hirearchy/actions/runs/42081956900)). The source includes the launcher safety correction and focused Node regression. This plan is complete only for the authenticated internal staging foundation; it does not certify the candidate workflow, external beta, public hosting, production execution, or independent off-host recovery. Earlier dated status and acceptance entries above are preserved as historical snapshots. Their pending-founder merge instructions were superseded by the later accepted release mandate and this final consolidation.

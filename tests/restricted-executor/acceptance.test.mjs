@@ -819,11 +819,11 @@ function observeExecutorCreate(
   transformCreateArgs = (args) => args,
 ) {
   let resolveObservation;
-  let rejectObservation;
   let observed = false;
-  const observation = new Promise((resolve, reject) => {
+  let createTracked = false;
+  let observationFailure = null;
+  const observation = new Promise((resolve) => {
     resolveObservation = resolve;
-    rejectObservation = reject;
   });
   const restore = installSpawnPatch((command, args, spawnOptions, original) => {
     if (
@@ -833,9 +833,9 @@ function observeExecutorCreate(
     ) {
       const observedArgs = transformCreateArgs([...args]);
       onDockerArgs([...observedArgs]);
-      if (observed || !observedArgs)
+      if (createTracked || !observedArgs)
         return original(command, args, spawnOptions);
-      observed = true;
+      createTracked = true;
       const labels = labelsFromDockerArgs(observedArgs);
       return trackCreateOutput(
         original,
@@ -845,9 +845,11 @@ function observeExecutorCreate(
         (id) => {
           try {
             registerContainer(id, labels);
-            resolveObservation(inspectExecutorContainer(id, labels));
+            const inspected = inspectExecutorContainer(id, labels);
+            observed = true;
+            resolveObservation(inspected);
           } catch (error) {
-            rejectObservation(error);
+            observationFailure = error;
           }
         },
       );
@@ -855,7 +857,21 @@ function observeExecutorCreate(
     if (command === '/usr/bin/docker') onDockerArgs([...args]);
     return original(command, args, spawnOptions);
   });
-  return { observation, restore };
+  return {
+    get observation() {
+      if (observationFailure) throw observationFailure;
+      if (!observed) {
+        throw new Error(
+          'Executor did not create an observed Docker container before inspection.',
+        );
+      }
+      return observation;
+    },
+    restore,
+    get wasObserved() {
+      return observed;
+    },
+  };
 }
 
 function labelsFromDockerArgs(args) {
@@ -891,6 +907,19 @@ test('fixed recipe argument arrays are immutable', () => {
   assert.throws(() => {
     RECIPE.argv[0] = 'sh';
   }, TypeError);
+});
+
+test('executor creation observer rejects inspection before a create is observed', () => {
+  const observation = observeExecutorCreate();
+  try {
+    assert.equal(observation.wasObserved, false);
+    assert.throws(
+      () => observation.observation,
+      /Executor did not create an observed Docker container before inspection\./,
+    );
+  } finally {
+    observation.restore();
+  }
 });
 
 test('canonical snapshots are order-independent and reject path escapes and duplicates', () => {
@@ -2117,9 +2146,10 @@ test('real Docker execution is bounded, credential-free, and replays after servi
   process.env.HIREARCHY_SYNTHETIC_SECRET = syntheticSecret;
   try {
     const receipt = await executor(databasePool).run(input);
-    const inspected = await createObservation.observation;
     assert.equal(receipt.status, 'completed');
     assert.equal(receipt.exitCode, 0);
+    assert.equal(createObservation.wasObserved, true);
+    const inspected = await createObservation.observation;
     assert.equal(receipt.resultMeaning, 'observed_command_result_only');
     assert.equal(receipt.isolation.network, 'none');
     assert.equal(receipt.isolation.rootFilesystemReadOnly, true);
