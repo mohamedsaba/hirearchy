@@ -551,6 +551,223 @@ export async function checkProofBoundary(
   assert.deepEqual(invitationCounts.rows, [{ envelopes: 1, requests: 1 }]);
 }
 
+export async function checkReviewPacketPersistence({
+  gateway,
+  admin,
+  privateKey,
+  reviewerBearer,
+  organizationId,
+  reviewerPrincipalId,
+  issuerPrincipalId,
+  onCheckpoint = () => {},
+}) {
+  const checkpoint = (label) => onCheckpoint(`review packet / ${label}`);
+  const [header, encodedClaims, signature] = reviewerBearer.split('.');
+  assert.ok(header && encodedClaims && signature);
+  const reviewerClaims = JSON.parse(Buffer.from(encodedClaims, 'base64url'));
+  assert.match(reviewerClaims.sub, /^[0-9a-f-]{36}$/i);
+  assert.match(reviewerClaims.session_id, /^[0-9a-f-]{36}$/i);
+  assert.ok(Number.isSafeInteger(reviewerClaims.exp));
+  assert.ok(reviewerClaims.exp > Math.floor(Date.now() / 1000));
+
+  const sessionId = `sess_review_packet_${randomUUID().replaceAll('-', '')}`;
+  const now = Date.now();
+  const createdAt = new Date(now - 3000);
+  const activatedAt = new Date(now - 2000);
+  const changedAt = new Date(now - 1000);
+  const submittedAt = new Date(now);
+  const workspaceDigest = 'a'.repeat(64);
+  const manifestDigest = 'b'.repeat(64);
+
+  checkpoint('seed synthetic submitted session');
+  await admin.query(
+    `INSERT INTO hirearchy.assessment_sessions (
+       id, organization_id, issuer_principal_id, status, created_at,
+       activated_at, submitted_at, closure_reason
+     ) VALUES ($1, $2::pg_catalog.uuid, $3::pg_catalog.uuid, 'SUBMITTED',
+       $4, $5, $6, 'candidate_submission')`,
+    [
+      sessionId,
+      organizationId,
+      issuerPrincipalId,
+      createdAt,
+      activatedAt,
+      submittedAt,
+    ],
+  );
+  await admin.query(
+    `INSERT INTO hirearchy.candidate_session_events (
+       organization_id, session_id, sequence, event_type, happened_at, payload
+     ) VALUES
+       ($1::pg_catalog.uuid, $2, 1, 'SESSION_ACTIVATED', $3, '{"activated":true}'),
+       ($1::pg_catalog.uuid, $2, 2, 'WORKSPACE_CHANGED', $4, $5::pg_catalog.jsonb),
+       ($1::pg_catalog.uuid, $2, 3, 'SESSION_SUBMITTED', $6, '{"closureReason":"candidate_submission"}')`,
+    [
+      organizationId,
+      sessionId,
+      activatedAt,
+      changedAt,
+      JSON.stringify({
+        filePath: 'src/notification.py',
+        version: 1,
+        contentDigest: workspaceDigest,
+      }),
+      submittedAt,
+    ],
+  );
+  await admin.query(
+    `INSERT INTO hirearchy.candidate_session_submissions (
+       organization_id, session_id, submitted_at, closure_reason,
+       workspace_digest, manifest_digest, manifest
+     ) VALUES ($1::pg_catalog.uuid, $2, $3, 'candidate_submission', $4, $5, '[]'::pg_catalog.jsonb)`,
+    [organizationId, sessionId, submittedAt, workspaceDigest, manifestDigest],
+  );
+  await admin.query(
+    `INSERT INTO hirearchy.reviewer_assignments (
+       id, organization_id, session_id, reviewer_principal_id, assigned_by_principal_id
+     ) VALUES ($1, $2::pg_catalog.uuid, $3, $4::pg_catalog.uuid, $5::pg_catalog.uuid)`,
+    [
+      `review-packet-${randomUUID()}`,
+      organizationId,
+      sessionId,
+      reviewerPrincipalId,
+      issuerPrincipalId,
+    ],
+  );
+
+  const proof = (operation, args) => {
+    const payload = Buffer.from(
+      canonical({
+        v: 1,
+        iss: 'hirearchy-staging',
+        aud: 'hirearchy-postgres',
+        kid: 'rehearsal-1',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.min(Math.floor(Date.now() / 1000) + 60, reviewerClaims.exp),
+        auth_exp: reviewerClaims.exp,
+        jti: randomUUID(),
+        sub: reviewerClaims.sub,
+        sid: reviewerClaims.session_id,
+        op: operation,
+        args,
+      }),
+    );
+    return gateway.query(
+      'SELECT staging.dispatch($1::bytea,$2::bytea) AS result',
+      [payload, sign(null, payload, privateKey)],
+    );
+  };
+  const dispatch = async (operation, args) =>
+    (await proof(operation, args)).rows[0].result;
+
+  checkpoint('open reviewer session and create grounded observation');
+  await dispatch('session.open', { organizationId });
+  const { rows: digestRows } = await admin.query(
+    `SELECT pg_catalog.encode(
+       pg_catalog.sha256(pg_catalog.convert_to(payload::pg_catalog.text, 'UTF8')),
+       'hex'
+     ) AS digest
+       FROM hirearchy.candidate_session_events
+      WHERE organization_id=$1::pg_catalog.uuid AND session_id=$2 AND sequence=2`,
+    [organizationId, sessionId],
+  );
+  assert.equal(digestRows.length, 1);
+  const observation = await dispatch('evidence.observation.create', {
+    organizationId,
+    sessionId,
+    input: {
+      evidenceSourceType: 'timeline_event',
+      eventSequence: '2',
+      evidenceDigest: digestRows[0].digest,
+      body: 'Synthetic observation anchored to a saved workspace event.',
+    },
+  });
+  assert.match(observation.id, /^[0-9a-f-]{36}$/i);
+
+  const packetInput = (summary, expectedVersion) => ({
+    summary,
+    strengths: ['Saved an observable workspace revision.'],
+    concerns: [],
+    unresolvedQuestions: [],
+    referencedObservationIds: [observation.id],
+    referencedEvidence: [],
+    ...(expectedVersion === undefined ? {} : { expectedVersion }),
+  });
+  const save = (input) =>
+    dispatch('review.packet.save', { organizationId, sessionId, input });
+
+  checkpoint('first draft and history response');
+  const first = await save(packetInput('Initial synthetic reviewer draft.'));
+  assert.deepEqual(
+    [first.reviewPacket.status, first.reviewPacket.version],
+    ['DRAFT', 1],
+  );
+  assert.deepEqual(first.reviewPacket.history, []);
+
+  const second = await save(
+    packetInput('Updated synthetic reviewer draft.', 1),
+  );
+  assert.equal(second.reviewPacket.version, 2);
+  assert.equal(second.reviewPacket.history.length, 1);
+  assert.equal(second.reviewPacket.history[0].version, 1);
+  assert.equal(
+    second.reviewPacket.history[0].summary,
+    'Initial synthetic reviewer draft.',
+  );
+
+  checkpoint('stale version conflict');
+  await assert.rejects(save(packetInput('Stale reviewer draft.', 1)), {
+    code: 'R2104',
+  });
+  const { rows: unchanged } = await admin.query(
+    `SELECT packet.version::pg_catalog.int4 AS version, packet.summary,
+            (SELECT pg_catalog.count(*) FROM hirearchy.evaluator_review_packet_history history
+              WHERE history.packet_id=packet.id)::pg_catalog.int4 AS history_count
+       FROM hirearchy.evaluator_review_packets packet
+      WHERE packet.organization_id=$1::pg_catalog.uuid AND packet.session_id=$2
+        AND packet.author_principal_id=$3::pg_catalog.uuid`,
+    [organizationId, sessionId, reviewerPrincipalId],
+  );
+  assert.deepEqual(unchanged, [
+    {
+      version: 2,
+      summary: 'Updated synthetic reviewer draft.',
+      history_count: 1,
+    },
+  ]);
+
+  checkpoint('finalize with complete history');
+  const finalized = await dispatch('review.packet.finalize', {
+    organizationId,
+    sessionId,
+    input: { expectedVersion: 2 },
+  });
+  assert.deepEqual(
+    [finalized.reviewPacket.status, finalized.reviewPacket.version],
+    ['FINALIZED', 3],
+  );
+  assert.match(finalized.reviewPacket.finalDigest, /^[0-9a-f]{64}$/);
+  assert.deepEqual(
+    finalized.reviewPacket.history.map((entry) => entry.version),
+    [1, 2],
+  );
+
+  checkpoint('immutable finalization replay');
+  const replayedFinalization = await dispatch('review.packet.finalize', {
+    organizationId,
+    sessionId,
+    input: { expectedVersion: 2 },
+  });
+  assert.equal(
+    replayedFinalization.reviewPacket.finalDigest,
+    finalized.reviewPacket.finalDigest,
+  );
+  assert.equal(replayedFinalization.reviewPacket.history.length, 2);
+  await assert.rejects(save(packetInput('Attempted post-final change.', 3)), {
+    code: 'R2105',
+  });
+}
+
 export async function checkReviewerRowLockBoundary({
   admin,
   organizationId,

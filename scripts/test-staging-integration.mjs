@@ -20,6 +20,7 @@ import { captureRelease } from '../tests/staging/release.mjs';
 import {
   checkInstallerBoundary,
   checkProofBoundary,
+  checkReviewPacketPersistence,
   checkReviewerRowLockBoundary,
 } from '../tests/staging/security.mjs';
 import {
@@ -702,6 +703,19 @@ try {
     sessionId: submittedSessionId,
     reviewerPrincipalId: provisioned.users[1].principalId,
     issuerPrincipalId: provisioned.users[0].principalId,
+  });
+  stage = 'proof-bound review packet persistence regression';
+  await checkReviewPacketPersistence({
+    gateway: await rollback.connect('r23_gateway'),
+    admin: rollback.admin,
+    privateKey: keys.privateKey,
+    reviewerBearer: reviewer,
+    organizationId,
+    reviewerPrincipalId: provisioned.users[1].principalId,
+    issuerPrincipalId: provisioned.users[0].principalId,
+    onCheckpoint: (checkpoint) => {
+      stage = checkpoint;
+    },
   });
   stage = 'unstarted invitation encryption-recovery fixture / GoTrue login';
   const invitationRecruiter = await login(

@@ -1343,7 +1343,7 @@ def staging_review_packet(packet_id):
               'validFrom', pg_catalog.to_char(history.valid_from AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
               'validUntil', pg_catalog.to_char(history.valid_until AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
               'recordedAt', pg_catalog.to_char(history.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-            ) ORDER BY history.version), '[]'::pg_catalog.jsonb)
+            ) ORDER BY history.version)
             FROM hirearchy.evaluator_review_packet_history AS history
             WHERE history.packet_id = packet.id
           ), '[]'::pg_catalog.jsonb)
