@@ -1,8 +1,12 @@
+import { enforceRateLimit } from '../../../../src/security/rate-limit';
 import { loadStagingConfiguration } from '../../../../src/staging/server';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<Response> {
+  const rateLimitResponse = enforceRateLimit(request, 'auth');
+  if (rateLimitResponse) return rateLimitResponse;
+
   const enabled =
     process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
   if (!enabled) {

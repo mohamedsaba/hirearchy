@@ -1,9 +1,13 @@
 import { verifyR23AccessToken } from '../../../../src/r23-auth/identity';
+import { enforceRateLimit } from '../../../../src/security/rate-limit';
 import { loadStagingConfiguration } from '../../../../src/staging/server';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<Response> {
+  const rateLimitResponse = enforceRateLimit(request, 'auth');
+  if (rateLimitResponse) return rateLimitResponse;
+
   const authHeader = request.headers.get('authorization');
   const match = authHeader?.match(/^Bearer ([A-Za-z0-9._-]{1,16384})$/);
   if (!match) {
