@@ -36,7 +36,6 @@ describe('Early Access Data Store & Rate Limiter', () => {
       teamSize: '51-200',
       primaryChallenge: 'leetcode_fatigue',
       notes: 'Interested in backend scenarios',
-      clientIp: '127.0.0.1',
     };
 
     const record = await saveEarlyAccessRecord(input);
@@ -48,6 +47,67 @@ describe('Early Access Data Store & Rate Limiter', () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].id).toBe(record.id);
     expect(stored[0].company).toBe('Acme Systems');
+    expect(stored[0].clientIp).toBeUndefined();
+    expect(stored[0].userAgent).toBeUndefined();
+    expect(fs.statSync(tempStoreFile).mode & 0o777).toBe(0o600);
+  });
+
+  it('serializes concurrent submissions without dropping records', async () => {
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        saveEarlyAccessRecord({
+          name: `Synthetic ${index}`,
+          email: `synthetic-${index}@example.test`,
+          company: `Team ${index}`,
+          teamSize: '1-10',
+          role: 'Engineering lead',
+          primaryChallenge: 'other',
+        }),
+      ),
+    );
+
+    expect(await readAllEarlyAccessRecords()).toHaveLength(8);
+  });
+
+  it('fails closed on a corrupt store instead of replacing its contents', async () => {
+    fs.writeFileSync(tempStoreFile, '{');
+
+    await expect(
+      saveEarlyAccessRecord({
+        name: 'Synthetic',
+        email: 'synthetic@example.test',
+        company: 'Example Team',
+        teamSize: '1-10',
+        role: 'Engineering lead',
+        primaryChallenge: 'other',
+      }),
+    ).rejects.toThrow(SyntaxError);
+
+    expect(fs.readFileSync(tempStoreFile, 'utf8')).toBe('{');
+  });
+
+  it('does not create a store when an operator reads an empty intake', async () => {
+    expect(await readAllEarlyAccessRecords()).toEqual([]);
+    expect(fs.existsSync(tempStoreFile)).toBe(false);
+  });
+
+  it('fails closed when the store is valid JSON with the wrong shape', async () => {
+    fs.writeFileSync(tempStoreFile, 'null');
+
+    await expect(readAllEarlyAccessRecords()).rejects.toThrow(
+      'must contain a JSON array',
+    );
+    await expect(
+      saveEarlyAccessRecord({
+        name: 'Synthetic',
+        email: 'synthetic@example.test',
+        company: 'Example Team',
+        teamSize: '1-10',
+        role: 'Engineering lead',
+        primaryChallenge: 'other',
+      }),
+    ).rejects.toThrow('must contain a JSON array');
+    expect(fs.readFileSync(tempStoreFile, 'utf8')).toBe('null');
   });
 
   it('enforces rate limits per client IP', () => {
@@ -138,11 +198,13 @@ describe('Early Access API Route (POST /api/early-access)', () => {
     expect(body.submissionId).toBeDefined();
     expect(body.receivedAt).toBeDefined();
     expect(body.company).toBe('Cyberdyne Systems');
-    expect(body.message).toContain('Automated email delivery is disabled');
-    expect(body.message).toContain('follow up directly');
+    expect(body.message).toContain('No email was sent');
+    expect(body.message).toContain('authorized operator');
 
     const stored = await readAllEarlyAccessRecords();
     expect(stored).toHaveLength(1);
     expect(stored[0].company).toBe('Cyberdyne Systems');
+    expect(stored[0].clientIp).toBeUndefined();
+    expect(stored[0].userAgent).toBeUndefined();
   });
 });

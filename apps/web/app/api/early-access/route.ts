@@ -73,7 +73,6 @@ export async function POST(request: Request) {
   const clientIp = forwardedFor
     ? forwardedFor.split(',')[0].trim()
     : '127.0.0.1';
-  const userAgent = request.headers.get('user-agent') || 'unknown';
 
   const rateLimit = checkRateLimit(clientIp);
   if (!rateLimit.allowed) {
@@ -126,8 +125,6 @@ export async function POST(request: Request) {
     role: data.role,
     primaryChallenge: data.primaryChallenge,
     notes: data.notes,
-    clientIp,
-    userAgent,
   };
 
   try {
@@ -139,7 +136,7 @@ export async function POST(request: Request) {
         receivedAt: record.receivedAt,
         company: record.company,
         message:
-          'Your early access request has been recorded. Note: Automated email delivery is disabled in this environment; our team will follow up directly at your provided work email.',
+          'Your request was recorded. No email was sent; an authorized operator can review it on the application host.',
       },
       { status: 201 },
     );

@@ -192,15 +192,18 @@ export function EarlyAccessForm() {
               <span>{new Date(successData.receivedAt).toUTCString()}</span>
             </p>
             <p className="ct-receipt-notice" data-testid="receipt-smtp-notice">
-              <strong>Truthful Delivery Notice:</strong> Automated email
-              delivery (SMTP) is disabled in this staging environment. Your
-              request has been stored durably, and our product team will contact
-              you directly at your provided work email.
+              <strong>Delivery notice:</strong> No email was sent. An authorized
+              operator can review your request on the application host;
+              automated follow-up is not configured.
             </p>
           </div>
           <div className="ct-success-actions">
-            <Link className="ct-button" href="/r23/login" prefetch={false}>
-              Explore internal demo <Arrow />
+            <Link
+              className="ct-button"
+              href="/products/software"
+              prefetch={false}
+            >
+              Explore Hirearchy Software <Arrow />
             </Link>
             <button
               type="button"
@@ -227,13 +230,13 @@ export function EarlyAccessForm() {
         >
           <p className="ct-form-stage" aria-hidden="true">
             <span />
-            Design Partner & Alpha Pilot Program
+            Early access interest
           </p>
           <h2>Request early access</h2>
           <p className="ct-form-intro">
-            We are onboarding a limited cohort of engineering teams to run
-            bounded, evidence-first evaluations. Fill out your details below to
-            request early access or participate in an alpha pilot.
+            Share your team context to request an early-access conversation.
+            Submitting this form does not create an account, activate a pilot,
+            or guarantee product access.
           </p>
 
           <label
@@ -428,11 +431,20 @@ export function EarlyAccessForm() {
             data-testid="staging-restrictions-notice"
           >
             <p>
-              <strong>Truthful Capability Boundary:</strong> In our current
-              demonstration environment, automated email delivery is disabled.
-              Requests are captured securely and answered directly. Live
-              candidate code execution and live AI assistance are disabled in
-              demo sessions pending dedicated container sandbox isolation.
+              <strong>Request information:</strong> We store your name, work
+              email, company or team, role, team size, selected challenge, and
+              optional note for authorized Hirearchy operators to review. Your
+              request stays on the application host until an authorized operator
+              deletes it; no automatic expiry or deletion-request process is
+              configured. Automated email and follow-up are not configured.
+              Share only information you want reviewed. Do not include candidate
+              data, credentials, or secrets. Read the{' '}
+              <Link href="/privacy">privacy notice draft</Link> before
+              submitting.
+            </p>
+            <p>
+              The current internal demo uses synthetic data. Candidate code
+              execution, live AI assistance, and automated email are disabled.
             </p>
           </div>
 

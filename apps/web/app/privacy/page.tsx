@@ -7,15 +7,37 @@ export default function LegalPage() {
   return (
     <Site>
       <section className="ct-legal-page">
-        <Kicker>Publication pending</Kicker>
-        <h1>Privacy</h1>
+        <Kicker>Draft for founder and legal review</Kicker>
+        <h1>Website privacy notice draft</h1>
         <p>
-          The approved privacy information for this website has not been
-          published yet.
+          This draft describes only the early-access request form. It is not an
+          approved privacy policy or a compliance statement and must be reviewed
+          before public use.
         </p>
         <p>
-          This page is a placeholder, not a legal policy. Please check back
-          before relying on these terms or submitting personal information.
+          The form collects your name, work email, company or team, role,
+          engineering team size, selected challenge, and optional note. The
+          application uses your source IP temporarily for rate limiting; it is
+          not included in the stored request record.
+        </p>
+        <h2>Use and access</h2>
+        <p>
+          An authorized Hirearchy operator can review requests from the
+          application host and may use the details to consider the request and
+          follow up manually. Automated email and follow-up are not configured.
+          No public account or pilot access is created by submitting the form.
+        </p>
+        <h2>Storage and retention</h2>
+        <p>
+          Requests are stored in the application data volume and remain there
+          until an authorized operator deletes them. There is no automatic
+          expiry or deletion schedule, and a deletion request process has not
+          been approved. Do not submit candidate information, credentials,
+          secrets, or other sensitive details.
+        </p>
+        <p>
+          Founder and legal review must set the retention period and deletion
+          channel before this notice or the intake form is used publicly.
         </p>
         <Button href="/">Back to Hirearchy</Button>
       </section>
