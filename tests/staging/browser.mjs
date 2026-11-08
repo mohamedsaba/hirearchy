@@ -45,6 +45,20 @@ function loadPlaywright() {
   throw new Error('Unable to resolve Playwright module');
 }
 
+export async function readBrowserCsrf(context, appUrl) {
+  // URL filtering omits Secure cookies on HTTP loopback even when Chromium accepts them.
+  const hostname = new URL(appUrl).hostname;
+  const cookie = (await context.cookies()).find(
+    (value) =>
+      value.name === '__Host-r23-csrf' &&
+      value.domain === hostname &&
+      value.path === '/' &&
+      value.secure === true,
+  );
+  assert.ok(cookie, 'Browser CSRF cookie must be present for the app host');
+  return cookie.value;
+}
+
 async function signInAndSelectOrganization(
   page,
   appUrl,
@@ -382,10 +396,7 @@ async function assertExpiredInvitationReplay({
     ],
   );
 
-  const csrf = (await context.cookies(appUrl)).find(
-    (cookie) => cookie.name === '__Host-r23-csrf',
-  )?.value;
-  assert.ok(csrf, 'Recruiter CSRF cookie must be present');
+  const csrf = await readBrowserCsrf(context, appUrl);
   const result = await page.evaluate(
     async ({
       organizationId: orgId,
@@ -464,10 +475,7 @@ async function assertUnassignedReviewerWritesDenied({
       `**/r23/organizations/${organizationId.toLowerCase()}`,
     );
 
-    const csrf = (await context.cookies(appUrl)).find(
-      (cookie) => cookie.name === '__Host-r23-csrf',
-    )?.value;
-    assert.ok(csrf, 'Unassigned reviewer CSRF cookie must be present');
+    const csrf = await readBrowserCsrf(context, appUrl);
     const before = await reviewWriteCounts(admin, organizationId, sessionId);
     const basePath = `/r27/api/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(sessionId)}`;
     const observationStatus = await page.evaluate(
