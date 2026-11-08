@@ -896,7 +896,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 MAX_PAYLOAD_BYTES = 1048576
 MAX_SAFE_INTEGER = 9007199254740991
-CLAIM_KEYS = {'v', 'iss', 'aud', 'kid', 'iat', 'exp', 'auth_exp', 'jti', 'sub', 'sid', 'op', 'args'}
+CLAIM_KEYS = {'v', 'isRecovery', 'iss', 'aud', 'kid', 'iat', 'exp', 'auth_exp', 'jti', 'sub', 'sid', 'op', 'args'}
 DRAFT_REQUIRED = {
     'title', 'brief', 'expectedBehavior', 'acceptanceCriteria',
     'primaryFilePath', 'starterFiles', 'durationMinutes',
@@ -2783,7 +2783,9 @@ try:
     proof = strict_json_bytes(raw_payload)
 except (UnicodeDecodeError, ValueError, TypeError, RecursionError):
     error('Staging proof is invalid', '28000')
-if not exact_keys(proof, CLAIM_KEYS) or proof.get('v') != 1 or isinstance(proof.get('v'), bool):
+if not exact_keys(proof, CLAIM_KEYS) or proof.get('v') != 2 or isinstance(proof.get('v'), bool):
+    error('Staging proof is invalid', '28000')
+if proof.get('isRecovery') is not False:
     error('Staging proof is invalid', '28000')
 for name, maximum in (('iss', 256), ('aud', 256), ('kid', 128), ('op', 128)):
     value = proof.get(name)

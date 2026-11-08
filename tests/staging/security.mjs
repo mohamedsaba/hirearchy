@@ -252,24 +252,26 @@ export async function checkProofBoundary(
   );
   assert.deepEqual(unchangedMemberships, [{ unchanged: true }]);
   const now = Math.floor(Date.now() / 1000);
-  const proof = (changes = {}) =>
-    Buffer.from(
-      canonical({
-        v: 1,
-        iss: 'hirearchy-staging',
-        aud: 'hirearchy-postgres',
-        kid: 'rehearsal-1',
-        iat: now,
-        exp: now + 60,
-        auth_exp: claims.exp,
-        jti: randomUUID(),
-        sub: claims.sub,
-        sid: claims.session_id,
-        op: 'session.open',
-        args: { organizationId },
-        ...changes,
-      }),
-    );
+  const proof = (changes = {}, omittedClaims = []) => {
+    const proofClaims = {
+      v: 2,
+      isRecovery: false,
+      iss: 'hirearchy-staging',
+      aud: 'hirearchy-postgres',
+      kid: 'rehearsal-1',
+      iat: now,
+      exp: now + 60,
+      auth_exp: claims.exp,
+      jti: randomUUID(),
+      sub: claims.sub,
+      sid: claims.session_id,
+      op: 'session.open',
+      args: { organizationId },
+      ...changes,
+    };
+    for (const name of omittedClaims) delete proofClaims[name];
+    return Buffer.from(canonical(proofClaims));
+  };
   const execute = (payload, signature = sign(null, payload, privateKey)) =>
     gateway.query('SELECT staging.dispatch($1::bytea,$2::bytea) AS result', [
       payload,
@@ -313,12 +315,18 @@ export async function checkProofBoundary(
     { args: { organizationId, subjectId: randomUUID() } },
     { injectedSubject: randomUUID() },
     { op: 'unavailable' },
-    { v: 2 },
+    { v: 1 },
+    { isRecovery: true },
+    { isRecovery: null },
+    { isRecovery: 'false' },
+    { isRecovery: 0 },
   ];
   for (const [index, changes] of rejectedProofChanges.entries()) {
     checkpoint(`invalid proof claim ${index + 1} denied`);
     await rejected(proof(changes));
   }
+  checkpoint('missing recovery claim denied');
+  await rejected(proof({}, ['isRecovery']));
   checkpoint('first verified session open');
   await execute(valid);
   checkpoint('proof replay denied');
@@ -638,7 +646,8 @@ export async function checkReviewPacketPersistence({
   const proof = (operation, args) => {
     const payload = Buffer.from(
       canonical({
-        v: 1,
+        v: 2,
+        isRecovery: false,
         iss: 'hirearchy-staging',
         aud: 'hirearchy-postgres',
         kid: 'rehearsal-1',

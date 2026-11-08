@@ -41,6 +41,7 @@ import {
   R23_SESSION_COOKIE,
 } from '../r23-auth/config';
 import {
+  assertR23StagingEligibleIdentity,
   assertR23VerifiedIdentity,
   passwordGrant,
   readR23Claims,
@@ -1056,7 +1057,7 @@ export async function stagingLoginPost(request: Request): Promise<Response> {
     const password = requiredText(body, 'password', 1024);
 
     const pair = await passwordGrant(config.auth, email, password);
-    const identity = assertR23VerifiedIdentity(
+    const identity = assertR23StagingEligibleIdentity(
       await verifyR23AccessToken(config.auth, pair.accessToken, pair),
     );
     const csrf = randomOpaqueValue();

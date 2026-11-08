@@ -16,7 +16,7 @@ Restricted execution service
   └─ separate runtime boundary; off in the durable internal demo
 ```
 
-The candidate path is implemented in draft PR #6 but is not yet accepted on `main`; the diagram describes the intended release boundary, not evidence of a passing end-to-end deployment. PR #5, merged as `1a919b40ab45f9788a8cf0f785d33449379b7098`, is the accepted authenticated staging foundation. See [release readiness](../release-readiness.md) for current CI, browser, recovery, and deployment evidence.
+The candidate and assigned-reviewer path is technically accepted in PR #6, merged as `6f144045a3dcfa523fd7d79112c09721011b4871` from source `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`. Its required CI checks, positive and negative browser journey, and late separate-instance restore passed. This does not establish deployment or authenticated visual acceptance. See [release readiness](../release-readiness.md) for the current evidence and remaining gates.
 
 ## Tenant and identity boundary
 
@@ -41,7 +41,7 @@ The restricted R2.14 executor remains separate from the durable recruiter and ca
 ## Current integration boundary
 
 - **Merged PR #5:** GoTrue-authenticated sign-in, organization selection, PostgreSQL recruiter authoring, validation, issuance, and reviewer assignment through the proof boundary. It does not issue candidate links or enable candidate activity, evaluator review writes, AI, or execution in authenticated staging.
-- **Draft PR #6:** source for the durable invitation, consent, candidate workspace, submitted evidence, and human-review bridge. It remains unmerged; updated CI and browser acceptance are pending. See [release readiness](../release-readiness.md) for current checks and evidence.
+- **Merged PR #6:** adds the durable invitation, consent, candidate workspace, submitted evidence, and assigned human-review bridge. Required CI, positive and negative browser acceptance, and late restore passed. Authenticated visual review, the approved-template walkthrough, first-team onboarding, and deployment remain pending. See [release readiness](../release-readiness.md) for current checks and evidence.
 - **Deployment:** no public or production deployment, external candidate workflow, or visual acceptance is established by those source changes.
 
 Do not duplicate release checklists or reports here. Update [the single readiness record](../release-readiness.md) when a source SHA or acceptance result changes.

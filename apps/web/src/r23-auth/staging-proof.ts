@@ -1,7 +1,7 @@
 import { randomUUID, sign, type KeyObject } from 'node:crypto';
 
 import {
-  assertR23VerifiedIdentity,
+  assertR23StagingEligibleIdentity,
   type R23VerifiedIdentity,
 } from './identity';
 
@@ -42,7 +42,7 @@ export function issueStagingProof(
   operation: string,
   args: { [key: string]: Json },
 ): Readonly<{ payload: Buffer; signature: Buffer }> {
-  const identity = assertR23VerifiedIdentity(identityInput);
+  const identity = assertR23StagingEligibleIdentity(identityInput);
   const now = Math.floor(Date.now() / 1000);
   if (
     !issuer.issuer ||
@@ -59,7 +59,8 @@ export function issueStagingProof(
     throw new TypeError('Invalid staging proof configuration or identity');
   const payload = Buffer.from(
     canonical({
-      v: 1,
+      v: 2,
+      isRecovery: false,
       iss: issuer.issuer,
       aud: issuer.audience,
       kid: issuer.keyId,

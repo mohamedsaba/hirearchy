@@ -2,7 +2,10 @@ import { generateKeyPairSync, verify } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { R23Config } from '../../apps/web/src/r23-auth/config';
-import { verifyR23AccessToken } from '../../apps/web/src/r23-auth/identity';
+import {
+  R23AuthenticationDenied,
+  verifyR23AccessToken,
+} from '../../apps/web/src/r23-auth/identity';
 import { issueStagingProof } from '../../apps/web/src/r23-auth/staging-proof';
 
 const subject = '10000000-0000-4000-8000-0000000000a1';
@@ -24,7 +27,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('staging proof issuer', () => {
   it('signs exact bounded claims for a GoTrue-verified identity', async () => {
     const expiresAt = Math.floor(Date.now() / 1000) + 300;
-    const token = `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: config.authIssuer, aud: config.authAudience, exp: expiresAt })}.signature`;
+    const token = `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: config.authIssuer, aud: config.authAudience, exp: expiresAt, amr: [{ method: 'password', timestamp: 1 }] })}.signature`;
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => Response.json({ id: subject })),
@@ -42,7 +45,8 @@ describe('staging proof issuer', () => {
     });
     const claims = JSON.parse(proof.payload.toString());
     expect(claims).toMatchObject({
-      v: 1,
+      v: 2,
+      isRecovery: false,
       iss: 'hirearchy',
       aud: 'database',
       kid: 'key-1',
@@ -73,5 +77,45 @@ describe('staging proof issuer', () => {
     expect(() =>
       issueStagingProof(issuer, identity, 'session.mint', { bad: 1.5 }),
     ).toThrow();
+  });
+
+  it('denies recovery and ineligible identities from product proof issuance', async () => {
+    const { privateKey } = generateKeyPairSync('ed25519');
+    const issuer = {
+      issuer: 'hirearchy',
+      audience: 'database',
+      keyId: 'key-1',
+      privateKey,
+    };
+    const expiresAt = Math.floor(Date.now() / 1000) + 300;
+    const identityFor = async (amr?: unknown) => {
+      const token = `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: config.authIssuer, aud: config.authAudience, exp: expiresAt, ...(amr === undefined ? {} : { amr }) })}.signature`;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ id: subject })),
+      );
+      return verifyR23AccessToken(config, token);
+    };
+
+    const recovery = await identityFor([
+      { method: 'password', timestamp: 1 },
+      { method: 'recovery', timestamp: 2 },
+    ]);
+    expect(recovery.isRecovery).toBe(true);
+    expect(() =>
+      issueStagingProof(issuer, recovery, 'session.mint', {}),
+    ).toThrow(R23AuthenticationDenied);
+
+    for (const amr of [
+      undefined,
+      [],
+      [{ method: 'password', timestamp: -1 }],
+    ]) {
+      const ineligible = await identityFor(amr);
+      expect(ineligible.isRecovery).toBeNull();
+      expect(() =>
+        issueStagingProof(issuer, ineligible, 'session.mint', {}),
+      ).toThrow(R23AuthenticationDenied);
+    }
   });
 });

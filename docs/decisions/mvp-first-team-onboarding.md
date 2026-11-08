@@ -2,13 +2,13 @@
 
 - **Status:** Proposed; do not implement until reviewed and accepted.
 - **Date:** 2026-11-06
-- **Baseline:** PR #5 is merged to protected `main` at `1a919b40ab45f9788a8cf0f785d33449379b7098`. PR #6 remains draft and unmerged. Migration `0016_candidate_invitation_lifecycle.sql` is in the PR #6 source, not the merged baseline. Any onboarding schema must be additive after `0016`; preserve all existing migration bytes and checksums.
+- **Baseline:** PR #5 is merged to protected `main` at `1a919b40ab45f9788a8cf0f785d33449379b7098`. PR #6 is merged at `6f144045a3dcfa523fd7d79112c09721011b4871` from accepted source `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`. Migration `0016_candidate_invitation_lifecycle.sql` is part of merged PR #6. Any onboarding schema must be additive after `0016`; preserve all existing migration bytes and checksums.
 
 ## Context
 
 The current R23 flow signs in with GoTrue and verifies the live user before creating the application session. Its signed proof is checked again in PostgreSQL against a live `auth.sessions` row. The staging dispatcher then requires an `application_principals` row before any operation, so a confirmed identity with no principal cannot create a first team or accept a first invitation.
 
-The existing tenant model has organizations, application principals bound to Auth user IDs, and `recruiter` and `reviewer` memberships. PR #5 still uses administrator provisioning. The R23 disposable fixture's principal-binding helpers are fixture-only and are not product onboarding patterns. Existing configured organization IDs and display names must remain historical records; self-service onboarding cannot adopt them.
+The existing tenant model has organizations, application principals bound to Auth user IDs, and `recruiter` and `reviewer` memberships. Current staging still uses administrator provisioning. The R23 disposable fixture's principal-binding helpers are fixture-only and are not product onboarding patterns. Existing configured organization IDs and display names must remain historical records; self-service onboarding cannot adopt them.
 
 This proposal adds the smallest confirmed-email first-team path and one reviewer-invitation path while preserving the existing identity proof and strict membership checks.
 
@@ -98,7 +98,7 @@ Recovery uses GoTrue's generic recovery response and a separate short-lived purp
 ## Sources
 
 - [Tenant foundation migration](../../database/postgres/migrations/0001_tenant_foundation.sql)
-- [PR #6 candidate lifecycle migration 0016](../../database/postgres/migrations/0016_candidate_invitation_lifecycle.sql) — draft/unmerged source, not the current protected-main baseline
+- [PR #6 candidate lifecycle migration 0016](../../database/postgres/migrations/0016_candidate_invitation_lifecycle.sql) — merged protected-main baseline; self-service onboarding remains proposed
 - [Privileged staging API installer](../../database/postgres/staging/install-api.sql)
 - [GoTrue identity verification](../../apps/web/src/r23-auth/identity.ts)
 - [Staging proof dispatch](../../apps/web/src/staging/server.ts)
