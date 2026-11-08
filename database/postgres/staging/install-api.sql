@@ -50,6 +50,77 @@ BEGIN
     RAISE EXCEPTION 'staging_readiness_owner is missing or unsafe';
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_class AS relation,
+           LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               relation.relacl,
+               pg_catalog.acldefault('r', relation.relowner)
+             )
+           ) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_class AS relation
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = relation.relnamespace
+      JOIN pg_catalog.pg_attribute AS attribute
+        ON attribute.attrelid = relation.oid
+      CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+       AND NOT (
+         namespace.nspname = 'hirearchy'
+         AND privilege.privilege_type = 'SELECT'
+         AND NOT privilege.is_grantable
+         AND (
+           (relation.relname = 'schema_migrations' AND attribute.attname = 'version')
+           OR (
+             relation.relname IN (
+               'durable_candidate_installation',
+               'durable_onboarding_installation'
+             )
+             AND attribute.attname IN ('marker_key', 'marker_version')
+           )
+           OR (
+             relation.relname = 'candidate_token_storage_meta'
+             AND attribute.attname = 'version'
+           )
+         )
+       )
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_namespace AS namespace,
+           LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               namespace.nspacl,
+               pg_catalog.acldefault('n', namespace.nspowner)
+             )
+           ) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+       AND NOT (
+         namespace.nspname = 'hirearchy'
+         AND privilege.privilege_type = 'USAGE'
+         AND NOT privilege.is_grantable
+       )
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_proc AS routine,
+           LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               routine.proacl,
+               pg_catalog.acldefault('f', routine.proowner)
+             )
+           ) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+       AND routine.oid IS DISTINCT FROM COALESCE(
+         pg_catalog.to_regprocedure('staging.readiness_probe()'),
+         0::pg_catalog.oid
+       )
+  ) THEN
+    RAISE EXCEPTION 'staging_readiness_owner has grants outside the readiness metadata boundary';
+  END IF;
+
   SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,
          rolcreaterole, rolreplication, rolinherit, rolconfig
     INTO gateway_role

@@ -46,6 +46,46 @@ export async function checkReadinessBoundary({
            pg_catalog.has_column_privilege('staging_readiness_owner','hirearchy.candidate_token_storage_meta','version','SELECT') AS token_version_select,
            pg_catalog.has_column_privilege('staging_readiness_owner','hirearchy.candidate_token_storage_meta','database_id','SELECT') AS token_database_id_select,
            pg_catalog.has_table_privilege('staging_readiness_owner','hirearchy.organization_memberships','SELECT') AS tenant_select,
+           NOT EXISTS (
+             SELECT 1
+               FROM pg_catalog.pg_class AS relation,
+                    LATERAL pg_catalog.aclexplode(
+                      COALESCE(
+                        relation.relacl,
+                        pg_catalog.acldefault('r', relation.relowner)
+                      )
+                    ) AS privilege
+              WHERE privilege.grantee = readiness.oid
+           ) AS no_table_level_grants,
+           NOT EXISTS (
+             SELECT 1
+               FROM pg_catalog.pg_class AS relation
+               JOIN pg_catalog.pg_namespace AS namespace
+                 ON namespace.oid = relation.relnamespace
+               JOIN pg_catalog.pg_attribute AS attribute
+                 ON attribute.attrelid = relation.oid
+               CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS privilege
+              WHERE privilege.grantee = readiness.oid
+                AND NOT (
+                  namespace.nspname = 'hirearchy'
+                  AND privilege.privilege_type = 'SELECT'
+                  AND NOT privilege.is_grantable
+                  AND (
+                    (relation.relname = 'schema_migrations' AND attribute.attname = 'version')
+                    OR (
+                      relation.relname IN (
+                        'durable_candidate_installation',
+                        'durable_onboarding_installation'
+                      )
+                      AND attribute.attname IN ('marker_key', 'marker_version')
+                    )
+                    OR (
+                      relation.relname = 'candidate_token_storage_meta'
+                      AND attribute.attname = 'version'
+                    )
+                  )
+                )
+           ) AS exact_column_selects,
            pg_catalog.has_function_privilege('r23_gateway','staging.readiness_probe()','EXECUTE') AS gateway_probe_execute,
            pg_catalog.has_function_privilege('anon','staging.readiness_probe()','EXECUTE') AS anonymous_probe_execute,
            EXISTS (
@@ -71,6 +111,8 @@ export async function checkReadinessBoundary({
       token_version_select: true,
       token_database_id_select: false,
       tenant_select: false,
+      no_table_level_grants: true,
+      exact_column_selects: true,
       gateway_probe_execute: true,
       anonymous_probe_execute: false,
       has_memberships: false,
