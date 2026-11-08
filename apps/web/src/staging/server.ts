@@ -29,12 +29,26 @@ const operations = new Set([
   'assessment.get',
   'assessment.validate',
   'assessment.issue',
+  'candidate.invitation.create',
+  'candidate.invitation.get',
+  'candidate.invitation.revoke',
   'evidence.read',
   'review.read',
   'evidence.observation.create',
   'evidence.observation.update',
   'review.packet.save',
   'review.packet.finalize',
+  'onboarding.status',
+  'organization.bootstrap',
+  'organization.invitation.accept',
+  'organization.invitation.create',
+  'organization.invitation.list',
+  'organization.invitation.revoke',
+  'organization.update',
+  'organization.members.list',
+  'organization.member.remove',
+  'account.profile.get',
+  'account.profile.update',
 ]);
 
 export type StagingConfiguration = ReturnType<typeof configuration>;
@@ -260,6 +274,30 @@ export async function stagingPost(request: Request): Promise<Response> {
       });
       return response(200, { validation, result });
     }
+    if (input.op === 'organization.bootstrap') {
+      const selfServiceEnabled =
+        process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
+      if (!selfServiceEnabled) {
+        return response(403, {
+          error: 'Self-service onboarding is disabled',
+        });
+      }
+    }
+    if (input.op === 'onboarding.status') {
+      const result = (await dispatch(input.op, args)) as Record<
+        string,
+        unknown
+      >;
+      const selfServiceEnabled =
+        process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
+      return response(200, {
+        ...result,
+        capabilities: {
+          selfServiceOnboardingEnabled: selfServiceEnabled,
+          emailDeliveryEnabled: false,
+        },
+      });
+    }
     return response(200, await dispatch(input.op, args));
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error) {
@@ -267,6 +305,10 @@ export async function stagingPost(request: Request): Promise<Response> {
         return response(401, { error: 'Authentication denied' });
       if (error.code === '42501' || error.code === '23505')
         return response(403, { error: 'Authorization denied' });
+      if (error.code === '22023')
+        return response(400, {
+          error: (error as { message?: string }).message || 'Invalid request',
+        });
     }
     if (error instanceof R23AuthenticationDenied)
       return response(401, { error: 'Authentication denied' });
