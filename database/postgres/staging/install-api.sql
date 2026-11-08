@@ -246,45 +246,20 @@ CREATE POLICY staging_verifier_session_revoke
 ALTER TABLE hirearchy.application_principals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hirearchy.application_principals FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS staging_verifier_principal_select ON hirearchy.application_principals;
+DROP POLICY IF EXISTS staging_verifier_principal_insert ON hirearchy.application_principals;
+DROP POLICY IF EXISTS staging_verifier_principal_update ON hirearchy.application_principals;
 CREATE POLICY staging_verifier_principal_select
   ON hirearchy.application_principals
   FOR SELECT TO staging_verifier_owner
   USING (
     auth_user_id = NULLIF(pg_catalog.current_setting('staging.subject_id', true), '')::pg_catalog.uuid
-    OR id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-    OR (
-      NULLIF(pg_catalog.current_setting('staging.organization_id', true), '') IS NOT NULL
-      AND id IN (
-        SELECT m.principal_id FROM hirearchy.organization_memberships m
-        WHERE m.organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-      )
-    )
-  );
-
-DROP POLICY IF EXISTS staging_verifier_principal_insert ON hirearchy.application_principals;
-CREATE POLICY staging_verifier_principal_insert
-  ON hirearchy.application_principals
-  FOR INSERT TO staging_verifier_owner
-  WITH CHECK (
-    auth_user_id = NULLIF(pg_catalog.current_setting('staging.subject_id', true), '')::pg_catalog.uuid
-  );
-
-DROP POLICY IF EXISTS staging_verifier_principal_update ON hirearchy.application_principals;
-CREATE POLICY staging_verifier_principal_update
-  ON hirearchy.application_principals
-  FOR UPDATE TO staging_verifier_owner
-  USING (
-    auth_user_id = NULLIF(pg_catalog.current_setting('staging.subject_id', true), '')::pg_catalog.uuid
-    OR id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-  )
-  WITH CHECK (
-    auth_user_id = NULLIF(pg_catalog.current_setting('staging.subject_id', true), '')::pg_catalog.uuid
-    OR id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
   );
 
 ALTER TABLE hirearchy.organization_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hirearchy.organization_memberships FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS staging_verifier_membership_select ON hirearchy.organization_memberships;
+DROP POLICY IF EXISTS staging_verifier_membership_insert ON hirearchy.organization_memberships;
+DROP POLICY IF EXISTS staging_verifier_membership_update_status ON hirearchy.organization_memberships;
 CREATE POLICY staging_verifier_membership_select
   ON hirearchy.organization_memberships
   FOR SELECT TO staging_verifier_owner
@@ -300,9 +275,6 @@ CREATE POLICY staging_verifier_membership_select
           AND status = 'active'
           AND revoked_at IS NULL
         )
-        OR (
-          NULLIF(pg_catalog.current_setting('staging.list_organization_members', true), '') = 'true'
-        )
       )
     )
     OR (
@@ -311,85 +283,11 @@ CREATE POLICY staging_verifier_membership_select
     )
   );
 
-DROP POLICY IF EXISTS staging_verifier_membership_insert ON hirearchy.organization_memberships;
-CREATE POLICY staging_verifier_membership_insert
-  ON hirearchy.organization_memberships
-  FOR INSERT TO staging_verifier_owner
-  WITH CHECK (
-    principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-  );
-
-DROP POLICY IF EXISTS staging_verifier_membership_update_status ON hirearchy.organization_memberships;
-CREATE POLICY staging_verifier_membership_update_status
-  ON hirearchy.organization_memberships
-  FOR UPDATE TO staging_verifier_owner
-  USING (
-    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-  );
-
-ALTER TABLE hirearchy.organizations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE hirearchy.organizations FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS staging_verifier_organizations_select ON hirearchy.organizations;
-CREATE POLICY staging_verifier_organizations_select
-  ON hirearchy.organizations
-  FOR SELECT TO staging_verifier_owner
-  USING (
-    id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-    OR owner_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-    OR id IN (
-      SELECT m.organization_id FROM hirearchy.organization_memberships m
-      WHERE m.principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-    )
-  );
-
 DROP POLICY IF EXISTS staging_verifier_organizations_insert ON hirearchy.organizations;
-CREATE POLICY staging_verifier_organizations_insert
-  ON hirearchy.organizations
-  FOR INSERT TO staging_verifier_owner
-  WITH CHECK (
-    owner_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-  );
-
 DROP POLICY IF EXISTS staging_verifier_organizations_update ON hirearchy.organizations;
-CREATE POLICY staging_verifier_organizations_update
-  ON hirearchy.organizations
-  FOR UPDATE TO staging_verifier_owner
-  USING (
-    id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-    AND owner_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-  )
-  WITH CHECK (
-    id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-    AND owner_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
-  );
-
-ALTER TABLE hirearchy.organization_invitations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE hirearchy.organization_invitations FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS staging_verifier_invitations_all ON hirearchy.organization_invitations;
-CREATE POLICY staging_verifier_invitations_all
-  ON hirearchy.organization_invitations
-  FOR ALL TO staging_verifier_owner
-  USING (
-    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-    OR NULLIF(pg_catalog.current_setting('staging.organization_id', true), '') IS NULL
-  )
-  WITH CHECK (
-    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
-    OR NULLIF(pg_catalog.current_setting('staging.organization_id', true), '') IS NULL
-  );
-
-ALTER TABLE hirearchy.onboarding_request_receipts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE hirearchy.onboarding_request_receipts FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS staging_verifier_receipts_all ON hirearchy.onboarding_request_receipts;
-CREATE POLICY staging_verifier_receipts_all
-  ON hirearchy.onboarding_request_receipts
-  FOR ALL TO staging_verifier_owner
-  USING (
-    subject_id = NULLIF(pg_catalog.current_setting('staging.subject_id', true), '')::pg_catalog.uuid
-  )
-  WITH CHECK (
-    subject_id = NULLIF(pg_catalog.current_setting('staging.subject_id', true), '')::pg_catalog.uuid
-  );
 
 -- SELECT ... FOR SHARE needs UPDATE privilege; limit it to the caller's active
 -- membership or the exact active reviewer selected by a validated issue request.
@@ -1002,17 +900,694 @@ GRANT UPDATE (
   finalized_at, final_digest, updated_at
 ) ON hirearchy.evaluator_review_packets TO staging_verifier_owner;
 
-GRANT SELECT, INSERT ON hirearchy.organizations, hirearchy.application_principals TO staging_verifier_owner;
-GRANT UPDATE (display_name) ON hirearchy.organizations, hirearchy.application_principals TO staging_verifier_owner;
-GRANT INSERT, UPDATE (status, revoked_at) ON hirearchy.organization_memberships TO staging_verifier_owner;
 REVOKE ALL ON hirearchy.organization_invitations,
   hirearchy.onboarding_request_receipts,
   hirearchy.durable_onboarding_installation
   FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway,
        app_control_worker, staging_verifier_owner;
-GRANT SELECT, INSERT, UPDATE (revoked_at, accepted_at, accepted_by_principal_id)
-  ON hirearchy.organization_invitations TO staging_verifier_owner;
-GRANT SELECT, INSERT ON hirearchy.onboarding_request_receipts TO staging_verifier_owner;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_get_status(
+  p_subject_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_principal_id pg_catalog.uuid;
+  v_active_count pg_catalog.int4 := 0;
+BEGIN
+  IF p_subject_id IS NULL THEN
+    RAISE EXCEPTION 'Subject ID is required' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT id INTO v_principal_id
+  FROM hirearchy.application_principals
+  WHERE auth_user_id = p_subject_id;
+
+  IF v_principal_id IS NOT NULL THEN
+    SELECT count(*)::pg_catalog.int4 INTO v_active_count
+    FROM hirearchy.organization_memberships
+    WHERE principal_id = v_principal_id
+      AND status = 'active'
+      AND revoked_at IS NULL;
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'status', CASE WHEN v_active_count = 0 THEN 'needs_team' ELSE 'has_active_membership' END,
+    'hasCompletedOnboarding', (v_active_count > 0),
+    'isVerified', true,
+    'principalId', v_principal_id::pg_catalog.text,
+    'activeOrganizationCount', v_active_count,
+    'capabilities', pg_catalog.jsonb_build_object(
+      'selfServiceOnboardingEnabled', true,
+      'emailDeliveryEnabled', false
+    )
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_bootstrap_organization(
+  p_subject_id pg_catalog.uuid,
+  p_email pg_catalog.text,
+  p_display_name pg_catalog.text,
+  p_idempotency_key pg_catalog.text,
+  p_request_digest pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_confirmed boolean;
+  v_display_name pg_catalog.text;
+  v_receipt record;
+  v_principal_id pg_catalog.uuid;
+  v_org_id pg_catalog.uuid;
+  v_response pg_catalog.jsonb;
+BEGIN
+  IF p_subject_id IS NULL THEN
+    RAISE EXCEPTION 'Subject ID is required' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT (email_confirmed_at IS NOT NULL) INTO v_confirmed
+  FROM auth.users
+  WHERE id = p_subject_id;
+
+  IF NOT FOUND OR NOT v_confirmed THEN
+    RAISE EXCEPTION 'Email confirmation is required' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_display_name IS NULL THEN
+    RAISE EXCEPTION 'Organization display name is invalid' USING ERRCODE = '22023';
+  END IF;
+  v_display_name := trim(p_display_name);
+  IF length(v_display_name) < 1 OR length(v_display_name) > 120 OR v_display_name ~ '[\x00-\x1f\x7f-\x9f]' THEN
+    RAISE EXCEPTION 'Organization display name is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9._~-]{1,128}$' THEN
+    RAISE EXCEPTION 'Idempotency key is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT request_digest, response_payload INTO v_receipt
+  FROM hirearchy.onboarding_request_receipts
+  WHERE subject_id = p_subject_id
+    AND operation = 'organization.bootstrap'
+    AND idempotency_key = p_idempotency_key;
+
+  IF FOUND THEN
+    IF v_receipt.request_digest <> p_request_digest THEN
+      RAISE EXCEPTION 'Idempotency key already exists with different request parameters' USING ERRCODE = '22023';
+    END IF;
+    RETURN v_receipt.response_payload;
+  END IF;
+
+  SELECT id INTO v_principal_id
+  FROM hirearchy.application_principals
+  WHERE auth_user_id = p_subject_id;
+
+  IF v_principal_id IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM hirearchy.organization_memberships
+      WHERE principal_id = v_principal_id
+        AND status = 'active'
+        AND revoked_at IS NULL
+    ) THEN
+      RAISE EXCEPTION 'User already has an active organization membership' USING ERRCODE = '42501';
+    END IF;
+  ELSE
+    v_principal_id := pg_catalog.gen_random_uuid();
+    INSERT INTO hirearchy.application_principals (id, auth_user_id, display_name)
+    VALUES (v_principal_id, p_subject_id, NULL);
+  END IF;
+
+  v_org_id := pg_catalog.gen_random_uuid();
+  INSERT INTO hirearchy.organizations (id, owner_principal_id, display_name)
+  VALUES (v_org_id, v_principal_id, v_display_name);
+
+  INSERT INTO hirearchy.organization_memberships (
+    organization_id, principal_id, role, status, joined_at, version
+  ) VALUES (
+    v_org_id, v_principal_id, 'recruiter', 'active',
+    pg_catalog.clock_timestamp(), 1
+  );
+
+  v_response := pg_catalog.jsonb_build_object(
+    'organizationId', v_org_id::pg_catalog.text,
+    'displayName', v_display_name,
+    'role', 'recruiter',
+    'isOwner', true,
+    'emailDeliveryEnabled', false
+  );
+
+  INSERT INTO hirearchy.onboarding_request_receipts (
+    subject_id, operation, idempotency_key, request_digest, response_payload
+  ) VALUES (
+    p_subject_id, 'organization.bootstrap', p_idempotency_key, p_request_digest, v_response
+  );
+
+  RETURN v_response;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_create_invitation(
+  p_subject_id pg_catalog.uuid,
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_target_email pg_catalog.text,
+  p_expires_at_str pg_catalog.text,
+  p_idempotency_key pg_catalog.text,
+  p_request_digest pg_catalog.text,
+  p_token_hash pg_catalog.text,
+  p_token_ciphertext pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+  v_receipt record;
+  v_expires_at pg_catalog.timestamptz;
+  v_formatted_expiry pg_catalog.text;
+  v_invitation_id pg_catalog.uuid;
+  v_canonical_email pg_catalog.text;
+  v_response pg_catalog.jsonb;
+BEGIN
+  IF p_organization_id IS NULL OR p_caller_principal_id IS NULL THEN
+    RAISE EXCEPTION 'Staging request is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations
+  WHERE id = p_organization_id;
+
+  IF NOT FOUND OR v_owner_id <> p_caller_principal_id THEN
+    RAISE EXCEPTION 'Invitation creation requires owner permission' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_target_email IS NULL THEN
+    RAISE EXCEPTION 'Target email address is invalid' USING ERRCODE = '22023';
+  END IF;
+  v_canonical_email := lower(trim(p_target_email));
+  IF length(v_canonical_email) > 255 OR v_canonical_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' THEN
+    RAISE EXCEPTION 'Target email address is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9._~-]{1,128}$' THEN
+    RAISE EXCEPTION 'Idempotency key is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'Invitation token hash is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_token_ciphertext IS NULL OR length(p_token_ciphertext) < 1 OR length(p_token_ciphertext) > 4096 THEN
+    RAISE EXCEPTION 'Invitation ciphertext is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT request_digest, response_payload INTO v_receipt
+  FROM hirearchy.onboarding_request_receipts
+  WHERE subject_id = p_subject_id
+    AND operation = 'organization.invitation.create'
+    AND idempotency_key = p_idempotency_key;
+
+  IF FOUND THEN
+    IF v_receipt.request_digest <> p_request_digest THEN
+      RAISE EXCEPTION 'Idempotency key already exists with different request parameters' USING ERRCODE = '22023';
+    END IF;
+    RETURN v_receipt.response_payload;
+  END IF;
+
+  BEGIN
+    v_expires_at := p_expires_at_str::pg_catalog.timestamptz;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Invitation expiry must be in the future and at most 30 days' USING ERRCODE = '22023';
+  END;
+
+  IF v_expires_at <= pg_catalog.clock_timestamp() OR v_expires_at > pg_catalog.clock_timestamp() + INTERVAL '30 days' THEN
+    RAISE EXCEPTION 'Invitation expiry must be in the future and at most 30 days' USING ERRCODE = '22023';
+  END IF;
+
+  v_formatted_expiry := pg_catalog.to_char(v_expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"');
+  v_invitation_id := pg_catalog.gen_random_uuid();
+
+  INSERT INTO hirearchy.organization_invitations (
+    id, organization_id, inviter_principal_id, target_email, role,
+    token_hash, token_ciphertext, expires_at
+  ) VALUES (
+    v_invitation_id, p_organization_id, p_caller_principal_id, v_canonical_email,
+    'reviewer', p_token_hash, p_token_ciphertext, v_expires_at
+  );
+
+  v_response := pg_catalog.jsonb_build_object(
+    'invitationId', v_invitation_id::pg_catalog.text,
+    'organizationId', p_organization_id::pg_catalog.text,
+    'targetEmail', v_canonical_email,
+    'role', 'reviewer',
+    'expiresAt', v_formatted_expiry,
+    'emailDeliveryEnabled', false
+  );
+
+  INSERT INTO hirearchy.onboarding_request_receipts (
+    subject_id, operation, idempotency_key, request_digest, response_payload
+  ) VALUES (
+    p_subject_id, 'organization.invitation.create', p_idempotency_key, p_request_digest, v_response
+  );
+
+  RETURN v_response;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_list_invitations(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+  v_is_owner boolean;
+  v_invitations pg_catalog.jsonb;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.organization_memberships
+    WHERE organization_id = p_organization_id
+      AND principal_id = p_caller_principal_id
+      AND status = 'active'
+      AND revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations
+  WHERE id = p_organization_id;
+
+  v_is_owner := (v_owner_id = p_caller_principal_id);
+
+  SELECT pg_catalog.coalesce(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'id', id::pg_catalog.text,
+        'targetEmail', target_email,
+        'role', role,
+        'status', CASE
+          WHEN revoked_at IS NOT NULL THEN 'revoked'
+          WHEN accepted_at IS NOT NULL THEN 'accepted'
+          WHEN expires_at <= pg_catalog.clock_timestamp() THEN 'expired'
+          ELSE 'active'
+        END,
+        'expiresAt', pg_catalog.to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'createdAt', pg_catalog.to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'acceptedAt', CASE WHEN accepted_at IS NULL THEN NULL
+                           ELSE pg_catalog.to_char(accepted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'tokenCiphertext', CASE WHEN v_is_owner THEN token_ciphertext ELSE NULL END
+      ) ORDER BY created_at DESC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_invitations
+  FROM hirearchy.organization_invitations
+  WHERE organization_id = p_organization_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'organizationId', p_organization_id::pg_catalog.text,
+    'invitations', v_invitations
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_revoke_invitation(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_invitation_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+BEGIN
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations
+  WHERE id = p_organization_id;
+
+  IF NOT FOUND OR v_owner_id <> p_caller_principal_id THEN
+    RAISE EXCEPTION 'Invitation revocation requires owner permission' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE hirearchy.organization_invitations
+  SET revoked_at = pg_catalog.clock_timestamp()
+  WHERE organization_id = p_organization_id
+    AND id = p_invitation_id
+    AND revoked_at IS NULL;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'invitationId', p_invitation_id::pg_catalog.text,
+    'status', 'revoked'
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_accept_invitation(
+  p_subject_id pg_catalog.uuid,
+  p_email pg_catalog.text,
+  p_token_hash pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_confirmed boolean;
+  v_inv record;
+  v_principal_id pg_catalog.uuid;
+BEGIN
+  IF p_subject_id IS NULL THEN
+    RAISE EXCEPTION 'Subject ID is required' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT (email_confirmed_at IS NOT NULL) INTO v_confirmed
+  FROM auth.users
+  WHERE id = p_subject_id;
+
+  IF NOT FOUND OR NOT v_confirmed THEN
+    RAISE EXCEPTION 'Email confirmation is required' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'Invitation token hash is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT id, organization_id, target_email, role,
+         (revoked_at IS NOT NULL) AS is_revoked,
+         (expires_at <= pg_catalog.clock_timestamp()) AS is_expired,
+         (accepted_at IS NOT NULL) AS is_accepted,
+         accepted_by_principal_id
+  INTO v_inv
+  FROM hirearchy.organization_invitations
+  WHERE token_hash = p_token_hash
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invitation not found' USING ERRCODE = '22023';
+  END IF;
+  IF v_inv.is_revoked THEN
+    RAISE EXCEPTION 'Invitation has been revoked' USING ERRCODE = '42501';
+  END IF;
+  IF v_inv.is_expired THEN
+    RAISE EXCEPTION 'Invitation has expired' USING ERRCODE = '42501';
+  END IF;
+  IF lower(trim(p_email)) <> lower(trim(v_inv.target_email)) THEN
+    RAISE EXCEPTION 'Invitation is bound to a different email address' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT id INTO v_principal_id
+  FROM hirearchy.application_principals
+  WHERE auth_user_id = p_subject_id;
+
+  IF v_inv.is_accepted THEN
+    IF v_principal_id IS NOT NULL AND v_inv.accepted_by_principal_id = v_principal_id THEN
+      IF EXISTS (
+        SELECT 1 FROM hirearchy.organization_memberships
+        WHERE organization_id = v_inv.organization_id
+          AND principal_id = v_principal_id
+          AND status = 'active'
+          AND revoked_at IS NULL
+      ) THEN
+        RETURN pg_catalog.jsonb_build_object(
+          'organizationId', v_inv.organization_id::pg_catalog.text,
+          'role', 'reviewer',
+          'status', 'accepted'
+        );
+      END IF;
+    END IF;
+    RAISE EXCEPTION 'Invitation has already been accepted' USING ERRCODE = '42501';
+  END IF;
+
+  IF v_principal_id IS NULL THEN
+    v_principal_id := pg_catalog.gen_random_uuid();
+    INSERT INTO hirearchy.application_principals (id, auth_user_id, display_name)
+    VALUES (v_principal_id, p_subject_id, NULL);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM hirearchy.organization_memberships
+    WHERE organization_id = v_inv.organization_id
+      AND principal_id = v_principal_id
+  ) THEN
+    RAISE EXCEPTION 'User already has a membership in this organization' USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO hirearchy.organization_memberships (
+    organization_id, principal_id, role, status, joined_at, version
+  ) VALUES (
+    v_inv.organization_id, v_principal_id, 'reviewer', 'active',
+    pg_catalog.clock_timestamp(), 1
+  );
+
+  UPDATE hirearchy.organization_invitations
+  SET accepted_at = pg_catalog.clock_timestamp(),
+      accepted_by_principal_id = v_principal_id
+  WHERE id = v_inv.id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'organizationId', v_inv.organization_id::pg_catalog.text,
+    'role', 'reviewer',
+    'status', 'accepted'
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_list_members(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_members pg_catalog.jsonb;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.organization_memberships
+    WHERE organization_id = p_organization_id
+      AND principal_id = p_caller_principal_id
+      AND status = 'active'
+      AND revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT pg_catalog.coalesce(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'principalId', m.principal_id::pg_catalog.text,
+        'displayName', p.display_name,
+        'email', u.email,
+        'role', m.role,
+        'status', m.status,
+        'joinedAt', pg_catalog.to_char(m.joined_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'isOwner', (o.owner_principal_id = m.principal_id)
+      ) ORDER BY (o.owner_principal_id = m.principal_id) DESC, m.joined_at ASC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_members
+  FROM hirearchy.organization_memberships m
+  JOIN hirearchy.application_principals p ON p.id = m.principal_id
+  LEFT JOIN auth.users u ON u.id = p.auth_user_id
+  JOIN hirearchy.organizations o ON o.id = m.organization_id
+  WHERE m.organization_id = p_organization_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'organizationId', p_organization_id::pg_catalog.text,
+    'members', v_members
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_remove_member(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_target_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+BEGIN
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations
+  WHERE id = p_organization_id;
+
+  IF NOT FOUND OR v_owner_id <> p_caller_principal_id THEN
+    RAISE EXCEPTION 'Member removal requires owner permission' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_target_principal_id = p_caller_principal_id OR p_target_principal_id = v_owner_id THEN
+    RAISE EXCEPTION 'Cannot remove or demote the organization owner' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE hirearchy.organization_memberships
+  SET status = 'revoked', revoked_at = pg_catalog.clock_timestamp()
+  WHERE organization_id = p_organization_id
+    AND principal_id = p_target_principal_id
+    AND status = 'active';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Active membership not found for target principal' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'organizationId', p_organization_id::pg_catalog.text,
+    'principalId', p_target_principal_id::pg_catalog.text,
+    'status', 'revoked'
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_update_organization(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_display_name pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+  v_display_name pg_catalog.text;
+BEGIN
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations
+  WHERE id = p_organization_id;
+
+  IF NOT FOUND OR v_owner_id <> p_caller_principal_id THEN
+    RAISE EXCEPTION 'Organization update requires owner permission' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_display_name IS NULL THEN
+    RAISE EXCEPTION 'Organization display name is invalid' USING ERRCODE = '22023';
+  END IF;
+  v_display_name := trim(p_display_name);
+  IF length(v_display_name) < 1 OR length(v_display_name) > 120 OR v_display_name ~ '[\x00-\x1f\x7f-\x9f]' THEN
+    RAISE EXCEPTION 'Organization display name is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE hirearchy.organizations
+  SET display_name = v_display_name
+  WHERE id = p_organization_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'organizationId', p_organization_id::pg_catalog.text,
+    'displayName', v_display_name
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_get_profile(
+  p_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_profile pg_catalog.jsonb;
+BEGIN
+  SELECT pg_catalog.jsonb_build_object(
+    'principalId', p.id::pg_catalog.text,
+    'displayName', p.display_name,
+    'email', u.email
+  ) INTO v_profile
+  FROM hirearchy.application_principals p
+  JOIN auth.users u ON u.id = p.auth_user_id
+  WHERE p.id = p_principal_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Account profile unavailable' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN v_profile;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_update_profile(
+  p_principal_id pg_catalog.uuid,
+  p_display_name pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
+AS $function$
+DECLARE
+  v_display_name pg_catalog.text;
+BEGIN
+  IF p_display_name IS NULL THEN
+    RAISE EXCEPTION 'Profile display name is invalid' USING ERRCODE = '22023';
+  END IF;
+  v_display_name := trim(p_display_name);
+  IF length(v_display_name) < 1 OR length(v_display_name) > 120 OR v_display_name ~ '[\x00-\x1f\x7f-\x9f]' THEN
+    RAISE EXCEPTION 'Profile display name is invalid' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE hirearchy.application_principals
+  SET display_name = v_display_name
+  WHERE id = p_principal_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Account profile unavailable' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'principalId', p_principal_id::pg_catalog.text,
+    'displayName', v_display_name
+  );
+END
+$function$;
+
+GRANT EXECUTE ON FUNCTION staging.onboarding_get_status(pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_bootstrap_organization(pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_create_invitation(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_list_invitations(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_revoke_invitation(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_accept_invitation(pg_catalog.uuid, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_list_members(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_remove_member(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_update_organization(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_get_profile(pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_update_profile(pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+
+REVOKE ALL ON FUNCTION staging.onboarding_get_status(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_bootstrap_organization(pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_create_invitation(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_list_invitations(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_revoke_invitation(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_accept_invitation(pg_catalog.uuid, pg_catalog.text, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_list_members(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_remove_member(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_update_organization(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_get_profile(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_update_profile(pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 
 
 CREATE OR REPLACE FUNCTION staging.dispatch(p_payload pg_catalog.bytea, p_signature pg_catalog.bytea)
@@ -2950,126 +3525,37 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
         return {'reviewPacket': staging_review_packet(str(packet['id']))}
 
     if operation == 'organization.update':
-        owner_check = run(
-            """
-            SELECT 1 FROM hirearchy.organizations
-            WHERE id = $1::pg_catalog.uuid AND owner_principal_id = $2::pg_catalog.uuid
-            """,
-            ['uuid', 'uuid'],
-            [organization_id, principal_id],
-        )
-        if not owner_check:
-            error('Organization update requires owner permission', '42501')
         raw_name = args.get('displayName')
         if not isinstance(raw_name, str):
             error('Organization display name is invalid', '22023')
         display_name = raw_name.strip()
         if len(display_name) < 1 or len(display_name) > 120 or re.search(r'[\x00-\x1f\x7f-\x9f]', display_name):
             error('Organization display name is invalid', '22023')
-        run(
-            """
-            UPDATE hirearchy.organizations
-            SET display_name = $1
-            WHERE id = $2::pg_catalog.uuid
-            """,
-            ['text', 'uuid'],
-            [display_name, organization_id],
+        rows = run(
+            "SELECT staging.onboarding_update_organization($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3) AS result",
+            ['uuid', 'uuid', 'text'],
+            [organization_id, principal_id, display_name],
         )
-        return {
-            'organizationId': organization_id,
-            'displayName': display_name,
-        }
+        return safe_json_value(rows[0]['result'])
 
     if operation == 'organization.members.list':
-        set_scope(
-            subject_id, auth_session_id, principal_id, organization_id,
-            list_organization_members='true',
-        )
         rows = run(
-            """
-            SELECT m.principal_id::pg_catalog.text AS principal_id,
-                   p.display_name,
-                   u.email,
-                   m.role,
-                   m.status,
-                   pg_catalog.to_char(m.joined_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS joined_at,
-                   (o.owner_principal_id = m.principal_id) AS is_owner
-            FROM hirearchy.organization_memberships m
-            JOIN hirearchy.application_principals p ON p.id = m.principal_id
-            LEFT JOIN auth.users u ON u.id = p.auth_user_id
-            JOIN hirearchy.organizations o ON o.id = m.organization_id
-            WHERE m.organization_id = $1::pg_catalog.uuid
-            ORDER BY is_owner DESC, m.joined_at ASC
-            """,
-            ['uuid'],
-            [organization_id],
-        )
-        return {
-            'organizationId': organization_id,
-            'members': [
-                {
-                    'principalId': r['principal_id'],
-                    'displayName': r['display_name'],
-                    'email': r['email'],
-                    'role': r['role'],
-                    'status': r['status'],
-                    'joinedAt': r['joined_at'],
-                    'isOwner': bool(r['is_owner']),
-                }
-                for r in rows
-            ],
-        }
-
-    if operation == 'organization.member.remove':
-        owner_check = run(
-            """
-            SELECT owner_principal_id::pg_catalog.text AS owner_principal_id
-            FROM hirearchy.organizations
-            WHERE id = $1::pg_catalog.uuid
-            """,
-            ['uuid'],
-            [organization_id],
-        )
-        if not owner_check or owner_check[0]['owner_principal_id'] != principal_id:
-            error('Member removal requires owner permission', '42501')
-        target_principal_id = require_uuid(args.get('targetPrincipalId'), 'target principal ID')
-        if target_principal_id == principal_id or target_principal_id == owner_check[0]['owner_principal_id']:
-            error('Cannot remove or demote the organization owner', '42501')
-        set_scope(
-            subject_id, auth_session_id, principal_id, organization_id,
-            list_organization_members='true',
-        )
-        updated = run(
-            """
-            UPDATE hirearchy.organization_memberships
-            SET status = 'revoked', revoked_at = pg_catalog.clock_timestamp()
-            WHERE organization_id = $1::pg_catalog.uuid
-              AND principal_id = $2::pg_catalog.uuid
-              AND status = 'active'
-            RETURNING principal_id::pg_catalog.text AS principal_id
-            """,
-            ['uuid', 'uuid'],
-            [organization_id, target_principal_id],
-        )
-        if not updated:
-            error('Active membership not found for target principal', '22023')
-        return {
-            'organizationId': organization_id,
-            'principalId': target_principal_id,
-            'status': 'revoked',
-        }
-
-    if operation == 'organization.invitation.create':
-        owner_check = run(
-            """
-            SELECT 1 FROM hirearchy.organizations
-            WHERE id = $1::pg_catalog.uuid AND owner_principal_id = $2::pg_catalog.uuid
-            """,
+            "SELECT staging.onboarding_list_members($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS result",
             ['uuid', 'uuid'],
             [organization_id, principal_id],
         )
-        if not owner_check:
-            error('Invitation creation requires owner permission', '42501')
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'organization.member.remove':
+        target_principal_id = require_uuid(args.get('targetPrincipalId'), 'target principal ID')
+        rows = run(
+            "SELECT staging.onboarding_remove_member($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS result",
+            ['uuid', 'uuid', 'uuid'],
+            [organization_id, principal_id, target_principal_id],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'organization.invitation.create':
         target_email = args.get('targetEmail')
         expires_at_str = args.get('expiresAt')
         idempotency_key = args.get('idempotencyKey')
@@ -3092,184 +3578,55 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             error('Invitation token hash is invalid', '22023')
         if len(token_ciphertext) < 1 or len(token_ciphertext) > 4096:
             error('Invitation ciphertext is invalid', '22023')
-        
+
         canonical_request = json.dumps({
             'organizationId': organization_id,
             'targetEmail': canonical_email,
             'expiresAt': expires_at_str,
         }, sort_keys=True, separators=(',', ':'))
         request_digest = sha256_hex(canonical_request)
-        
-        receipt_rows = run(
+
+        rows = run(
             """
-            SELECT request_digest, response_payload
-            FROM hirearchy.onboarding_request_receipts
-            WHERE subject_id = $1::pg_catalog.uuid
-              AND operation = 'organization.invitation.create'
-              AND idempotency_key = $2
-            """,
-            ['uuid', 'text'],
-            [subject_id, idempotency_key],
-        )
-        if receipt_rows:
-            receipt = receipt_rows[0]
-            if receipt['request_digest'] != request_digest:
-                error('Idempotency key already exists with different request parameters', '22023')
-            return safe_json_value(receipt['response_payload'])
-        
-        expiry_rows = run(
-            """
-            SELECT ($1::pg_catalog.timestamptz > pg_catalog.clock_timestamp()) AS is_future,
-                   ($1::pg_catalog.timestamptz <= pg_catalog.clock_timestamp() + INTERVAL '30 days') AS within_30_days,
-                   pg_catalog.to_char($1::pg_catalog.timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS formatted_expiry
-            """,
-            ['text'],
-            [expires_at_str],
-        )
-        if not expiry_rows or not expiry_rows[0]['is_future'] or not expiry_rows[0]['within_30_days']:
-            error('Invitation expiry must be in the future and at most 30 days', '22023')
-        formatted_expiry = expiry_rows[0]['formatted_expiry']
-        
-        invitation_id = str(uuid.uuid4())
-        run(
-            """
-            INSERT INTO hirearchy.organization_invitations (
-              id, organization_id, inviter_principal_id, target_email, role,
-              token_hash, token_ciphertext, expires_at
-            ) VALUES (
+            SELECT staging.onboarding_create_invitation(
               $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid,
-              $4, 'reviewer', $5, $6, $7::pg_catalog.timestamptz
-            )
+              $4, $5, $6, $7, $8, $9
+            ) AS result
             """,
-            ['uuid', 'uuid', 'uuid', 'text', 'text', 'text', 'timestamptz'],
-            [invitation_id, organization_id, principal_id, canonical_email, token_hash, token_ciphertext, expires_at_str],
+            ['uuid', 'uuid', 'uuid', 'text', 'text', 'text', 'text', 'text', 'text'],
+            [subject_id, organization_id, principal_id, canonical_email, expires_at_str, idempotency_key, request_digest, token_hash, token_ciphertext],
         )
-        response = {
-            'invitationId': invitation_id,
-            'organizationId': organization_id,
-            'targetEmail': canonical_email,
-            'role': 'reviewer',
-            'expiresAt': formatted_expiry,
-            'emailDeliveryEnabled': False,
-        }
-        run(
-            """
-            INSERT INTO hirearchy.onboarding_request_receipts (
-              subject_id, operation, idempotency_key, request_digest, response_payload
-            ) VALUES (
-              $1::pg_catalog.uuid, 'organization.invitation.create', $2, $3, $4::pg_catalog.jsonb
-            )
-            """,
-            ['uuid', 'text', 'text', 'text'],
-            [subject_id, idempotency_key, request_digest, json.dumps(response)],
-        )
-        return response
+        return safe_json_value(rows[0]['result'])
 
     if operation == 'organization.invitation.list':
         rows = run(
-            """
-            SELECT id::pg_catalog.text AS id,
-                   target_email, role,
-                   CASE
-                     WHEN revoked_at IS NOT NULL THEN 'revoked'
-                     WHEN accepted_at IS NOT NULL THEN 'accepted'
-                     WHEN expires_at <= pg_catalog.clock_timestamp() THEN 'expired'
-                     ELSE 'active'
-                   END AS status,
-                   pg_catalog.to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS expires_at,
-                   pg_catalog.to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
-                   CASE WHEN accepted_at IS NULL THEN NULL
-                        ELSE pg_catalog.to_char(accepted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END AS accepted_at,
-                   token_ciphertext
-            FROM hirearchy.organization_invitations
-            WHERE organization_id = $1::pg_catalog.uuid
-            ORDER BY created_at DESC
-            """,
-            ['uuid'],
-            [organization_id],
-        )
-        owner_check = run(
-            """
-            SELECT 1 FROM hirearchy.organizations
-            WHERE id = $1::pg_catalog.uuid AND owner_principal_id = $2::pg_catalog.uuid
-            """,
+            "SELECT staging.onboarding_list_invitations($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS result",
             ['uuid', 'uuid'],
             [organization_id, principal_id],
         )
-        is_owner = bool(owner_check)
-        return {
-            'organizationId': organization_id,
-            'invitations': [
-                {
-                    'id': r['id'],
-                    'targetEmail': r['target_email'],
-                    'role': r['role'],
-                    'status': r['status'],
-                    'expiresAt': r['expires_at'],
-                    'createdAt': r['created_at'],
-                    'acceptedAt': r['accepted_at'],
-                    'tokenCiphertext': r['token_ciphertext'] if is_owner else None,
-                }
-                for r in rows
-            ],
-        }
+        return safe_json_value(rows[0]['result'])
 
     if operation == 'organization.invitation.revoke':
-        owner_check = run(
-            """
-            SELECT 1 FROM hirearchy.organizations
-            WHERE id = $1::pg_catalog.uuid AND owner_principal_id = $2::pg_catalog.uuid
-            """,
-            ['uuid', 'uuid'],
-            [organization_id, principal_id],
-        )
-        if not owner_check:
-            error('Invitation revocation requires owner permission', '42501')
         invitation_id = require_uuid(args.get('invitationId'), 'invitation ID')
-        updated = run(
-            """
-            UPDATE hirearchy.organization_invitations
-            SET revoked_at = pg_catalog.clock_timestamp()
-            WHERE organization_id = $1::pg_catalog.uuid
-              AND id = $2::pg_catalog.uuid
-              AND revoked_at IS NULL
-            RETURNING id::pg_catalog.text AS id
-            """,
-            ['uuid', 'uuid'],
-            [organization_id, invitation_id],
+        rows = run(
+            "SELECT staging.onboarding_revoke_invitation($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS result",
+            ['uuid', 'uuid', 'uuid'],
+            [organization_id, principal_id, invitation_id],
         )
-        return {
-            'invitationId': invitation_id,
-            'status': 'revoked',
-        }
+        return safe_json_value(rows[0]['result'])
 
     error('Staging operation is unavailable', '22023')
 
 def dispatch_pre_principal(op, args, subject_id, auth_session_id, principal_id, email, auth_exp, proof_exp):
     if op == 'onboarding.status':
-        active_count = 0
-        if principal_id:
-            rows = run(
-                """
-                SELECT count(*)::pg_catalog.int4 AS count
-                FROM hirearchy.organization_memberships
-                WHERE principal_id = $1::pg_catalog.uuid
-                  AND status = 'active'
-                  AND revoked_at IS NULL
-                """,
-                ['uuid'],
-                [principal_id],
-            )
-            active_count = rows[0]['count'] if rows else 0
-        status = 'needs_team' if active_count == 0 else 'has_active_membership'
-        return {
-            'status': status,
-            'email': email,
-            'capabilities': {
-                'selfServiceOnboardingEnabled': True,
-                'emailDeliveryEnabled': False,
-            },
-        }
+        rows = run(
+            "SELECT staging.onboarding_get_status($1::pg_catalog.uuid) AS result",
+            ['uuid'],
+            [subject_id],
+        )
+        res = safe_json_value(rows[0]['result'])
+        res['email'] = email
+        return res
 
     if op == 'organization.bootstrap':
         raw_name = args.get('displayName')
@@ -3284,219 +3641,36 @@ def dispatch_pre_principal(op, args, subject_id, auth_session_id, principal_id, 
         
         canonical_request = json.dumps({'displayName': display_name}, sort_keys=True, separators=(',', ':'))
         request_digest = sha256_hex(canonical_request)
-        
-        receipt_rows = run(
-            """
-            SELECT request_digest, response_payload
-            FROM hirearchy.onboarding_request_receipts
-            WHERE subject_id = $1::pg_catalog.uuid
-              AND operation = 'organization.bootstrap'
-              AND idempotency_key = $2
-            """,
-            ['uuid', 'text'],
-            [subject_id, idempotency_key],
+
+        rows = run(
+            "SELECT staging.onboarding_bootstrap_organization($1::pg_catalog.uuid, $2, $3, $4, $5) AS result",
+            ['uuid', 'text', 'text', 'text', 'text'],
+            [subject_id, email, display_name, idempotency_key, request_digest],
         )
-        if receipt_rows:
-            receipt = receipt_rows[0]
-            if receipt['request_digest'] != request_digest:
-                error('Idempotency key already exists with different request parameters', '22023')
-            return safe_json_value(receipt['response_payload'])
-        
-        if principal_id:
-            active_mem = run(
-                """
-                SELECT 1
-                FROM hirearchy.organization_memberships
-                WHERE principal_id = $1::pg_catalog.uuid
-                  AND status = 'active'
-                  AND revoked_at IS NULL
-                LIMIT 1
-                """,
-                ['uuid'],
-                [principal_id],
-            )
-            if active_mem:
-                error('User already has an active organization membership', '42501')
-        
-        if not principal_id:
-            principal_id = str(uuid.uuid4())
-            run(
-                """
-                INSERT INTO hirearchy.application_principals (id, auth_user_id)
-                VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid)
-                """,
-                ['uuid', 'uuid'],
-                [principal_id, subject_id],
-            )
-            set_scope(subject_id, auth_session_id, principal_id)
-        
-        org_id = str(uuid.uuid4())
-        run(
-            """
-            INSERT INTO hirearchy.organizations (id, owner_principal_id, display_name)
-            VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3)
-            """,
-            ['uuid', 'uuid', 'text'],
-            [org_id, principal_id, display_name],
-        )
-        run(
-            """
-            INSERT INTO hirearchy.organization_memberships (
-              organization_id, principal_id, role, status, joined_at, version
-            ) VALUES (
-              $1::pg_catalog.uuid, $2::pg_catalog.uuid, 'recruiter', 'active',
-              pg_catalog.clock_timestamp(), 1
-            )
-            """,
-            ['uuid', 'uuid'],
-            [org_id, principal_id],
-        )
-        response = {
-            'organizationId': org_id,
-            'displayName': display_name,
-            'role': 'recruiter',
-            'isOwner': True,
-            'emailDeliveryEnabled': False,
-        }
-        run(
-            """
-            INSERT INTO hirearchy.onboarding_request_receipts (
-              subject_id, operation, idempotency_key, request_digest, response_payload
-            ) VALUES (
-              $1::pg_catalog.uuid, 'organization.bootstrap', $2, $3, $4::pg_catalog.jsonb
-            )
-            """,
-            ['uuid', 'text', 'text', 'text'],
-            [subject_id, idempotency_key, request_digest, json.dumps(response)],
-        )
-        return response
+        return safe_json_value(rows[0]['result'])
 
     if op == 'organization.invitation.accept':
         token_hash = args.get('invitationTokenHash')
         if not isinstance(token_hash, str) or not re.fullmatch(r'[0-9a-f]{64}', token_hash):
             error('Invitation token hash is invalid', '22023')
-        inv_rows = run(
-            """
-            SELECT id::pg_catalog.text AS id,
-                   organization_id::pg_catalog.text AS organization_id,
-                   target_email, role,
-                   (revoked_at IS NOT NULL) AS is_revoked,
-                   (expires_at <= pg_catalog.clock_timestamp()) AS is_expired,
-                   (accepted_at IS NOT NULL) AS is_accepted,
-                   accepted_by_principal_id::pg_catalog.text AS accepted_by_principal_id
-            FROM hirearchy.organization_invitations
-            WHERE token_hash = $1
-            FOR UPDATE
-            """,
-            ['text'],
-            [token_hash],
+        rows = run(
+            "SELECT staging.onboarding_accept_invitation($1::pg_catalog.uuid, $2, $3) AS result",
+            ['uuid', 'text', 'text'],
+            [subject_id, email, token_hash],
         )
-        if not inv_rows:
-            error('Invitation not found', '22023')
-        inv = inv_rows[0]
-        if inv['is_revoked']:
-            error('Invitation has been revoked', '42501')
-        if inv['is_expired']:
-            error('Invitation has expired', '42501')
-        if email.strip().lower() != inv['target_email'].strip().lower():
-            error('Invitation is bound to a different email address', '42501')
-        if inv['is_accepted']:
-            if principal_id and inv['accepted_by_principal_id'] == principal_id:
-                mem = run(
-                    """
-                    SELECT role FROM hirearchy.organization_memberships
-                    WHERE organization_id = $1::pg_catalog.uuid
-                      AND principal_id = $2::pg_catalog.uuid
-                      AND status = 'active'
-                      AND revoked_at IS NULL
-                    """,
-                    ['uuid', 'uuid'],
-                    [inv['organization_id'], principal_id],
-                )
-                if mem:
-                    return {
-                        'organizationId': inv['organization_id'],
-                        'role': 'reviewer',
-                        'status': 'accepted',
-                    }
-            error('Invitation has already been accepted', '42501')
-        
-        if not principal_id:
-            principal_id = str(uuid.uuid4())
-            run(
-                """
-                INSERT INTO hirearchy.application_principals (id, auth_user_id)
-                VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid)
-                """,
-                ['uuid', 'uuid'],
-                [principal_id, subject_id],
-            )
-            set_scope(subject_id, auth_session_id, principal_id)
-        
-        existing_mem = run(
-            """
-            SELECT role, status FROM hirearchy.organization_memberships
-            WHERE organization_id = $1::pg_catalog.uuid
-              AND principal_id = $2::pg_catalog.uuid
-            """,
-            ['uuid', 'uuid'],
-            [inv['organization_id'], principal_id],
-        )
-        if existing_mem:
-            error('User already has a membership in this organization', '42501')
-        
-        run(
-            """
-            INSERT INTO hirearchy.organization_memberships (
-              organization_id, principal_id, role, status, joined_at, version
-            ) VALUES (
-              $1::pg_catalog.uuid, $2::pg_catalog.uuid, 'reviewer', 'active',
-              pg_catalog.clock_timestamp(), 1
-            )
-            """,
-            ['uuid', 'uuid'],
-            [inv['organization_id'], principal_id],
-        )
-        run(
-            """
-            UPDATE hirearchy.organization_invitations
-            SET accepted_at = pg_catalog.clock_timestamp(),
-                accepted_by_principal_id = $1::pg_catalog.uuid
-            WHERE id = $2::pg_catalog.uuid
-            """,
-            ['uuid', 'uuid'],
-            [principal_id, inv['id']],
-        )
-        return {
-            'organizationId': inv['organization_id'],
-            'role': 'reviewer',
-            'status': 'accepted',
-        }
+        return safe_json_value(rows[0]['result'])
 
     error('Staging operation is unavailable', '22023')
 
 def dispatch_account(op, args, subject_id, auth_session_id, principal_id):
     if op == 'account.profile.get':
         rows = run(
-            """
-            SELECT p.id::pg_catalog.text AS principal_id,
-                   p.display_name,
-                   u.email
-            FROM hirearchy.application_principals p
-            JOIN auth.users u ON u.id = p.auth_user_id
-            WHERE p.id = $1::pg_catalog.uuid
-            """,
+            "SELECT staging.onboarding_get_profile($1::pg_catalog.uuid) AS result",
             ['uuid'],
             [principal_id],
         )
-        if not rows:
-            error('Account profile unavailable', '22023')
-        row = rows[0]
-        return {
-            'principalId': row['principal_id'],
-            'displayName': row['display_name'],
-            'email': row['email'],
-        }
+        return safe_json_value(rows[0]['result'])
+
     if op == 'account.profile.update':
         raw_name = args.get('displayName')
         if not isinstance(raw_name, str):
@@ -3504,19 +3678,12 @@ def dispatch_account(op, args, subject_id, auth_session_id, principal_id):
         display_name = raw_name.strip()
         if len(display_name) < 1 or len(display_name) > 120 or re.search(r'[\x00-\x1f\x7f-\x9f]', display_name):
             error('Profile display name is invalid', '22023')
-        run(
-            """
-            UPDATE hirearchy.application_principals
-            SET display_name = $1
-            WHERE id = $2::pg_catalog.uuid
-            """,
-            ['text', 'uuid'],
-            [display_name, principal_id],
+        rows = run(
+            "SELECT staging.onboarding_update_profile($1::pg_catalog.uuid, $2) AS result",
+            ['uuid', 'text'],
+            [principal_id, display_name],
         )
-        return {
-            'principalId': principal_id,
-            'displayName': display_name,
-        }
+        return safe_json_value(rows[0]['result'])
 
     error('Staging operation is unavailable', '22023')
 
@@ -3811,5 +3978,60 @@ BEGIN
   END IF;
 END
 $durable_candidate_marker$;
+
+DO $durable_onboarding_marker$
+DECLARE
+  installed_migration record;
+  existing_marker record;
+  marker_table record;
+BEGIN
+  SELECT checksum, applied_by
+    INTO installed_migration
+    FROM hirearchy.schema_migrations
+   WHERE version = '0017';
+  IF NOT FOUND
+     OR installed_migration.applied_by <> 'hirearchy_migrator'
+     OR installed_migration.checksum !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'Durable onboarding lifecycle migration is not verified';
+  END IF;
+
+  SELECT role.rolname AS owner,
+         relation.relrowsecurity,
+         relation.relforcerowsecurity
+    INTO marker_table
+    FROM pg_catalog.pg_class AS relation
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = relation.relnamespace
+    JOIN pg_catalog.pg_roles AS role ON role.oid = relation.relowner
+   WHERE namespace.nspname = 'hirearchy'
+     AND relation.relname = 'durable_onboarding_installation'
+     AND relation.relkind = 'r';
+  IF NOT FOUND
+     OR marker_table.owner IS DISTINCT FROM 'hirearchy_migrator'
+     OR marker_table.relrowsecurity IS DISTINCT FROM true
+     OR marker_table.relforcerowsecurity IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Durable onboarding installation marker is not protected';
+  END IF;
+
+  INSERT INTO hirearchy.durable_onboarding_installation (
+    marker_key, marker_version, migration_version, migration_checksum, installed_by
+  ) VALUES (
+    'durable-onboarding-v1', 1, '0017',
+    installed_migration.checksum, current_user
+  )
+  ON CONFLICT (marker_key) DO NOTHING;
+
+  SELECT marker_version, migration_version, migration_checksum
+    INTO existing_marker
+    FROM hirearchy.durable_onboarding_installation
+   WHERE marker_key = 'durable-onboarding-v1';
+  IF NOT FOUND
+     OR existing_marker.marker_version <> 1
+     OR existing_marker.migration_version <> '0017'
+     OR existing_marker.migration_checksum <> installed_migration.checksum THEN
+    RAISE EXCEPTION 'Durable onboarding lifecycle installation marker is inconsistent';
+  END IF;
+END
+$durable_onboarding_marker$;
 
 COMMIT;
