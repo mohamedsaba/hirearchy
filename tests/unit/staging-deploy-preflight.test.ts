@@ -49,6 +49,7 @@ function validEnvironment(): Record<string, string> {
     STAGING_AUTH_URL: 'http://127.0.0.1:59998',
     STAGING_AUTH_ISSUER: 'https://alpha.example.test',
     STAGING_AUTH_AUDIENCE: 'authenticated',
+    STAGING_PUBLIC_ORIGIN: 'https://alpha.example.test:58443',
   };
 }
 
@@ -73,6 +74,7 @@ describe('single-team staging preflight', () => {
     environment.STAGING_PROOF_PRIVATE_KEY = 'not-a-key';
     environment.HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY = 'not-a-key';
     environment.HIREARCHY_RELEASE_SHA = 'c'.repeat(40);
+    environment.STAGING_PUBLIC_ORIGIN = 'https://alpha.example.test';
 
     const checks = runPreflightChecks(environment, testEvidence);
     const failures = checks.filter((check) => !check.passed).map((c) => c.name);
@@ -80,6 +82,9 @@ describe('single-team staging preflight', () => {
     expect(failures).toContain('STAGING_DATABASE_URL loopback URL');
     expect(failures).toContain('Staging edge allowlist is restricted');
     expect(failures).toContain('Trusted proxy hops stay disabled');
+    expect(failures).toContain(
+      'STAGING_PUBLIC_ORIGIN matches the HTTPS proxy origin',
+    );
     expect(failures).toContain(
       'STAGING_PROOF_PRIVATE_KEY is canonical Ed25519 PKCS#8',
     );
@@ -89,6 +94,17 @@ describe('single-team staging preflight', () => {
     expect(failures).toContain(
       'Release provenance matches clean checked-out commit',
     );
+  });
+
+  it('accepts the standard production HTTPS origin without a port suffix', () => {
+    const environment = validEnvironment();
+    environment.CADDY_HTTP_PORT = '80';
+    environment.CADDY_HTTPS_PORT = '443';
+    environment.STAGING_PUBLIC_ORIGIN = 'https://alpha.example.test';
+
+    const checks = runPreflightChecks(environment, testEvidence);
+
+    expect(checks.every((check) => check.passed)).toBe(true);
   });
 
   it('preflights public preview without PostgreSQL, GoTrue, or proof secrets', () => {

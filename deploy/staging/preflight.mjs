@@ -84,6 +84,25 @@ function validateHttpsOrigin(value, name) {
   }
 }
 
+function validStagingPublicOrigin(value, hostname, httpsPort) {
+  try {
+    const url = new URL(value ?? '');
+    const expectedPort = Number(httpsPort) === 443 ? '' : String(httpsPort);
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === hostname &&
+      url.port === expectedPort &&
+      url.pathname === '/' &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
 function portsAreValid(env, names) {
   const ports = names.map((name) => Number(env[name]));
   return (
@@ -319,6 +338,19 @@ export function runPreflightChecks(env = process.env, evidence = {}) {
     env.STAGING_AUTH_AUDIENCE === 'authenticated'
       ? 'GoTrue audience matches the application'
       : 'Must equal authenticated',
+  );
+  const stagingPublicOriginValid = validStagingPublicOrigin(
+    env.STAGING_PUBLIC_ORIGIN,
+    env.STAGING_HOSTNAME ?? '',
+    env.CADDY_HTTPS_PORT,
+  );
+  add(
+    results,
+    'STAGING_PUBLIC_ORIGIN matches the HTTPS proxy origin',
+    stagingPublicOriginValid,
+    stagingPublicOriginValid
+      ? 'Candidate links and browser Origin checks match Caddy TLS'
+      : 'Set the HTTPS origin for STAGING_HOSTNAME and include the CADDY_HTTPS_PORT when it is nonstandard',
   );
 
   const jwtSecret = env.GOTRUE_JWT_SECRET ?? '';
