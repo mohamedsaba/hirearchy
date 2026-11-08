@@ -1,0 +1,11 @@
+import {
+  stagingSignupGet,
+  stagingSignupPost,
+} from '../../../src/staging/browser';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
+
+export const GET = stagingSignupGet;
+export const POST = stagingSignupPost;

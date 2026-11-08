@@ -7,6 +7,12 @@ import {
 
 const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
   /^\/r23\/login$/,
+  /^\/r23\/signup$/,
+  /^\/r23\/verify-email$/,
+  /^\/r23\/recover$/,
+  /^\/r23\/reset-password$/,
+  /^\/r23\/invitations\/accept$/,
+  /^\/r23\/organizations\/[^/]+\/settings$/,
   /^\/r23\/auth\/callback$/,
   /^\/r23\/organizations$/,
   /^\/r23\/organizations\/[^/]+$/,
@@ -33,6 +39,14 @@ const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
 const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
   /^\/api\/staging\/v1$/,
   /^\/api\/auth\/(signup|verify-email|recover|reset-password)$/,
+  /^\/r23\/login$/,
+  /^\/r23\/signup$/,
+  /^\/r23\/verify-email$/,
+  /^\/r23\/recover$/,
+  /^\/r23\/reset-password$/,
+  /^\/r23\/organization\/bootstrap$/,
+  /^\/r23\/organizations\/[^/]+\/settings$/,
+  /^\/r23\/invitations\/accept$/,
   /^\/r23\/auth\/login$/,
   /^\/r23\/auth\/logout$/,
   /^\/r23\/auth\/refresh$/,

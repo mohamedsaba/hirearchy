@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     useTypeScriptCli: false,
   },
   poweredByHeader: false,
-  serverExternalPackages: ['better-sqlite3'],
+  serverExternalPackages: ['better-sqlite3', 'pg'],
   outputFileTracingExcludes: {
     '/*': ['./.env*', '../../.env*', './.data/**', '../../.data/**'],
   },

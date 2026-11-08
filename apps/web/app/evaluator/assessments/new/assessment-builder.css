@@ -1696,3 +1696,33 @@ body {
     transition: none;
   }
 }
+
+.assessment-input-control {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--software-radius-control, 6px);
+  border: 1px solid var(--software-border, #ccc);
+  background: var(--software-surface, #fff);
+  color: var(--software-ink, #000);
+  box-sizing: border-box;
+}
+
+.assessment-input-row-item {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--software-border, #ccc);
+  background: var(--software-surface, #fff);
+  color: var(--software-ink, #000);
+  box-sizing: border-box;
+}
+
+.assessment-input-row-item-compact {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--software-border, #ccc);
+  background: var(--software-surface, #fff);
+  color: var(--software-ink, #000);
+  box-sizing: border-box;
+}
