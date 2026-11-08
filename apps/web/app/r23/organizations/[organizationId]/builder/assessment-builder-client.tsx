@@ -209,6 +209,8 @@ export function AssessmentBuilderClient({
   // Issuance state
   const [selectedReviewerPrincipalId, setSelectedReviewerPrincipalId] =
     useState<string>(reviewers[0]?.principalId ?? '');
+  const effectiveReviewerPrincipalId =
+    selectedReviewerPrincipalId || reviewers[0]?.principalId || '';
   const [isIssuing, setIsIssuing] = useState(false);
   const [issuedSession, setIssuedSession] = useState<{
     sessionId: string;
@@ -645,7 +647,7 @@ export function AssessmentBuilderClient({
   // Issue Action
   const handleIssue = async () => {
     if (!validatedVersion) return;
-    if (isAuthenticatedStaging && !selectedReviewerPrincipalId) {
+    if (isAuthenticatedStaging && !effectiveReviewerPrincipalId) {
       setIssuanceError(
         'Select an active organization reviewer to assign before issuing the assessment.',
       );
@@ -671,8 +673,8 @@ export function AssessmentBuilderClient({
             durationMinutes: Math.round(validatedVersion.durationSeconds / 60),
             terminalEnabled: validatedVersion.terminalEnabled,
             integratedAi: validatedVersion.integratedAi,
-            ...(isAuthenticatedStaging && selectedReviewerPrincipalId
-              ? { reviewerPrincipalId: selectedReviewerPrincipalId }
+            ...(effectiveReviewerPrincipalId
+              ? { reviewerPrincipalId: effectiveReviewerPrincipalId }
               : {}),
             idempotencyKey,
             csrf: csrfToken,
@@ -2535,8 +2537,10 @@ export function AssessmentBuilderClient({
                           <dt style={{ color: 'var(--software-muted)' }}>
                             Idempotency Key
                           </dt>
-                          <dd>
-                            <code>{idempotencyKey}</code>
+                          <dd suppressHydrationWarning>
+                            <code suppressHydrationWarning>
+                              {idempotencyKey}
+                            </code>
                           </dd>
                         </dl>
 
@@ -2564,19 +2568,12 @@ export function AssessmentBuilderClient({
                               id="issue-reviewer-select"
                               name="reviewerPrincipalId"
                               data-testid="issue-reviewer-select"
-                              value={selectedReviewerPrincipalId}
+                              suppressHydrationWarning
+                              value={effectiveReviewerPrincipalId}
                               onChange={(e) =>
                                 setSelectedReviewerPrincipalId(e.target.value)
                               }
-                              style={{
-                                width: '100%',
-                                padding: '10px 12px',
-                                borderRadius: '6px',
-                                border:
-                                  '1px solid var(--software-border, #d1d5db)',
-                                background: 'var(--software-surface, #fff)',
-                                color: 'var(--software-ink, #000)',
-                              }}
+                              className="assessment-input-control"
                             >
                               <option value="">
                                 Select an eligible organization reviewer
