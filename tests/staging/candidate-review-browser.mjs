@@ -1008,6 +1008,10 @@ export async function checkCandidateReviewBrowserAcceptance({
       'The assigned evaluator must retain access to submitted evidence after candidate revocation',
     );
     await reviewerPage.locator('[data-workbench-mode-tab="evidence"]').click();
+    await reviewerPage
+      .getByRole('button', { name: /Workspace save recorded/ })
+      .first()
+      .click();
     const observationPanel = reviewerPage.locator(
       'section[aria-label="Anchored Observations"]',
     );
