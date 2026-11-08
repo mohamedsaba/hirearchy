@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import {
   loadAuthenticatedOrganizationSessionList,
   r211AssessmentDraftApiGet,
+  r25OrganizationReviewersApiGet,
 } from '../../../../../src/r23-auth/server';
 import { isAuthenticatedStaging } from '../../../../../src/runtime/profile';
 import { AssessmentBuilderClient } from './assessment-builder-client';
@@ -53,6 +54,22 @@ export default async function AssessmentBuilderPage({
     draft?: R211AssessmentDraft | null;
   };
 
+  let reviewers = contextWithStaging.reviewers ?? [];
+  if (reviewers.length === 0) {
+    try {
+      const reviewersRes = await r25OrganizationReviewersApiGet(
+        request,
+        organizationId,
+      );
+      if (reviewersRes.ok) {
+        const data = await reviewersRes.json();
+        reviewers = data?.reviewers ?? [];
+      }
+    } catch {
+      reviewers = [];
+    }
+  }
+
   let initialDraft: R211AssessmentDraft | null =
     contextWithStaging.draft ?? null;
   if (!initialDraft) {
@@ -82,7 +99,7 @@ export default async function AssessmentBuilderPage({
       organizationId={organizationId}
       csrfToken={context.csrfToken}
       initialDraft={initialDraft}
-      reviewers={contextWithStaging.reviewers ?? []}
+      reviewers={reviewers}
       isAuthenticatedStaging={isAuthenticatedStaging()}
       initialIssuedSessionId={initialIssuedSessionId}
     />

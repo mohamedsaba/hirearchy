@@ -385,7 +385,7 @@ export function AssessmentBuilderClient({
 
   useEffect(() => {
     const sessionId = currentSessionId;
-    if (!isAuthenticatedStaging || !sessionId) return;
+    if (!sessionId) return;
 
     let active = true;
     const contextKey = invitationContextKey;
@@ -406,10 +406,19 @@ export function AssessmentBuilderClient({
               : `HTTP ${response.status}`,
           );
         }
-        const result: R23CandidateInvitationResponse = await response.json();
-        if (result.sessionId !== sessionId) {
+        const data = await response.json();
+        if (data.sessionId && data.sessionId !== sessionId) {
           throw new Error('SESSION_MISMATCH');
         }
+        const result: R23CandidateInvitationResponse =
+          typeof data.candidateToken === 'string'
+            ? {
+                sessionId,
+                status: 'active',
+                candidatePath: `/r26/candidate/${sessionId}#${data.candidateToken}`,
+                expiresAt: data.expiresAt ?? null,
+              }
+            : data;
         if (active) {
           setInvitationState({ contextKey, invitation: result });
           setInvitationFeedbackContextKey(contextKey);
@@ -662,7 +671,7 @@ export function AssessmentBuilderClient({
             durationMinutes: Math.round(validatedVersion.durationSeconds / 60),
             terminalEnabled: validatedVersion.terminalEnabled,
             integratedAi: validatedVersion.integratedAi,
-            ...(selectedReviewerPrincipalId
+            ...(isAuthenticatedStaging && selectedReviewerPrincipalId
               ? { reviewerPrincipalId: selectedReviewerPrincipalId }
               : {}),
             idempotencyKey,
@@ -716,6 +725,24 @@ export function AssessmentBuilderClient({
             ? data.candidateTokenIssued
             : data.candidatePath !== null,
       });
+
+      if (!isAuthenticatedStaging && selectedReviewerPrincipalId) {
+        void fetch(
+          `/r23/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(data.sessionId)}/assignments`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-csrf-token': csrfToken,
+              Origin: window.location.origin,
+            },
+            body: JSON.stringify({
+              reviewerPrincipalId: selectedReviewerPrincipalId,
+              csrf: csrfToken,
+            }),
+          },
+        );
+      }
     } catch (err: unknown) {
       setIssuanceError(
         err instanceof Error
@@ -762,7 +789,6 @@ export function AssessmentBuilderClient({
       !sessionId ||
       invitation?.sessionId !== sessionId ||
       invitation.status !== 'active' ||
-      !invitation.expiresAt ||
       !invitation.candidatePath ||
       currentInvitationNeedsRefresh ||
       currentInvitationBusy
@@ -1419,7 +1445,13 @@ export function AssessmentBuilderClient({
             {stage === 'define' && (
               <div
                 className="assessment-stage-content"
-                style={{ padding: '24px' }}
+                style={{
+                  padding: 'clamp(12px, 2.5vw, 24px)',
+                  boxSizing: 'border-box',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {/* Save Feedback Alerts */}
                 {saveStatus === 'saved' && (
@@ -1877,9 +1909,12 @@ export function AssessmentBuilderClient({
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                    gridTemplateColumns:
+                      'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
                     gap: '20px',
                     marginBottom: '24px',
+                    minWidth: 0,
+                    maxWidth: '100%',
                   }}
                 >
                   <div>
@@ -2179,7 +2214,13 @@ export function AssessmentBuilderClient({
             {stage === 'validate' && (
               <div
                 className="assessment-stage-content"
-                style={{ padding: '24px' }}
+                style={{
+                  padding: 'clamp(12px, 2.5vw, 24px)',
+                  boxSizing: 'border-box',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {isValidating && (
                   <div
@@ -2408,7 +2449,13 @@ export function AssessmentBuilderClient({
             {stage === 'issue' && (
               <div
                 className="assessment-stage-content"
-                style={{ padding: '24px' }}
+                style={{
+                  padding: 'clamp(12px, 2.5vw, 24px)',
+                  boxSizing: 'border-box',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {(recoveredSessionId || recoveryContextError) &&
                 !issuedSession ? (
@@ -2711,46 +2758,30 @@ export function AssessmentBuilderClient({
                         ) : null}
                         <dt style={{ fontWeight: 600 }}>Candidate Link:</dt>
                         <dd>
-                          {isAuthenticatedStaging ? (
-                            <section
-                              className="assessment-feedback"
-                              data-testid="candidate-invitation-panel"
-                              aria-label="Candidate invitation"
-                            >
-                              <h4>Candidate invitation</h4>
-                              {renderCandidateInvitationControls()}
-                            </section>
-                          ) : issuedSession.candidatePath ? (
-                            <Link
-                              href={issuedSession.candidatePath}
-                              data-testid="candidate-workspace-link"
-                              style={{
-                                color: '#047857',
-                                fontWeight: 600,
-                                wordBreak: 'break-all',
-                              }}
-                            >
-                              {issuedSession.candidatePath}
-                            </Link>
-                          ) : (
-                            <div
-                              data-testid="candidate-invitation-unavailable-notice"
-                              role="status"
-                              style={{
-                                padding: '10px 12px',
-                                borderRadius: '6px',
-                                border: '1px solid #f59e0b',
-                                backgroundColor: '#fffbeb',
-                                color: '#92400e',
-                                fontSize: '0.85rem',
-                              }}
-                            >
-                              <strong>
-                                Candidate invitation is unavailable:
-                              </strong>{' '}
-                              this session was issued without a candidate link.
-                            </div>
-                          )}
+                          <section
+                            className="assessment-feedback"
+                            data-testid="candidate-invitation-panel"
+                            aria-label="Candidate invitation"
+                          >
+                            <h4>Candidate invitation</h4>
+                            {renderCandidateInvitationControls()}
+                            {issuedSession.candidatePath &&
+                            !candidateInvitationUrl ? (
+                              <div style={{ marginTop: '8px' }}>
+                                <Link
+                                  href={issuedSession.candidatePath}
+                                  data-testid="candidate-workspace-link"
+                                  style={{
+                                    color: '#047857',
+                                    fontWeight: 600,
+                                    wordBreak: 'break-all',
+                                  }}
+                                >
+                                  {issuedSession.candidatePath}
+                                </Link>
+                              </div>
+                            ) : null}
+                          </section>
                         </dd>
                       </dl>
                     </div>

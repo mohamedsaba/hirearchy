@@ -1,6 +1,15 @@
+html,
+body {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+
 .assessment-builder-page {
   min-height: 100dvh;
   background: var(--software-canvas);
+  overflow-x: clip;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .assessment-builder-page :is(h1, h2, h3, h4) {
@@ -10,11 +19,16 @@
 
 .assessment-builder-shell {
   padding: 24px 24px 56px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .assessment-builder-container {
   width: min(100%, 1040px);
+  max-width: 100%;
+  box-sizing: border-box;
   margin-inline: auto;
+  overflow-x: clip;
 }
 
 .assessment-builder-hero {
@@ -1400,7 +1414,9 @@
 
 @media (max-width: 620px) {
   .assessment-builder-shell {
-    padding: 17px 14px 32px;
+    padding: 16px 10px 32px;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .assessment-builder-hero {
