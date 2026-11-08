@@ -4,7 +4,7 @@ import { EarlyAccessForm } from '../home/early-access-form';
 export const metadata = {
   title: 'Request Early Access & Pilot Evaluation — Hirearchy',
   description:
-    'Join our design partner cohort or request a supervised alpha pilot for your engineering team. Experience evidence-first technical hiring with verifiable source citations.',
+    'Request an early-access conversation about Hirearchy Software, an engineering-evaluation prototype built around observable work and human review.',
 };
 
 export default function EarlyAccessPage() {
@@ -14,13 +14,13 @@ export default function EarlyAccessPage() {
         className="ct-page-hero ct-page-hero--white ct-reveal"
         style={{ minHeight: 0 }}
       >
-        <Kicker>Design Partner Program & Pilot Inquiries</Kicker>
-        <h1 className="ct-enter">Request early access or pilot evaluation.</h1>
+        <Kicker>Early access interest</Kicker>
+        <h1 className="ct-enter">Request an early-access conversation.</h1>
         <p>
-          We are partnering with engineering leaders who want to move beyond
-          LeetCode puzzles and opaque automated scoring. Connect with our team
-          to explore a supervised alpha pilot or evaluate our evidence workbench
-          on upcoming senior engineering roles.
+          Hirearchy Software is an engineering-evaluation prototype. This form
+          records interest for operator review; there is no public signup or
+          hosted pilot available yet. Candidate code execution, live AI
+          assistance, and automated email are disabled in the current demo.
         </p>
         <div className="ct-contact-links">
           <Button href="/products/software">Explore Software</Button>

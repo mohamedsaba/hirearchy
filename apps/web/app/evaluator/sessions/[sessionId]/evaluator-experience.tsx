@@ -35,7 +35,13 @@ export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
   if (props.readOnly) {
     return (
       <div className="evaluator-v2-container" style={{ gap: 0 }}>
-        <SoftwareProductHeader active="reviews" />
+        <SoftwareProductHeader
+          active="reviews"
+          stagingReview={{
+            organizationId: props.r27Evidence.organizationId,
+            sessionId: props.sessionId,
+          }}
+        />
         <div className="evaluator-review-page-content">
           <EvaluatorReviewWorkspace
             key={props.sessionId}

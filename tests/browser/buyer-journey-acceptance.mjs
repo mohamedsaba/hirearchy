@@ -14,8 +14,6 @@ const SCREENSHOT_DIR = '/tmp/hirearchy-ux-screenshots';
 export async function runBuyerJourneyAcceptance({
   baseUrl = 'http://localhost:3001',
 } = {}) {
-  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-
   const browser = await chromium.launch({
     headless: true,
     args: [
@@ -24,13 +22,34 @@ export async function runBuyerJourneyAcceptance({
       '--disable-network-change-notifier',
     ],
   });
+  try {
+    await inspectBuyerJourney({ baseUrl, browser });
+  } finally {
+    await browser.close();
+  }
+}
 
+async function inspectBuyerJourney({ baseUrl, browser }) {
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   const context = await browser.newContext({
     bypassCSP: true,
     reducedMotion: 'reduce',
   });
 
   const page = await context.newPage();
+  const browserErrors = [];
+  let expectingStorageFailure = false;
+  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return;
+    if (
+      expectingStorageFailure &&
+      message.text().includes('503 (Service Unavailable)')
+    ) {
+      return;
+    }
+    browserErrors.push(message.text());
+  });
   const axeSource = fs.readFileSync(
     path.join(process.cwd(), 'node_modules/axe-core/axe.min.js'),
     'utf8',
@@ -140,6 +159,11 @@ export async function runBuyerJourneyAcceptance({
   const nameError = page.locator('#error-ea-name');
   await nameError.waitFor({ state: 'visible', timeout: 5000 });
   assert.equal(await nameError.textContent(), 'Please enter your name.');
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    'ea-name',
+    'Keyboard validation should focus the first invalid field',
+  );
 
   // 2. Fill form with realistic pilot request
   console.log('Filling early access pilot request form...');
@@ -162,6 +186,37 @@ export async function runBuyerJourneyAcceptance({
   await page
     .locator('[data-testid="early-access-submit-button"]')
     .scrollIntoViewIfNeeded();
+  expectingStorageFailure = true;
+  const expectedStorageFailure = page.waitForEvent('console', {
+    predicate: (message) =>
+      message.type() === 'error' &&
+      message.text().includes('503 (Service Unavailable)'),
+  });
+  await page.route('**/api/early-access', (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Request storage is unavailable.' }),
+    }),
+  );
+  await page.click('[data-testid="early-access-submit-button"]');
+  await expectedStorageFailure;
+  const errorAlert = page.locator('[data-testid="early-access-error-alert"]');
+  await errorAlert.waitFor({ state: 'visible', timeout: 5000 });
+  assert.equal(
+    await errorAlert.textContent(),
+    'Request storage is unavailable.',
+  );
+  assert.equal(
+    await page.evaluate(() =>
+      document.activeElement?.getAttribute('data-testid'),
+    ),
+    'early-access-error-alert',
+    'Keyboard focus should move to the form error message',
+  );
+  await page.unroute('**/api/early-access');
+  expectingStorageFailure = false;
+
   const [response] = await Promise.all([
     page.waitForResponse(
       (res) => res.url().includes('/api/early-access') && res.status() === 201,
@@ -172,9 +227,7 @@ export async function runBuyerJourneyAcceptance({
   const responseJson = await response.json();
   assert.equal(responseJson.ok, true);
   assert.ok(responseJson.submissionId, 'Expected submissionId in response');
-  assert.ok(
-    responseJson.message.includes('Automated email delivery is disabled'),
-  );
+  assert.ok(responseJson.message.includes('No email was sent'));
 
   // 4. Verify receipt display in DOM
   console.log('Verifying receipt display and truthful staging notice...');
@@ -182,6 +235,13 @@ export async function runBuyerJourneyAcceptance({
     '[data-testid="early-access-success-panel"]',
   );
   await successPanel.waitFor({ state: 'visible', timeout: 5000 });
+  assert.equal(
+    await page.evaluate(() =>
+      document.activeElement?.getAttribute('data-testid'),
+    ),
+    'early-access-success-panel',
+    'Keyboard focus should move to the success receipt',
+  );
 
   const receiptSubmissionId = page.locator(
     '[data-testid="receipt-submission-id"]',
@@ -193,10 +253,12 @@ export async function runBuyerJourneyAcceptance({
 
   const smtpNotice = page.locator('[data-testid="receipt-smtp-notice"]');
   assert.ok(
-    (await smtpNotice.textContent()).includes(
-      'Automated email delivery (SMTP) is disabled',
-    ),
-    'Expected truthful SMTP boundary notice in success receipt',
+    (await smtpNotice.textContent()).includes('No email was sent'),
+    'Expected truthful email boundary notice in success receipt',
+  );
+  assert.ok(
+    (await smtpNotice.textContent()).includes('authorized operator'),
+    'Expected operator retrieval notice in success receipt',
   );
 
   // Capture success receipt screenshot across viewports
@@ -213,8 +275,13 @@ export async function runBuyerJourneyAcceptance({
     await page.screenshot({ path: receiptScreenshot, fullPage: true });
   }
 
-  await browser.close();
+  assert.deepEqual(
+    browserErrors,
+    [],
+    `Browser console and page errors: ${browserErrors.join('; ')}`,
+  );
+
   console.log(
-    'PASS: All buyer journey, responsive, accessibility, and early access flow checks verified!',
+    'PASS: Responsive pages, accessibility, keyboard validation, error and success intake states, and browser console checks verified.',
   );
 }

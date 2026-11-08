@@ -8,10 +8,11 @@ import {
   randomUUID,
 } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createInterface } from 'node:readline';
 import { Client } from 'pg';
 import { applyMigrations } from '../database/postgres/migrate.mjs';
 import { provisionStaging } from './provision-staging.mjs';
@@ -34,6 +35,8 @@ import {
   candidateReviewRecoveryHash,
 } from '../tests/staging/candidate-review-recovery.mjs';
 const name = `hirearchy-r215-${randomBytes(6).toString('hex')}`;
+const presentationMode = process.argv.includes('--presentation');
+const presentationReadyFile = process.env.HIREARCHY_PRESENTATION_READY_FILE;
 const image = 'hirearchy-staging-postgres-local';
 const authImage =
   'supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b';
@@ -63,6 +66,7 @@ const clients = [];
 let app;
 let appLog = '';
 let stage = 'setup';
+let presenterFile;
 const waitFor = async (check) => {
   for (let i = 0; i < 150; i++) {
     try {
@@ -349,6 +353,53 @@ async function stopApp() {
   }
   app = undefined;
 }
+async function waitForPresentationStop() {
+  const input = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  let resolveStop;
+  let stopped = false;
+  const stoppedBy = new Promise((resolve) => {
+    resolveStop = resolve;
+  });
+  const finish = (reason) => {
+    if (stopped) return;
+    stopped = true;
+    process.off('SIGINT', onSigint);
+    process.off('SIGTERM', onSigterm);
+    input.close();
+    if (reason === 'SIGINT') process.exitCode = 130;
+    if (reason === 'SIGTERM') process.exitCode = 143;
+    resolveStop(reason);
+  };
+  const onSigint = () => finish('SIGINT');
+  const onSigterm = () => finish('SIGTERM');
+  input.once('line', () => finish('Enter'));
+  input.once('close', () => finish('stdin closed'));
+  process.once('SIGINT', onSigint);
+  process.once('SIGTERM', onSigterm);
+
+  if (presentationReadyFile) {
+    await writeFile(
+      presentationReadyFile,
+      JSON.stringify({
+        name,
+        presenterFile: presenterFile.pathname,
+        resources,
+        volumes,
+        network: name,
+      }),
+      { encoding: 'utf8', mode: 0o600 },
+    );
+    await chmod(presentationReadyFile, 0o600);
+  }
+
+  console.log(
+    'Press Enter or Ctrl-C to stop the local demo; SIGTERM also works.',
+  );
+  return stoppedBy;
+}
 function adminJwt() {
   const header = Buffer.from(
     JSON.stringify({ alg: 'HS256', typ: 'JWT' }),
@@ -503,8 +554,9 @@ async function createSnapshotManifest({
     release,
   };
 }
-try {
+integration: try {
   await mkdir(artifact, { recursive: true, mode: 0o700 });
+  await chmod(artifact, 0o700);
   await mkdir(browserEvidence, { recursive: true, mode: 0o700 });
   const postgresImageId = docker(
     'image',
@@ -552,11 +604,13 @@ try {
   await preinstallCandidate.end();
   await authRoles(source);
   const authUrl = await auth(source, 'source');
-  stage = 'installer rejects disposable fixture schema';
-  await checkInstallerBoundary(
-    source.admin,
-    await sqlFile('database/postgres/staging/install-api.sql'),
-  );
+  if (!presentationMode) {
+    stage = 'installer rejects disposable fixture schema';
+    await checkInstallerBoundary(
+      source.admin,
+      await sqlFile('database/postgres/staging/install-api.sql'),
+    );
+  }
   await source.admin.query(
     "INSERT INTO hirearchy.staging_verification_keys(key_id,issuer,audience,public_key,valid_from,valid_until) VALUES($1,$2,$3,$4,now()-interval '1 minute',now()+interval '1 day')",
     [
@@ -620,23 +674,67 @@ try {
   );
   assert.deepEqual(installedReadiness.rows, [{ ready: true }]);
   await installedCandidate.end();
-  stage = 'database proof security';
-  const gateway = await source.connect('r23_gateway');
-  await checkProofBoundary(
-    gateway,
-    source.admin,
-    keys.privateKey,
-    recruiter,
-    organizationId,
-    (checkpoint) => {
-      stage = checkpoint;
-    },
-  );
-  stage = 'database proof security complete';
+  if (!presentationMode) {
+    stage = 'database proof security';
+    const gateway = await source.connect('r23_gateway');
+    await checkProofBoundary(
+      gateway,
+      source.admin,
+      keys.privateKey,
+      recruiter,
+      organizationId,
+      (checkpoint) => {
+        stage = checkpoint;
+      },
+    );
+    stage = 'database proof security complete';
+  }
   let appUrl = await startApp(source, authUrl);
   stage = 'verified application sessions';
   await call(appUrl, recruiter, 'session.open', { organizationId });
   await call(appUrl, reviewer, 'session.open', { organizationId });
+
+  if (presentationMode) {
+    stage = 'interactive synthetic presentation';
+    presenterFile = new URL('presenter.json', artifact);
+    await writeFile(
+      presenterFile,
+      JSON.stringify(
+        {
+          appUrl,
+          organizationId,
+          recruiter: {
+            email: input.users[0].email,
+            password: userPassword,
+            loginUrl: `${appUrl}/r23/login`,
+            builderUrl: `${appUrl}/r23/organizations/${organizationId}/builder`,
+          },
+          evaluator: {
+            email: input.users[1].email,
+            password: userPassword,
+            principalId: provisioned.users[1].principalId,
+            loginUrl: `${appUrl}/r23/login`,
+            reviewUrl: `${appUrl}/r27/organizations/${organizationId}/sessions/{sessionId}`,
+          },
+          candidate: {
+            name: 'Demo Candidate',
+            email: 'candidate@hirearchy.test',
+            note: 'Create a fresh invitation from the builder UI; no candidate user is pre-created.',
+          },
+        },
+        null,
+        2,
+      ),
+      { encoding: 'utf8', mode: 0o600 },
+    );
+    await chmod(presenterFile, 0o600);
+    console.log(`Presentation ready at ${appUrl}`);
+    console.log(`Private presenter details: ${presenterFile.pathname}`);
+    await waitForPresentationStop();
+    console.log('Stopping presentation and cleaning owned staging resources.');
+    break integration;
+  }
+
   stage = 'recovery-proof boundary / normal password bearer';
   await call(appUrl, recruiter, 'session.open', { organizationId });
   const recruiterClaims = JSON.parse(
@@ -1060,4 +1158,16 @@ try {
   for (const container of resources.reverse()) cleanup('rm', container, '-f');
   for (const volume of volumes) cleanup('volume', volume, 'rm');
   if (networkCreated) cleanup('network', name, 'rm');
+  if (presenterFile) {
+    try {
+      await unlink(presenterFile);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        console.error(
+          'Could not remove the private presenter credential file.',
+        );
+        process.exitCode = 1;
+      }
+    }
+  }
 }

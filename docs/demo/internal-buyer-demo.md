@@ -1,72 +1,43 @@
 # Hirearchy Software: internal buyer demo
 
-**Audience:** founder-led conversations with prospective design partners
+**Audience:** founder-led discovery conversations. **Status:** local synthetic demo instructions; not a hosted pilot.
 
-**Status:** Script and product scope only. The complete recruiter-to-candidate-to-review runtime is pending integrated CI and visual acceptance. Check the single [release readiness record](../release-readiness.md) before attempting a live walkthrough. Until it is accepted, do not present this flow as a working product demo.
+## Start the local demo
 
-## Product in one minute
+From the repository root on a Linux host with Docker and Node.js 22 or later:
 
-Hirearchy gives a candidate a bounded engineering task, records saved work and task activity, and presents the resulting evidence in chronological context for an assigned human reviewer. The reviewer writes and owns the interpretation. Hirearchy does not produce candidate scores, rankings, competence labels, or automatic hiring verdicts.
+```sh
+npm ci
+docker build -t hirearchy-staging-postgres-local:latest database/postgres/staging
+docker pull supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+npx playwright install chromium
+npm run build
+npm run demo:staging
+```
 
-The intended internal walkthrough uses the approved **Reservation Moves v3** task. Its durable demo profile uses synthetic data; AI assistance, code execution, and email delivery are disabled. The invitation is copied by an authenticated recruiter and expires. This is a product script, not evidence of public deployment, customer use, or release readiness.
+For a full retained-demo rehearsal, run `npm run test:staging:presentation` after these prerequisites. It provisions a fresh synthetic organization, performs the recruiter, candidate, and evaluator flow in a browser, then sends SIGTERM and verifies cleanup of only that run's containers, volumes, and network. It does not print or screenshot invitation tokens or passwords.
 
-## Before a live walkthrough
+The existing staging integration provisioner starts disposable PostgreSQL and GoTrue services, creates a fresh synthetic organization and real authenticated recruiter/reviewer identities through the supported setup path, installs the API, and starts the local app. It does not write candidate, assessment, timeline, or review fixture rows directly. The app uses the authenticated staging profile on loopback; do not change its runtime flags or expose its port externally.
 
-Use the automated staging fixture after the release readiness record shows that the integrated candidate and reviewer browser journey has passed and been accepted. The app has no self-service signup, first-organization setup, or account recovery flow. The demo needs pre-provisioned synthetic GoTrue identities, application-principal bindings, organization memberships, and one assigned reviewer. Do not create a buyer-facing account by manually copying credentials or tokens into this guide.
+When ready, the process prints a local app URL and the path to a private presenter file under `.data/`. The file has mode `0600` inside a mode `0700` directory. Open it locally for the random password, synthetic recruiter/reviewer emails, organization ID, and entry points. Do not copy its contents into documentation, slides, logs, screenshots, or chat. The credentials and organization are freshly generated for each run.
 
-Use a fresh synthetic assessment session for each walkthrough. Do not enter real candidate details, source code, credentials, secrets, or customer data. The candidate notice describes recorded data and disabled capabilities; it does not replace approved legal, retention, or external-candidate disclosures.
+The process stays active while presenting. Press Enter, Ctrl-C, or send SIGTERM to run the same `finally` cleanup path. It removes the disposable containers, volumes, and network owned by that run; release/recovery artifacts remain under `.data/`, while the presenter credential file is removed. Do not delete recovery artifacts as routine cleanup.
 
-## One recruiter-to-candidate-to-evaluator walkthrough
+## Safe entry points
 
-### 1. Recruiter prepares and invites
+- Recruiter sign-in: `{appUrl}/r23/login`
+- Assessment builder: `{appUrl}/r23/organizations/{organizationId}/builder`
+- Evaluator sign-in: `{appUrl}/r23/login`
+- Assigned-session review: `{appUrl}/r27/organizations/{organizationId}/sessions/{sessionId}`
 
-1. Sign in at `/r23/login`, choose the prepared organization at `/r23/organizations`, and open `/r23/organizations/{organizationId}/builder`.
-2. Select **Reservation Moves v3**, review the task brief and starter workspace, select the assigned reviewer, then validate and issue the assessment.
-3. Create the candidate invitation explicitly. The expiry defaults to seven days and can be set up to 30 days. Copy the confirmed active link from the invitation panel. It is not emailed. Treat the link as a bearer credential; never paste it into slides, notes, chat, screenshots, or test output.
+Sign in as recruiter, create and issue a Reservation Moves v3 task, assign the synthetic reviewer, then issue an invitation to a synthetic candidate such as `Demo Candidate` / `candidate@hirearchy.test`. Copy the invitation only into a private browser context. The candidate is an invitation bearer, not a pre-created user. Have them read the consent notice, save a code revision, and submit. Sign in as the assigned reviewer to inspect the submitted evidence and write a human-owned review. Never edit the database during the presentation.
 
-### 2. Candidate works and submits
+The walkthrough and discovery questions are in [buyer demo and discovery notes](../product/buyer-demo-and-discovery.md).
 
-1. Open the recruiter-copied invitation in a private browser context. The URL uses `/r26/candidate/{sessionId}`; its secret fragment is omitted from this guide.
-2. Read the canonical notice and affirmatively consent before activating the workspace:
+## Boundaries
 
-   > This workspace records saved code, revisions, task activity and submission for your assigned hiring team’s review. This demo uses synthetic data; do not enter secrets or real candidate information. AI assistance and code execution are unavailable in this demo.
-
-   This acknowledgement records consent to the demo notice; it is not proof of understanding or legal compliance.
-
-3. Edit the task files in the browser workspace. Confirm the saved state before continuing, then submit. The submitted workspace becomes read-only. Resume is available through the same active invitation before its expiry; no email reminder or delivery is provided.
-
-### 3. Assigned evaluator reviews evidence
-
-1. Sign in as the assigned reviewer and open `/r27/organizations/{organizationId}/sessions/{sessionId}`.
-2. Review the chronological evidence and submitted work. Add factual observations tied to available evidence, then write a human review that cites evidence and records strengths, concerns, and unresolved questions.
-3. Save and finalize the review packet. Finalization is retained and immutable. The interface does not calculate a score or choose a hiring outcome. If the recruiter revokes the invitation, candidate access stops while submitted work and reviewer records remain available to authorized reviewers.
-
-These are the intended browser entry points for the integrated flow. Route availability and the full runtime journey remain **pending acceptance**; the readiness record is authoritative for current status.
-
-## Early-adopter approach
-
-The buyer hypothesis is that an engineering manager or technical founder sponsors a pilot and a recruiter operates invitations. This is a segment to investigate, not validated buyer preference. Start with founder-led conversations and a synthetic rehearsal. There is no public self-serve signup, live email, or customer provisioning path.
-
-The public `/contact` page is informational and does not accept or store requests. Opening buyer intake later requires an approved durable PostgreSQL persistence path and an explicit delivery destination; neither is currently wired.
-
-Internal pricing hypothesis only: **US$250 for a fixed 30-day design-partner pilot**, one team, one approved scenario, and up to 10 candidate sessions, credited toward a future small-team plan. Do not publish this price, quote it as an offer, or implement payment. Published competitor attempt prices are not directly comparable; see [competitive positioning](../market/competitive-positioning.md). Hosting, execution, and support costs are unmeasured and must be checked before any pilot is offered. No willingness-to-pay, margin, or customer-interview evidence is claimed.
-
-Do not use real external candidates until the relevant deployment, privacy, retention, support, and security gates are accepted. External code execution remains a separate launch blocker; this demo keeps execution and AI off.
-
-## Five discovery questions
-
-1. How often do you review take-home engineering work, and how much engineering time does a typical review take? Where does review slow down?
-2. Which evidence would make a work sample more useful to discuss: the submitted artifact, revisions, task activity, or an ordered timeline? What would not help?
-3. Who chooses the assessment, sends invitations, supports candidates, and owns the final evaluation?
-4. Where do candidates experience the most friction: setup, time burden, privacy and consent, accessibility, saving and resuming, or uncertainty about what happens next?
-5. What budget and approval path would a 30-day, one-scenario pilot require, and what result would justify continuing?
-
-Do not record answers as validation until they come from actual buyer conversations. Do not imply that the proposed pilot price has been tested.
-
-## Presenter disclosures
-
-- This is an internal-demo scope; current release status and accepted evidence live only in [release readiness](../release-readiness.md).
-- Use synthetic data only. The current app flow does not provide public account creation, organization provisioning, password recovery, candidate email, or self-serve onboarding.
-- AI assistance and code execution are unavailable in this demo. Do not describe hidden AI use, code origin, or candidate competence as inferred facts.
-- The reviewer owns interpretation. No candidate score, ranking, automatic pass/reject, or hire recommendation is produced.
-- Do not claim a public deployment, production security certification, customer result, ATS integration, or commercial offer without separate verified evidence and approval.
+- Use synthetic names, emails, code, and task data only.
+- Candidate email delivery, public signup, AI provider calls, live code execution, and external candidate activation are disabled.
+- The demo is local and temporary, not public hosting or proof of production readiness.
+- Treat an invitation URL as a bearer credential; never include it in a screenshot or shared notes.
+- Review [release readiness](../release-readiness.md) for current operational evidence before discussing hosted access.
