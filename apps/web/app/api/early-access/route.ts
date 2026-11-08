@@ -1,9 +1,21 @@
 import { z } from 'zod';
+import { resolveRateLimitClientIdentity } from '../../../src/access/trusted-proxy-client-identity';
+import { globalRateLimiter } from '../../../src/security/rate-limit';
 import {
-  checkRateLimit,
   saveEarlyAccessRecord,
   type EarlyAccessSubmissionInput,
 } from '../../../src/early-access/store';
+
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 5;
+
+function checkRateLimit() {
+  return globalRateLimiter.check(resolveRateLimitClientIdentity().key, {
+    maxRequests: MAX_REQUESTS_PER_WINDOW,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+    keyPrefix: 'early-access',
+  });
+}
 
 const earlyAccessSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
@@ -68,13 +80,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Extract client IP for rate limiting
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  const clientIp = forwardedFor
-    ? forwardedFor.split(',')[0].trim()
-    : '127.0.0.1';
-
-  const rateLimit = checkRateLimit(clientIp);
+  const rateLimit = checkRateLimit();
   if (!rateLimit.allowed) {
     return Response.json(
       {

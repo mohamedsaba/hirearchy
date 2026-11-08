@@ -5,9 +5,9 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   saveEarlyAccessRecord,
   readAllEarlyAccessRecords,
-  checkRateLimit,
   type EarlyAccessSubmissionInput,
 } from '../../apps/web/src/early-access/store';
+import { globalRateLimiter } from '../../apps/web/src/security/rate-limit';
 import { POST } from '../../apps/web/app/api/early-access/route';
 
 describe('Early Access Data Store & Rate Limiter', () => {
@@ -15,12 +15,14 @@ describe('Early Access Data Store & Rate Limiter', () => {
   let tempStoreFile: string;
 
   beforeEach(() => {
+    globalRateLimiter.reset();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ea-test-'));
     tempStoreFile = path.join(tempDir, 'early-access.json');
     process.env.EARLY_ACCESS_STORAGE_PATH = tempStoreFile;
   });
 
   afterEach(() => {
+    globalRateLimiter.reset();
     delete process.env.EARLY_ACCESS_STORAGE_PATH;
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -109,23 +111,13 @@ describe('Early Access Data Store & Rate Limiter', () => {
     ).rejects.toThrow('must contain a JSON array');
     expect(fs.readFileSync(tempStoreFile, 'utf8')).toBe('null');
   });
-
-  it('enforces rate limits per client IP', () => {
-    const testIp = `192.0.2.${Math.floor(Math.random() * 200) + 1}`;
-    for (let i = 0; i < 5; i++) {
-      const check = checkRateLimit(testIp);
-      expect(check.allowed).toBe(true);
-    }
-    const sixthCheck = checkRateLimit(testIp);
-    expect(sixthCheck.allowed).toBe(false);
-    expect(sixthCheck.retryAfterSeconds).toBeGreaterThan(0);
-  });
 });
 
 describe('Early Access API Route (POST /api/early-access)', () => {
   let tempDir: string;
 
   beforeEach(() => {
+    globalRateLimiter.reset();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ea-api-test-'));
     process.env.EARLY_ACCESS_STORAGE_PATH = path.join(
       tempDir,
@@ -134,6 +126,7 @@ describe('Early Access API Route (POST /api/early-access)', () => {
   });
 
   afterEach(() => {
+    globalRateLimiter.reset();
     delete process.env.EARLY_ACCESS_STORAGE_PATH;
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -206,5 +199,36 @@ describe('Early Access API Route (POST /api/early-access)', () => {
     expect(stored[0].company).toBe('Cyberdyne Systems');
     expect(stored[0].clientIp).toBeUndefined();
     expect(stored[0].userAgent).toBeUndefined();
+  });
+
+  it('does not let forwarded-header rotation bypass the shared intake limit', async () => {
+    const payload = {
+      name: 'Synthetic Buyer',
+      email: 'buyer@example.test',
+      company: 'Example Team',
+      role: 'Engineering lead',
+      teamSize: '1-10',
+      primaryChallenge: 'other',
+    };
+    const post = (index: number) =>
+      POST(
+        new Request('http://localhost:3000/api/early-access', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-forwarded-for': `198.51.100.${index}`,
+            'user-agent': `Synthetic browser ${index}`,
+          },
+          body: JSON.stringify(payload),
+        }),
+      );
+
+    for (let index = 1; index <= 5; index += 1) {
+      expect((await post(index)).status).toBe(201);
+    }
+    const limited = await post(6);
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect(await readAllEarlyAccessRecords()).toHaveLength(5);
   });
 });

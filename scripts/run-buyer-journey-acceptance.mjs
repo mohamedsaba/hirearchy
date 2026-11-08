@@ -26,6 +26,56 @@ async function waitForServer(url, timeoutMs = 45000) {
   throw new Error(`Server at ${url} failed to respond within ${timeoutMs}ms`);
 }
 
+async function verifyPublicPreviewBoundary() {
+  const healthResponse = await fetch(`${BASE_URL}/api/health`);
+  assert.equal(healthResponse.status, 200);
+  const health = await healthResponse.json();
+  assert.equal(health.status, 'ok');
+  assert.deepEqual(health.capabilities, {
+    application: 'disabled',
+    execution: 'disabled',
+    ai: 'disabled',
+  });
+
+  const headResponse = await fetch(`${BASE_URL}/products/software`, {
+    method: 'HEAD',
+  });
+  assert.equal(headResponse.status, 200);
+
+  const deniedRoutes = [
+    ['GET', '/r23/login'],
+    ['POST', '/api/auth/signup'],
+    ['GET', '/api/staging/readiness'],
+    ['GET', '/r23/api/organizations/example/sessions'],
+    ['GET', '/r26/candidate/example'],
+    ['GET', '/r27/organizations/example/sessions/example'],
+    ['GET', '/r27/api/organizations/example/sessions/example/evidence'],
+    ['POST', '/api/candidate/sessions/example/terminal/exec'],
+    ['POST', '/r26/api/candidate/example/execution'],
+    ['POST', '/r26/api/candidate/example/ai'],
+    ['POST', '/api/evaluator/assessments/generate'],
+    ['POST', '/api/sessions'],
+    ['POST', '/api/contact'],
+  ];
+  for (const [method, pathname] of deniedRoutes) {
+    const response = await fetch(`${BASE_URL}${pathname}`, {
+      method,
+      ...(method === 'POST'
+        ? {
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+          }
+        : {}),
+    });
+    assert.equal(response.status, 404, `${method} ${pathname} must be denied`);
+    const body = await response.json();
+    assert.equal(body.error.code, 'PREVIEW_ROUTE_UNAVAILABLE');
+  }
+  console.log(
+    `Public-preview boundary passed: health and marketing GET/HEAD allowed; ${deniedRoutes.length} auth, product, candidate, evaluator, AI, execution, and contact routes denied.`,
+  );
+}
+
 async function main() {
   const acceptanceStorage = fs.mkdtempSync(
     path.join(os.tmpdir(), 'hirearchy-buyer-acceptance-'),
@@ -41,6 +91,7 @@ async function main() {
       ...process.env,
       PORT: String(PORT),
       NODE_ENV: 'development',
+      HIREARCHY_RUNTIME_PROFILE: 'public-preview',
       EARLY_ACCESS_STORAGE_PATH: acceptanceStorageFile,
     },
   });
@@ -59,6 +110,7 @@ async function main() {
     console.log(
       `Next.js server ready at ${BASE_URL}. Running buyer journey acceptance suite...`,
     );
+    await verifyPublicPreviewBoundary();
 
     await runBuyerJourneyAcceptance({ baseUrl: BASE_URL });
     const contactResponse = await fetch(`${BASE_URL}/api/contact`, {
@@ -74,8 +126,11 @@ async function main() {
         message: 'This is a local synthetic contact-route check.',
       }),
     });
-    assert.equal(contactResponse.status, 503);
-    assert.match((await contactResponse.json()).error, /has not been sent/i);
+    assert.equal(contactResponse.status, 404);
+    assert.equal(
+      (await contactResponse.json()).error.code,
+      'PREVIEW_ROUTE_UNAVAILABLE',
+    );
 
     const exported = execFileSync(
       process.execPath,

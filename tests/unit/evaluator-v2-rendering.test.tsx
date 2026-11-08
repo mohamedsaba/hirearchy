@@ -12,6 +12,7 @@ import {
 import { ReviewGuidance } from '../../apps/web/app/evaluator/sessions/[sessionId]/review-guidance';
 import { ArtifactAvailabilityCard } from '../../apps/web/app/evaluator/sessions/[sessionId]/artifact-availability-card';
 import { EvaluatorExperience } from '../../apps/web/app/evaluator/sessions/[sessionId]/evaluator-experience';
+import { SoftwareProductHeader } from '../../apps/web/app/evaluator/software-product-header';
 import { projectBriefing } from '../../apps/web/src/evaluator/project-evaluator-briefing';
 import type { EvaluatorBriefing } from '../../apps/web/src/evaluator/evaluator-briefing';
 import type { EvaluatorReviewPresentation } from '../../apps/web/src/evaluator/evaluator-review-presentation';
@@ -422,6 +423,28 @@ const mockReview: EvaluatorReviewPresentation = {
 };
 
 describe('Evaluator Experience V2 Component & Projection Suite', () => {
+  describe('authenticated staging evaluator navigation', () => {
+    it('links only to the authorized organization and R27 review routes', () => {
+      const html = renderToStaticMarkup(
+        <SoftwareProductHeader
+          active="reviews"
+          stagingReview={{
+            organizationId: '3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a',
+            sessionId: 'sess_83e9f58fc9ce4bbdbd21ef9802e39ef9',
+          }}
+        />,
+      );
+
+      expect(html).toContain(
+        'href="/r23/organizations/3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a/sessions/sess_83e9f58fc9ce4bbdbd21ef9802e39ef9"',
+      );
+      expect(html).toContain(
+        'href="/r27/organizations/3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a/sessions/sess_83e9f58fc9ce4bbdbd21ef9802e39ef9"',
+      );
+      expect(html).not.toContain('href="/evaluator');
+    });
+  });
+
   describe('EvaluatorHeader', () => {
     it('renders the back link, session reference, scenario title, and duration without role controls', () => {
       const html = renderToStaticMarkup(
@@ -459,6 +482,25 @@ describe('Evaluator Experience V2 Component & Projection Suite', () => {
 
       expect(html).toContain('Assessment time ended');
       expect(html).not.toContain('Submitted by candidate');
+    });
+
+    it('uses the authorized R23 session summary as the R27 back link when provided', () => {
+      const html = renderToStaticMarkup(
+        <EvaluatorHeader
+          sessionId="session-c-12345678"
+          scenarioTitle="Cache Staleness Investigation"
+          submittedAt="2026-09-16T17:12:34.000Z"
+          closureReason="candidate_submission"
+          backHref="/r23/organizations/3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a/sessions/session-c-12345678"
+          backLabel="← Back to session summary"
+        />,
+      );
+
+      expect(html).toContain(
+        'href="/r23/organizations/3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a/sessions/session-c-12345678"',
+      );
+      expect(html).toContain('Back to session summary');
+      expect(html).not.toContain('href="/evaluator');
     });
   });
 

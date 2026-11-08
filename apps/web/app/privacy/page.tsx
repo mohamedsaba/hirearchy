@@ -17,8 +17,11 @@ export default function LegalPage() {
         <p>
           The form collects your name, work email, company or team, role,
           engineering team size, selected challenge, and optional note. The
-          application uses your source IP temporarily for rate limiting; it is
-          not included in the stored request record.
+          stored request record does not include a client IP address or browser
+          user-agent. The application ignores forwarded-IP headers for rate
+          limiting and applies a shared limit of five requests per 15 minutes
+          across visitors to its single app process. This draft does not
+          describe separate infrastructure-provider or network access logs.
         </p>
         <h2>Use and access</h2>
         <p>

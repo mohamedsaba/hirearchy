@@ -4,11 +4,18 @@
 
 ## Start the local demo
 
-From the repository root, with required Docker images and Node dependencies installed:
+From the repository root on a Linux host with Docker and Node.js 22 or later:
 
 ```sh
-node scripts/test-staging-integration.mjs --presentation
+npm ci
+docker build -t hirearchy-staging-postgres-local:latest database/postgres/staging
+docker pull supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+npx playwright install chromium
+npm run build
+npm run demo:staging
 ```
+
+For a full retained-demo rehearsal, run `npm run test:staging:presentation` after these prerequisites. It provisions a fresh synthetic organization, performs the recruiter, candidate, and evaluator flow in a browser, then sends SIGTERM and verifies cleanup of only that run's containers, volumes, and network. It does not print or screenshot invitation tokens or passwords.
 
 The existing staging integration provisioner starts disposable PostgreSQL and GoTrue services, creates a fresh synthetic organization and real authenticated recruiter/reviewer identities through the supported setup path, installs the API, and starts the local app. It does not write candidate, assessment, timeline, or review fixture rows directly. The app uses the authenticated staging profile on loopback; do not change its runtime flags or expose its port externally.
 

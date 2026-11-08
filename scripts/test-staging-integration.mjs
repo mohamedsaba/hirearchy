@@ -712,6 +712,7 @@ integration: try {
           evaluator: {
             email: input.users[1].email,
             password: userPassword,
+            principalId: provisioned.users[1].principalId,
             loginUrl: `${appUrl}/r23/login`,
             reviewUrl: `${appUrl}/r27/organizations/${organizationId}/sessions/{sessionId}`,
           },

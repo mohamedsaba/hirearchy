@@ -22,36 +22,7 @@ export interface EarlyAccessRecord extends EarlyAccessSubmissionInput {
   receivedAt: string;
 }
 
-// In-memory rate limiting map: ip -> array of timestamps
-const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_REQUESTS_PER_WINDOW = 5;
 let saveQueue = Promise.resolve();
-
-export function checkRateLimit(clientIp: string): {
-  allowed: boolean;
-  retryAfterSeconds?: number;
-} {
-  const now = Date.now();
-  const timestamps = rateLimitMap.get(clientIp) || [];
-
-  // Clean up older timestamps outside window
-  const validTimestamps = timestamps.filter(
-    (t) => now - t < RATE_LIMIT_WINDOW_MS,
-  );
-
-  if (validTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
-    const oldest = validTimestamps[0];
-    const retryAfterSeconds = Math.ceil(
-      (oldest + RATE_LIMIT_WINDOW_MS - now) / 1000,
-    );
-    return { allowed: false, retryAfterSeconds };
-  }
-
-  validTimestamps.push(now);
-  rateLimitMap.set(clientIp, validTimestamps);
-  return { allowed: true };
-}
 
 export function getStoragePath(): string {
   if (process.env.EARLY_ACCESS_STORAGE_PATH) {

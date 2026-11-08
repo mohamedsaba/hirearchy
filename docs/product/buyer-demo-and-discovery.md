@@ -19,11 +19,18 @@ This segment and problem are unvalidated. No customer interviews, active pilots,
 
 ## Repeatable synthetic demo
 
-Run from the repository root on a host with the required Docker images and Node dependencies:
+On a Linux host with Docker and Node.js 22 or later, prepare from the repository root:
 
 ```sh
-node scripts/test-staging-integration.mjs --presentation
+npm ci
+docker build -t hirearchy-staging-postgres-local:latest database/postgres/staging
+docker pull supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+npx playwright install chromium
+npm run build
+npm run demo:staging
 ```
+
+Before a founder presentation, rehearse the retained lifecycle with `npm run test:staging:presentation`. It provisions a fresh synthetic organization, exercises recruiter authoring and issue, candidate consent/save/submit, assigned evaluator evidence and human review in a real browser, then sends SIGTERM and verifies cleanup of only the run-owned containers, volumes, network, and presenter credential file. It does not print or screenshot passwords or candidate invitation tokens.
 
 The command uses the existing disposable PostgreSQL/GoTrue provisioner and starts the authenticated local app only after real identity, organization, and API provisioning. It generates a fresh synthetic recruiter and evaluator with a shared random password, then writes the credentials and organization ID to a private local presenter file. The app prints only a loopback URL and the path to that file; it does not print passwords or candidate invitation tokens.
 
@@ -71,7 +78,7 @@ This is copy for possible founder use, not authorization to contact anyone. No r
 
 ## Intake handling for operators
 
-The public early-access form collects name, work email, company/team, role, team size, selected challenge, and optional note. It stores requests on the application data volume. Requests remain there until an authorized operator deletes them; there is no automatic expiry or approved deletion-request process. The current form sends no email and creates no account or pilot. Operators can review the JSON without editing database records:
+The public early-access form collects name, work email, company/team, role, team size, selected challenge, and optional note. It stores requests on the application data volume. Requests remain there until an authorized operator deletes them; there is no automatic expiry or approved deletion-request process. The stored record excludes client IP and browser user-agent. Forwarded-IP headers are ignored for rate limiting; all visitors share a five-request/15-minute bucket per app process. The current form sends no email and creates no account or pilot. Operators can review the JSON without editing database records:
 
 ```sh
 docker compose -f deploy/staging/docker-compose.preview.yml exec -T web node --experimental-strip-types scripts/export-early-access-requests.mjs

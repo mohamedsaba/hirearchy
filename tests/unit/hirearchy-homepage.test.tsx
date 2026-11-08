@@ -79,8 +79,8 @@ describe('Hirearchy public website', () => {
   });
   it('provides a functional early access request form with truthful staging disclosures', () => {
     const html = renderToStaticMarkup(createElement(EarlyAccessPage));
-    expect(html).toContain('Request early access or pilot evaluation.');
-    expect(html).toContain('Design Partner Program');
+    expect(html).toContain('Request an early-access conversation.');
+    expect(html).toContain('does not create an account, activate a pilot');
     expect(html).toMatch(/<form\b/);
     expect(html).toContain('name="name"');
     expect(html).toContain('name="email"');
@@ -88,7 +88,12 @@ describe('Hirearchy public website', () => {
     expect(html).toContain('name="role"');
     expect(html).toContain('name="teamSize"');
     expect(html).toContain('name="primaryChallenge"');
-    expect(html).toContain('Truthful Capability Boundary:');
-    expect(html).toContain('automated email delivery is disabled');
+    expect(html).toContain('data-testid="staging-restrictions-notice"');
+    expect(html).toContain('until an authorized operator deletes it');
+    expect(html).toContain('does not include your client IP');
+    expect(html).toContain(
+      'five submissions per 15 minutes across all visitors',
+    );
+    expect(html).toContain('Automated email and follow-up are not configured');
   });
 });

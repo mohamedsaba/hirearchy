@@ -11,22 +11,38 @@ export interface SoftwareProductHeaderTenantScope {
   readonly csrfToken?: string;
 }
 
+export interface SoftwareProductHeaderStagingReview {
+  readonly organizationId: string;
+  readonly sessionId: string;
+}
+
 export const SoftwareProductHeader = ({
   active,
   tenantScope,
+  stagingReview,
   readOnlyMode = false,
 }: Readonly<{
   active: 'assessments' | 'reviews';
   tenantScope?: SoftwareProductHeaderTenantScope;
+  stagingReview?: SoftwareProductHeaderStagingReview;
   readOnlyMode?: boolean;
 }>) => {
   const allowIssuance = !readOnlyMode && !tenantScope;
+  const sessionSummaryHref = stagingReview
+    ? `/r23/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
+    : null;
+  const reviewHref = stagingReview
+    ? `/r27/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
+    : null;
 
   return (
     <header className="software-product-header">
       <Link
         className="software-wordmark"
-        href={tenantScope ? tenantScope.switchOrganizationHref : '/evaluator'}
+        href={
+          sessionSummaryHref ??
+          (tenantScope ? tenantScope.switchOrganizationHref : '/evaluator')
+        }
         aria-label="Hirearchy Software home"
       >
         <span>Hirearchy</span>
@@ -51,20 +67,37 @@ export const SoftwareProductHeader = ({
         </div>
       ) : null}
       <nav aria-label="Evaluator workspace">
-        <Link
-          className="software-nav-link"
-          href="/evaluator/assessments"
-          aria-current={active === 'assessments' ? 'page' : undefined}
-        >
-          Assessments
-        </Link>
-        <Link
-          className="software-nav-link"
-          href="/evaluator"
-          aria-current={active === 'reviews' ? 'page' : undefined}
-        >
-          Reviews
-        </Link>
+        {stagingReview && reviewHref && sessionSummaryHref ? (
+          <>
+            <Link
+              className="software-nav-link"
+              href={reviewHref}
+              aria-current={active === 'reviews' ? 'page' : undefined}
+            >
+              Review
+            </Link>
+            <Link className="software-nav-link" href={sessionSummaryHref}>
+              Session summary
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link
+              className="software-nav-link"
+              href="/evaluator/assessments"
+              aria-current={active === 'assessments' ? 'page' : undefined}
+            >
+              Assessments
+            </Link>
+            <Link
+              className="software-nav-link"
+              href="/evaluator"
+              aria-current={active === 'reviews' ? 'page' : undefined}
+            >
+              Reviews
+            </Link>
+          </>
+        )}
         {tenantScope ? (
           <>
             <Link

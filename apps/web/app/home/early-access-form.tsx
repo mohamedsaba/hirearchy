@@ -436,9 +436,12 @@ export function EarlyAccessForm() {
               optional note for authorized Hirearchy operators to review. Your
               request stays on the application host until an authorized operator
               deletes it; no automatic expiry or deletion-request process is
-              configured. Automated email and follow-up are not configured.
-              Share only information you want reviewed. Do not include candidate
-              data, credentials, or secrets. Read the{' '}
+              configured. Automated email and follow-up are not configured. The
+              stored request does not include your client IP or browser
+              user-agent. The form allows five submissions per 15 minutes across
+              all visitors to this single app process. Share only information
+              you want reviewed. Do not include candidate data, credentials, or
+              secrets. Read the{' '}
               <Link href="/privacy">privacy notice draft</Link> before
               submitting.
             </p>
