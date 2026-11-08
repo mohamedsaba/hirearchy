@@ -1,6 +1,6 @@
 # MVP release readiness
 
-- **As of:** 2026-11-07
+- **As of:** 2026-11-08
 - **Authority:** [active MVP release program](plans/active/mvp-release-program.md)
 - **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #5 is an accepted internal staging foundation. PR #6 remains draft and unmerged; its candidate and human-review workflow is not accepted.
 
@@ -47,13 +47,14 @@ Source anchors: `apps/web/src/staging/server.ts`, `apps/web/src/staging/browser.
 
 ## Current PR #6 evidence
 
-**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The last completed CI evidence is for source head `a41023b76465702565c2ac10cc253058aaa0a2ac`; checks on this repair follow-up remain pending.
+**Pull request:** [#6](https://github.com/mohamedsaba/hirearchy/pull/6) remains draft and unmerged. The last completed CI evidence is for source head `04daf4dfd65b08b29b2b7acd74eec628f54cfdea`; checks on the source-location diagnostic follow-up remain pending.
 
-- [Verify run 42388212938](https://github.com/mohamedsaba/hirearchy/actions/runs/42388212938) passed on `a41023b76465702565c2ac10cc253058aaa0a2ac`.
-- [Executor run 42388212961](https://github.com/mohamedsaba/hirearchy/actions/runs/42388212961) passed dependency-audit and PostgreSQL. Its real-Docker job passed persistent API installation and earlier setup, then failed at `Candidate invitation create response (ERR_ASSERTION)` after the recovered-session check. That head did not emit the POST status.
+- [Verify run 42390320189](https://github.com/mohamedsaba/hirearchy/actions/runs/42390320189) passed on `04daf4dfd65b08b29b2b7acd74eec628f54cfdea`.
+- [Executor run 42390320134](https://github.com/mohamedsaba/hirearchy/actions/runs/42390320134) passed dependency-audit, PostgreSQL, restricted-executor, dispatch, service, and production build checks. The staging journey now confirms candidate invitation creation with HTTP `201`. Browser sign-in, cookie checks, and organization selection progressed; the next failure is an assertion in the Builder validation/issuance phase, before the candidate/reviewer journey. The exact assertion was absent from the public diagnostic.
 - The membership row-lock grant now uses the existing `organization_id` column. Bounded validation against the actual migration-defined schema reproduced the old SQLSTATE `42703`, then passed the current installer and proof-bound checks, including denial of runtime UPDATE on every membership column. It used synthetic Auth session metadata, not live GoTrue authentication.
 - A bounded actual-migration SQL reproduction confirmed the real candidate encryption helper produces ciphertext segment lengths `[2, 16, 58, 22]`, while the installer dispatcher had required 43 for the ciphertext segment and rejected creation with SQLSTATE `22023` before writes. The follow-up changes that exact length to 58. The same SQL fixture now passes invitation create, same-key replay with fresh token material, malformed-length rejection, lock checks, and runtime write denial. Auth session metadata was synthetic; this was not live GoTrue acceptance.
-- The repair follow-up adds a proof-bound regression using the real token hash/encryption helpers and emits only POST status plus a fixed response category before retaining the link assertion. Staging snapshots now record the ordered migration ledger and inspected Auth image identity. The internal demo guide keeps signup, first-team setup, and public activation out of scope; the contact page says requests are closed and collects no messages. Root's focused launcher-safety, candidate-key custody, and local-environment checks passed 9/9; targeted syntax, Prettier, and diff checks passed. Fresh CI on this repair source is pending.
+- The pending diagnostic reports only an allowlisted repository-relative staging source file and bounded line/column numbers; assertion values, raw messages, absolute paths, and private logs remain excluded. Its three focused Node checks pass, including real assertion-frame extraction and rejection of private/unknown locations. Full CI on this follow-up is pending.
+- Staging snapshots record the ordered migration ledger and inspected Auth image identity. The internal demo guide keeps signup, first-team setup, and public activation out of scope; the contact page says requests are closed and collects no messages. Root's earlier focused launcher-safety, candidate-key custody, and local-environment checks passed 9/9.
 - Full browser and recovery acceptance remain pending. Screenshot export/upload remains deferred; no screenshots were uploaded or visually reviewed. A 900 MiB local build attempt and a separate webpack development attempt (with no services) were both stopped by OOM before rendering; visual acceptance remains pending.
 
 Do not infer success from focused local checks, earlier PR #5 CI, or a different source head. All release levels remain NO-GO until the current source passes the complete browser, recovery, and visual acceptance gates.

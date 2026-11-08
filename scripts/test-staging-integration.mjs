@@ -26,6 +26,7 @@ import {
   checkBrowserAcceptance,
   createActiveCandidateInvitationFingerprint,
   verifyCandidateInvitationRecovery,
+  stagingFailureSource,
 } from '../tests/staging/browser.mjs';
 import {
   candidateReviewApiHash,
@@ -954,8 +955,9 @@ try {
     `${stage}\n${error.stack}\n${appLog}\n${resources.map((container) => `\n${container}\n${docker('logs', container)}`).join('')}`,
     { mode: 0o600 },
   );
+  const failureSource = stagingFailureSource(error);
   console.error(
-    `Staging integration failed at ${stage} (${error.code ?? error.name ?? 'unknown'}); private diagnostics: ${artifact.pathname}`,
+    `Staging integration failed at ${stage} (${error.code ?? error.name ?? 'unknown'}${failureSource ? `; source=${failureSource}` : ''}); private diagnostics: ${artifact.pathname}`,
   );
   process.exitCode = 1;
 } finally {

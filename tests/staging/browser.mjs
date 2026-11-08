@@ -2,6 +2,34 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 
+export function stagingFailureSource(error) {
+  if (typeof error?.stack !== 'string') return null;
+  const sourceRoot = new URL('../../', import.meta.url).href;
+  for (const line of error.stack.split('\n').slice(1)) {
+    const frame = line.match(
+      /^\s+at (?:[^()]* \()?(\S+\.mjs):([1-9]\d{0,5}):([1-9]\d{0,4})\)?$/,
+    );
+    if (!frame?.[1].startsWith(sourceRoot)) continue;
+    const relativePath = frame[1].slice(sourceRoot.length);
+    if (
+      [
+        'tests/staging/browser.mjs',
+        'tests/staging/candidate-review-browser.mjs',
+        'tests/staging/candidate-review-recovery.mjs',
+        'tests/staging/security.mjs',
+        'tests/staging/private-review.mjs',
+        'tests/staging/journey.mjs',
+        'tests/staging/release.mjs',
+        'tests/staging/failure-source-check.mjs',
+        'scripts/test-staging-integration.mjs',
+      ].includes(relativePath)
+    ) {
+      return `${relativePath}:${frame[2]}:${frame[3]}`;
+    }
+  }
+  return null;
+}
+
 function loadPlaywright() {
   const require = createRequire(import.meta.url);
   const candidates = [process.env.R23_PLAYWRIGHT_MODULE, 'playwright'].filter(
