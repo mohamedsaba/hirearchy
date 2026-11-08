@@ -1565,6 +1565,58 @@ BEGIN
 END
 $function$;
 
+CREATE OR REPLACE FUNCTION staging.onboarding_list_user_memberships(
+  p_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_items pg_catalog.jsonb;
+BEGIN
+  SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'organizationId', m.organization_id::pg_catalog.text,
+    'role', m.role,
+    'version', m.version,
+    'displayName', o.display_name,
+    'isOwner', (o.owner_principal_id = m.principal_id)
+  ) ORDER BY m.organization_id), '[]'::pg_catalog.jsonb)
+  INTO v_items
+  FROM hirearchy.organization_memberships AS m
+  LEFT JOIN hirearchy.organizations AS o ON o.id = m.organization_id
+  WHERE m.principal_id = p_principal_id
+    AND m.status = 'active'
+    AND m.revoked_at IS NULL;
+
+  RETURN v_items;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_get_organization_metadata(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_meta pg_catalog.jsonb;
+BEGIN
+  SELECT pg_catalog.jsonb_build_object(
+    'displayName', display_name,
+    'isOwner', (owner_principal_id = p_caller_principal_id)
+  ) INTO v_meta
+  FROM hirearchy.organizations
+  WHERE id = p_organization_id;
+
+  RETURN v_meta;
+END
+$function$;
+
 GRANT EXECUTE ON FUNCTION staging.onboarding_get_status(pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_bootstrap_organization(pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_create_invitation(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
@@ -1576,6 +1628,8 @@ GRANT EXECUTE ON FUNCTION staging.onboarding_remove_member(pg_catalog.uuid, pg_c
 GRANT EXECUTE ON FUNCTION staging.onboarding_update_organization(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_get_profile(pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_update_profile(pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_list_user_memberships(pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_get_organization_metadata(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
 
 REVOKE ALL ON FUNCTION staging.onboarding_get_status(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.onboarding_bootstrap_organization(pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
@@ -1588,6 +1642,8 @@ REVOKE ALL ON FUNCTION staging.onboarding_remove_member(pg_catalog.uuid, pg_cata
 REVOKE ALL ON FUNCTION staging.onboarding_update_organization(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.onboarding_get_profile(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.onboarding_update_profile(pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_list_user_memberships(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_get_organization_metadata(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 
 
 CREATE OR REPLACE FUNCTION staging.dispatch(p_payload pg_catalog.bytea, p_signature pg_catalog.bytea)
@@ -2101,26 +2157,13 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
         if revoked_rows:
             error('Staging session is unavailable', '28000')
         rows = run(
-            """
-            SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-              'organizationId', m.organization_id::pg_catalog.text,
-              'role', m.role,
-              'version', m.version,
-              'displayName', o.display_name,
-              'isOwner', (o.owner_principal_id = m.principal_id)
-            ) ORDER BY m.organization_id), '[]'::pg_catalog.jsonb) AS items
-            FROM hirearchy.organization_memberships AS m
-            JOIN hirearchy.organizations AS o ON o.id = m.organization_id
-            WHERE m.principal_id = $1::pg_catalog.uuid
-              AND m.status = 'active'
-              AND m.revoked_at IS NULL
-            """,
+            "SELECT staging.onboarding_list_user_memberships($1::pg_catalog.uuid) AS items",
             ['uuid'],
             [principal_id],
-        )[0]['items']
+        )
         return {
             'principalId': principal_id,
-            'memberships': json_value(rows),
+            'memberships': safe_json_value(rows[0]['items']),
         }
 
     organization_id = require_uuid(args.get('organizationId'), 'organization ID')
@@ -2526,17 +2569,14 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             ['uuid', 'uuid', 'text'],
             [organization_id, principal_id, role],
         )[0]['items']
-        org_meta = run(
-            """
-            SELECT display_name, (owner_principal_id = $2::pg_catalog.uuid) AS is_owner
-            FROM hirearchy.organizations
-            WHERE id = $1::pg_catalog.uuid
-            """,
+        meta_rows = run(
+            "SELECT staging.onboarding_get_organization_metadata($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS meta",
             ['uuid', 'uuid'],
             [organization_id, principal_id],
         )
-        org_display_name = org_meta[0]['display_name'] if org_meta else None
-        org_is_owner = bool(org_meta[0]['is_owner']) if org_meta else False
+        org_meta = safe_json_value(meta_rows[0]['meta']) if meta_rows else None
+        org_display_name = org_meta.get('displayName') if org_meta else None
+        org_is_owner = bool(org_meta.get('isOwner')) if org_meta else False
         return {
             'organizationId': organization_id,
             'displayName': org_display_name,
