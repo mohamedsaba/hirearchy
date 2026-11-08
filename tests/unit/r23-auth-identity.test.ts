@@ -122,5 +122,66 @@ describe('R23 Auth identity verification', () => {
     expect(() => assertR23VerifiedIdentity({ ...identity })).toThrow(
       R23AuthenticationDenied,
     );
+    expect(identity.isRecovery).toBeNull();
+  });
+
+  it('classifies every valid AMR entry only after live user verification', async () => {
+    const normalToken = accessToken({
+      amr: [
+        { method: 'password', timestamp: 1, provider: 'email' },
+        { method: 'mfa/totp', timestamp: 2 },
+      ],
+    });
+    const authFetch = vi.fn<typeof fetch>(async () =>
+      Response.json({ id: subjectA }),
+    );
+    vi.stubGlobal('fetch', authFetch);
+    await expect(
+      verifyR23AccessToken(config, normalToken),
+    ).resolves.toMatchObject({
+      isRecovery: false,
+    });
+    expect(authFetch).toHaveBeenCalledOnce();
+
+    const recoveryToken = accessToken({
+      amr: [
+        { method: 'password', timestamp: 1 },
+        { method: 'recovery', timestamp: 2 },
+      ],
+    });
+    await expect(
+      verifyR23AccessToken(config, recoveryToken),
+    ).resolves.toMatchObject({
+      isRecovery: true,
+    });
+    expect(authFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks missing, empty, or malformed AMR ineligible without breaking legacy verification', async () => {
+    const invalidAmr: unknown[] = [
+      undefined,
+      [],
+      null,
+      'password',
+      [{}],
+      [{ method: '', timestamp: 1 }],
+      [{ method: 'password', timestamp: -1 }],
+      [{ method: 'password', timestamp: '1' }],
+      [{ method: 'password', timestamp: 1e100 }],
+      [{ method: 'password', timestamp: 1 }, null],
+      [{ method: 'recovery', timestamp: 1 }, null],
+    ];
+    const authFetch = vi.fn<typeof fetch>(async () =>
+      Response.json({ id: subjectA }),
+    );
+    vi.stubGlobal('fetch', authFetch);
+
+    for (const amr of invalidAmr) {
+      const claims = amr === undefined ? {} : { amr };
+      await expect(
+        verifyR23AccessToken(config, accessToken(claims)),
+      ).resolves.toMatchObject({ isRecovery: null });
+    }
+    expect(authFetch).toHaveBeenCalledTimes(invalidAmr.length);
   });
 });

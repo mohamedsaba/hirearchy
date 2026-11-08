@@ -1,6 +1,6 @@
 # Internal staging PostgreSQL dispatcher
 
-This provides a private authoring and review lane for one team. It is a prototype, not a production or hostile-code security boundary, and does not certify managed Supabase compatibility.
+The merged PR #6 source provides a private recruiter, candidate, and assigned-reviewer workflow for one team. Its technical CI, browser, and late-restore checks passed; authenticated visual review and release-level operations remain open. This is a prototype, not a production or hostile-code security boundary, and does not certify managed Supabase compatibility. See the [single release-readiness record](../../../docs/release-readiness.md) for current evidence.
 
 ## Install
 
@@ -27,17 +27,21 @@ Run the app with `HIREARCHY_RUNTIME_PROFILE=staging-authenticated` and configure
 
 The current profile accepts only loopback Auth and PostgreSQL URLs. A proof is signed over canonical JSON, expires within 60 seconds, and is consumed once by the database. The `auth_exp` claim records the verified access-token expiry; PostgreSQL clamps the effective application-session expiry to GoTrue `not_after` when set and rejects expired Auth sessions on every operation. A staging session is bound to the Auth session ID, subject, organization, and application principal; valid requests refresh its expiry. `session.revoke` persists revocation for the specified organization context.
 
+The in-progress recovery-proof-v2 follow-up changes this proof contract. After validating the exact bearer through live GoTrue `/user`, the application classifies every signed AMR entry and issues only proof version 2 with `isRecovery: false`. Missing, empty, malformed, or recovery AMR is denied before browser-session creation or proof issuance. The SQL verifier requires strict boolean false and rejects v1; it retains signature, live Auth session, subject, expiry, authorization, and nonce checks. This follow-up is not yet part of the merged PR #6 source; install its signer and verifier together only after its own CI acceptance.
+
 `r23_gateway` can execute only `staging.dispatch(bytea, bytea)`. It has no direct product table access and cannot assume the `NOLOGIN` verifier owner. The `SECURITY DEFINER` dispatcher verifies Ed25519 proofs, checks the active GoTrue session and current membership, consumes nonces atomically, and uses fixed search paths and verifier-owner RLS policies. Only the dispatcher sets the owner-scoped RLS context after proof verification. `session.revoke` persists revocation for the specified organization context; other organization contexts for the same GoTrue session remain independent.
 
 ## Available operations and limits
 
+The raw `POST /api/staging/v1` allowlist remains `membership.list`, `organization.context`, `session.open`, `session.revoke`, `assessment.create`, `assessment.get`, `assessment.validate`, `assessment.issue`, `evidence.read`, `review.read`, `evidence.observation.create`, `evidence.observation.update`, `review.packet.save`, and `review.packet.finalize`. Candidate invitation lifecycle operations are exposed through authenticated R23 browser routes and are not arbitrary additions to this direct API allowlist.
+
 - `session.open` and `session.revoke` take `{ organizationId }`.
 - `assessment.create` takes `{ organizationId, content }` and may include `assessmentId` when updating an existing draft. `assessment.get` takes `{ organizationId, assessmentId }`.
 - `assessment.validate` takes `{ organizationId, assessmentId }`. The app reads the stored draft and runs the R2.11 static validator and approved-template normalization; SQL locks and matches the current draft before persisting the validated digest and snapshot.
-- `assessment.issue` takes `{ organizationId, assessmentId, reviewerPrincipalId }`. It creates a real `CREATED` session and reviewer assignment with terminal execution and AI disabled. It issues no candidate token and enables no candidate browser or execution route.
-- `evidence.read` and `review.read` take `{ organizationId, sessionId }` and require the assigned active reviewer. Until the candidate session is `SUBMITTED`, they return empty arrays with an explicit availability message. Submitted reads return persisted evidence and review packets; evaluator observations, histories, and packets are scoped to the caller's own authored records. There are no review-write operations.
+- `assessment.issue` takes `{ organizationId, assessmentId, reviewerPrincipalId }`. It creates a real `CREATED` session and reviewer assignment with terminal execution and AI disabled. Candidate invitation creation is a separate explicit action through the authenticated R23 candidate-token route.
+- `evidence.read` and `review.read` take `{ organizationId, sessionId }` and require the assigned active reviewer. Until the candidate session is `SUBMITTED`, they return empty arrays with an explicit availability message. Submitted reads return persisted evidence and review packets; evaluator observations, histories, and packets are private to their author. The assigned reviewer may write observations and save/finalize a versioned human review packet through the existing staging operations.
 
-Candidate execution, AI, candidate token creation, candidate browser access, and review writes remain unavailable. An issued assessment is not evidence of candidate work. The lane does not infer or report competence, scores, or hiring verdicts.
+The R26 candidate browser flow supports invitation-scoped consent, workspace editing and save, and final submission. Candidate execution, AI, and invitation email remain unavailable. An issued assessment is not evidence of candidate work. The lane does not infer or report competence, scores, or hiring verdicts.
 
 ## Recovery and rollback
 
@@ -45,4 +49,4 @@ Run `npm run build` followed by `npm run test:staging`. The harness exercises re
 
 PostgreSQL dumps omit cluster roles and Python packages. Restore requires the same reviewed image, role and extension bootstrap, Auth configuration, and matching application signing keys. The local `.data` dumps and private-key files are private recovery artifacts; protect them and maintain an off-host backup. Reconcile key rotation and revocation state with the restored database before routing traffic. This local rehearsal is not a deployment-readiness claim.
 
-HTTP bodies are bounded to 256 KiB and proofs to 1 MiB to accommodate the existing bounded workspace and signed validation snapshots. The staging profile permits only liveness and the new API; liveness remains explicitly separate from readiness. There is no browser product journey in this API slice. Auth and application data share the database dump, but GoTrue JWT configuration and application private keys require separate protected recovery. A snapshot predating access revocation must have those revocations reconciled before traffic resumes.
+HTTP bodies are bounded to 256 KiB and proofs to 1 MiB to accommodate the existing bounded workspace and signed validation snapshots. The staging profile permits only liveness and the explicit API and browser routes; liveness remains separate from readiness. Auth and application data share the database dump, but GoTrue JWT configuration and application private keys require separate protected recovery. A snapshot predating access revocation must have those revocations reconciled before traffic resumes.

@@ -14,6 +14,7 @@ export type R23VerifiedIdentity = Readonly<{
   assurance: 'aal1' | 'aal2';
   email: string | null;
   emailVerified: boolean;
+  isRecovery: boolean | null;
   expiresAt: number;
 }>;
 
@@ -44,6 +45,27 @@ type Claims = Record<string, unknown> & {
 
 function denied(): never {
   throw new R23AuthenticationDenied();
+}
+
+function classifyRecoveryAmr(amr: unknown): boolean | null {
+  if (!Array.isArray(amr) || amr.length === 0) return null;
+  let isRecovery = false;
+  for (const entry of amr) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      return null;
+    const { method, timestamp } = entry as Record<string, unknown>;
+    if (
+      typeof method !== 'string' ||
+      method.trim().length === 0 ||
+      typeof timestamp !== 'number' ||
+      !Number.isSafeInteger(timestamp) ||
+      timestamp < 0
+    ) {
+      return null;
+    }
+    if (method === 'recovery') isRecovery = true;
+  }
+  return isRecovery;
 }
 
 function parseSegment(segment: string): Record<string, unknown> {
@@ -282,6 +304,7 @@ export async function verifyR23AccessToken(
     assurance: claims.aal,
     email: typeof user.email === 'string' ? user.email : null,
     emailVerified: typeof user.email_confirmed_at === 'string',
+    isRecovery: classifyRecoveryAmr(claims.amr),
     expiresAt: claims.exp,
   });
   verifiedIdentities.add(identity);
@@ -292,4 +315,12 @@ export function assertR23VerifiedIdentity(value: unknown): R23VerifiedIdentity {
   if (!value || typeof value !== 'object' || !verifiedIdentities.has(value))
     return denied();
   return value as R23VerifiedIdentity;
+}
+
+export function assertR23StagingEligibleIdentity(
+  value: unknown,
+): R23VerifiedIdentity {
+  const identity = assertR23VerifiedIdentity(value);
+  if (identity.isRecovery !== false) return denied();
+  return identity;
 }

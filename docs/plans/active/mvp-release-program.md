@@ -1,6 +1,6 @@
 # MVP release program
 
-Status: Active. Updated: 2026-11-05.
+Status: Active. Updated: 2026-11-08.
 
 This is the single active plan for the MVP release program. The R2.15 internal staging foundation plan is complete and preserved at `docs/plans/completed/160-r2-15-staging-foundation.md`. The current release evidence and go/no-go state live in [release readiness](../../release-readiness.md). Update that file as source, CI, browser, recovery, or hosting evidence changes; do not create a sequence of R2.x status reports.
 
@@ -16,15 +16,15 @@ Evidence remains separate from evaluator judgment. Do not add candidate scores, 
 
 ## Current integration boundary
 
-PR #5, R2.15, merged to protected `main` as `1a919b40ab45f9788a8cf0f785d33449379b7098`, from source head `2bf59713e3d6ccd9c18e46db71d2de8dba467524`. It provides an authenticated internal staging foundation: GoTrue sign-in, organization selection, assessment draft/validation/issuance, and reviewer assignment through the PostgreSQL proof boundary. It intentionally issues no candidate token or link; candidate activity, execution, live AI, and evaluator review writes are blocked in this profile. Its browser acceptance covers this restricted scope, not the complete product journey. The complete workflow and later release levels remain NO-GO. Exact CI evidence and limits are in [release readiness](../../release-readiness.md).
+PR #6 merged normally to protected `main` at `6f144045a3dcfa523fd7d79112c09721011b4871`, with the exact tree of source `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`. All four required checks passed on that source. The real GoTrue/PostgreSQL/Chromium journey covers candidate invitations and consent, persistent saves/submission, assigned-reviewer observations, saved and finalized human review, unassigned write denial, and late separate-instance recovery. It builds on PR #5's authenticated staging foundation. Authenticated visual acceptance, the approved Reservation Moves v3 walkthrough, first-team setup and later release gates remain incomplete. Exact evidence and limits are in [release readiness](../../release-readiness.md).
 
 The existing R2.14 PostgreSQL candidate bridge already has the token-scoped workspace and the restricted-executor integration. Reuse those domains and their evidence model. Do not turn on R2.14 disposable flags in the persistent staging profile.
 
 ## Delivery sequence
 
 1. **Consolidate PR #5 — complete, internal staging foundation only.** The launcher correction is included in source head `2bf59713e3d6ccd9c18e46db71d2de8dba467524`; all four required CI contexts passed on that exact commit. PR #5 merged through the normal protected workflow as `1a919b40ab45f9788a8cf0f785d33449379b7098`. Protected `main` was fast-forwarded locally to this merge commit while preserving the pre-existing dirty `apps/web/next-env.d.ts`. This acceptance does not complete the candidate-to-human-review workflow or change any release gate.
-2. **Build the internal demo on the accepted PostgreSQL base.** Connect recruiter issuance to an expiring, revocable, copyable candidate invitation; require clear data-use disclosure and consent before work begins; support candidate activation, editing, save/autosave, refresh recovery, and final submission; make submitted evidence available only to the assigned evaluator; retain a human review packet. The internal demo sends no email, uses no live AI, and does not enable external execution.
-3. **Prove the complete journey and isolation.** Exercise recruiter, candidate, and evaluator browser flows against disposable PostgreSQL and GoTrue. Verify token expiry/revocation/replay, submission finality, organization and reviewer-assignment isolation, durable restart, truthful failure/success states, and captured evidence provenance. After the completed candidate/reviewer browser flow, save a second private PostgreSQL snapshot, verify its saved bytes, restore it into fresh PostgreSQL, GoTrue, and app instances, then compare session-scoped row and authorized reviewer-read hashes. Recover a separate active invitation by comparing only the SHA-256 of its relative candidate path and expiry; keep the completed session revoked. Run heavyweight checks serially on the shared machine.
+2. **Build the internal demo on the accepted PostgreSQL base — technical workflow merged in PR #6; visual and approved-template acceptance remain pending.** Connect recruiter issuance to an expiring, revocable, copyable candidate invitation; require clear data-use disclosure and consent before work begins; support candidate activation, editing, save/autosave, refresh recovery, and final submission; make submitted evidence available only to the assigned evaluator; retain a human review packet. The internal demo sends no email, uses no live AI, and does not enable external execution.
+3. **Prove the complete journey and isolation — technical browser and late restore gates passed on PR #6.** Exercise recruiter, candidate, and evaluator browser flows against disposable PostgreSQL and GoTrue. Verify token expiry/revocation/replay, submission finality, organization and reviewer-assignment isolation, durable restart, truthful failure/success states, and captured evidence provenance. After the completed candidate/reviewer browser flow, save a second private PostgreSQL snapshot, verify its saved bytes, restore it into fresh PostgreSQL, GoTrue, and app instances, then compare session-scoped row and authorized reviewer-read hashes. Recover a separate active invitation by comparing only the SHA-256 of its relative candidate path and expiry; keep the completed session revoked. Run heavyweight checks serially on the shared machine.
 4. **Prepare a buyer-facing demo.** Validate the initial buyer segment with sourced competitor research. Provide a short demo script, honest capability disclosures, customer-discovery questions, and a pricing hypothesis. No fabricated interviews, testimonials, or outcome metrics.
 5. **Close release-level gates.** Rehearse supported hosting, migration, backup restore, rollback, monitoring, proxy/TLS, and security controls before external candidates or a public launch. Ask for a precise provisioning decision only where an external service, paid infrastructure, or irreversible activation is genuinely required.
 
@@ -51,7 +51,7 @@ The existing R2.14 PostgreSQL candidate bridge already has the token-scoped work
 - **Sol 6.1 Ultra:** owns product/scope/architecture decisions, integration authority, and acceptance. The founder's 2026-11-06 continuation authorizes direct bounded implementation while Luna is unavailable; do not claim independent worker verification for that work.
 - **Luna Max:** preferred for repository scans, market research, code, Git operations, tests, and routine delivery when available. Maximum two active Luna workers; no nested delegation. Do not repeatedly retry quota-exhausted workers or silently substitute models.
 - Sol assigns non-overlapping files and responsibilities. Workers report changed paths, commands, evidence, limitations, and remaining uncertainty.
-- The common implementation base is protected main at merge commit `1a919b40ab45f9788a8cf0f785d33449379b7098`; use an isolated worktree and preserve unrelated work. Begin backend implementation only after root accepts the API contract and assigns ownership. Never force-overwrite or clean unknown resources.
+- The common implementation base is protected main at merge commit `6f144045a3dcfa523fd7d79112c09721011b4871`; use an isolated worktree and preserve unrelated work. Begin backend implementation only after root accepts the API contract and assigns ownership. Never force-overwrite or clean unknown resources.
 - Coordinate database, Docker, browser, and full-suite verification serially. A passing unit or disposable integration test does not certify staging or production.
 - Do not commit, push, merge, send customer communications, incur paid services, or deploy publicly without the applicable authorization in the master mandate and protected workflow.
 
@@ -61,7 +61,7 @@ Update the architecture overview, README, current-state handoff, scenario/runtim
 
 ## Accepted internal-demo rules and implementation contract
 
-Root accepted these product and security rules and assigned the backend implementation. The contract below is being implemented on the durable-workflow branch; it is not a deployment or release certification.
+Root accepted these product and security rules and assigned the backend implementation. The contract below is implemented by merged PR #6 with the technical acceptance above; it is not a deployment or release certification.
 
 ### Invitation lifecycle and idempotency
 
@@ -101,6 +101,29 @@ The staging verifier owner uses column-only `UPDATE(id)` privileges on assessmen
 - B’s UI mapping after this contract is accepted: R23 recruiter UI creates, recovers, copies, and revokes the invitation from the existing issued session; R26 page eligibility calls `r26CandidatePageIsAvailable()`; candidate GET is typed as `R26CandidateGetResponse`; AI/execution controls and fetches follow `response.capabilities`; the consent step renders only `response.dataNotice` and activates only after affirmative acknowledgement. No capability defaults or candidate UI changes to reviewer writes are required.
 - Continue through existing R27 submitted-evidence and R210 human-review surfaces. Preserve the existing `writesEnabled` contract, assigned-reviewer checks, submitted-session gate, private observations, and optimistic finalization.
 
-## Current CI repair — 2026-11-06
+## Prior CI repair — 2026-11-06 through 2026-11-08
 
-PR #6 is draft at implementation source `b5bcbf4abc67725da60f070040a18166d28b8132`. Preserve interrupted work before editing. Repair the React state/effect lifecycle, keep the candidate command plus its read-only lifecycle probe as the exact runtime function allowlist, and make the installer accept only the bootstrap role setting `search_path=pg_catalog` while rejecting extra or per-database settings. Preserve the explicit disposable-schema refusal. Run focused lint/types and PostgreSQL checks, then the complete required CI and browser/recovery journey on the new head. The founder approved the eight masked synthetic PNGs as GitHub Actions artifacts for seven days; inspect for credential exposure before upload and keep all other operational files excluded. Full browser, visual, and release acceptance remain pending.
+The interrupted candidate/UI work was preserved before repair. PR #6's accepted source retains the exact candidate-command/lifecycle-probe allowlist, bootstrap-role setting checks, disposable-schema refusal, browser privacy guards and proof-bound authorization. The founder approved eight masked synthetic PNG artifacts but later deferred upload because the existing credential lacks workflow scope. Keep upload deferred; do not modify workflows or export screenshots/private diagnostics through another route. Full technical browser and recovery CI now passes; authenticated visual and later release acceptance remain pending.
+
+## Recovery credentials cannot authorize product operations
+
+- **Status:** Active; root accepted this bounded security contract on 2026-11-08.
+- **Implementation base:** accepted PR #6 merge `6f144045a3dcfa523fd7d79112c09721011b4871`. This does not accept or implement the remaining first-team onboarding proposal.
+
+### Problem and outcome
+
+A recovery-issued GoTrue bearer can reach the direct staging API. A separate recovery cookie cannot prevent that. Require an eligible normal login before creating a staging browser session or issuing any product proof. Recovery credentials remain available only to GoTrue password update, followed by fresh login.
+
+### Accepted boundary
+
+1. Preserve exact-token live GoTrue `/user`, subject, session and expiry verification. Classify its Auth-signed AMR only after live verification. Inspect every entry: any recovery method is recovery-only. Missing, empty or malformed AMR is ineligible. Valid entries require a nonempty method and nonnegative safe-integer timestamp; do not silently select the first entry or default to normal login.
+2. Carry the classification in the existing branded verified identity. Preserve legacy SQLite and disposable verification behavior; an identity with ineligible AMR cannot issue a staging proof.
+3. Require proof version 2 with exact keys and `isRecovery: false`. Deny recovery and ineligible identities in the shared issuer. Deny both before the staging login writes a browser session. The direct bearer API and all browser product operations continue through this shared issuer.
+4. PostgreSQL requires strict boolean false and rejects v1. Retain signature, key, independent live Auth subject/session/expiry, principal, membership, operation and nonce checks. No fallback, Auth AMR-table privileges or migration changes.
+5. Deploy the application and privileged verifier installer together in the existing staging rehearsal. A mismatched version fails closed; do not introduce compatibility acceptance of v1.
+
+### Ownership and checks
+
+Luna owns identity/proof/login guards, SQL proof validation and affected fixtures in an isolated checkout. Root owns the contract, review, integration and acceptance. Preserve unrelated work, earlier migration bytes, source workflows and disabled AI/execution/email capabilities.
+
+Cover normal password login; recovery in any AMR entry; missing/empty/malformed AMR; proof issuance and browser-session denial; direct API denial; strict SQL rejection of true/missing/null/string/numeric recovery fields and v1; and continued nonce/live-session enforcement. Use existing focused suites and the actual migrated SQL fixture before full CI. Record exact source and evidence in release readiness. Do not claim signup, SMTP, first-team setup, managed-Supabase compatibility, deployment or public readiness from this slice.

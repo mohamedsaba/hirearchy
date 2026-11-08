@@ -371,6 +371,63 @@ const login = async (authUrl, email, userPassword) => {
   assert.equal(response.status, 200, 'Real GoTrue login');
   return (await response.json()).access_token;
 };
+function syntheticAmrVariants(originalAccessToken) {
+  const [header, encodedPayload] = originalAccessToken.split('.');
+  assert.ok(header && encodedPayload);
+  const headerClaims = JSON.parse(
+    Buffer.from(header, 'base64url').toString('utf8'),
+  );
+  assert.equal(headerClaims.alg, 'HS256', 'GoTrue bearer uses HS256');
+  const original = JSON.parse(
+    Buffer.from(encodedPayload, 'base64url').toString('utf8'),
+  );
+  assert.equal(typeof original.sub, 'string');
+  assert.equal(typeof original.session_id, 'string');
+  assert.equal(Number.isSafeInteger(original.exp), true);
+  const now = Math.floor(Date.now() / 1000);
+  const variants = [
+    [
+      'recovery AMR precedes password AMR',
+      [
+        { method: 'recovery', timestamp: now - 1 },
+        { method: 'password', timestamp: now },
+      ],
+    ],
+    [
+      'recovery AMR follows password AMR',
+      [
+        { method: 'password', timestamp: now - 1 },
+        { method: 'recovery', timestamp: now },
+      ],
+    ],
+    ['missing AMR', undefined],
+    ['empty AMR', []],
+  ];
+  return variants.map(([label, amr]) => {
+    const claims = { ...original };
+    if (amr === undefined) delete claims.amr;
+    else claims.amr = amr;
+    assert.deepEqual(
+      [claims.sub, claims.session_id, claims.exp],
+      [original.sub, original.session_id, original.exp],
+      'Synthetic AMR variant preserves original subject, session, and expiry',
+    );
+    const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+    const signingInput = `${header}.${payload}`;
+    const signature = createHmac('sha256', jwtSecret)
+      .update(signingInput)
+      .digest('base64url');
+    return { label, token: `${signingInput}.${signature}` };
+  });
+}
+async function assertGoTrueAcceptsExactToken(authUrl, token, subjectId) {
+  const response = await fetch(`${authUrl}/user`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 200, 'GoTrue accepts synthetic AMR bearer');
+  const user = await response.json();
+  assert.equal(user.id, subjectId, 'GoTrue /user subject matches token');
+}
 const call = async (url, token, op, args, expected = 200) => {
   const response = await fetch(`${url}/api/staging/v1`, {
     method: 'POST',
@@ -580,6 +637,21 @@ try {
   stage = 'verified application sessions';
   await call(appUrl, recruiter, 'session.open', { organizationId });
   await call(appUrl, reviewer, 'session.open', { organizationId });
+  stage = 'recovery-proof boundary / normal password bearer';
+  await call(appUrl, recruiter, 'session.open', { organizationId });
+  const recruiterClaims = JSON.parse(
+    Buffer.from(recruiter.split('.')[1], 'base64url').toString('utf8'),
+  );
+  for (const variant of syntheticAmrVariants(recruiter)) {
+    stage = `recovery-proof boundary / GoTrue accepts ${variant.label}`;
+    await assertGoTrueAcceptsExactToken(
+      authUrl,
+      variant.token,
+      recruiterClaims.sub,
+    );
+    stage = `recovery-proof boundary / deny ${variant.label}`;
+    await call(appUrl, variant.token, 'session.open', { organizationId }, 401);
+  }
   const journey = await import('../tests/staging/journey.mjs');
   stage = 'durable assessment journey';
   const state = await journey.createJourney({

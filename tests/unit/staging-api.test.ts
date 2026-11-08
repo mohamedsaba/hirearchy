@@ -6,6 +6,7 @@ vi.mock('../../apps/web/src/staging/dispatch.mjs', () => ({
   dispatchStagingProof: vi.fn(async () => ({ ok: true })),
 }));
 import { dispatchStagingProof } from '../../apps/web/src/staging/dispatch.mjs';
+import { stagingLoginPost } from '../../apps/web/src/staging/browser';
 import { stagingPost } from '../../apps/web/src/staging/server';
 import { proxy } from '../../apps/web/proxy';
 import { r23IsEnabled } from '../../apps/web/src/r23-auth/config';
@@ -198,7 +199,7 @@ describe('authenticated staging boundary', () => {
       STAGING_PROOF_KEY_ID: 'key-1',
     };
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
-    const token = `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: env.STAGING_AUTH_ISSUER, aud: env.STAGING_AUTH_AUDIENCE, exp: Math.floor(Date.now() / 1000) + 300 })}.signature`;
+    const token = `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: env.STAGING_AUTH_ISSUER, aud: env.STAGING_AUTH_AUDIENCE, exp: Math.floor(Date.now() / 1000) + 300, amr: [{ method: 'password', timestamp: 1 }] })}.signature`;
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => Response.json({ id: subject })),
@@ -208,6 +209,8 @@ describe('authenticated staging boundary', () => {
       vi.mocked(dispatchStagingProof).mock.calls[0];
     expect(url).toBe(env.STAGING_DATABASE_URL);
     expect(JSON.parse(payload.toString())).toMatchObject({
+      v: 2,
+      isRecovery: false,
       sub: subject,
       sid: session,
       op: 'session.open',
@@ -325,5 +328,78 @@ describe('authenticated staging boundary', () => {
         )
       ).status,
     ).toBe(400);
+  });
+
+  it('permits normal login but denies recovery or ineligible credentials before product access', async () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    const { privateKey } = generateKeyPairSync('ed25519');
+    const env = {
+      STAGING_AUTH_URL: 'http://127.0.0.1:54321',
+      STAGING_AUTH_ISSUER: 'https://auth.example.test',
+      STAGING_AUTH_AUDIENCE: 'authenticated',
+      STAGING_DATABASE_URL:
+        'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
+      STAGING_PROOF_PRIVATE_KEY: privateKey
+        .export({ format: 'der', type: 'pkcs8' })
+        .toString('base64'),
+      STAGING_PROOF_ISSUER: 'hirearchy',
+      STAGING_PROOF_AUDIENCE: 'database',
+      STAGING_PROOF_KEY_ID: 'key-1',
+    };
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+
+    const makeToken = (amr?: unknown) => {
+      const exp = Math.floor(Date.now() / 1000) + 300;
+      return `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: env.STAGING_AUTH_ISSUER, aud: env.STAGING_AUTH_AUDIENCE, exp, ...(amr === undefined ? {} : { amr }) })}.signature`;
+    };
+    let grantedToken = makeToken([{ method: 'password', timestamp: 1 }]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        if (String(input).includes('/token?grant_type=password')) {
+          return Response.json({
+            access_token: grantedToken,
+            refresh_token: 'synthetic-refresh-token',
+            expires_in: 300,
+          });
+        }
+        return Response.json({ id: subject });
+      }),
+    );
+    const loginRequest = () =>
+      new Request('http://localhost/r23/auth/login', {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'evaluator@example.test',
+          password: 'synthetic-password',
+        }),
+      });
+
+    const normalLogin = await stagingLoginPost(loginRequest());
+    expect(normalLogin.status).toBe(303);
+    expect(normalLogin.headers.get('set-cookie')).toContain(
+      '__Host-r23-session=',
+    );
+
+    for (const amr of [
+      [
+        { method: 'password', timestamp: 1 },
+        { method: 'recovery', timestamp: 2 },
+      ],
+      undefined,
+    ]) {
+      grantedToken = makeToken(amr);
+      const login = await stagingLoginPost(loginRequest());
+      expect(login.status).toBe(401);
+      expect(login.headers.get('set-cookie')).toBeNull();
+      vi.mocked(dispatchStagingProof).mockClear();
+      expect((await stagingPost(request(grantedToken))).status).toBe(401);
+      expect(dispatchStagingProof).not.toHaveBeenCalled();
+    }
   });
 });
