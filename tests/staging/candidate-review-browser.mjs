@@ -649,7 +649,7 @@ export async function checkCandidateReviewBrowserAcceptance({
     } finally {
       releaseFirstResponse();
       heldSaveResponseRelease = null;
-      await candidatePage.unroute(`**/r26/api/candidate/${sessionId}`);
+      await candidatePage.unrouteAll({ behavior: 'wait' });
     }
 
     const executionGatePage = await candidateContext.newPage();
@@ -715,10 +715,13 @@ export async function checkCandidateReviewBrowserAcceptance({
       0,
       'The execution handler must also reject runs without a confirmed budget',
     );
+    await executionGatePage.unrouteAll({ behavior: 'wait' });
     await executionGatePage.close();
 
     const submitInputs = [];
     let firstSubmitStatus = null;
+    let firstSubmitFinished = false;
+    let firstSubmitError = null;
     await candidatePage.route(
       `**/r26/api/candidate/${sessionId}`,
       async (route) => {
@@ -734,14 +737,15 @@ export async function checkCandidateReviewBrowserAcceptance({
 
         submitInputs.push(body.input);
         if (submitInputs.length === 1) {
-          const response = await route.fetch();
-          firstSubmitStatus = response.status();
-          assert.equal(
-            response.ok(),
-            true,
-            'The first submission must commit before its response is dropped',
-          );
-          await route.abort('failed');
+          try {
+            const response = await route.fetch();
+            firstSubmitStatus = response.status();
+            await route.abort('failed');
+          } catch (error) {
+            firstSubmitError = error;
+          } finally {
+            firstSubmitFinished = true;
+          }
           return;
         }
         await route.continue();
@@ -750,8 +754,19 @@ export async function checkCandidateReviewBrowserAcceptance({
     await candidatePage
       .getByRole('button', { name: 'Submit assessment' })
       .click();
-    await candidatePage.getByTestId('candidate-submit-uncertain').waitFor();
-    assert.ok(firstSubmitStatus >= 200 && firstSubmitStatus < 300);
+    await waitUntil(
+      () => firstSubmitFinished,
+      'the first submission response to be dropped',
+    );
+    if (firstSubmitError) throw firstSubmitError;
+    assert.ok(
+      firstSubmitStatus >= 200 && firstSubmitStatus < 300,
+      'The first submission must commit before its response is dropped',
+    );
+    await candidatePage
+      .getByTestId('candidate-submit-uncertain')
+      .filter({ hasText: 'The submission outcome is unknown.' })
+      .waitFor();
     const candidateEditor = candidatePage.locator(
       '.cm-content[aria-label="Edit file"]',
     );
@@ -790,7 +805,7 @@ export async function checkCandidateReviewBrowserAcceptance({
         maskableValues: candidateMaskableValues,
       },
     );
-    await candidatePage.unroute(`**/r26/api/candidate/${sessionId}`);
+    await candidatePage.unrouteAll({ behavior: 'wait' });
 
     assert.deepEqual(
       forbiddenCapabilityRequests,
@@ -1092,11 +1107,23 @@ export async function checkCandidateReviewBrowserAcceptance({
   } finally {
     heldSaveResponseRelease?.();
     heldRevokeResponseRelease?.();
-    await Promise.allSettled([
-      recruiterContext?.close(),
-      candidateContext?.close(),
-      reviewerContext?.close(),
-    ]);
-    await browser.close();
+    try {
+      for (const context of [
+        recruiterContext,
+        candidateContext,
+        reviewerContext,
+      ]) {
+        for (const page of context?.pages() ?? []) {
+          await page.unrouteAll({ behavior: 'wait' });
+        }
+      }
+    } finally {
+      await Promise.allSettled([
+        recruiterContext?.close(),
+        candidateContext?.close(),
+        reviewerContext?.close(),
+      ]);
+      await browser.close();
+    }
   }
 }
