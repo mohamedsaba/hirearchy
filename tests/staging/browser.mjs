@@ -508,53 +508,57 @@ async function assertUnassignedReviewerWritesDenied({
     );
 
     const csrf = await readBrowserCsrf(context, appUrl);
+    const sessionCookie = (await context.cookies()).find(
+      (cookie) =>
+        cookie.name === '__Host-r23-session' &&
+        cookie.domain === new URL(appUrl).hostname &&
+        cookie.path === '/' &&
+        cookie.secure === true &&
+        cookie.httpOnly === true,
+    );
+    assert.ok(sessionCookie, 'Browser session cookie must match the app host');
+    // The forms page blocks fetch via CSP; the API client also omits Secure loopback cookies.
+    const headers = {
+      Accept: 'application/json',
+      Origin: new URL(appUrl).origin,
+      'X-CSRF-Token': csrf,
+      Cookie: `${sessionCookie.name}=${sessionCookie.value}; __Host-r23-csrf=${csrf}`,
+    };
     const before = await reviewWriteCounts(admin, organizationId, sessionId);
     const basePath = `/r27/api/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(sessionId)}`;
-    const observationStatus = await page.evaluate(
-      async ({ basePath, csrf }) => {
-        const response = await fetch(`${basePath}/observations`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': csrf,
-          },
-          body: JSON.stringify({
-            csrf,
-            evidenceSourceType: 'timeline_event',
-            eventSequence: '1',
-            evidenceDigest: '0'.repeat(64),
-            body: 'Unassigned reviewer write must be rejected.',
-          }),
-        });
-        return response.status;
+    const observationResponse = await context.request.post(
+      `${appUrl}${basePath}/observations`,
+      {
+        headers,
+        maxRedirects: 0,
+        data: {
+          csrf,
+          evidenceSourceType: 'timeline_event',
+          eventSequence: '1',
+          evidenceDigest: '0'.repeat(64),
+          body: 'Unassigned reviewer write must be rejected.',
+        },
       },
-      { basePath, csrf },
     );
-    assert.equal(observationStatus, 403);
+    assert.equal(observationResponse.status(), 403);
 
-    const packetStatus = await page.evaluate(
-      async ({ basePath, csrf }) => {
-        const response = await fetch(`${basePath}/review-packet`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': csrf,
-          },
-          body: JSON.stringify({
-            csrf,
-            summary: 'Unassigned reviewer write must be rejected.',
-            strengths: [],
-            concerns: [],
-            unresolvedQuestions: [],
-            referencedObservationIds: [],
-            referencedEvidence: [],
-          }),
-        });
-        return response.status;
+    const packetResponse = await context.request.put(
+      `${appUrl}${basePath}/review-packet`,
+      {
+        headers,
+        maxRedirects: 0,
+        data: {
+          csrf,
+          summary: 'Unassigned reviewer write must be rejected.',
+          strengths: [],
+          concerns: [],
+          unresolvedQuestions: [],
+          referencedObservationIds: [],
+          referencedEvidence: [],
+        },
       },
-      { basePath, csrf },
     );
-    assert.equal(packetStatus, 403);
+    assert.equal(packetResponse.status(), 403);
     assert.deepEqual(
       await reviewWriteCounts(admin, organizationId, sessionId),
       before,
