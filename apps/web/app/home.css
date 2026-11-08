@@ -180,7 +180,8 @@
   border-radius: 50px;
   background: var(--ct-plum);
   color: #fff !important;
-  font-size: 1.2cqw;
+  font-size: max(13px, 1.2cqw);
+  min-height: 44px;
   font-weight: 650;
   border: 1px solid transparent;
   transition: color 200ms;
