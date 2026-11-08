@@ -245,16 +245,24 @@ export function Path({
   );
 }
 export function ContactCta({
-  title = 'The Software demo is in development.',
+  title = 'Evaluate real engineering work with Hirearchy.',
 }: {
   title?: string;
 }) {
   return (
     <section className="ct-contact-cta ct-reveal">
-      <Kicker>Product preview</Kicker>
+      <Kicker>Design Partner Program</Kicker>
       <h2>{title}</h2>
-      <p>Customer access and demo requests are not open yet.</p>
-      <Button href="/products/software#demo-limits">Explore Software</Button>
+      <p>
+        Join our early access cohort to run high-signal, evidence-first
+        technical evaluations with verifiable source citations.
+      </p>
+      <div
+        className="ct-contact-links"
+        style={{ justifyContent: 'center', marginTop: '20px' }}
+      >
+        <Button href="/contact">Request early access</Button>
+      </div>
     </section>
   );
 }

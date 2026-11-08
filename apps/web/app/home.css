@@ -1264,6 +1264,96 @@
   margin: 2cqw 0;
   font-size: 1.6cqw;
 }
+.ct-form-intro {
+  margin: 12px 0 24px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ct-muted);
+}
+.ct-topic-options--vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ct-topic-options--vertical .ct-topic-choice {
+  width: 100%;
+}
+.ct-topic-options--vertical .ct-topic-choice > span {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+.ct-form-notice {
+  margin: 20px 0;
+  padding: 14px 18px;
+  background: var(--ct-lilac);
+  border-left: 3px solid var(--ct-plum);
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ct-plum);
+}
+.ct-form-notice strong {
+  color: var(--ct-ink);
+}
+.ct-success-lead {
+  font-size: 18px;
+  line-height: 1.45;
+  margin-top: 12px;
+}
+.ct-success-receipt {
+  margin: 24px 0;
+  padding: 18px 20px;
+  background: #f7f5fa;
+  border: 1px solid #d9d2e3;
+  border-radius: 6px;
+  text-align: left;
+}
+.ct-success-receipt p {
+  margin: 8px 0 !important;
+  font-size: 14px !important;
+  color: var(--ct-ink);
+}
+.ct-receipt-label {
+  font-weight: 700;
+  color: var(--ct-plum);
+  display: inline-block;
+  min-width: 120px;
+}
+.ct-receipt-notice {
+  margin-top: 14px !important;
+  padding-top: 12px;
+  border-top: 1px dashed #cfc6dc;
+  font-size: 13px !important;
+  color: #564c63 !important;
+  line-height: 1.45;
+}
+.ct-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 24px;
+}
+@media (max-width: 640px) {
+  .ct-contact-form .ct-form-stage {
+    font-size: 12px;
+  }
+  .ct-form-notice {
+    font-size: 13px;
+    padding: 12px 14px;
+  }
+  .ct-success-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ct-success-actions > * {
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+  }
+}
 /* The contact section holds five fields, a topic selector, a message area and
    a submit control, so on laptop heights it is taller than one viewport and
    scrolls there by design. Where there is vertical room to spare, a compact
