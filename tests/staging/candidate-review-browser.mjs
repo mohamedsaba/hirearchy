@@ -926,7 +926,7 @@ export async function checkCandidateReviewBrowserAcceptance({
       0,
       'A late revoke response must not overwrite the current session panel',
     );
-    await recoveredRecruiterPage.unroute(invitationEndpoint);
+    await recoveredRecruiterPage.unrouteAll({ behavior: 'wait' });
     await recoveredRecruiterPage.goto(
       `${appUrl}${builderPath}?issuedSession=${encodeURIComponent(sessionId)}`,
     );
