@@ -1854,7 +1854,7 @@ const R28WorkspaceRevisionView = ({
       <R29ObservationPanel
         organizationId={r27Evidence.organizationId}
         sessionId={r27Evidence.sessionId}
-        evidenceSourceType="file_revision"
+        evidenceSourceType={revision ? 'file_revision' : 'timeline_event'}
         eventSequence={event.sequence}
         filePath={
           revision?.filePath ??
@@ -4512,6 +4512,7 @@ export const R210ReviewPacketPanel = ({
                   const seenRevs = new Set<string>();
                   const uniqueRevs = (r27Evidence.revisions ?? []).filter(
                     (rev) => {
+                      if (rev.source === 'starter') return false;
                       const id = `${rev.path}:${rev.version}:${rev.digest}`;
                       if (seenRevs.has(id)) return false;
                       seenRevs.add(id);
