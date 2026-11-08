@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: hirearchy-staging-postgres-local:latest
+    container_name: hirearchy-staging-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-staging-secure-password-123}
+      POSTGRES_DB: ${POSTGRES_DB:-staging_db}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - hirearchy-staging-pg-data:/var/lib/postgresql/data
+    networks:
+      - hirearchy-staging-net
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U postgres -d ${POSTGRES_DB:-staging_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  gotrue:
+    image: supabase/gotrue:v2.197.0
+    container_name: hirearchy-staging-gotrue
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-staging-secure-password-123}@postgres:5432/${POSTGRES_DB:-staging_db}?sslmode=disable
+      GOTRUE_SITE_URL: http://127.0.0.1:3000
+      GOTRUE_URI_ALLOW_LIST: http://127.0.0.1:3000/*
+      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_DISABLE_SIGNUP: 'false'
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'false'
+      GOTRUE_MAILER_AUTOCONFIRM: 'false'
+    ports:
+      - '127.0.0.1:9998:9999'
+    networks:
+      - hirearchy-staging-net
+
+volumes:
+  hirearchy-staging-pg-data:
+    name: hirearchy-staging-pg-data
+
+networks:
+  hirearchy-staging-net:
+    name: hirearchy-staging-net
+    driver: bridge

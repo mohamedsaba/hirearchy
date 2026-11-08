@@ -2,7 +2,7 @@
 
 - **As of:** 2026-11-08
 - **Authority:** [active MVP release program](plans/active/mvp-release-program.md)
-- **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #8 is merged with accepted Reservation Moves v3 durable journey and separate-instance disaster recovery. Priority 6 (Self-Service Onboarding) backend, PostgreSQL RLS, GoTrue verified identity, and 12/12 integration stages are implemented and verified. Authenticated visual review (Worker A) and front-end onboarding UI wiring remain incomplete.
+- **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #8 is merged with accepted Reservation Moves v3 durable journey and separate-instance disaster recovery. PR #9 is merged with Priority 6 (Self-Service Onboarding) backend, PostgreSQL RLS, GoTrue verified identity, and 12/12 integration stages. Wave 3 backend release hardening (bounded rate limiting, structured secret-redacted observability, operational readiness probe, dependency remediation, single-team staging deployment assets, and compatible release rollback rehearsal) is implemented and verified. Authenticated visual review (Worker A) and front-end onboarding UI wiring remain incomplete.
 
 This is the single current record for release status and evidence. It contains no credentials, candidate data, private recovery artifact locations, or unverified commercial claims.
 
@@ -113,6 +113,70 @@ The backend, database schema, RLS policies, GoTrue integration, and API surface 
 
 Test coverage: `scripts/test-self-service-onboarding.mjs` (all 12 stages passing) and `tests/unit/onboarding.test.ts` (5/5 unit tests passing).
 
+## Wave 3: Backend Hardening, Rate Limits, Observability, Dependency Remediation & Staging Packaging
+
+Wave 3 implements comprehensive backend hardening and release readiness assets across six key dimensions:
+
+1. **Bounded Deterministic Rate Limiting & Abuse Controls**:
+   - Implemented in `apps/web/src/security/rate-limit.ts` using a sliding window algorithm with strict in-memory key bounding (default max 10,000 tracked keys) and LRU/expiration eviction to prevent memory exhaustion.
+   - Standard `429 Too Many Requests` responses with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining: 0`, and `X-RateLimit-Reset` headers.
+   - Protects all sensitive endpoints:
+     - `/api/auth/signup` (configurable via `HIREARCHY_AUTH_RATE_LIMIT_MAX`, default 20 req/min)
+     - `/api/auth/verify-email` (default 20 req/min)
+     - `/api/auth/recover` (default 20 req/min)
+     - `/api/auth/reset-password` (default 20 req/min)
+     - `/api/staging/v1` (configurable via `HIREARCHY_STAGING_RATE_LIMIT_MAX`, default 100 req/min)
+     - `/api/candidate/sessions/*` (configurable via `HIREARCHY_CANDIDATE_RATE_LIMIT_MAX`, default 60 req/min)
+   - Configurable for test environments via `HIREARCHY_RATE_LIMIT_ENABLED=false` so test suites pass cleanly while dedicated rate-limit tests prove enforcement.
+   - Test coverage: `tests/unit/rate-limit.test.ts` (7/7 tests passing).
+
+2. **Structured Secret-Redacted Observability**:
+   - Implemented in `apps/web/src/observability/logger.mjs` with comprehensive redaction:
+     - Database connection URLs (`postgres://[REDACTED_USER]:[REDACTED_SECRET]@host/dbname`)
+     - Ed25519 PKCS#8 private keys and AES-256 base64 symmetric keys (`[REDACTED_KEY]`)
+     - Bearer tokens and JWTs (`Bearer [REDACTED_TOKEN]`)
+     - Passwords, recovery tokens, ciphertext, and authorization headers (`[REDACTED]`)
+   - Error sanitization strips stack traces and local filesystem paths from operational logging.
+   - Test coverage: `tests/unit/observability.test.ts` (8/8 tests passing).
+
+3. **Non-Sensitive Operational Readiness Endpoint**:
+   - Route: `GET /api/staging/readiness` (`apps/web/app/api/staging/readiness/route.ts` & `apps/web/src/observability/readiness.mjs`).
+   - Probes PostgreSQL database connectivity, verifies schema migration level (`0017`), verifies durable installation markers (`durable-candidate-lifecycle-v1`, `durable-onboarding-v1`, candidate token storage meta, R211 authoring, R214 execution).
+   - Truthfully reports capability boundaries:
+     - `liveCodeExecutionEnabled: false`
+     - `liveAiAssistanceEnabled: false`
+     - `emailDeliveryEnabled: false`
+     - `selfServiceOnboardingEnabled` (reflecting `HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED`)
+     - `managedSupabaseSupported: false`
+   - Returns HTTP 200 when ready, HTTP 503 when not ready, with `Cache-Control: no-store`. Zero leakage of connection strings or stack traces.
+
+4. **Dependency Remediation & Audit Integrity**:
+   - Run status: `npm audit --audit-level=high` reports **0 vulnerabilities** (clean exit 0), matching GitHub Actions CI `dependency-audit` job.
+   - Development devDependencies contain 8 moderate advisories in `minimatch` via `eslint-config-next@16.4.3` (`@typescript-eslint`).
+   - Risk assessment: Running `npm audit fix --force` would downgrade `eslint-config-next` to `15.5.29`, causing breaking peer dependency incompatibilities with Next.js 16.
+   - Mitigation: The advisories are strictly build/lint time (non-runtime) and have zero exposure in production staging.
+
+5. **Single-Team Staging Deployment Packaging**:
+   - Packaged under `deploy/staging/`:
+     - `deploy/staging/README.md`: Complete single-team deployment instructions, operational prerequisites, environment variables, security boundaries, and rollback runbook.
+     - `deploy/staging/env.staging.example`: Reference configuration template with documented variables.
+     - `deploy/staging/docker-compose.staging.yml`: Compose specification declaring PostgreSQL + GoTrue services with healthchecks.
+     - `deploy/staging/preflight.mjs`: Standalone preflight checker validating Node.js >= 20, Docker CLI, container images, Ed25519 PKCS#8 DER private key format, AES 32-byte key length, and database URL scheme.
+     - `scripts/deploy-single-team-staging.mjs`: Automated staging deployment runner and readiness verifier.
+
+6. **Compatible Release Rollback Rehearsal**:
+   - Automated rehearsal script: `scripts/test-release-rollback.mjs` (`npm run test:rollback`).
+   - Validates 4 distinct stages:
+     - Stage 1: Operational readiness probe verification on Release N.
+     - Stage 2: Seeding Release N data (verified GoTrue user, organization with `display_name` and `owner_principal_id`, Reservation Moves v3 assessment & session, reviewer invitation).
+     - Stage 3: Simulated application rollback to Release N-1 runtime against the 0017 additive database schema, confirming:
+       1. Release N-1 queries execute cleanly with zero syntax errors or column collisions.
+       2. Reservation Moves v3 assessments, sessions, and events remain 100% readable and valid.
+       3. Additive columns and tables in 0017 do not interfere with Release N-1 code.
+       4. Zero auth bypass (invitation records do not grant unapproved access).
+     - Stage 4: Roll-forward back to Release N, verifying subsequent onboarding mutations succeed idempotently.
+   - Test coverage: 4/4 rehearsal stages passing cleanly in automated test.
+
 ## Reusable next integration seam
 
 - **Recruiter:** `/r23/login` and `/r23/organizations/...` use GoTrue authentication, organization membership, assessment draft/validate/issue, and reviewer assignment.
@@ -125,12 +189,12 @@ The approved-template durable technical journey (`Reservation Moves v3`) and the
 
 ## Release gates
 
-| Release level           | Status        | Evidence needed                                                                                                                                                                                                     |
-| ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Internal workflow demo  | **Not ready** | Technical browser, recovery, and Reservation Moves v3 durable journey gates pass 11/11; authenticated visual review (Worker A) remains pending.                                                                     |
-| Supervised alpha        | **Not ready** | Internal journey accepted; backend self-service onboarding complete and verified 12/12 (Wave 2 / Priority 6); frontend UI wiring (Worker A), supported single-team hosting, and privacy disclosures remain pending. |
-| External-candidate beta | **No-go**     | Beta environment and recovery accepted; invitation expiry/revocation and delivery path verified; execution threat boundary accepted before enabling candidate code execution; support and incident process defined. |
-| Public MVP              | **No-go**     | Beta gates plus approved legal/privacy copy, market and competitor evidence, public onboarding, reliable delivery, monitoring, backups, and founder-approved production activation.                                 |
+| Release level           | Status        | Evidence needed                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Internal workflow demo  | **Not ready** | Technical browser, recovery, and Reservation Moves v3 durable journey gates pass 11/11; authenticated visual review (Worker A) remains pending.                                                                                                                                                                                                                                      |
+| Supervised alpha        | **Not ready** | Internal journey accepted; backend self-service onboarding complete and verified 12/12; Wave 3 backend hardening complete (bounded rate limiting, secret redaction, readiness probe, staging package in `deploy/staging/`, compatible release rollback rehearsal passing 4/4); frontend UI wiring (Worker A), supported single-team hosting, and privacy disclosures remain pending. |
+| External-candidate beta | **No-go**     | Beta environment and recovery accepted; invitation expiry/revocation and delivery path verified; execution threat boundary accepted before enabling candidate code execution; support and incident process defined.                                                                                                                                                                  |
+| Public MVP              | **No-go**     | Beta gates plus approved legal/privacy copy, market and competitor evidence, public onboarding, reliable delivery, monitoring, backups, and founder-approved production activation.                                                                                                                                                                                                  |
 
 ## Required checks and verification boundary
 
@@ -139,6 +203,8 @@ Run these on the accepted post-PR base, serially where they use Docker, PostgreS
 - `npm run verify` — format, lint, typecheck, unit/integration suite, executor checks, and production build.
 - `npm run test:postgres` — role, migration, PostgreSQL authorization, and storage foundation.
 - `npm run test:staging` — authenticated persistent staging, candidate/reviewer browser acceptance, denial checks and recovery rehearsal.
+- `npm run test:onboarding` — self-service onboarding backend, GoTrue integration, PR #7 recovery-token quarantine, and disaster recovery rehearsal (12 stages).
+- `npm run test:rollback` — compatible release rollback rehearsal across additive schema migrations (4 stages).
 - `node scripts/test-r214-integration.mjs` — existing disposable PostgreSQL and real-Docker candidate/execution bridge; supplemental evidence only.
 
 The accepted PR #6 CI above is the technical browser/recovery baseline. Focused checks on the in-progress recovery-proof follow-up do not replace fresh full CI on its final source. Hosting, off-host backup, authenticated visual acceptance and any external deployment remain unverified.

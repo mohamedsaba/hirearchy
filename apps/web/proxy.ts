@@ -27,10 +27,12 @@ const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations\/[^/]+$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet$/,
+  /^\/api\/staging\/readiness$/,
 ];
 
 const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
   /^\/api\/staging\/v1$/,
+  /^\/api\/auth\/(signup|verify-email|recover|reset-password)$/,
   /^\/r23\/auth\/login$/,
   /^\/r23\/auth\/logout$/,
   /^\/r23\/auth\/refresh$/,
@@ -98,7 +100,10 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (
     isStagingLockdown() &&
-    !(request.method === 'GET' && pathname === '/api/health') &&
+    !(
+      request.method === 'GET' &&
+      (pathname === '/api/health' || pathname === '/api/staging/readiness')
+    ) &&
     !(
       isAuthenticatedStaging() &&
       isAllowedAuthenticatedStagingRequest(request.method, pathname)

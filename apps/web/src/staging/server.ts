@@ -1,6 +1,7 @@
 import { createPrivateKey } from 'node:crypto';
 import { isIP } from 'node:net';
 
+import { enforceRateLimit } from '../security/rate-limit';
 import {
   R23AuthenticationDenied,
   verifyR23AccessToken,
@@ -170,6 +171,8 @@ async function body(request: Request): Promise<Record<string, unknown>> {
 
 export async function stagingPost(request: Request): Promise<Response> {
   if (!isAuthenticatedStaging()) return response(503, { error: 'Unavailable' });
+  const rateLimitResponse = enforceRateLimit(request, 'staging');
+  if (rateLimitResponse) return rateLimitResponse;
   let config: ReturnType<typeof configuration>;
   try {
     config = configuration();

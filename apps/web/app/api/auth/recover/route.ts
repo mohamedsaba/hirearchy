@@ -1,8 +1,12 @@
+import { enforceRateLimit } from '../../../../src/security/rate-limit';
 import { loadStagingConfiguration } from '../../../../src/staging/server';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<Response> {
+  const rateLimitResponse = enforceRateLimit(request, 'auth');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const config = loadStagingConfiguration();
     const body = (await request.json().catch(() => null)) as Record<

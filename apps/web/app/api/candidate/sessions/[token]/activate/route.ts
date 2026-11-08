@@ -1,4 +1,5 @@
 import { errorResponse } from '../../../../../../src/http/error-response';
+import { enforceRateLimit } from '../../../../../../src/security/rate-limit';
 import { toCandidateSessionView } from '../../../../../../src/sessions/candidate-session-view';
 import { getSessionService } from '../../../../../../src/sessions/session-service';
 
@@ -7,9 +8,12 @@ type CandidateRouteContext = Readonly<{
 }>;
 
 export const POST = async (
-  _request: Request,
+  request: Request,
   context: CandidateRouteContext,
 ) => {
+  const rateLimitResponse = enforceRateLimit(request, 'candidate');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { token } = await context.params;
     const sessionService = getSessionService();
