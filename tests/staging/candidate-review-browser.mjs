@@ -742,7 +742,15 @@ export async function checkCandidateReviewBrowserAcceptance({
             firstSubmitStatus = response.status();
             await route.abort('failed');
           } catch (error) {
-            firstSubmitError = error;
+            try {
+              await route.abort('failed');
+              firstSubmitError = error;
+            } catch (abortError) {
+              firstSubmitError = new AggregateError(
+                [error, abortError],
+                'Candidate submit interception and request abort both failed',
+              );
+            }
           } finally {
             firstSubmitFinished = true;
           }
