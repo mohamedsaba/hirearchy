@@ -1008,16 +1008,24 @@ export async function checkCandidateReviewBrowserAcceptance({
       'The assigned evaluator must retain access to submitted evidence after candidate revocation',
     );
     await reviewerPage.locator('[data-workbench-mode-tab="evidence"]').click();
-    await reviewerPage
+    const savedRevisionSource = reviewerPage
       .getByRole('button', { name: /Workspace save recorded/ })
-      .first()
-      .click();
+      .first();
+    await savedRevisionSource.click();
     const observationPanel = reviewerPage.locator(
       'section[aria-label="Anchored Observations"]',
     );
     await observationPanel.waitFor({ timeout: 20_000 });
     await reviewerPage.setViewportSize({ width: 390, height: 844 });
-    await observationPanel.scrollIntoViewIfNeeded();
+    await savedRevisionSource.click();
+    const mobileInspector = reviewerPage.getByRole('dialog', {
+      name: 'Focused source inspection',
+    });
+    const mobileObservationPanel = mobileInspector.locator(
+      'section[aria-label="Anchored Observations"]',
+    );
+    await mobileObservationPanel.waitFor({ timeout: 20_000 });
+    await mobileObservationPanel.scrollIntoViewIfNeeded();
     await assertNoHorizontalOverflow(reviewerPage, 'Evaluator evidence view');
     await saveBrowserEvidence(
       reviewerPage,
@@ -1028,6 +1036,10 @@ export async function checkCandidateReviewBrowserAcceptance({
         maskableValues: candidateMaskableValues,
       },
     );
+    await mobileInspector
+      .getByRole('button', { name: '← Back to evidence', exact: true })
+      .click();
+    await mobileInspector.waitFor({ state: 'hidden' });
     await reviewerPage.setViewportSize({ width: 1280, height: 900 });
     const observationText = `Observed saved revisions for session ${sessionId.slice(-8)}.`;
     await observationPanel
