@@ -4,6 +4,11 @@
 	https_port {$CADDY_HTTPS_PORT}
 }
 
+http://{$PUBLIC_HOSTNAME}:{$CADDY_HTTP_PORT} {
+	bind {$CADDY_BIND_ADDRESS}
+	redir https://{$PUBLIC_HOSTNAME}:{$CADDY_HTTPS_PORT}{uri} 308
+}
+
 {$PUBLIC_HOSTNAME} {
 	bind {$CADDY_BIND_ADDRESS}
 	encode zstd gzip

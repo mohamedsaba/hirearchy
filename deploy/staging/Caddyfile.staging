@@ -4,6 +4,11 @@
 	https_port {$CADDY_HTTPS_PORT}
 }
 
+http://{$PREVIEW_HOSTNAME}:{$CADDY_HTTP_PORT} {
+	bind {$CADDY_BIND_ADDRESS}
+	redir https://{$PREVIEW_HOSTNAME}:{$CADDY_HTTPS_PORT}{uri} 308
+}
+
 {$PREVIEW_HOSTNAME} {
 	bind {$CADDY_BIND_ADDRESS}
 	encode zstd gzip
@@ -12,6 +17,13 @@
 		max_size 32KB
 	}
 	reverse_proxy 127.0.0.1:{$PREVIEW_APP_PORT}
+}
+
+http://{$STAGING_HOSTNAME}:{$CADDY_HTTP_PORT} {
+	bind {$CADDY_BIND_ADDRESS}
+	@outside_alpha not remote_ip {$STAGING_ALLOWED_CIDRS}
+	respond @outside_alpha 404
+	redir https://{$STAGING_HOSTNAME}:{$CADDY_HTTPS_PORT}{uri} 308
 }
 
 {$STAGING_HOSTNAME} {
