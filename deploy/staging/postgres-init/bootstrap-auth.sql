@@ -1,0 +1,8 @@
+\set ON_ERROR_STOP on
+CREATE ROLE supabase_auth_admin LOGIN PASSWORD :'gotrue_password'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+CREATE SCHEMA auth AUTHORIZATION supabase_auth_admin;
+ALTER ROLE supabase_auth_admin SET search_path = auth;
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN;

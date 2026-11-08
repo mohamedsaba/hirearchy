@@ -1,0 +1,13 @@
+{
+	http_port {$CADDY_HTTP_PORT}
+	https_port {$CADDY_HTTPS_PORT}
+}
+
+{$PUBLIC_HOSTNAME} {
+	encode zstd gzip
+	@early_access path /api/early-access
+	request_body @early_access {
+		max_size 32KB
+	}
+	reverse_proxy 127.0.0.1:{$PREVIEW_APP_PORT}
+}
