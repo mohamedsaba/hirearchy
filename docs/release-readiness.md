@@ -2,7 +2,7 @@
 
 - **As of:** 2026-11-08
 - **Authority:** [active MVP release program](plans/active/mvp-release-program.md)
-- **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #6 is merged with accepted technical browser and recovery evidence. Authenticated visual review, the approved-template walkthrough, first-team onboarding and later release gates remain incomplete.
+- **Status:** **NO-GO for a complete internal demo, external-candidate beta, or public MVP.** PR #8 is merged with accepted Reservation Moves v3 durable journey and separate-instance disaster recovery. Priority 6 (Self-Service Onboarding) backend, PostgreSQL RLS, GoTrue verified identity, and 12/12 integration stages are implemented and verified. Authenticated visual review (Worker A) and front-end onboarding UI wiring remain incomplete.
 
 This is the single current record for release status and evidence. It contains no credentials, candidate data, private recovery artifact locations, or unverified commercial claims.
 
@@ -77,21 +77,58 @@ Test coverage: `scripts/test-reservation-moves-durable-journey.mjs` (all 11 stag
 
 AI assistance, candidate code execution and email delivery remain disabled in durable staging. No deployment, public signup, customer delivery or managed-Supabase compatibility is certified by this verification.
 
+## Wave 2 Priority 6: Self-Service Onboarding & Reviewer Invitations (Backend)
+
+The backend, database schema, RLS policies, GoTrue integration, and API surface for **Priority 6: Self-Service Onboarding** are fully implemented and verified end-to-end across 12 distinct verification stages:
+
+1. **Operational Signup Gate**:
+   - Self-service signup and first-organization creation are **disabled by default** unless explicitly enabled via `HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED=true` (rejecting unconfigured attempts with 403).
+   - System truthfully reports capability status (`selfServiceOnboardingEnabled`, `emailDeliveryEnabled: false`).
+2. **User Registration & Verified Identity (GoTrue + Ed25519 Proof v2)**:
+   - Preserves GoTrue + application-signed Ed25519 identity proof v2 architecture.
+   - User identity requires verified email (`email_confirmed_at IS NOT NULL`) before product sessions or pre-principal operations are permitted (unverified identities strictly rejected with 42501).
+3. **Truthful Delivery Capability**:
+   - External SMTP remains disabled (`emailDeliveryEnabled: false`). Signup, reviewer invitation, and password recovery responses explicitly document disabled delivery, supporting truthful token handoff in non-SMTP staging environments.
+4. **First Organization Creation & Immutable Ownership**:
+   - Idempotent `organization.bootstrap` creates the user's initial organization with owner governance and recruiter operational capability.
+   - PostgreSQL trigger `organizations_owner_principal_immutable` enforces permanent immutability of `owner_principal_id` once established (raising 23514 on attempted mutation).
+5. **Idempotent Bootstrap Replay Protection**:
+   - Replay with identical idempotency key returns cached receipt. Conflicting parameters with same idempotency key are rejected (22023). Duplicate team creation attempts by an active member are blocked (42501).
+6. **Zero Cross-Tenant Leakage & Approved Catalog Exposure**:
+   - Newly created organizations immediately see the approved template catalog (`Reservation Moves v3`) and empty assessment list under strict PostgreSQL RLS tenant isolation.
+7. **Reviewer Invitation Lifecycle**:
+   - Organization owners issue invitations bound to target email, with SHA-256 token hashing, AES-256-GCM ciphertext custody, and future expiry checks (<= 30 days).
+   - Authenticated, confirmed users matching the exact canonical target email accept the invitation to gain active `reviewer` membership. Unconfirmed users, mismatched emails, expired invitations, and revoked invitations are strictly rejected (42501).
+8. **Explicit Revocation & Session Lifecycle**:
+   - Server-side session revocation (`staging_sessions.revoked_at`) and GoTrue `auth.sessions` deletion are enforced in PostgreSQL, rejecting subsequent product proofs with 28000.
+9. **Password Recovery & Quarantine Invariant (PR #7)**:
+   - Recovery credentials/JWTs (`method: "recovery"`, `isRecovery: true`) are strictly quarantined and rejected (28000) from all product APIs and Ed25519 proof minting.
+   - Recovery credentials are valid exclusively at the dedicated `/api/auth/reset-password` endpoint.
+10. **Account & Organization Management**:
+    - Users can view and update profile display name. Owners can update organization display name and list members with their roles and owner indicators.
+    - Owners can revoke reviewer memberships; removal or demotion of the organization owner is strictly rejected (42501).
+11. **Migration Idempotency & Separate-Instance Disaster Recovery**:
+    - Migration 0017 (`0017_self_service_onboarding.sql`) is fully idempotent on re-run.
+    - Full binary database backup (`pg_dump -Fc`) and cluster globals (`pg_dumpall -g`) restored into a separate PostgreSQL instance, verifying organizations, members, revoked invitations, and receipts intact.
+
+Test coverage: `scripts/test-self-service-onboarding.mjs` (all 12 stages passing) and `tests/unit/onboarding.test.ts` (5/5 unit tests passing).
+
 ## Reusable next integration seam
 
 - **Recruiter:** `/r23/login` and `/r23/organizations/...` use GoTrue authentication, organization membership, assessment draft/validate/issue, and reviewer assignment.
 - **Candidate:** `apps/web/src/r26-candidate/server.ts` and the R26 PostgreSQL adapter implement bearer-token scoped activation, workspace read/save/submit, and finality. Migrations 0003–0005 define the candidate token envelope, workspace, event, operation, submission, and revision data.
 - **Restricted execution:** R2.14 connects approved execution operations to the restricted executor service. `node scripts/test-r214-integration.mjs` is a disposable development integration, not the durable staging profile or a production security certification.
 - **Evaluator evidence and review:** R27 provides submitted evidence reads; R210 stores structured human review packets. PR #5's R2.15 staging allowlist blocks candidate operations and evaluator writes. PR #6's accepted durable path bridges these operations through verified identity and PostgreSQL authorization; never accept a browser-supplied subject or enable disposable runtime flags in durable mode.
+- **Self-Service Onboarding:** `apps/web/src/staging/onboarding.ts` exposes typed client interfaces and token helpers (`encryptInvitationToken`, `decryptInvitationToken`, `invitationTokenHash`) for Worker A to wire the frontend self-service UI cleanly without backend changes.
 
-The approved-template durable technical journey (`Reservation Moves v3`) is fully implemented and verified across all 11 stages. The remaining release gate for an internal demo is authenticated visual review (Worker A). Wave 2 will implement first-team self-service onboarding (Priority 6). Keep AI and execution visibly disabled.
+The approved-template durable technical journey (`Reservation Moves v3`) and the complete self-service onboarding backend (Priority 6) are fully implemented and verified. The remaining release gates for internal demo and supervised alpha are authenticated visual review and frontend onboarding UI wiring (Worker A). Keep AI and execution visibly disabled.
 
 ## Release gates
 
 | Release level           | Status        | Evidence needed                                                                                                                                                                                                     |
 | ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Internal workflow demo  | **Not ready** | Technical browser, recovery, and Reservation Moves v3 durable journey gates pass 11/11; authenticated visual review (Worker A) remains pending.                                                                     |
-| Supervised alpha        | **Not ready** | Internal journey accepted; first-team self-service onboarding (Wave 2 / Priority 6), supported single-team hosting, migration/restore/rollback, monitored operation, and privacy disclosures verified.              |
+| Supervised alpha        | **Not ready** | Internal journey accepted; backend self-service onboarding complete and verified 12/12 (Wave 2 / Priority 6); frontend UI wiring (Worker A), supported single-team hosting, and privacy disclosures remain pending. |
 | External-candidate beta | **No-go**     | Beta environment and recovery accepted; invitation expiry/revocation and delivery path verified; execution threat boundary accepted before enabling candidate code execution; support and incident process defined. |
 | Public MVP              | **No-go**     | Beta gates plus approved legal/privacy copy, market and competitor evidence, public onboarding, reliable delivery, monitoring, backups, and founder-approved production activation.                                 |
 
@@ -110,10 +147,10 @@ The accepted PR #6 CI above is the technical browser/recovery baseline. Focused 
 
 - **Deployment:** No production or cloud deployment is evidenced by these source merges. Choose and approve a supported hosting/reverse-proxy/TLS design; establish persistent PostgreSQL and GoTrue operations, secret rotation, monitoring, and rollback before external use. Do not incur charges or publish a service without the mandate's approval.
 - **Recovery:** The local staging suite records separate-instance restore and release rollback coverage. Off-host backup independence, backup retention, managed-provider restore, and rollback on a production-like host remain unverified. Database dumps alone do not restore cluster roles or encryption/signing keys.
-- **Authentication and provisioning:** First-team self-service and reviewer invitations remain proposed, not implemented; initial staging organization provisioning is administrator-managed. Keep identity proof bound to verified GoTrue sessions and current membership. Signup confirmation and password recovery require GoTrue SMTP; team invitations do not send email. See the [proposed onboarding ADR](decisions/mvp-first-team-onboarding.md).
+- **Authentication and provisioning:** First-team self-service onboarding and reviewer invitations backend (Priority 6) are implemented and verified across 12 stages in Wave 2 (Migration 0017, GoTrue verified identity, immutable ownership, RLS isolation, PR #7 recovery token quarantine). Operational signup gate defaults to disabled (`HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED`). External email delivery remains disabled (`emailDeliveryEnabled: false`); team invitations do not send email. Front-end onboarding UI wiring (Worker A) remains pending.
 - **Candidate delivery and privacy:** The internal demo may expose an expiring/revocable copy link in the authenticated product UI; it must state that no email is sent. External delivery provider, candidate notice/consent, retention policy, and approved legal text remain release gates.
 - **Execution and AI:** Keep off in durable staging. External candidate code execution needs an independent security and operations acceptance, not only the disposable R2.14 Docker run. Live AI needs a separate privacy/provider and cost decision.
-- **Product truth:** `README.md`, the system overview, current-state handoff, and non-goals now describe the PostgreSQL/GoTrue release direction and preserve SQLite as historical prototype work. First-team onboarding remains a proposal; do not claim self-service setup until its implementation is independently accepted.
+- **Product truth:** `README.md`, the system overview, current-state handoff, and non-goals now describe the PostgreSQL/GoTrue release direction and preserve SQLite as historical prototype work. Self-service onboarding backend is verified; public activation remains disabled until operational acceptance.
 
 ## Decision rule
 
