@@ -182,6 +182,14 @@ type StagingSessionRecord = Readonly<{
   assignments: StagingSessionAssignmentItem[];
 }>;
 
+export type StagingTemplateSummary = Readonly<{
+  templateId: 'custom' | 'reservation-moves-v3';
+  title: string;
+  description: string;
+  scenarioId?: string;
+  scenarioVersion?: string;
+}>;
+
 type StagingOrganizationContextResponse = Readonly<{
   organizationId: string;
   principalId: string;
@@ -190,6 +198,7 @@ type StagingOrganizationContextResponse = Readonly<{
   draft: R211AssessmentDraft | null;
   validatedVersions: R211ValidatedVersion[];
   sessions: StagingSessionRecord[];
+  availableTemplates?: StagingTemplateSummary[];
 }>;
 
 export type StagingR27EvidencePageState =
@@ -1268,6 +1277,7 @@ export async function stagingLoadOrganizationSessionList(
     reviewers: StagingReviewerItem[];
     draft: R211AssessmentDraft | null;
     validatedVersions: R211ValidatedVersion[];
+    availableTemplates?: StagingTemplateSummary[];
     refreshedSessionCookie: string | null;
   }
 > {
@@ -1335,6 +1345,7 @@ export async function stagingLoadOrganizationSessionList(
         reviewers: orgContext.reviewers ?? [],
         draft: orgContext.draft ?? null,
         validatedVersions: orgContext.validatedVersions ?? [],
+        availableTemplates: orgContext.availableTemplates ?? [],
         refreshedSessionCookie,
       };
     },
