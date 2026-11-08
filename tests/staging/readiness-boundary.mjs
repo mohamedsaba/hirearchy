@@ -95,7 +95,7 @@ export async function checkReadinessBoundary({
     'SELECT version FROM hirearchy.schema_migrations',
     'SELECT version FROM hirearchy.candidate_token_storage_meta',
     'SELECT marker_key FROM hirearchy.durable_candidate_installation',
-    'SELECT id FROM hirearchy.organization_memberships',
+    'SELECT * FROM hirearchy.organization_memberships LIMIT 1',
     'UPDATE hirearchy.durable_onboarding_installation SET marker_version = 1',
   ]) {
     await assert.rejects(gateway.query(query), { code: '42501' });
