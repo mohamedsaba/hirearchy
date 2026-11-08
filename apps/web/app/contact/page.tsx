@@ -1,9 +1,9 @@
 import { Site, Kicker, Button } from '../home/site';
 
 export const metadata = {
-  title: 'Contact',
+  title: 'Contact — Hirearchy',
   description:
-    'Buyer and demo requests are not open yet. Read about Hirearchy Software and its current internal demo.',
+    'Buyer and demo requests are not open yet. Read about Hirearchy Software and its current internal demo, or request early access.',
 };
 
 export default function ContactPage() {
@@ -17,8 +17,11 @@ export default function ContactPage() {
         <h1 className="ct-enter">Buyer and demo requests are not open yet.</h1>
         <p>
           This page is informational only. It does not accept or store messages.
+          If you are looking to evaluate Hirearchy for your engineering team,
+          explore our dedicated early access and alpha pilot portal.
         </p>
         <div className="ct-contact-links">
+          <Button href="/early-access">Request early access</Button>
           <Button href="/products/software">Explore Software</Button>
           <Button href="/products/software#demo-limits">See demo limits</Button>
         </div>

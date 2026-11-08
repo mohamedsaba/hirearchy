@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import HomePage from '../../apps/web/app/page';
 import ContactPage from '../../apps/web/app/contact/page';
+import EarlyAccessPage from '../../apps/web/app/early-access/page';
 import ProductsPage from '../../apps/web/app/products/page';
 import SoftwarePage from '../../apps/web/app/products/software/page';
 import ThinkingPage from '../../apps/web/app/thinking/page';
@@ -11,6 +12,7 @@ import AboutPage from '../../apps/web/app/about/page';
 const pages = [
   HomePage,
   ContactPage,
+  EarlyAccessPage,
   ProductsPage,
   SoftwarePage,
   ThinkingPage,
@@ -23,6 +25,7 @@ const routes = [
   '/thinking',
   '/about',
   '/contact',
+  '/early-access',
   '/privacy',
   '/terms',
 ];
@@ -73,5 +76,19 @@ describe('Hirearchy public website', () => {
     expect(html).not.toMatch(/<(form|input|textarea)\b/);
     expect(html).toContain('href="/products/software"');
     expect(html).toContain('href="/products/software#demo-limits"');
+  });
+  it('provides a functional early access request form with truthful staging disclosures', () => {
+    const html = renderToStaticMarkup(createElement(EarlyAccessPage));
+    expect(html).toContain('Request early access or pilot evaluation.');
+    expect(html).toContain('Design Partner Program');
+    expect(html).toMatch(/<form\b/);
+    expect(html).toContain('name="name"');
+    expect(html).toContain('name="email"');
+    expect(html).toContain('name="company"');
+    expect(html).toContain('name="role"');
+    expect(html).toContain('name="teamSize"');
+    expect(html).toContain('name="primaryChallenge"');
+    expect(html).toContain('Truthful Capability Boundary:');
+    expect(html).toContain('automated email delivery is disabled');
   });
 });
