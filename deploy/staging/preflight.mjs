@@ -22,6 +22,22 @@ function isLoopback(hostname) {
   );
 }
 
+function validHostname(value) {
+  if (!value) return false;
+  try {
+    const url = new URL(`https://${value}`);
+    return (
+      url.hostname === value &&
+      !url.port &&
+      url.pathname === '/' &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validateDatabaseUrl(env, name, username) {
   const value = env[name];
   if (!value) return `${name} is missing`;
@@ -68,12 +84,42 @@ function validateHttpsOrigin(value, name) {
   }
 }
 
+function portsAreValid(env, names) {
+  const ports = names.map((name) => Number(env[name]));
+  return (
+    ports.every(
+      (port) => Number.isInteger(port) && port >= 1 && port <= 65535,
+    ) && new Set(ports).size === ports.length
+  );
+}
+
+function accessCidrsAreRestricted(value) {
+  const cidrs = (value ?? '').trim().split(/\s+/).filter(Boolean);
+  return (
+    cidrs.length > 0 &&
+    cidrs.every((cidr) => {
+      const [address, prefix, ...extra] = cidr.split('/');
+      const family = isIP(address);
+      const maxPrefix = family === 4 ? 32 : family === 6 ? 128 : 0;
+      const prefixLength = prefix === undefined ? maxPrefix : Number(prefix);
+      return (
+        family !== 0 &&
+        extra.length === 0 &&
+        Number.isInteger(prefixLength) &&
+        prefixLength >= 1 &&
+        prefixLength <= maxPrefix
+      );
+    })
+  );
+}
+
 /**
- * Validate the operator-provided staging environment without printing secret values.
+ * Validate the operator-provided deployment environment without printing secret values.
  * @param {Record<string, string | undefined>} [env=process.env]
+ * @param {{ dockerComposeVersion?: string, checkoutSha?: string, workingTreeClean?: boolean }} [evidence]
  * @returns {PreflightCheckResult[]}
  */
-export function runPreflightChecks(env = process.env) {
+export function runPreflightChecks(env = process.env, evidence = {}) {
   const results = [];
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10);
   add(
@@ -84,10 +130,12 @@ export function runPreflightChecks(env = process.env) {
   );
 
   try {
-    const docker = execFileSync('docker', ['compose', 'version'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
+    const docker =
+      evidence.dockerComposeVersion ??
+      execFileSync('docker', ['compose', 'version'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
     add(results, 'Docker Compose v2 available', true, docker);
   } catch {
     add(
@@ -100,22 +148,113 @@ export function runPreflightChecks(env = process.env) {
 
   const releaseSha = env.HIREARCHY_RELEASE_SHA ?? '';
   let checkoutSha = '';
+  let workingTreeClean = false;
   try {
-    checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
+    checkoutSha =
+      evidence.checkoutSha ??
+      execFileSync('git', ['rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+    workingTreeClean =
+      evidence.workingTreeClean ??
+      execFileSync('git', ['status', '--porcelain'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim() === '';
   } catch {
     // Report a failed provenance check below without exposing command output.
   }
+  const provenanceValid =
+    /^[0-9a-f]{40}$/.test(releaseSha) &&
+    releaseSha === checkoutSha &&
+    workingTreeClean;
   add(
     results,
-    'Release provenance matches checked-out commit',
-    /^[0-9a-f]{40}$/.test(releaseSha) && releaseSha === checkoutSha,
-    /^[0-9a-f]{40}$/.test(releaseSha) && releaseSha === checkoutSha
+    'Release provenance matches clean checked-out commit',
+    provenanceValid,
+    provenanceValid
       ? `Compose image tag is ${releaseSha}`
-      : 'Set HIREARCHY_RELEASE_SHA to the exact clean checkout commit SHA',
+      : 'Set HIREARCHY_RELEASE_SHA to the exact commit and use a clean checkout',
   );
+
+  const mode = env.HIREARCHY_DEPLOY_MODE ?? 'supervised-alpha';
+  add(
+    results,
+    'Deployment mode is recognized',
+    mode === 'public-preview' || mode === 'supervised-alpha',
+    mode === 'public-preview' || mode === 'supervised-alpha'
+      ? `Selected ${mode}`
+      : 'Use public-preview or supervised-alpha',
+  );
+
+  const proxyHopsValid =
+    env.HIREARCHY_TRUSTED_PROXY_HOPS === undefined ||
+    env.HIREARCHY_TRUSTED_PROXY_HOPS === '0';
+  add(
+    results,
+    'Trusted proxy hops stay disabled',
+    proxyHopsValid,
+    proxyHopsValid
+      ? 'Client identity does not trust proxy-supplied headers'
+      : 'Must be unset or 0; upstream proxies are not configured as trusted',
+  );
+
+  const caddyBind = (env.CADDY_BIND_ADDRESS ?? '').trim().split(/\s+/);
+  const caddyBindValid =
+    (caddyBind.length === 1 && caddyBind[0] === '127.0.0.1') ||
+    (caddyBind.length === 2 &&
+      caddyBind[0] === '0.0.0.0' &&
+      caddyBind[1] === '::');
+  add(
+    results,
+    'Caddy bind address is explicit',
+    caddyBindValid,
+    caddyBindValid
+      ? caddyBind[0] === '127.0.0.1'
+        ? 'Loopback-only listener for rehearsal'
+        : 'Public IPv4 and IPv6 listeners require approved activation'
+      : 'Use 127.0.0.1 for rehearsal or 0.0.0.0 :: for approved public activation',
+  );
+
+  add(
+    results,
+    'Compose project name is isolated',
+    /^[a-z0-9][a-z0-9_-]{0,62}$/.test(env.COMPOSE_PROJECT_NAME ?? ''),
+    /^[a-z0-9][a-z0-9_-]{0,62}$/.test(env.COMPOSE_PROJECT_NAME ?? '')
+      ? 'Persistent volumes are scoped to this Compose project'
+      : 'Set a lowercase Compose project name outside shared test projects',
+  );
+
+  const previewHostnameValid = validHostname(env.PREVIEW_HOSTNAME ?? '');
+  add(
+    results,
+    'Preview hostname is valid',
+    previewHostnameValid,
+    previewHostnameValid
+      ? 'Valid preview hostname'
+      : 'Set a hostname without a scheme, path, or port',
+  );
+
+  const previewPorts = [
+    'PREVIEW_APP_PORT',
+    'CADDY_HTTP_PORT',
+    'CADDY_HTTPS_PORT',
+  ];
+  const allPorts = ['PG_PORT', 'GOTRUE_API_PORT', 'APP_PORT', ...previewPorts];
+  const relevantPorts = mode === 'public-preview' ? previewPorts : allPorts;
+  const portNamesValid = portsAreValid(env, relevantPorts);
+  add(
+    results,
+    'Service ports are valid and unique',
+    portNamesValid,
+    portNamesValid
+      ? 'All configured listener ports are unique'
+      : 'Set distinct TCP ports between 1 and 65535',
+  );
+
+  if (mode === 'public-preview') return results;
+  if (mode !== 'supervised-alpha') return results;
 
   for (const [name, username] of expectedDatabaseUsers) {
     const error = validateDatabaseUrl(env, name, username);
@@ -134,10 +273,9 @@ export function runPreflightChecks(env = process.env) {
     );
   }
 
-  const authUrl = env.STAGING_AUTH_URL ?? '';
   let authOk = false;
   try {
-    const url = new URL(authUrl);
+    const url = new URL(env.STAGING_AUTH_URL ?? '');
     authOk =
       url.protocol === 'http:' &&
       isLoopback(url.hostname) &&
@@ -157,7 +295,7 @@ export function runPreflightChecks(env = process.env) {
     authOk,
     authOk
       ? 'Valid loopback GoTrue URL'
-      : 'Must be an HTTP URL on loopback with a port',
+      : 'Must be an HTTP URL on loopback at GOTRUE_API_PORT',
   );
 
   const authIssuerError = validateHttpsOrigin(
@@ -167,18 +305,12 @@ export function runPreflightChecks(env = process.env) {
   add(
     results,
     'STAGING_AUTH_ISSUER is a public HTTPS origin',
-    !authIssuerError,
-    authIssuerError ?? 'Valid HTTPS origin',
-  );
-  add(
-    results,
-    'Trusted proxy hops stay disabled',
-    env.HIREARCHY_TRUSTED_PROXY_HOPS === undefined ||
-      env.HIREARCHY_TRUSTED_PROXY_HOPS === '0',
-    env.HIREARCHY_TRUSTED_PROXY_HOPS === undefined ||
-      env.HIREARCHY_TRUSTED_PROXY_HOPS === '0'
-      ? 'Client identity does not trust proxy-supplied headers'
-      : 'Must be unset or 0; upstream proxies are not configured as trusted',
+    !authIssuerError &&
+      env.STAGING_AUTH_ISSUER === `https://${env.STAGING_HOSTNAME}`,
+    !authIssuerError &&
+      env.STAGING_AUTH_ISSUER === `https://${env.STAGING_HOSTNAME}`
+      ? 'Issuer matches the staging hostname'
+      : (authIssuerError ?? 'Issuer must match https://STAGING_HOSTNAME'),
   );
   add(
     results,
@@ -272,78 +404,34 @@ export function runPreflightChecks(env = process.env) {
       : `Generate 64-character hex values for: ${missingPasswords.join(', ')}`,
   );
 
-  const hostnames = ['PREVIEW_HOSTNAME', 'STAGING_HOSTNAME'].map((name) => {
-    const value = env[name] ?? '';
-    try {
-      const url = new URL(`https://${value}`);
-      return url.hostname === value && value.length > 0;
-    } catch {
-      return false;
-    }
-  });
+  const stagingHostnameValid = validHostname(env.STAGING_HOSTNAME ?? '');
+  const distinctHostnames = env.PREVIEW_HOSTNAME !== env.STAGING_HOSTNAME;
   add(
     results,
-    'Preview and staging hostnames are configured',
-    hostnames.every(Boolean) && env.PREVIEW_HOSTNAME !== env.STAGING_HOSTNAME,
-    hostnames.every(Boolean) && env.PREVIEW_HOSTNAME !== env.STAGING_HOSTNAME
-      ? 'Separate DNS hostnames configured'
-      : 'Use two distinct DNS hostnames without schemes or paths',
+    'Staging hostname is valid and separate',
+    stagingHostnameValid && distinctHostnames,
+    stagingHostnameValid && distinctHostnames
+      ? 'Preview and staging use separate hostnames'
+      : 'Use a valid staging hostname distinct from preview',
   );
 
-  const allowedCidrs = (env.STAGING_ALLOWED_CIDRS ?? '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  const accessBoundaryValid =
-    allowedCidrs.length > 0 &&
-    allowedCidrs.every((cidr) => {
-      const [address, prefix, ...extra] = cidr.split('/');
-      const family = isIP(address);
-      const maxPrefix = family === 4 ? 32 : family === 6 ? 128 : 0;
-      const prefixLength = prefix === undefined ? maxPrefix : Number(prefix);
-      return (
-        family !== 0 &&
-        extra.length === 0 &&
-        Number.isInteger(prefixLength) &&
-        prefixLength >= 1 &&
-        prefixLength <= maxPrefix
-      );
-    });
+  const accessBoundaryValid = accessCidrsAreRestricted(
+    env.STAGING_ALLOWED_CIDRS,
+  );
   add(
     results,
     'Staging edge allowlist is restricted',
     accessBoundaryValid,
     accessBoundaryValid
-      ? `${allowedCidrs.length} explicit team/VPN CIDR(s); public access is denied by Caddy outside these ranges`
-      : 'Provide one or more valid CIDRs; wildcard and /0 ranges are rejected',
-  );
-
-  const portNames = [
-    'PG_PORT',
-    'GOTRUE_API_PORT',
-    'APP_PORT',
-    'PREVIEW_APP_PORT',
-    'CADDY_HTTP_PORT',
-    'CADDY_HTTPS_PORT',
-  ];
-  const ports = portNames.map((name) => Number(env[name]));
-  const validPorts = ports.every(
-    (port) => Number.isInteger(port) && port >= 1 && port <= 65535,
-  );
-  add(
-    results,
-    'Service ports are valid and unique',
-    validPorts && new Set(ports).size === ports.length,
-    validPorts && new Set(ports).size === ports.length
-      ? 'All service listener ports are unique'
-      : 'Set six distinct TCP ports between 1 and 65535',
+      ? 'Caddy denies requests outside the explicit team/VPN CIDRs'
+      : 'Provide valid team/VPN CIDRs; wildcard and /0 ranges are rejected',
   );
 
   return results;
 }
 
 if (process.argv[1] && process.argv[1].endsWith('preflight.mjs')) {
-  console.log('--- Hirearchy Single-Team Staging Preflight ---');
+  console.log('--- Hirearchy Deployment Preflight ---');
   const checks = runPreflightChecks();
   for (const check of checks) {
     console.log(`${check.passed ? '✓' : '✗'} ${check.name}: ${check.message}`);

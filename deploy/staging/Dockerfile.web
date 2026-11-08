@@ -21,6 +21,7 @@ COPY --from=build --chown=node:node /app/apps ./apps
 COPY --from=build --chown=node:node /app/packages ./packages
 COPY --from=build --chown=node:node /app/database ./database
 COPY --from=build --chown=node:node /app/scripts ./scripts
+COPY --from=build --chown=node:node /app/scenarios/002-booking-notification-retry/repository ./scenarios/002-booking-notification-retry/repository
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 EXPOSE 3000

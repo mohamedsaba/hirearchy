@@ -23,6 +23,7 @@ import {
   checkReviewPacketPersistence,
   checkReviewerRowLockBoundary,
 } from '../tests/staging/security.mjs';
+import { checkReadinessBoundary } from '../tests/staging/readiness-boundary.mjs';
 import {
   checkBrowserAcceptance,
   createActiveCandidateInvitationFingerprint,
@@ -620,8 +621,8 @@ try {
   );
   assert.deepEqual(installedReadiness.rows, [{ ready: true }]);
   await installedCandidate.end();
-  stage = 'database proof security';
   const gateway = await source.connect('r23_gateway');
+  stage = 'database proof security';
   await checkProofBoundary(
     gateway,
     source.admin,
@@ -634,6 +635,27 @@ try {
   );
   stage = 'database proof security complete';
   let appUrl = await startApp(source, authUrl);
+  stage = 'readiness operational boundary';
+  await checkReadinessBoundary({
+    admin: source.admin,
+    gateway,
+    appUrl,
+    postgresContainer: source.container,
+    candidateTokenEncryptionKey,
+    secrets: [
+      password,
+      candidatePassword,
+      jwtSecret,
+      proofPrivateKey,
+      candidateTokenEncryptionKey,
+    ],
+    appLog: () => appLog,
+    docker,
+    waitFor,
+    onCheckpoint: (checkpoint) => {
+      stage = checkpoint;
+    },
+  });
   stage = 'verified application sessions';
   await call(appUrl, recruiter, 'session.open', { organizationId });
   await call(appUrl, reviewer, 'session.open', { organizationId });

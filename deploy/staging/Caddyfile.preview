@@ -1,9 +1,11 @@
 {
+	admin off
 	http_port {$CADDY_HTTP_PORT}
 	https_port {$CADDY_HTTPS_PORT}
 }
 
 {$PUBLIC_HOSTNAME} {
+	bind {$CADDY_BIND_ADDRESS}
 	encode zstd gzip
 	@early_access path /api/early-access
 	request_body @early_access {

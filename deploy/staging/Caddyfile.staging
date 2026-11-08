@@ -1,9 +1,11 @@
 {
+	admin off
 	http_port {$CADDY_HTTP_PORT}
 	https_port {$CADDY_HTTPS_PORT}
 }
 
 {$PREVIEW_HOSTNAME} {
+	bind {$CADDY_BIND_ADDRESS}
 	encode zstd gzip
 	@early_access path /api/early-access
 	request_body @early_access {
@@ -13,6 +15,7 @@
 }
 
 {$STAGING_HOSTNAME} {
+	bind {$CADDY_BIND_ADDRESS}
 	encode zstd gzip
 	@outside_alpha not remote_ip {$STAGING_ALLOWED_CIDRS}
 	respond @outside_alpha 404

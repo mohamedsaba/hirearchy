@@ -45,82 +45,59 @@ export async function checkOperationalReadiness(databaseUrlOverride) {
     connectionString: databaseUrl,
     connectionTimeoutMillis: 3000,
   });
+  let databaseConnected = false;
 
   try {
     await client.connect();
 
-    // 1. Basic connectivity
     await client.query('SELECT 1');
+    databaseConnected = true;
 
-    // 2. Query schema migrations
-    let migrationVersion = null;
-    try {
-      const migrationRes = await client.query(
-        'SELECT version FROM hirearchy.schema_migrations ORDER BY version DESC LIMIT 1',
-      );
-      if (migrationRes.rows.length > 0) {
-        migrationVersion = migrationRes.rows[0].version;
-      }
-    } catch {
-      migrationVersion = null;
+    const { rows } = await client.query(
+      'SELECT staging.readiness_probe() AS readiness',
+    );
+    const probe = rows[0]?.readiness;
+    const markerNames = [
+      'candidateLifecycle',
+      'onboarding',
+      'candidateTokenStorage',
+      'authoringR211',
+      'executionR214',
+    ];
+    const probeValid =
+      probe !== null &&
+      typeof probe === 'object' &&
+      !Array.isArray(probe) &&
+      Object.keys(probe).length === 2 &&
+      Object.hasOwn(probe, 'migrationVersion') &&
+      Object.hasOwn(probe, 'markers') &&
+      (probe.migrationVersion === null ||
+        typeof probe.migrationVersion === 'string') &&
+      probe.markers !== null &&
+      typeof probe.markers === 'object' &&
+      !Array.isArray(probe.markers) &&
+      Object.keys(probe.markers).length === markerNames.length &&
+      markerNames.every((name) => typeof probe.markers[name] === 'boolean');
+
+    if (!probeValid) {
+      throw new Error('Database readiness metadata probe is unavailable');
     }
 
-    // 3. Query durable installation markers
-    let candidateLifecycle = false;
-    try {
-      const markerRes = await client.query(
-        "SELECT 1 FROM hirearchy.durable_candidate_installation WHERE marker_key = 'durable-candidate-lifecycle-v1' AND marker_version = 1 LIMIT 1",
-      );
-      candidateLifecycle = markerRes.rows.length > 0;
-    } catch {
-      candidateLifecycle = false;
-    }
-
-    let onboarding = false;
-    try {
-      const markerRes = await client.query(
-        "SELECT 1 FROM hirearchy.durable_onboarding_installation WHERE marker_key = 'durable-onboarding-v1' AND marker_version = 1 LIMIT 1",
-      );
-      onboarding = markerRes.rows.length > 0;
-    } catch {
-      onboarding = false;
-    }
-
-    let candidateTokenStorage = false;
-    try {
-      const metaRes = await client.query(
-        'SELECT 1 FROM hirearchy.candidate_token_storage_meta WHERE version = 1 LIMIT 1',
-      );
-      candidateTokenStorage = metaRes.rows.length > 0;
-    } catch {
-      candidateTokenStorage = false;
-    }
-
-    let authoringR211 = false;
-    try {
-      const r211Res = await client.query(
-        "SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = 'hirearchy' AND tablename = 'assessment_validated_versions'",
-      );
-      authoringR211 = r211Res.rows.length > 0;
-    } catch {
-      authoringR211 = false;
-    }
-
-    let executionR214 = false;
-    try {
-      const r214Res = await client.query(
-        "SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = 'hirearchy' AND tablename = 'candidate_execution_operations'",
-      );
-      executionR214 = r214Res.rows.length > 0;
-    } catch {
-      executionR214 = false;
-    }
+    const migrationVersion = probe.migrationVersion;
+    const {
+      candidateLifecycle,
+      onboarding,
+      candidateTokenStorage,
+      authoringR211,
+      executionR214,
+    } = probe.markers;
 
     const isMigrationCurrent = migrationVersion === TARGET_MIGRATION_VERSION;
     const isReady =
       isMigrationCurrent &&
       candidateLifecycle &&
       onboarding &&
+      candidateTokenStorage &&
       authoringR211 &&
       executionR214;
 
@@ -158,7 +135,7 @@ export async function checkOperationalReadiness(databaseUrlOverride) {
       status: 'not_ready',
       timestamp,
       database: {
-        connected: false,
+        connected: databaseConnected,
         migrationVersion: null,
         targetMigrationVersion: TARGET_MIGRATION_VERSION,
         isMigrationCurrent: false,
