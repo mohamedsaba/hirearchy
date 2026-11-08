@@ -131,3 +131,91 @@ describe('staging lockdown', () => {
     expect(getHealthStatus().capabilities).toBeUndefined();
   });
 });
+
+describe('public preview lockdown', () => {
+  it('allows only the public pages, static assets, health, and early-access submission', () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'public-preview');
+    for (const [method, path] of [
+      ['GET', '/'],
+      ['HEAD', '/products/software'],
+      ['GET', '/about'],
+      ['GET', '/contact'],
+      ['GET', '/early-access'],
+      ['GET', '/privacy'],
+      ['GET', '/products'],
+      ['GET', '/terms'],
+      ['GET', '/thinking'],
+      ['GET', '/favicon.ico'],
+      ['GET', '/_next/static/chunks/app.js'],
+      ['GET', '/fonts/dm-sans-latin.woff2'],
+      ['GET', '/software/icons/check.svg'],
+      ['GET', '/api/health'],
+      ['POST', '/api/early-access'],
+    ]) {
+      expect(
+        proxy(
+          new NextRequest(`http://localhost${path}`, { method }),
+        ).headers.get('x-middleware-next'),
+        `${method} ${path}`,
+      ).toBe('1');
+    }
+  });
+
+  it('denies product, authentication, staging, candidate, evaluator, AI, and execution routes', async () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'public-preview');
+    vi.stubEnv('HIREARCHY_R23_DISPOSABLE', '1');
+    vi.stubEnv('HIREARCHY_R26_DISPOSABLE', '1');
+    vi.stubEnv('HIREARCHY_R27_DISPOSABLE', '1');
+    for (const [method, path] of [
+      ['POST', '/api/auth/signup'],
+      ['GET', '/api/staging/readiness'],
+      ['POST', '/api/staging/v1'],
+      ['GET', '/r23/login'],
+      ['POST', '/r23/auth/login'],
+      ['GET', '/r26/candidate/example'],
+      ['POST', '/r26/api/candidate/example/ai'],
+      ['POST', '/r26/api/candidate/example/execution'],
+      ['POST', '/api/candidate/sessions/example/terminal/exec'],
+      ['GET', '/evaluator'],
+      ['POST', '/api/contact'],
+      ['PUT', '/api/early-access'],
+      ['GET', '/api/early-access'],
+      ['GET', '/admin'],
+    ]) {
+      const response = proxy(
+        new NextRequest(`http://localhost${path}`, { method }),
+      );
+      expect(response.status, `${method} ${path}`).toBe(404);
+      expect((await response.json()).error.code).toBe(
+        'PREVIEW_ROUTE_UNAVAILABLE',
+      );
+    }
+    expect(getHealthStatus()).toMatchObject({
+      capabilities: {
+        application: 'disabled',
+        execution: 'disabled',
+        ai: 'disabled',
+      },
+    });
+    expect(r23IsEnabled()).toBe(false);
+    expect(readR23Config()).toBeNull();
+    expect(r26IsEnabled()).toBe(false);
+    expect(r27IsEnabled()).toBe(false);
+  });
+
+  it('keeps execution, AI, and storage initialization disabled', async () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'public-preview');
+    vi.stubEnv('HIREARCHY_EXECUTION_BACKEND', 'restricted-executor');
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: 'not json',
+    });
+    expect(
+      (await r214CandidateExecutionAction(request, 'invalid')).status,
+    ).toBe(503);
+    expect((await r212CandidateAiAction(request, 'invalid')).status).toBe(503);
+    expect(request.bodyUsed).toBe(false);
+    await expect(register()).resolves.toBeUndefined();
+  });
+});

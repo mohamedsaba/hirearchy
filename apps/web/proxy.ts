@@ -2,8 +2,21 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import {
   isAuthenticatedStaging,
+  isPublicPreview,
   isStagingLockdown,
 } from './src/runtime/profile';
+
+const PUBLIC_PREVIEW_GET_PATHS = new Set([
+  '/',
+  '/about',
+  '/contact',
+  '/early-access',
+  '/privacy',
+  '/products',
+  '/products/software',
+  '/terms',
+  '/thinking',
+]);
 
 const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
   /^\/r23\/login$/,
@@ -110,8 +123,39 @@ function isAllowedAuthenticatedStagingRequest(
   return false;
 }
 
+function isAllowedPublicPreviewRequest(
+  method: string,
+  pathname: string,
+): boolean {
+  if (method === 'GET' || method === 'HEAD') {
+    return (
+      PUBLIC_PREVIEW_GET_PATHS.has(pathname) ||
+      pathname === '/api/health' ||
+      pathname === '/favicon.ico' ||
+      pathname.startsWith('/_next/static/') ||
+      pathname.startsWith('/fonts/') ||
+      pathname.startsWith('/software/icons/')
+    );
+  }
+  return method === 'POST' && pathname === '/api/early-access';
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (isPublicPreview()) {
+    if (isAllowedPublicPreviewRequest(request.method, pathname)) {
+      return NextResponse.next();
+    }
+    return NextResponse.json(
+      {
+        error: {
+          code: 'PREVIEW_ROUTE_UNAVAILABLE',
+          message: 'This route is unavailable in the public preview.',
+        },
+      },
+      { status: 404, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
   if (
     isStagingLockdown() &&
     !(
