@@ -420,15 +420,23 @@ try {
   console.log('--- 12-STEP DEMO UX ACCEPTANCE AUDIT REPORT ---');
   console.log('======================================================');
   console.log(`Screenshots Captured: ${auditReportResult?.steps?.length ?? 0}`);
-  console.log(`Horizontal Overflows: ${auditReportResult?.overflows?.length ?? 0}`);
-  console.log(`Axe Violations: ${auditReportResult?.axeViolations?.length ?? 0}`);
+  console.log(
+    `Horizontal Overflows: ${auditReportResult?.overflows?.length ?? 0}`,
+  );
+  console.log(
+    `Axe Violations: ${auditReportResult?.axeViolations?.length ?? 0}`,
+  );
   console.log(`Page Errors: ${auditReportResult?.pageErrors?.length ?? 0}`);
-  console.log(`Console Errors: ${auditReportResult?.consoleErrors?.length ?? 0}`);
+  console.log(
+    `Console Errors: ${auditReportResult?.consoleErrors?.length ?? 0}`,
+  );
 
   if (auditReportResult?.overflows?.length > 0) {
     console.log('\n--- OVERFLOW FINDINGS ---');
     for (const ov of auditReportResult.overflows) {
-      console.log(`  - ${ov.step} [${ov.viewport}]: docWidth=${ov.docWidth}px > clientWidth=${ov.clientWidth}px`);
+      console.log(
+        `  - ${ov.step} [${ov.viewport}]: docWidth=${ov.docWidth}px > clientWidth=${ov.clientWidth}px`,
+      );
     }
   }
 
@@ -437,7 +445,9 @@ try {
     for (const item of auditReportResult.axeViolations) {
       console.log(`  - ${item.step}:`);
       for (const v of item.violations) {
-        console.log(`      * [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodes)`);
+        console.log(
+          `      * [${v.impact}] ${v.id}: ${v.description} (${v.nodes} nodes)`,
+        );
       }
     }
   }

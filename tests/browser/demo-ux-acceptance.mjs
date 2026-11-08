@@ -19,11 +19,7 @@ const VIEWPORTS = {
   mobile: { width: 390, height: 844 },
 };
 
-export async function runDemoUxAcceptanceWalkthrough({
-  origin,
-  users,
-  admin,
-}) {
+export async function runDemoUxAcceptanceWalkthrough({ origin, users, admin }) {
   const auditReport = {
     steps: [],
     overflows: [],
@@ -89,16 +85,20 @@ export async function runDemoUxAcceptanceWalkthrough({
           docWidth: overflow.docWidth,
           clientWidth: overflow.clientWidth,
         });
-        const badElements = await page.evaluate(() => {
-          const cw = document.documentElement.clientWidth;
-          const offenders = [];
-          for (const el of document.querySelectorAll('*')) {
-            if (el.scrollWidth > cw + 1 || el.clientWidth > cw + 1) {
-              offenders.push(`${el.tagName}.${el.className} [scrollWidth=${el.scrollWidth}]`);
+        const badElements = await page
+          .evaluate(() => {
+            const cw = document.documentElement.clientWidth;
+            const offenders = [];
+            for (const el of document.querySelectorAll('*')) {
+              if (el.scrollWidth > cw + 1 || el.clientWidth > cw + 1) {
+                offenders.push(
+                  `${el.tagName}.${el.className} [scrollWidth=${el.scrollWidth}]`,
+                );
+              }
             }
-          }
-          return offenders.slice(-8);
-        }).catch(() => []);
+            return offenders.slice(-8);
+          })
+          .catch(() => []);
         console.warn(
           `  ⚠️ Overflow on ${vpName}: scrollWidth=${overflow.docWidth}px > clientWidth=${overflow.clientWidth}px`,
           badElements,
@@ -258,7 +258,9 @@ export async function runDemoUxAcceptanceWalkthrough({
     await recruiterPage.waitForTimeout(600);
 
     // Click Save draft button and wait for response
-    const saveDraftBtn = recruiterPage.locator('[data-testid="save-draft-button"]');
+    const saveDraftBtn = recruiterPage.locator(
+      '[data-testid="save-draft-button"]',
+    );
     await saveDraftBtn.waitFor({ state: 'visible', timeout: 10000 });
     const [saveResponse] = await Promise.all([
       recruiterPage.waitForResponse(
@@ -325,8 +327,7 @@ export async function runDemoUxAcceptanceWalkthrough({
     const [issueRes] = await Promise.all([
       recruiterPage.waitForResponse(
         (res) =>
-          res.url().includes('/sessions') &&
-          res.request().method() === 'POST',
+          res.url().includes('/sessions') && res.request().method() === 'POST',
       ),
       issueButton.click(),
     ]);
@@ -600,7 +601,10 @@ export async function runDemoUxAcceptanceWalkthrough({
     const mobileCloseInitial = reviewerPage.locator(
       'button:has-text("Back to evidence")',
     );
-    if ((await mobileCloseInitial.count()) > 0 && (await mobileCloseInitial.first().isVisible())) {
+    if (
+      (await mobileCloseInitial.count()) > 0 &&
+      (await mobileCloseInitial.first().isVisible())
+    ) {
       await mobileCloseInitial.first().click();
       await reviewerPage.waitForTimeout(300);
     }
@@ -633,8 +637,7 @@ export async function runDemoUxAcceptanceWalkthrough({
     const [obsRes] = await Promise.all([
       reviewerPage.waitForResponse(
         (r) =>
-          r.url().includes('/observations') &&
-          r.request().method() === 'POST',
+          r.url().includes('/observations') && r.request().method() === 'POST',
         { timeout: 10000 },
       ),
       saveObsBtn.click(),
@@ -650,7 +653,10 @@ export async function runDemoUxAcceptanceWalkthrough({
     const mobileCloseAfterObs = reviewerPage.locator(
       'button:has-text("Back to evidence")',
     );
-    if ((await mobileCloseAfterObs.count()) > 0 && (await mobileCloseAfterObs.first().isVisible())) {
+    if (
+      (await mobileCloseAfterObs.count()) > 0 &&
+      (await mobileCloseAfterObs.first().isVisible())
+    ) {
       await mobileCloseAfterObs.first().click();
       await reviewerPage.waitForTimeout(300);
     }
@@ -729,8 +735,7 @@ export async function runDemoUxAcceptanceWalkthrough({
     const [saveDraftRes] = await Promise.all([
       reviewerPage.waitForResponse(
         (r) =>
-          r.url().includes('/review-packet') &&
-          r.request().method() === 'PUT',
+          r.url().includes('/review-packet') && r.request().method() === 'PUT',
         { timeout: 15000 },
       ),
       saveDraftButton.click(),
@@ -739,9 +744,7 @@ export async function runDemoUxAcceptanceWalkthrough({
     if (!saveDraftRes.ok()) {
       console.error(`  Save draft error: ${await saveDraftRes.text()}`);
     }
-    await reviewPacket
-      .getByText(/Draft saved at/i)
-      .waitFor({ timeout: 10000 });
+    await reviewPacket.getByText(/Draft saved at/i).waitFor({ timeout: 10000 });
 
     // Finalize review packet
     const finalizeButton = reviewPacket.getByRole('button', {
@@ -775,12 +778,15 @@ export async function runDemoUxAcceptanceWalkthrough({
       console.error(`  Finalize error: ${await finalizeRes.text()}`);
     }
 
-    await reviewerPage.waitForFunction(() => {
-      const el = document.querySelector(
-        '[data-testid="review-packet-status"]',
-      );
-      return el && el.textContent?.includes('FINALIZED');
-    }, { timeout: 20000 });
+    await reviewerPage.waitForFunction(
+      () => {
+        const el = document.querySelector(
+          '[data-testid="review-packet-status"]',
+        );
+        return el && el.textContent?.includes('FINALIZED');
+      },
+      { timeout: 20000 },
+    );
 
     await reviewerPage
       .locator('[data-testid="review-packet-finalized-notice"]')

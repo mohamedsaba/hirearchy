@@ -2765,7 +2765,8 @@ export function AssessmentBuilderClient({
                           >
                             <h4>Candidate invitation</h4>
                             {renderCandidateInvitationControls()}
-                            {issuedSession.candidatePath && !candidateInvitationUrl ? (
+                            {issuedSession.candidatePath &&
+                            !candidateInvitationUrl ? (
                               <div style={{ marginTop: '8px' }}>
                                 <Link
                                   href={issuedSession.candidatePath}
