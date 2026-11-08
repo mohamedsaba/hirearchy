@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import {
+  normalizeAssessmentTemplate,
+  reservationMovesBinding,
+} from '../../database/postgres/r211/template.mjs';
 
-const content = {
+export const content = {
   title: 'Durable notification retry assessment',
   brief:
     'Implement bounded notification retries and preserve the observable result of each delivery attempt.',
@@ -25,6 +29,14 @@ const content = {
     },
   ],
 };
+
+export const reservationMovesContent = normalizeAssessmentTemplate({
+  templateId: 'reservation-moves-v3',
+  durationMinutes: 60,
+  terminalEnabled: true,
+  integratedAi: false,
+});
+
 export async function createJourney({
   call,
   appUrl,
@@ -32,10 +44,12 @@ export async function createJourney({
   reviewer,
   organizationId,
   provisioned,
+  content: customContent = content,
 }) {
+  const journeyContent = customContent;
   const created = await call(appUrl, recruiter, 'assessment.create', {
     organizationId,
-    content,
+    content: journeyContent,
   });
   const assessmentId = created.assessmentId;
   assert.match(assessmentId, /^[0-9a-f-]{36}$/i);
@@ -43,7 +57,7 @@ export async function createJourney({
     appUrl,
     reviewer,
     'assessment.create',
-    { organizationId, content },
+    { organizationId, content: journeyContent },
     403,
   );
   const args = { organizationId, assessmentId };
@@ -62,7 +76,11 @@ export async function createJourney({
     reviewerPrincipalId: provisioned.users[1].principalId,
   });
   assert(issued.sessionId);
-  const state = { assessmentId, sessionId: issued.sessionId, content };
+  const state = {
+    assessmentId,
+    sessionId: issued.sessionId,
+    content: journeyContent,
+  };
   await readJourney({
     call,
     appUrl,
@@ -102,6 +120,15 @@ export async function readJourney({
   assert.equal(evidence.session.status, 'CREATED');
   assert.equal(evidence.session.terminalEnabled, false);
   assert.equal(evidence.session.aiCapabilitySnapshot.enabled, false);
+  if (state.content?.templateId === 'reservation-moves-v3') {
+    assert.equal(evidence.session.scenarioId, 'reservation-moves');
+    assert.equal(evidence.session.scenarioVersion, 'v3');
+    assert.equal(evidence.session.scenarioTitle, 'Reservation Moves');
+    const snapshot = evidence.session.scenarioSnapshot;
+    assert.equal(snapshot?.scenario?.templateId, 'reservation-moves-v3');
+    assert.equal(snapshot?.scenario?.recipe?.id, 'reservation-moves.pytest');
+    assert.ok(snapshot?.workspaceFiles?.['src/service.py'] !== undefined);
+  }
   for (const field of [
     'events',
     'fileRevisions',

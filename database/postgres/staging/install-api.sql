@@ -1805,6 +1805,20 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             'draft': draft_obj,
             'validatedVersions': validated_versions,
             'sessions': json_value(session_rows),
+            'availableTemplates': [
+                {
+                    'templateId': 'custom',
+                    'title': 'Custom authored assessment',
+                    'description': 'Author a custom scenario with explicit starter files, brief, and rubric.',
+                },
+                {
+                    'templateId': 'reservation-moves-v3',
+                    'title': 'Reservation Moves v3',
+                    'description': 'A local Python/pytest scenario where a candidate fixes capacity preservation and idempotent replay for booking moves.',
+                    'scenarioId': 'reservation-moves',
+                    'scenarioVersion': 'v3',
+                },
+            ],
         }
 
     if operation == 'session.revoke':

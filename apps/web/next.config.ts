@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  turbopack: process.env.TURBO_ROOT
+    ? { root: process.env.TURBO_ROOT }
+    : undefined,
   agentRules: false,
   devIndicators: false,
   experimental: {

@@ -1,26 +1,69 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   RECIPE,
   RECIPE_DIGEST,
 } from '../../../packages/restricted-executor/recipes.mjs';
 
-const templateRoot = join(
-  process.cwd(),
-  'docs/scenarios/examples/reservation-moves',
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const fallbackRoot = join(
+  currentDir,
+  '../../..',
+  'docs',
+  'scenarios',
+  'examples',
+  'reservation-moves',
 );
+const candidateRoot = join(
+  process.cwd(),
+  'docs',
+  'scenarios',
+  'examples',
+  'reservation-moves',
+);
+const templateRoot = existsSync(candidateRoot) ? candidateRoot : fallbackRoot;
+
 const paths = [
   'src/sender.py',
   'src/service.py',
   'src/state.py',
   'tests/test_moves.py',
 ];
-const expectedWorkspaceDigest =
+export const expectedWorkspaceDigest =
   'c1e172b193fd0c5e78f81ef5bf74ea95a07b6be3215829d5fa8e5116423b0694';
-const expectedBriefDigest =
+export const expectedBriefDigest =
   '10d0bb112ad93c897c2801ad14059ece94f7139d181bc4d8f0ae6434e047e241';
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
+
+export const APPROVED_ASSESSMENT_TEMPLATES = Object.freeze([
+  Object.freeze({
+    templateId: 'reservation-moves-v3',
+    scenarioId: 'reservation-moves',
+    scenarioVersion: 'v3',
+    title: 'Reservation Moves',
+    description:
+      'A local Python/pytest scenario where a candidate fixes capacity preservation and idempotent replay for booking moves.',
+    primaryFilePath: 'src/service.py',
+    recipeId: RECIPE.recipeId,
+    recipeVersion: RECIPE.recipeVersion,
+    recipeDigest: RECIPE_DIGEST,
+    starterWorkspaceDigest: expectedWorkspaceDigest,
+    starterFilePaths: Object.freeze([...paths]),
+  }),
+]);
+
+export function listApprovedTemplates() {
+  return APPROVED_ASSESSMENT_TEMPLATES;
+}
+
+export function getApprovedTemplate(templateId) {
+  return (
+    APPROVED_ASSESSMENT_TEMPLATES.find((t) => t.templateId === templateId) ??
+    null
+  );
+}
 
 export function normalizeAssessmentTemplate(input) {
   const templateId = input?.templateId ?? 'custom';

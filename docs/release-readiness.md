@@ -45,24 +45,37 @@ The launcher safety correction and Node test naming fix are included in the merg
 
 Source anchors: `apps/web/src/staging/server.ts`, `apps/web/src/staging/browser.ts`, `apps/web/src/runtime/profile.ts`, `database/postgres/migrations/0014_staging_proof_state.sql`, `database/postgres/migrations/0015_staging_dispatch_api.sql`, and `tests/staging/journey.mjs`.
 
-## Accepted PR #6 technical evidence
+## Accepted PR #6 & PR #7 technical evidence
 
-[PR #6](https://github.com/mohamedsaba/hirearchy/pull/6) merged normally on 2026-11-08. Its accepted source is `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`; protected merge commit `6f144045a3dcfa523fd7d79112c09721011b4871` has the exact same tree. The primary checkout was fast-forwarded without changing its unrelated generated-file edit.
+[PR #6](https://github.com/mohamedsaba/hirearchy/pull/6) merged normally on 2026-11-08. Its accepted source is `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`; protected merge commit `6f144045a3dcfa523fd7d79112c09721011b4871` has the exact same tree.
+[PR #7](https://github.com/mohamedsaba/hirearchy/pull/7) merged on 2026-11-08 with merge commit `83a9203e28e15da33bcddac7e5923101bc2f0dda`, enforcing verified AMR recovery-token restrictions (`isRecovery: false`, rejecting recovery AMR entries with 28000 at proof boundary).
 
-- [Verify run 42478976235](https://github.com/mohamedsaba/hirearchy/actions/runs/42478976235) and [Executor PostgreSQL run 42478976277](https://github.com/mohamedsaba/hirearchy/actions/runs/42478976277) pass on that source. All four required contexts pass: `verify`, `dependency-audit`, `postgres`, and `real-docker`. There were no unresolved review threads or requested changes at merge.
+- [Verify run 42478976235](https://github.com/mohamedsaba/hirearchy/actions/runs/42478976235) and [Executor PostgreSQL run 42478976277](https://github.com/mohamedsaba/hirearchy/actions/runs/42478976277) pass on the PR #6 baseline.
 - Real GoTrue, PostgreSQL and Chromium acceptance passes invitation creation/recovery/expiry/revocation, affirmative candidate consent, persistent workspace save and lost-response recovery, submission retry, restart/read-only behavior, assigned-reviewer observations, draft reload and final human review. Both unassigned-reviewer writes return `403` without changing observations, packets or history. The forms-page CSP and Secure/HttpOnly cookie protections remain intact.
 - Late separate-instance database and application recovery passes after the actual candidate and final-review workflow, including stored-data/API fingerprints and active invitation recovery. The existing R2.14 real-Docker recruiter-to-evidence compatibility journey also passes. These are owned disposable rehearsals, not off-host backup or production-host acceptance.
 - The packet-response regression reproduces SQLSTATE `42601` on the old installer and passes corrected draft creation/update, stale-version denial without mutation, history, finalization and immutable replay on actual migrations. The bounded SQL-only fixture used synthetic Auth metadata. All 84 literal dispatcher queries also passed non-executing schema preparation. Full CI above supplies the separate live-authentication/browser evidence.
 - The technical journey captured eight masked synthetic workflow screenshots under the privacy guards. Upload remains deferred; no authenticated-workflow screenshot was uploaded or visually inspected. A 900 MiB local build and a separate webpack development attempt stopped by OOM before rendering. Do not repeat those attempts under unchanged capacity.
 - Limited static Home, Software and Contact component checks at 1280×900, 834×900 and 390×900 pass all nine overflow/target/text checks; captures were inspected and the public suites pass 13/13. This does not establish Next delivery/hydration/navigation or authenticated visual acceptance.
 
-AI assistance, candidate code execution and email delivery remain disabled in durable staging. The approved Reservation Moves v3 template has a durable source path, but the accepted browser journey used a custom assessment; its approved-template walkthrough remains pending. No deployment, public signup, customer delivery or managed-Supabase compatibility is certified by this merge.
+## Approved-template durable journey: Reservation Moves v3
 
-## Current follow-up: recovery-proof eligibility
+The durable staging lifecycle is verified end-to-end on PostgreSQL specifically using the approved template **Reservation Moves v3** (`reservation-moves@v3`, templateId `reservation-moves-v3`, recipe `reservation-moves.pytest`):
 
-An isolated, in-progress follow-up requires normal verified AMR before product proof issuance or staging browser-session creation. It emits proof v2 with strict `isRecovery: false`; the SQL verifier rejects v1, missing, true and non-boolean recovery fields. Recovery in any AMR entry and missing/empty/malformed AMR deny product access while preserving legacy verification outside this proof boundary.
+1. **Approved-template catalog exposure & selection**: `availableTemplates` exposed on organization context API and client, exporting `expectedWorkspaceDigest` (`c1e172b1...`) and `expectedBriefDigest` (`10d0bb11...`).
+2. **Stable scenario/version binding**: `reservation-moves` / `v3` / `Reservation Moves` correctly bound and retained across assessment creation, validation, issuance, candidate read/save/submit, evidence workbench, and review packets.
+3. **Static validation**: Template-backed assessment validates brief and workspace digests without requiring untrusted live execution.
+4. **Assessment issuance & invitation security**: Candidate token envelope generated with SHA-256 token hashing, AES-256-GCM ciphertext, 30-day lifecycle expiration check, and reviewer assignment.
+5. **Affirmative consent enforcement**: Candidate activation strictly rejects string consent (`"true"`) with R2603; affirmative boolean consent (`accepted: true`, notice version `candidate-data-v1`, digest `9bfa590ff...`) persists to `candidate_data_consents`.
+6. **Candidate workspace starter files & save/resume**: Unpacks exactly 4 files (`src/sender.py`, `src/service.py`, `src/state.py`, `tests/test_moves.py`) at version 0 with verified content digests. Edits to `src/service.py` persist version 1 revision in `candidate_file_revisions`, record `WORKSPACE_CHANGED` event, and resume cleanly.
+7. **Durable submission capture**: Finalizes candidate session with closure reason `candidate_submission`, records `candidate_session_submissions`, and rejects late edits with R2605.
+8. **Evidence provenance & truthful restrictions**: Submitted evidence surfaces truthful capability restrictions (`terminalEnabled: false`, `aiCapabilitySnapshot.enabled: false`, capture limitation notice). Factual records contain zero automated scores, candidate rankings, or competence labels.
+9. **Evaluator authorization boundaries**: Recruiter denied `evidence.read` (42501), unassigned reviewer denied `evidence.read` and `review.packet.save` (42501), cross-org recruiter denied (42501), recovery credential proof denied (28000).
+10. **Human review lifecycle**: Evaluator observations created and updated with citation grounding, draft review packet saved, finalized with SHA-256 digest, review history preserved, and finalized packet mutation rejected (R2105).
+11. **Restart & PostgreSQL backup/restore rehearsal**: Survives application disconnect/restart; full binary database backup (`pg_dump -Fc`) and cluster globals (`pg_dumpall -g`) restored into a separate PostgreSQL instance, verifying evidence, revisions, submissions, observations, and finalized review packet intact.
 
-Focused identity/proof/direct-API/login tests pass 11/11, including unsafe timestamp denial; typechecking and static checks pass. The actual migrated SQL fixture passes v2 negative proofs, existing authorization/replay checks and review persistence with synthetic Auth metadata. Fresh full CI and live-GoTrue AMR variant checks remain pending. This does not implement signup, SMTP, password-recovery callbacks, team bootstrap or reviewer invitations.
+Test coverage: `scripts/test-reservation-moves-durable-journey.mjs` (all 11 stages passing) and automated inclusion in `npm run test:staging`.
+
+AI assistance, candidate code execution and email delivery remain disabled in durable staging. No deployment, public signup, customer delivery or managed-Supabase compatibility is certified by this verification.
 
 ## Reusable next integration seam
 
@@ -71,14 +84,14 @@ Focused identity/proof/direct-API/login tests pass 11/11, including unsafe times
 - **Restricted execution:** R2.14 connects approved execution operations to the restricted executor service. `node scripts/test-r214-integration.mjs` is a disposable development integration, not the durable staging profile or a production security certification.
 - **Evaluator evidence and review:** R27 provides submitted evidence reads; R210 stores structured human review packets. PR #5's R2.15 staging allowlist blocks candidate operations and evaluator writes. PR #6's accepted durable path bridges these operations through verified identity and PostgreSQL authorization; never accept a browser-supplied subject or enable disposable runtime flags in durable mode.
 
-The immediate code gate is recovery-proof eligibility, followed by first-team onboarding. Authenticated visual review and the approved-template walkthrough remain acceptance gates. Keep AI and execution visibly disabled.
+The approved-template durable technical journey (`Reservation Moves v3`) is fully implemented and verified across all 11 stages. The remaining release gate for an internal demo is authenticated visual review (Worker A). Wave 2 will implement first-team self-service onboarding (Priority 6). Keep AI and execution visibly disabled.
 
 ## Release gates
 
 | Release level           | Status        | Evidence needed                                                                                                                                                                                                     |
 | ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Internal workflow demo  | **Not ready** | Technical browser and late recovery gates pass; authenticated visual review and the approved-template walkthrough remain pending.                                                                                   |
-| Supervised alpha        | **Not ready** | Internal journey accepted; first-team setup, supported single-team hosting, migration/restore/rollback, monitored operation, and privacy disclosures verified.                                                      |
+| Internal workflow demo  | **Not ready** | Technical browser, recovery, and Reservation Moves v3 durable journey gates pass 11/11; authenticated visual review (Worker A) remains pending.                                                                     |
+| Supervised alpha        | **Not ready** | Internal journey accepted; first-team self-service onboarding (Wave 2 / Priority 6), supported single-team hosting, migration/restore/rollback, monitored operation, and privacy disclosures verified.              |
 | External-candidate beta | **No-go**     | Beta environment and recovery accepted; invitation expiry/revocation and delivery path verified; execution threat boundary accepted before enabling candidate code execution; support and incident process defined. |
 | Public MVP              | **No-go**     | Beta gates plus approved legal/privacy copy, market and competitor evidence, public onboarding, reliable delivery, monitoring, backups, and founder-approved production activation.                                 |
 
