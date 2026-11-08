@@ -35,18 +35,45 @@ async function waitUntil(predicate, description, timeoutMs = 15_000) {
 }
 
 async function signInAndSelectOrganization(page, appUrl, user, organizationId) {
+  const appOrigin = new URL(appUrl).origin;
   await page.goto(`${appUrl}/r23/login`);
   await page.waitForLoadState('domcontentloaded');
   await page.locator('input[name="email"]').fill(user.email);
   await page.locator('input[name="password"]').fill(user.password);
-  await page.locator('button[type="submit"]').click();
+  const [loginResponse] = await Promise.all([
+    page.waitForResponse((response) => {
+      const responseUrl = new URL(response.url());
+      return (
+        response.request().method() === 'POST' &&
+        responseUrl.origin === appOrigin &&
+        responseUrl.pathname === '/r23/auth/login'
+      );
+    }),
+    page.locator('button[type="submit"]').click(),
+  ]);
+  console.log(
+    `Staging browser auth login POST status=${loginResponse.status()}`,
+  );
   await page.waitForURL('**/r23/organizations');
 
   const organization = organizationId.toLowerCase();
   const selectForm = page.locator('form').filter({
     has: page.locator(`input[value="${organization}"]`),
   });
-  await selectForm.locator('button[type="submit"]').click();
+  const [organizationResponse] = await Promise.all([
+    page.waitForResponse((response) => {
+      const responseUrl = new URL(response.url());
+      return (
+        response.request().method() === 'POST' &&
+        responseUrl.origin === appOrigin &&
+        responseUrl.pathname === '/r23/organization'
+      );
+    }),
+    selectForm.locator('button[type="submit"]').click(),
+  ]);
+  console.log(
+    `Staging browser organization selection POST status=${organizationResponse.status()}`,
+  );
   await page.waitForURL(`**/r23/organizations/${organization}`);
 }
 

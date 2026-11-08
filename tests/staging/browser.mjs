@@ -1,16 +1,48 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export function stagingFailureSource(error) {
   if (typeof error?.stack !== 'string') return null;
-  const sourceRoot = new URL('../../', import.meta.url).href;
+  const sourceRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
   for (const line of error.stack.split('\n').slice(1)) {
     const frame = line.match(
-      /^\s+at (?:[^()]* \()?(\S+\.mjs):([1-9]\d{0,5}):([1-9]\d{0,4})\)?$/,
+      /^\s+at (?:[^()]* \()?(.+?\.mjs):([1-9]\d{0,5}):([1-9]\d{0,4})\)?$/,
     );
-    if (!frame?.[1].startsWith(sourceRoot)) continue;
-    const relativePath = frame[1].slice(sourceRoot.length);
+    if (!frame) continue;
+
+    let sourcePath;
+    try {
+      if (frame[1].startsWith('file:')) {
+        const sourceUrl = new URL(frame[1]);
+        if (
+          sourceUrl.protocol !== 'file:' ||
+          sourceUrl.search ||
+          sourceUrl.hash
+        ) {
+          continue;
+        }
+        sourcePath = fileURLToPath(sourceUrl);
+      } else if (isAbsolute(frame[1])) {
+        sourcePath = resolve(frame[1]);
+      } else {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    const relativePath = relative(sourceRoot, sourcePath);
+    if (
+      relativePath === '..' ||
+      relativePath.startsWith(`..${sep}`) ||
+      isAbsolute(relativePath)
+    ) {
+      continue;
+    }
+    const repositoryPath = relativePath.split(sep).join('/');
     if (
       [
         'tests/staging/browser.mjs',
@@ -22,9 +54,9 @@ export function stagingFailureSource(error) {
         'tests/staging/release.mjs',
         'tests/staging/failure-source-check.mjs',
         'scripts/test-staging-integration.mjs',
-      ].includes(relativePath)
+      ].includes(repositoryPath)
     ) {
-      return `${relativePath}:${frame[2]}:${frame[3]}`;
+      return `${repositoryPath}:${frame[2]}:${frame[3]}`;
     }
   }
   return null;

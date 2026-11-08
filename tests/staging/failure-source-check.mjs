@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { stagingFailureSource } from './browser.mjs';
 
 test('reports a source frame without assertion values or absolute paths', () => {
@@ -16,12 +18,18 @@ test('reports a source frame without assertion values or absolute paths', () => 
 
 test('accepts only staging source frames with bounded line numbers', () => {
   const sourceRoot = new URL('../../', import.meta.url).href;
+  const sourceRootPath = resolve(
+    fileURLToPath(new URL('../../', import.meta.url)),
+  );
+  const browserPath = resolve(sourceRootPath, 'tests/staging/browser.mjs');
   const rejected = [
     'file:///private/credentials.mjs:3:4',
     `${sourceRoot}tests/staging/private-token-name.mjs:3:4`,
     `${sourceRoot}tests/staging/token-secret.mjs?token=secret:3:4`,
     `${sourceRoot}tests/staging/../private.mjs:3:4`,
     `${sourceRoot}tests/staging/browser.mjs:1234567:4`,
+    '/tmp/private-token-name.mjs:3:4',
+    `${browserPath}?token=secret:3:4`,
   ];
   for (const location of rejected) {
     assert.equal(
@@ -32,6 +40,12 @@ test('accepts only staging source frames with bounded line numbers', () => {
   assert.equal(
     stagingFailureSource({
       stack: `Error: synthetic-private-message\n    at async checkBrowserAcceptance (${sourceRoot}tests/staging/browser.mjs:123:4)`,
+    }),
+    'tests/staging/browser.mjs:123:4',
+  );
+  assert.equal(
+    stagingFailureSource({
+      stack: `Error: synthetic-private-message\n    at async checkBrowserAcceptance (${browserPath}:123:4)`,
     }),
     'tests/staging/browser.mjs:123:4',
   );
