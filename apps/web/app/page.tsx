@@ -214,8 +214,12 @@ export default function HomePage() {
             </li>
           ))}
         </ol>
-        <div className="ct-software-button">
-          <Button href="/products/software">Start with Software</Button>
+        <div
+          className="ct-software-button"
+          style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}
+        >
+          <Button href="/early-access">Request early access</Button>
+          <Button href="/products/software">Explore Software</Button>
         </div>
         <aside className="ct-software-aside">
           <Kicker>
