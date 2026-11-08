@@ -1445,6 +1445,7 @@ export function AssessmentBuilderClient({
             {stage === 'define' && (
               <div
                 className="assessment-stage-content"
+                suppressHydrationWarning
                 style={{
                   padding: 'clamp(12px, 2.5vw, 24px)',
                   boxSizing: 'border-box',
@@ -1540,17 +1541,11 @@ export function AssessmentBuilderClient({
                         id="assessment-title"
                         name="title"
                         type="text"
+                        suppressHydrationWarning
                         data-testid="assessment-title-input"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: 'var(--software-radius-control, 6px)',
-                          border: '1px solid var(--software-border, #ccc)',
-                          background: 'var(--software-surface, #fff)',
-                          color: 'var(--software-ink, #000)',
-                        }}
+                        className="assessment-input-control"
                       />
                       {getFieldIssue('title') && (
                         <p
@@ -1581,17 +1576,11 @@ export function AssessmentBuilderClient({
                         id="assessment-brief"
                         name="brief"
                         rows={5}
+                        suppressHydrationWarning
                         data-testid="assessment-brief-input"
                         value={brief}
                         onChange={(e) => setBrief(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: 'var(--software-radius-control, 6px)',
-                          border: '1px solid var(--software-border, #ccc)',
-                          background: 'var(--software-surface, #fff)',
-                          color: 'var(--software-ink, #000)',
-                        }}
+                        className="assessment-input-control"
                       />
                       {getFieldIssue('brief') && (
                         <p
@@ -1644,12 +1633,7 @@ export function AssessmentBuilderClient({
                             onChange={(e) =>
                               updateExpectedBehavior(idx, e.target.value)
                             }
-                            style={{
-                              flex: 1,
-                              padding: '8px 10px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--software-border, #ccc)',
-                            }}
+                            className="assessment-input-row-item"
                           />
                           <button
                             type="button"
@@ -1717,12 +1701,7 @@ export function AssessmentBuilderClient({
                             onChange={(e) =>
                               updateAcceptanceCriterion(idx, e.target.value)
                             }
-                            style={{
-                              flex: 1,
-                              padding: '8px 10px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--software-border, #ccc)',
-                            }}
+                            className="assessment-input-row-item"
                           />
                           <button
                             type="button"
@@ -1768,17 +1747,11 @@ export function AssessmentBuilderClient({
                         id="primary-file-path"
                         name="primaryFilePath"
                         type="text"
+                        suppressHydrationWarning
                         data-testid="primary-file-path-input"
                         value={primaryFilePath}
                         onChange={(e) => setPrimaryFilePath(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: 'var(--software-radius-control, 6px)',
-                          border: '1px solid var(--software-border, #ccc)',
-                          background: 'var(--software-surface, #fff)',
-                          color: 'var(--software-ink, #000)',
-                        }}
+                        className="assessment-input-control"
                       />
                       {getFieldIssue('primaryFilePath') && (
                         <p
@@ -1843,13 +1816,7 @@ export function AssessmentBuilderClient({
                               onChange={(e) =>
                                 updateStarterFile(idx, 'path', e.target.value)
                               }
-                              style={{
-                                flex: 1,
-                                padding: '6px 10px',
-                                borderRadius: '4px',
-                                border:
-                                  '1px solid var(--software-border, #ccc)',
-                              }}
+                              className="assessment-input-row-item-compact"
                             />
                             <button
                               type="button"
@@ -1931,17 +1898,12 @@ export function AssessmentBuilderClient({
                     <select
                       id="duration-minutes"
                       name="durationMinutes"
+                      suppressHydrationWarning
                       value={durationMinutes}
                       onChange={(e) =>
                         setDurationMinutes(Number(e.target.value))
                       }
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        borderRadius: 'var(--software-radius-control, 6px)',
-                        border: '1px solid var(--software-border, #ccc)',
-                        background: 'var(--software-surface, #fff)',
-                      }}
+                      className="assessment-input-control"
                     >
                       <option value={30}>30 minutes</option>
                       <option value={45}>45 minutes</option>
@@ -2089,12 +2051,8 @@ export function AssessmentBuilderClient({
                                 e.target.value,
                               )
                             }
-                            style={{
-                              flex: 2,
-                              padding: '6px 10px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--software-border, #ccc)',
-                            }}
+                            className="assessment-input-row-item-compact"
+                            style={{ flex: 2 }}
                           />
                           <div
                             style={{
@@ -2114,13 +2072,8 @@ export function AssessmentBuilderClient({
                                   Number(e.target.value),
                                 )
                               }
-                              style={{
-                                width: '70px',
-                                padding: '6px 10px',
-                                borderRadius: '4px',
-                                border:
-                                  '1px solid var(--software-border, #ccc)',
-                              }}
+                              className="assessment-input-row-item-compact"
+                              style={{ width: '70px', flex: 'none' }}
                             />
                             <span style={{ fontSize: '0.85rem' }}>%</span>
                           </div>
@@ -2152,12 +2105,8 @@ export function AssessmentBuilderClient({
                               e.target.value,
                             )
                           }
-                          style={{
-                            width: '100%',
-                            padding: '6px 10px',
-                            borderRadius: '4px',
-                            border: '1px solid var(--software-border, #ccc)',
-                          }}
+                          className="assessment-input-row-item-compact"
+                          style={{ width: '100%' }}
                         />
                       </div>
                     ))}

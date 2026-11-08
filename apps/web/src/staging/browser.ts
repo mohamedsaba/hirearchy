@@ -4,9 +4,22 @@ import {
   createHash,
   hkdfSync,
   randomBytes,
+  randomUUID,
   timingSafeEqual,
 } from 'node:crypto';
 import { isIP } from 'node:net';
+
+import {
+  invitationTokenHash,
+  encryptInvitationToken,
+  decryptInvitationToken,
+  type OnboardingStatusResponse,
+  type OrganizationMemberItem,
+  type ReviewerInvitationItem,
+  type AccountProfile,
+  type BootstrapOrganizationResponse,
+  type AcceptInvitationResponse,
+} from './onboarding';
 
 import type {
   R23Membership,
@@ -39,6 +52,7 @@ import {
   R23_CALLBACK_COOKIE,
   R23_CSRF_COOKIE,
   R23_SESSION_COOKIE,
+  readR23Config,
 } from '../r23-auth/config';
 import {
   assertR23StagingEligibleIdentity,
@@ -520,7 +534,7 @@ function htmlResponse(
 }
 
 function loginForm(message = ''): string {
-  return `${message ? `<p role="alert">${safeHtml(message)}</p>` : ''}<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form>`;
+  return `${message ? `<p role="alert">${safeHtml(message)}</p>` : ''}<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options"><p><a href="/r23/signup">Create an account (Sign up)</a></p><p><a href="/r23/recover">Forgot password?</a></p><p><a href="/r23/verify-email">Verify email address</a></p></nav>`;
 }
 
 function redirect(
@@ -553,12 +567,21 @@ function getSqlErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
+function getSqlErrorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as Record<string, unknown>).message;
+    return typeof message === 'string' ? message : '';
+  }
+  return '';
+}
+
 function errorDetails(error: unknown): {
   status: number;
   code: string;
   message: string;
 } {
   const code = getSqlErrorCode(error);
+  const sqlMessage = getSqlErrorMessage(error);
   if (code === 'R2901' || code === 'R2101') {
     return {
       status: 400,
@@ -595,6 +618,18 @@ function errorDetails(error: unknown): {
     };
   }
   if (error instanceof StagingBadRequest || code === '22023') {
+    if (
+      sqlMessage.includes(
+        'Idempotency key already exists with different request parameters',
+      )
+    ) {
+      return {
+        status: 400,
+        code: 'IDEMPOTENCY_CONFLICT',
+        message:
+          'Idempotency key already exists with different request parameters.',
+      };
+    }
     return {
       status: 400,
       code: 'INVALID_REQUEST',
@@ -619,6 +654,59 @@ function errorDetails(error: unknown): {
     };
   }
   if (error instanceof StagingForbidden || code === '42501') {
+    if (sqlMessage.includes('Email confirmation is required')) {
+      return {
+        status: 403,
+        code: 'EMAIL_CONFIRMATION_REQUIRED',
+        message: 'Email confirmation is required before proceeding.',
+      };
+    }
+    if (
+      sqlMessage.includes('User already has an active organization membership')
+    ) {
+      return {
+        status: 403,
+        code: 'MEMBERSHIP_CONFLICT',
+        message: 'User already has an active organization membership.',
+      };
+    }
+    if (
+      sqlMessage.includes('Invitation is bound to a different email address')
+    ) {
+      return {
+        status: 403,
+        code: 'INVITATION_EMAIL_MISMATCH',
+        message: 'This invitation was issued to a different email address.',
+      };
+    }
+    if (sqlMessage.includes('Invitation has been revoked')) {
+      return {
+        status: 403,
+        code: 'INVITATION_REVOKED',
+        message: 'This invitation has been revoked by the organization owner.',
+      };
+    }
+    if (sqlMessage.includes('Invitation has expired')) {
+      return {
+        status: 403,
+        code: 'INVITATION_EXPIRED',
+        message: 'This invitation has expired.',
+      };
+    }
+    if (sqlMessage.includes('Sole organization owner cannot be removed')) {
+      return {
+        status: 403,
+        code: 'OWNER_REMOVAL_FORBIDDEN',
+        message: 'The sole organization owner cannot be removed.',
+      };
+    }
+    if (sqlMessage.includes('Self-service onboarding is disabled')) {
+      return {
+        status: 403,
+        code: 'SELF_SERVICE_DISABLED',
+        message: 'Self-service onboarding is disabled in this environment.',
+      };
+    }
     return {
       status: 403,
       code: 'ACCESS_DENIED',
@@ -1184,15 +1272,21 @@ export async function stagingOrganizationsGet(
       request,
       digest(csrf),
       async ({ config, identity, csrfToken, refreshedSessionCookie }) => {
-        const result = (await dispatchVerifiedStagingOperation(
-          config,
-          identity,
-          'membership.list',
-          {},
-        )) as { memberships?: StagingMembershipItem[] } | null;
-        const memberships = Array.isArray(result?.memberships)
-          ? result.memberships
-          : [];
+        let memberships: StagingMembershipItem[] = [];
+        try {
+          const result = (await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'membership.list',
+            {},
+          )) as { memberships?: StagingMembershipItem[] } | null;
+          if (Array.isArray(result?.memberships)) {
+            memberships = result.memberships;
+          }
+        } catch {
+          // Pre-principal identity without an active principal or zero memberships
+          memberships = [];
+        }
         const items = memberships
           .map((membership) => {
             if (!UUID.test(membership.organizationId)) {
@@ -1203,9 +1297,47 @@ export async function stagingOrganizationsGet(
             return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit">Select organization ${id} (${roleLabel})</button></form></li>`;
           })
           .join('');
-        const content = items
-          ? `<p>Select one organization for this session.</p><ul>${items}</ul>`
-          : '<p>No active organization membership is available for this account.</p>';
+        let content = '';
+        if (memberships.length > 0) {
+          content = `<p>Select one organization for this session.</p><ul>${items}</ul>`;
+        } else {
+          let onboardingStatus: OnboardingStatusResponse | null = null;
+          try {
+            onboardingStatus = (await dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              'onboarding.status',
+              {},
+            )) as OnboardingStatusResponse;
+          } catch {
+            // Pre-principal or unconfirmed identity
+          }
+
+          if (
+            onboardingStatus?.status === 'needs_team' &&
+            onboardingStatus.capabilities.selfServiceOnboardingEnabled
+          ) {
+            content = `
+              <section aria-labelledby="create-org-title">
+                <h2 id="create-org-title">Create your first organization</h2>
+                <p>You do not have an active organization membership yet. As the founding owner, create your first organization to begin issuing assessments.</p>
+                <div role="note" aria-label="Governance notice">
+                  <p><strong>Governance:</strong> You will be provisioned as the immutable <strong>owner</strong> and <strong>recruiter</strong> for this organization. <em>Reservation Moves v3</em> will be immediately available in your workspace.</p>
+                </div>
+                <form action="/r23/organization/bootstrap" method="post">
+                  <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
+                  <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
+                  <label for="displayName">Organization display name</label>
+                  <input id="displayName" name="displayName" type="text" required maxlength="100" placeholder="e.g. Acme Space Systems">
+                  <button type="submit">Create organization and continue</button>
+                </form>
+              </section>
+            `;
+          } else {
+            content =
+              '<p>No active organization membership is available for this account.</p>';
+          }
+        }
         const response = htmlResponse(
           'Choose an organization',
           `${content}<form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><button type="submit">Sign out</button></form>`,
@@ -1599,6 +1731,7 @@ export async function stagingOrganizationGet(
         </p>
         <nav aria-label="Evaluator workspace">
           <a href="/r23/organizations">Switch organization</a>
+          <a href="/r23/organizations/${safeOrgId}/settings" data-testid="org-settings-link">Team &amp; Settings</a>
         </nav>
       </header>
 
@@ -4428,4 +4561,974 @@ export function stagingReviewPacketFinalizeApiPost(
     'POST',
     'review.packet.finalize',
   );
+}
+
+function resolveAuthAuthConfig(): {
+  authUrl: URL;
+  authIssuer: string;
+  authAudience: string;
+} {
+  try {
+    const config = loadStagingConfiguration();
+    if (config?.auth?.authUrl) return config.auth;
+  } catch {
+    // ignore
+  }
+  const r23 = readR23Config();
+  if (r23) {
+    return {
+      authUrl: r23.authUrl,
+      authIssuer: r23.authIssuer,
+      authAudience: r23.authAudience,
+    };
+  }
+  const envUrl = process.env.STAGING_AUTH_URL || process.env.R23_AUTH_URL;
+  if (envUrl) {
+    return {
+      authUrl: new URL(envUrl),
+      authIssuer:
+        process.env.STAGING_AUTH_ISSUER ||
+        process.env.R23_AUTH_ISSUER ||
+        'https://auth.hirearchy.test/auth/v1',
+      authAudience:
+        process.env.STAGING_AUTH_AUDIENCE ||
+        process.env.R23_AUTH_AUDIENCE ||
+        'authenticated',
+    };
+  }
+  throw new Error('Auth configuration unavailable');
+}
+
+export async function stagingSignupGet(request: Request): Promise<Response> {
+  const enabled =
+    process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
+
+  if (!enabled) {
+    return htmlResponse(
+      'Self-service registration disabled',
+      `
+        <section aria-labelledby="gated-signup-heading">
+          <h2 id="gated-signup-heading">Self-service registration disabled</h2>
+          <p>Public self-service signup is gated off in this environment. Registration will open when self-service release gates are met.</p>
+          <div role="note" aria-label="Environment restrictions">
+            <p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>).</p>
+          </div>
+          <p><a href="/r23/login">Return to sign in</a></p>
+        </section>
+      `,
+      403,
+    );
+  }
+
+  const url = new URL(request.url);
+  const emailParam = url.searchParams.get('email') ?? '';
+
+  return htmlResponse(
+    'Create your account',
+    `
+      <section aria-labelledby="signup-heading">
+        <h2 id="signup-heading">Create your Hirearchy account</h2>
+        <div role="note" aria-label="Environment notice">
+          <p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). After registration, verify your email to activate your account.</p>
+        </div>
+        <form action="/r23/signup" method="post">
+          <label for="email">Work email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required maxlength="320" value="${safeHtml(emailParam)}" placeholder="you@company.com">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="1024">
+          <button type="submit">Create account</button>
+        </form>
+        <nav aria-label="Sign in navigation">
+          <p><a href="/r23/login">Already have an account? Sign in</a></p>
+        </nav>
+      </section>
+    `,
+  );
+}
+
+export async function stagingSignupPost(request: Request): Promise<Response> {
+  const enabled =
+    process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
+
+  if (!enabled) {
+    return htmlResponse(
+      'Self-service registration disabled',
+      '<p role="alert">Self-service onboarding is disabled in this environment.</p><p><a href="/r23/login">Return to sign in</a></p>',
+      403,
+    );
+  }
+
+  try {
+    const body = await parseBody(request, false);
+    allowedFields(body, ['email', 'password']);
+    const email = requiredText(body, 'email', 320);
+    const password = requiredText(body, 'password', 1024);
+
+    if (!email.includes('@') || password.length < 6) {
+      return htmlResponse(
+        'Create your account',
+        '<p role="alert">Invalid email or password (password must be at least 6 characters).</p><p><a href="/r23/signup">Try again</a></p>',
+        400,
+      );
+    }
+
+    const authConfig = resolveAuthAuthConfig();
+
+    const authResponse = await fetch(
+      new URL('/signup', authConfig.authUrl).toString(),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+
+    const data = (await authResponse.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+
+    if (!authResponse.ok) {
+      return htmlResponse(
+        'Create your account',
+        `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Signup failed'))}</p><p><a href="/r23/signup">Try again</a></p>`,
+        authResponse.status,
+      );
+    }
+
+    return htmlResponse(
+      'Account registered',
+      `
+        <section aria-labelledby="registered-heading">
+          <h2 id="registered-heading">Account registration initiated</h2>
+          <p>An account for <strong>${safeHtml(email)}</strong> was successfully registered.</p>
+          <section aria-labelledby="verification-instructions-heading">
+            <h3 id="verification-instructions-heading">Identity Verification Required</h3>
+            <div role="note" aria-label="Email delivery notice">
+              <p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p>
+            </div>
+            <p>Please proceed to verify your email address before signing in.</p>
+            <p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>
+            <p><a href="/r23/login">Sign in</a></p>
+          </section>
+        </section>
+      `,
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+export async function stagingVerifyEmailGet(
+  request: Request,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const token = url.searchParams.get('token');
+  const tokenHash = url.searchParams.get('token_hash');
+  const type = url.searchParams.get('type') || 'signup';
+
+  if (token || tokenHash) {
+    try {
+      const authConfig = resolveAuthAuthConfig();
+      const verifyUrl = new URL('/verify', authConfig.authUrl);
+      if (tokenHash) {
+        verifyUrl.searchParams.set('token_hash', tokenHash);
+      } else if (token) {
+        verifyUrl.searchParams.set('token', token);
+      }
+      verifyUrl.searchParams.set('type', type);
+
+      const authResponse = await fetch(verifyUrl.toString(), {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+        redirect: 'manual',
+      });
+
+      if (
+        authResponse.status === 200 ||
+        authResponse.status === 302 ||
+        authResponse.status === 303
+      ) {
+        return htmlResponse(
+          'Email confirmed',
+          `
+            <section aria-labelledby="confirmed-heading">
+              <h2 id="confirmed-heading">Email verified successfully</h2>
+              <p>Your identity has been confirmed. You may now sign in and set up your organization.</p>
+              <p><a href="/r23/login">Proceed to sign in</a></p>
+            </section>
+          `,
+        );
+      }
+    } catch {
+      // fallback to manual form
+    }
+  }
+
+  return htmlResponse(
+    'Verify your email address',
+    `
+      <section aria-labelledby="verify-heading">
+        <h2 id="verify-heading">Confirm your email address</h2>
+        <div role="note" aria-label="Verification instructions">
+          <p>Enter the verification token provided for your account to confirm your email.</p>
+        </div>
+        <form action="/r23/verify-email" method="post">
+          <label for="token">Verification token</label>
+          <input id="token" name="token" type="text" required placeholder="Verification token" value="${safeHtml(token ?? '')}">
+          <input type="hidden" name="type" value="${safeHtml(type)}">
+          <button type="submit">Confirm email</button>
+        </form>
+        <p><a href="/r23/login">Return to sign in</a></p>
+      </section>
+    `,
+  );
+}
+
+export async function stagingVerifyEmailPost(
+  request: Request,
+): Promise<Response> {
+  try {
+    const authConfig = resolveAuthAuthConfig();
+    const body = await parseBody(request, false);
+    allowedFields(body, ['token', 'tokenHash', 'type']);
+    const token = body.token;
+    const tokenHash = body.tokenHash;
+    const type = String(body.type || 'signup');
+
+    const verifyUrl = new URL('/verify', authConfig.authUrl);
+    if (tokenHash && typeof tokenHash === 'string') {
+      verifyUrl.searchParams.set('token_hash', tokenHash);
+    } else if (token && typeof token === 'string') {
+      verifyUrl.searchParams.set('token', token);
+    } else {
+      return htmlResponse(
+        'Verify your email address',
+        '<p role="alert">Verification token is required.</p><p><a href="/r23/verify-email">Try again</a></p>',
+        400,
+      );
+    }
+    verifyUrl.searchParams.set('type', type);
+
+    const authResponse = await fetch(verifyUrl.toString(), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+      redirect: 'manual',
+    });
+
+    if (
+      authResponse.status === 200 ||
+      authResponse.status === 302 ||
+      authResponse.status === 303
+    ) {
+      return htmlResponse(
+        'Email confirmed',
+        `
+          <section aria-labelledby="confirmed-heading">
+            <h2 id="confirmed-heading">Email verified successfully</h2>
+            <p>Your identity has been confirmed. You may now sign in and set up your organization.</p>
+            <p><a href="/r23/login">Sign in</a></p>
+          </section>
+        `,
+      );
+    }
+
+    return htmlResponse(
+      'Verify your email address',
+      '<p role="alert">Email verification failed. Check the token and try again.</p><p><a href="/r23/verify-email">Try again</a></p>',
+      400,
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+export function stagingRecoverGet(): Response {
+  return htmlResponse(
+    'Reset your password',
+    `
+      <section aria-labelledby="recover-heading">
+        <h2 id="recover-heading">Request Password Recovery</h2>
+        <div role="note" aria-label="Environment notice">
+          <p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Recovery tokens are generated by the identity provider.</p>
+        </div>
+        <form action="/r23/recover" method="post">
+          <label for="email">Account email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required maxlength="320">
+          <button type="submit">Request password recovery</button>
+        </form>
+        <p><a href="/r23/login">Return to sign in</a></p>
+      </section>
+    `,
+  );
+}
+
+export async function stagingRecoverPost(request: Request): Promise<Response> {
+  try {
+    const authConfig = resolveAuthAuthConfig();
+    const body = await parseBody(request, false);
+    allowedFields(body, ['email']);
+    const email = requiredText(body, 'email', 320);
+
+    const authResponse = await fetch(
+      new URL('/recover', authConfig.authUrl).toString(),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+
+    if (!authResponse.ok) {
+      const data = (await authResponse.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null;
+      return htmlResponse(
+        'Reset your password',
+        `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Password recovery request failed'))}</p><p><a href="/r23/recover">Try again</a></p>`,
+        authResponse.status,
+      );
+    }
+
+    return htmlResponse(
+      'Password recovery initiated',
+      `
+        <section aria-labelledby="recovery-receipt-title">
+          <h2 id="recovery-receipt-title">Password Recovery Initiated</h2>
+          <p>A password recovery request has been processed for <strong>${safeHtml(email)}</strong>.</p>
+          <div role="note" aria-label="Email delivery notice">
+            <p><strong>Automated email delivery is disabled:</strong> Automated recovery emails are not sent in this environment (<code>emailDeliveryEnabled: false</code>).</p>
+          </div>
+          <p>If you have received a recovery token, you can set your new password below:</p>
+          <p><a href="/r23/reset-password">Enter recovery token and set new password</a></p>
+          <p><a href="/r23/login">Return to sign in</a></p>
+        </section>
+      `,
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+export function stagingResetPasswordGet(request: Request): Response {
+  const url = new URL(request.url);
+  const token =
+    url.searchParams.get('token') ?? url.searchParams.get('access_token') ?? '';
+
+  return htmlResponse(
+    'Set new password',
+    `
+      <section aria-labelledby="reset-password-heading">
+        <h2 id="reset-password-heading">Set new password</h2>
+        <div role="note" aria-label="Quarantine notice">
+          <p><strong>Security notice:</strong> Password reset uses a dedicated recovery credential. After resetting your password, you will be directed to sign in with your standard credentials.</p>
+        </div>
+        <form action="/r23/reset-password" method="post">
+          <label for="token">Recovery token / access token</label>
+          <input id="token" name="token" type="password" required value="${safeHtml(token)}">
+          <label for="password">New password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="1024">
+          <button type="submit">Update password</button>
+        </form>
+        <p><a href="/r23/login">Cancel and return to sign in</a></p>
+      </section>
+    `,
+  );
+}
+
+export async function stagingResetPasswordPost(
+  request: Request,
+): Promise<Response> {
+  try {
+    const body = await parseBody(request, false);
+    allowedFields(body, ['token', 'password']);
+    const token = requiredText(body, 'token', 16384);
+    const password = requiredText(body, 'password', 1024);
+
+    if (password.length < 6) {
+      return htmlResponse(
+        'Set new password',
+        '<p role="alert">New password must be at least 6 characters.</p><p><a href="/r23/reset-password">Try again</a></p>',
+        400,
+      );
+    }
+
+    const authConfig = resolveAuthAuthConfig();
+
+    const identity = await verifyR23AccessToken(authConfig, token);
+    if (identity.isRecovery !== true) {
+      return htmlResponse(
+        'Recovery credential required',
+        '<p role="alert">A valid recovery credential is required for password reset.</p><p><a href="/r23/recover">Request recovery</a></p>',
+        403,
+      );
+    }
+
+    const updateResponse = await fetch(
+      new URL('/user', authConfig.authUrl).toString(),
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ password }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+
+    if (!updateResponse.ok) {
+      const data = (await updateResponse.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null;
+      return htmlResponse(
+        'Set new password',
+        `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Password update failed'))}</p><p><a href="/r23/reset-password">Try again</a></p>`,
+        updateResponse.status,
+      );
+    }
+
+    return htmlResponse(
+      'Password updated successfully',
+      `
+        <section aria-labelledby="reset-complete-heading">
+          <h2 id="reset-complete-heading">Password Updated Successfully</h2>
+          <p>Your password has been changed. Please sign in with your new credentials.</p>
+          <p><a href="/r23/login">Sign in now</a></p>
+        </section>
+      `,
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+export async function stagingOrganizationBootstrapPost(
+  request: Request,
+): Promise<Response> {
+  try {
+    const origin = requireSameOrigin(request);
+    const body = await parseBody(request, false);
+    allowedFields(body, ['displayName', 'idempotencyKey', 'csrf']);
+    const displayName = requiredText(body, 'displayName', 100);
+    const idempotencyKey = requiredText(body, 'idempotencyKey', 128);
+    const csrf = requiredText(body, 'csrf', 100);
+    const csrfHash = digest(csrf);
+
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, sessionKey, session, identity }) => {
+        const result = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'organization.bootstrap',
+          { displayName, idempotencyKey },
+        )) as BootstrapOrganizationResponse;
+
+        const organizationId = result.organizationId.toLowerCase();
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'session.open',
+          { organizationId },
+        );
+
+        const updatedSession: StagingBrowserSessionPayload = Object.freeze({
+          ...session,
+          selectedOrganizationId: organizationId,
+        });
+
+        return redirect(origin, `/r23/organizations/${organizationId}`, [
+          cookieHeader(
+            R23_SESSION_COOKIE,
+            encryptSessionPayload(updatedSession, sessionKey),
+            true,
+          ),
+        ]);
+      },
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+export async function stagingOrganizationSettingsGet(
+  request: Request,
+  targetOrganizationId: string,
+): Promise<Response> {
+  if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
+  const orgIdLower = targetOrganizationId.toLowerCase();
+  const csrf = requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+
+  return withStagingBrowserSession(
+    request,
+    digest(csrf),
+    async ({
+      session,
+      identity,
+      config,
+      csrfToken,
+      refreshedSessionCookie,
+    }) => {
+      if (session.selectedOrganizationId !== orgIdLower) {
+        throw new StagingForbidden();
+      }
+      const orgContext = await fetchOrganizationContext(
+        config,
+        identity,
+        orgIdLower,
+      );
+
+      const profile = (await dispatchVerifiedStagingOperation(
+        config,
+        identity,
+        'account.profile.get',
+        {},
+      )) as AccountProfile;
+
+      const membersResult = (await dispatchVerifiedStagingOperation(
+        config,
+        identity,
+        'organization.members.list',
+        { organizationId: orgIdLower },
+      )) as { members?: OrganizationMemberItem[] };
+      const members = membersResult?.members ?? [];
+
+      const invitationsResult = (await dispatchVerifiedStagingOperation(
+        config,
+        identity,
+        'organization.invitation.list',
+        { organizationId: orgIdLower },
+      )) as { invitations?: ReviewerInvitationItem[] };
+      const invitations = invitationsResult?.invitations ?? [];
+
+      const membership: R23Membership = {
+        organizationId: orgIdLower,
+        role: orgContext.role,
+        membershipVersion: '1',
+      };
+      const orgDisplay = resolveOrgDisplay(
+        orgIdLower,
+        membership,
+        identity.email,
+      );
+
+      const safeOrgId = safeHtml(orgIdLower);
+      const safeOrgName = safeHtml(orgDisplay.name);
+      const safeOrgSlug = safeHtml(orgDisplay.slug);
+      const safeRole = safeHtml(orgContext.role);
+      const safeCsrf = safeHtml(csrfToken);
+      const safeEmail = safeHtml(profile.email || identity.email || '');
+      const safeDisplayName = safeHtml(profile.displayName || '');
+
+      const membersRows = members
+        .map((m) => {
+          const ownerLabel = m.isOwner ? '<strong>(Sole Owner)</strong>' : '';
+          const removeButton =
+            !m.isOwner &&
+            (orgContext.role === 'recruiter' ||
+              m.principalId === profile.principalId)
+              ? `<form action="/r23/organizations/${safeOrgId}/settings" method="post">
+                  <input type="hidden" name="csrf" value="${safeCsrf}">
+                  <input type="hidden" name="action" value="remove_member">
+                  <input type="hidden" name="principalId" value="${safeHtml(m.principalId)}">
+                  <button type="submit" aria-label="Remove member ${safeHtml(m.email || m.principalId)}">Remove member</button>
+                </form>`
+              : m.isOwner
+                ? '<span>Sole owner (protected)</span>'
+                : '';
+
+          return `
+            <tr>
+              <td>${safeHtml(m.displayName || 'No display name')}</td>
+              <td><code>${safeHtml(m.email || m.principalId)}</code></td>
+              <td>${safeHtml(m.role)}</td>
+              <td>${safeHtml(m.status)} ${ownerLabel}</td>
+              <td><time datetime="${safeHtml(m.joinedAt)}">${safeHtml(m.joinedAt)}</time></td>
+              <td>${removeButton}</td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      const candidateEncryptionKey = loadCandidateTokenEncryptionKey();
+      const invitationsList = invitations
+        .map((inv) => {
+          let linkHtml = '';
+          if (inv.status === 'active' && inv.tokenCiphertext) {
+            try {
+              const rawToken = decryptInvitationToken(
+                inv.tokenCiphertext,
+                orgIdLower,
+                candidateEncryptionKey,
+              );
+              const acceptUrl = `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`;
+              linkHtml = `<p><strong>Acceptance Link:</strong> <input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}" style="width:100%;max-width:100%;box-sizing:border-box;"></p>`;
+            } catch {
+              // decryption fallback
+            }
+          }
+
+          const revokeButton =
+            inv.status === 'active'
+              ? `<form action="/r23/organizations/${safeOrgId}/settings" method="post">
+                  <input type="hidden" name="csrf" value="${safeCsrf}">
+                  <input type="hidden" name="action" value="revoke_invitation">
+                  <input type="hidden" name="invitationId" value="${safeHtml(inv.id)}">
+                  <button type="submit" aria-label="Revoke invitation for ${safeHtml(inv.targetEmail)}">Revoke invitation</button>
+                </form>`
+              : '';
+
+          return `
+            <li>
+              <div>
+                <strong>Target email:</strong> <code>${safeHtml(inv.targetEmail)}</code> |
+                <strong>Role:</strong> ${safeHtml(inv.role)} |
+                <strong>Status:</strong> <span>${safeHtml(inv.status)}</span>
+              </div>
+              <div>
+                <span>Expires: <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(inv.expiresAt)}</time></span>
+                ${inv.acceptedAt ? ` | <span>Accepted: <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(inv.acceptedAt)}</time></span>` : ''}
+              </div>
+              ${linkHtml}
+              ${revokeButton}
+            </li>
+          `;
+        })
+        .join('');
+
+      const content = `
+        <header>
+          <p>
+            <strong>Active organization:</strong>
+            <span>${safeOrgName}</span>
+            <span>(${safeOrgId})</span>
+            <span>Role: ${safeRole}</span>
+            <span>${safeEmail}</span>
+          </p>
+          <nav aria-label="Settings navigation">
+            <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
+            <a href="/r23/organizations">Switch organization</a>
+          </nav>
+        </header>
+
+        <form action="/r23/auth/logout" method="post">
+          <input type="hidden" name="csrf" value="${safeCsrf}">
+          <button type="submit">Sign out</button>
+        </form>
+
+        <section aria-labelledby="account-profile-heading">
+          <h2 id="account-profile-heading">Account Profile</h2>
+          <p>Email: <code>${safeEmail}</code> | Principal ID: <code>${safeHtml(profile.principalId)}</code></p>
+          <form action="/r23/organizations/${safeOrgId}/settings" method="post">
+            <input type="hidden" name="csrf" value="${safeCsrf}">
+            <input type="hidden" name="action" value="update_account_profile">
+            <label for="accountDisplayName">Display name</label>
+            <input id="accountDisplayName" name="displayName" type="text" maxlength="100" value="${safeDisplayName}" placeholder="Your full name">
+            <button type="submit">Update profile</button>
+          </form>
+        </section>
+
+        <section aria-labelledby="org-profile-heading">
+          <h2 id="org-profile-heading">Organization Details</h2>
+          <p>Organization ID: <code>${safeOrgId}</code> | Slug: <code>${safeOrgSlug}</code></p>
+          ${
+            orgContext.role === 'recruiter'
+              ? `
+            <form action="/r23/organizations/${safeOrgId}/settings" method="post">
+              <input type="hidden" name="csrf" value="${safeCsrf}">
+              <input type="hidden" name="action" value="update_organization_profile">
+              <label for="orgDisplayName">Organization display name</label>
+              <input id="orgDisplayName" name="organizationDisplayName" type="text" required maxlength="100" value="${safeOrgName}">
+              <button type="submit">Update organization name</button>
+            </form>
+            `
+              : ''
+          }
+        </section>
+
+        <section aria-labelledby="team-members-heading">
+          <h2 id="team-members-heading">Organization Members</h2>
+          <p>Members with active governance or evaluation roles in this organization.</p>
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email / Principal</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Joined</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${membersRows}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section aria-labelledby="invitations-heading">
+          <h2 id="invitations-heading">Reviewer Invitations</h2>
+          ${
+            orgContext.role === 'recruiter'
+              ? `
+            <section aria-labelledby="issue-invitation-heading">
+              <h3 id="issue-invitation-heading">Issue Reviewer Invitation</h3>
+              <div role="note" aria-label="Invitation delivery notice">
+                <p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). A copyable invitation link and bearer token will be generated for manual sharing with the reviewer.</p>
+              </div>
+              <form action="/r23/organizations/${safeOrgId}/settings" method="post">
+                <input type="hidden" name="csrf" value="${safeCsrf}">
+                <input type="hidden" name="action" value="create_invitation">
+                <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
+                <label for="targetEmail">Reviewer email</label>
+                <input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="reviewer@example.com">
+                <button type="submit">Create reviewer invitation</button>
+              </form>
+            </section>
+            `
+              : ''
+          }
+          <section aria-labelledby="invitation-history-heading">
+            <h3 id="invitation-history-heading">Pending &amp; Past Invitations</h3>
+            ${
+              invitations.length === 0
+                ? '<p>No invitations have been issued for this organization.</p>'
+                : `<ul>${invitationsList}</ul>`
+            }
+          </section>
+        </section>
+      `;
+
+      const response = htmlResponse('Team & Settings', content);
+      return attachRefreshedCookie(response, refreshedSessionCookie);
+    },
+  );
+}
+
+export async function stagingOrganizationSettingsPost(
+  request: Request,
+  targetOrganizationId: string,
+): Promise<Response> {
+  if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
+  const orgIdLower = targetOrganizationId.toLowerCase();
+  const origin = requireSameOrigin(request);
+  const body = await parseBody(request, false);
+  const action = String(body.action ?? '');
+  const csrf = requiredText(body, 'csrf', 100);
+  const csrfHash = digest(csrf);
+
+  return withStagingBrowserSession(
+    request,
+    csrfHash,
+    async ({ session, identity, config }) => {
+      if (session.selectedOrganizationId !== orgIdLower) {
+        throw new StagingForbidden();
+      }
+
+      if (action === 'update_account_profile') {
+        const displayName = requiredText(body, 'displayName', 100);
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'account.profile.update',
+          { displayName },
+        );
+      } else if (action === 'update_organization_profile') {
+        const displayName = requiredText(body, 'organizationDisplayName', 100);
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'organization.update',
+          { organizationId: orgIdLower, displayName },
+        );
+      } else if (action === 'create_invitation') {
+        const targetEmail = requiredText(body, 'targetEmail', 320)
+          .trim()
+          .toLowerCase();
+        const idempotencyKey = requiredText(body, 'idempotencyKey', 128);
+        const rawToken = randomBytes(32).toString('base64url');
+        const tokenHash = invitationTokenHash(rawToken);
+        const ciphertext = encryptInvitationToken(
+          rawToken,
+          orgIdLower,
+          loadCandidateTokenEncryptionKey(),
+        );
+        const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'organization.invitation.create',
+          {
+            organizationId: orgIdLower,
+            targetEmail,
+            expiresAt,
+            idempotencyKey,
+            invitationTokenHash: tokenHash,
+            invitationTokenCiphertext: ciphertext,
+          },
+        );
+      } else if (action === 'revoke_invitation') {
+        const invitationId = requiredText(body, 'invitationId', 128);
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'organization.invitation.revoke',
+          { organizationId: orgIdLower, invitationId },
+        );
+      } else if (action === 'remove_member') {
+        const principalId = requiredText(body, 'principalId', 128);
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'organization.member.remove',
+          { organizationId: orgIdLower, principalId },
+        );
+      } else {
+        throw new StagingBadRequest();
+      }
+
+      return redirect(origin, `/r23/organizations/${orgIdLower}/settings`);
+    },
+  );
+}
+
+export async function stagingInvitationAcceptGet(
+  request: Request,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const token = url.searchParams.get('token');
+  if (!token || token.length > 256) {
+    return htmlResponse(
+      'Invitation link required',
+      '<p role="alert">An invitation token is required in the link.</p><p><a href="/r23/login">Sign in</a></p>',
+      400,
+    );
+  }
+
+  const encodedSession = cookieValue(request, R23_SESSION_COOKIE);
+  const csrf = cookieValue(request, R23_CSRF_COOKIE);
+
+  if (!encodedSession || !csrf) {
+    return htmlResponse(
+      'Reviewer Invitation',
+      `
+        <section aria-labelledby="invitation-intro-title">
+          <h2 id="invitation-intro-title">Join organization as reviewer</h2>
+          <p>You have been invited to join an engineering organization on Hirearchy as an active reviewer.</p>
+          <div role="note" aria-label="Invitation instructions">
+            <p>Please sign in or create an account using the email address the invitation was issued to.</p>
+          </div>
+          <p><a href="/r23/login?redirect=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in with invited account</a></p>
+          <p><a href="/r23/signup">Create new account</a></p>
+        </section>
+      `,
+    );
+  }
+
+  try {
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ identity, csrfToken }) => {
+        const safeToken = safeHtml(token);
+        const safeEmail = safeHtml(identity.email ?? '');
+        const safeCsrf = safeHtml(csrfToken);
+
+        return htmlResponse(
+          'Accept Reviewer Invitation',
+          `
+            <section aria-labelledby="accept-invitation-title">
+              <h2 id="accept-invitation-title">Accept Reviewer Invitation</h2>
+              <p>You are signed in as <strong>${safeEmail}</strong>.</p>
+              <form action="/r23/invitations/accept" method="post">
+                <input type="hidden" name="csrf" value="${safeCsrf}">
+                <input type="hidden" name="token" value="${safeToken}">
+                <button type="submit">Accept invitation and join organization</button>
+              </form>
+              <p><a href="/r23/organizations">Cancel</a></p>
+            </section>
+          `,
+        );
+      },
+    );
+  } catch {
+    return htmlResponse(
+      'Reviewer Invitation',
+      `
+        <p>Your session has expired or is invalid. Please sign in to accept the invitation.</p>
+        <p><a href="/r23/login?redirect=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in</a></p>
+      `,
+      401,
+    );
+  }
+}
+
+export async function stagingInvitationAcceptPost(
+  request: Request,
+): Promise<Response> {
+  try {
+    const origin = requireSameOrigin(request);
+    const body = await parseBody(request, false);
+    allowedFields(body, ['token', 'csrf']);
+    const token = requiredText(body, 'token', 256);
+    const csrf = requiredText(body, 'csrf', 100);
+    const csrfHash = digest(csrf);
+
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, sessionKey, session, identity }) => {
+        const tokenHash = invitationTokenHash(token);
+        const result = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'organization.invitation.accept',
+          { invitationTokenHash: tokenHash },
+        )) as AcceptInvitationResponse;
+
+        const organizationId = result.organizationId.toLowerCase();
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'session.open',
+          { organizationId },
+        );
+
+        const updatedSession: StagingBrowserSessionPayload = Object.freeze({
+          ...session,
+          selectedOrganizationId: organizationId,
+        });
+
+        return redirect(origin, `/r23/organizations/${organizationId}`, [
+          cookieHeader(
+            R23_SESSION_COOKIE,
+            encryptSessionPayload(updatedSession, sessionKey),
+            true,
+          ),
+        ]);
+      },
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
 }
