@@ -107,6 +107,20 @@ describe('single-team staging preflight', () => {
     expect(checks.every((check) => check.passed)).toBe(true);
   });
 
+  it('rejects a dirty checkout even when the release SHA matches HEAD', () => {
+    const checks = runPreflightChecks(validEnvironment(), {
+      ...testEvidence,
+      workingTreeClean: false,
+    });
+
+    expect(
+      checks.find(
+        (check) =>
+          check.name === 'Release provenance matches clean checked-out commit',
+      )?.passed,
+    ).toBe(false);
+  });
+
   it('preflights public preview without PostgreSQL, GoTrue, or proof secrets', () => {
     const previewEnvironment = {
       HIREARCHY_DEPLOY_MODE: 'public-preview',
