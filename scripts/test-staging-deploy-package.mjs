@@ -438,9 +438,10 @@ async function runResourceSampler(projectName, outputPath) {
         peakMemoryMiB = totalMemoryMiB;
         peakAtSeconds = (Date.now() - startedAt) / 1000;
       }
+      // Docker stats reports 100 percent for one fully used CPU core.
       peakCpuPercent = Math.max(
         peakCpuPercent,
-        (totalCpuPercent / os.availableParallelism()) * 100,
+        totalCpuPercent / os.availableParallelism(),
       );
     } catch {
       // Sampling is best-effort; the deployment assertions remain authoritative.
