@@ -65,6 +65,7 @@ jobs:
       - name: Install browser for the application journey
         run: npx playwright install --with-deps chromium
       - name: Run synthetic buyer public-preview browser acceptance
+        timeout-minutes: 10
         run: node scripts/run-buyer-journey-acceptance.mjs
       - run: node scripts/test-restricted-executor.mjs
       - run: node scripts/test-restricted-executor-dispatch.mjs
