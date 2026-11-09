@@ -64,6 +64,8 @@ jobs:
         run: docker pull supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
       - name: Install browser for the application journey
         run: npx playwright install --with-deps chromium
+      - name: Verify buyer journey server shutdown
+        run: node scripts/test-buyer-journey-server-lifecycle.mjs
       - name: Run synthetic buyer public-preview browser acceptance
         timeout-minutes: 10
         run: node scripts/run-buyer-journey-acceptance.mjs
