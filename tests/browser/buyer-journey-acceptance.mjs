@@ -104,7 +104,20 @@ async function inspectBuyerJourney({ baseUrl, browser }) {
     { path: '/products/software', label: 'software-product' },
     { path: '/contact', label: 'contact-page' },
     { path: '/early-access', label: 'early-access-portal' },
+    { path: '/privacy', label: 'privacy-draft' },
+    { path: '/terms', label: 'terms-draft' },
   ];
+  const routeCtas = {
+    '/': [['/early-access', 'Request early access']],
+    '/products/software': [['/early-access', 'Request early access']],
+    '/contact': [['/early-access', 'Request early access']],
+    '/early-access': [
+      ['/products/software', 'Explore Software'],
+      ['/products/software#demo-limits', 'See demo limits'],
+    ],
+    '/privacy': [['/', 'Back to Hirearchy']],
+    '/terms': [['/', 'Back to Hirearchy']],
+  };
 
   console.log(
     '--- Phase 1: Multi-Viewport Inspection & Accessibility Audits ---',
@@ -121,6 +134,15 @@ async function inspectBuyerJourney({ baseUrl, browser }) {
       console.log(`Auditing: ${desc} at ${url}`);
 
       await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+
+      for (const [href, label] of routeCtas[route.path] ?? []) {
+        const cta = page.getByRole('link', { name: label }).first();
+        assert.equal(
+          await cta.getAttribute('href'),
+          href,
+          `${desc} CTA: ${label}`,
+        );
+      }
 
       // Check horizontal overflow
       await checkNoHorizontalOverflow(desc);
@@ -165,21 +187,18 @@ async function inspectBuyerJourney({ baseUrl, browser }) {
     'Keyboard validation should focus the first invalid field',
   );
 
-  // 2. Fill form with realistic pilot request
-  console.log('Filling early access pilot request form...');
+  // 2. Fill the form with reserved synthetic values
+  console.log('Filling synthetic early-access acceptance request...');
   await page.locator('#ea-name').scrollIntoViewIfNeeded();
-  await page.fill('#ea-name', 'Alex Chen');
-  await page.fill('#ea-email', 'alex.chen@acme-infrastructure.com');
-  await page.fill('#ea-company', 'Acme Infrastructure');
-  await page.fill('#ea-role', 'Head of Platform Engineering');
+  await page.fill('#ea-name', 'Demo Buyer');
+  await page.fill('#ea-email', 'buyer@hirearchy.test');
+  await page.fill('#ea-company', 'Synthetic Example Team');
+  await page.fill('#ea-role', 'Synthetic Engineering Lead');
   await page.check('input[name="teamSize"][value="51-200"]');
   await page.check(
     'input[name="primaryChallenge"][value="ai_authenticity_uncertainty"]',
   );
-  await page.fill(
-    '#ea-notes',
-    'Looking to evaluate backend scenarios for senior systems engineer hiring in Q1.',
-  );
+  await page.fill('#ea-notes', 'Synthetic preview acceptance record.');
 
   // 3. Submit
   console.log('Submitting early access request...');

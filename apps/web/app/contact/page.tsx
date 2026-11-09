@@ -18,7 +18,8 @@ export default function ContactPage() {
         <p>
           This page is informational only. It does not accept or store messages.
           If you are looking to evaluate Hirearchy for your engineering team,
-          explore our dedicated early access and alpha pilot portal.
+          explore our early-access form. A submission records interest only and
+          does not create a public account or hosted pilot.
         </p>
         <div className="ct-contact-links">
           <Button href="/early-access">Request early access</Button>

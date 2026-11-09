@@ -1,14 +1,23 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
+  deleteEarlyAccessRecords,
   saveEarlyAccessRecord,
   readAllEarlyAccessRecords,
   type EarlyAccessSubmissionInput,
 } from '../../apps/web/src/early-access/store';
 import { globalRateLimiter } from '../../apps/web/src/security/rate-limit';
 import { POST } from '../../apps/web/app/api/early-access/route';
+
+const execFileAsync = promisify(execFile);
+const storeModuleUrl = new URL(
+  '../../apps/web/src/early-access/store.ts',
+  import.meta.url,
+).href;
 
 describe('Early Access Data Store & Rate Limiter', () => {
   let tempDir: string;
@@ -31,24 +40,24 @@ describe('Early Access Data Store & Rate Limiter', () => {
 
   it('saves and reads early access records durably', async () => {
     const input: EarlyAccessSubmissionInput = {
-      name: 'Alice Developer',
-      email: 'alice@example.com',
-      company: 'Acme Systems',
-      role: 'VP Engineering',
+      name: 'Demo Buyer',
+      email: 'buyer@hirearchy.test',
+      company: 'Synthetic Example Team',
+      role: 'Synthetic Engineering Lead',
       teamSize: '51-200',
       primaryChallenge: 'leetcode_fatigue',
-      notes: 'Interested in backend scenarios',
+      notes: 'Synthetic preview acceptance record.',
     };
 
     const record = await saveEarlyAccessRecord(input);
     expect(record.id).toBeDefined();
-    expect(record.name).toBe('Alice Developer');
+    expect(record.name).toBe('Demo Buyer');
     expect(record.receivedAt).toBeDefined();
 
     const stored = await readAllEarlyAccessRecords();
     expect(stored).toHaveLength(1);
     expect(stored[0].id).toBe(record.id);
-    expect(stored[0].company).toBe('Acme Systems');
+    expect(stored[0].company).toBe('Synthetic Example Team');
     expect(stored[0].clientIp).toBeUndefined();
     expect(stored[0].userAgent).toBeUndefined();
     expect(fs.statSync(tempStoreFile).mode & 0o777).toBe(0o600);
@@ -110,6 +119,156 @@ describe('Early Access Data Store & Rate Limiter', () => {
       }),
     ).rejects.toThrow('must contain a JSON array');
     expect(fs.readFileSync(tempStoreFile, 'utf8')).toBe('null');
+  });
+
+  it('writes a replay filter before replacing the active store and treats repeats as no-ops', async () => {
+    const target = await saveEarlyAccessRecord({
+      name: 'Synthetic Target',
+      email: 'target@example.test',
+      company: 'Example Team',
+      teamSize: '1-10',
+      role: 'Engineering lead',
+      primaryChallenge: 'other',
+    });
+    const retained = await saveEarlyAccessRecord({
+      name: 'Synthetic Retained',
+      email: 'retained@example.test',
+      company: 'Example Team',
+      teamSize: '1-10',
+      role: 'Engineering lead',
+      primaryChallenge: 'other',
+    });
+    let receiptWrittenBeforeReplace = false;
+
+    const deleted = await deleteEarlyAccessRecords(
+      { kind: 'id', id: target.id },
+      async (ids) => {
+        expect(ids).toEqual([target.id]);
+        expect(await readAllEarlyAccessRecords()).toHaveLength(2);
+        receiptWrittenBeforeReplace = true;
+      },
+    );
+
+    expect(receiptWrittenBeforeReplace).toBe(true);
+    expect(deleted).toEqual([target.id]);
+    expect(await readAllEarlyAccessRecords()).toEqual([retained]);
+    await expect(
+      deleteEarlyAccessRecords({ kind: 'id', id: target.id }),
+    ).resolves.toEqual([]);
+  });
+
+  it('leaves data unchanged on receipt failure and retains a replay filter on store-write failure', async () => {
+    const target = await saveEarlyAccessRecord({
+      name: 'Synthetic Target',
+      email: 'target@example.test',
+      company: 'Example Team',
+      teamSize: '1-10',
+      role: 'Engineering lead',
+      primaryChallenge: 'other',
+    });
+    const before = fs.readFileSync(tempStoreFile, 'utf8');
+
+    await expect(
+      deleteEarlyAccessRecords({ kind: 'id', id: target.id }, async () => {
+        throw new Error('synthetic receipt write failure');
+      }),
+    ).rejects.toThrow('synthetic receipt write failure');
+    expect(fs.readFileSync(tempStoreFile, 'utf8')).toBe(before);
+
+    const receiptPath = path.join(tempDir, 'delete-receipt.json');
+    const renameSpy = vi
+      .spyOn(fs.promises, 'rename')
+      .mockRejectedValueOnce(new Error('synthetic store write failure'));
+    try {
+      await expect(
+        deleteEarlyAccessRecords({ kind: 'id', id: target.id }, async (ids) => {
+          fs.writeFileSync(
+            receiptPath,
+            JSON.stringify({ version: 1, affectedIds: ids }),
+            { mode: 0o600 },
+          );
+        }),
+      ).rejects.toThrow('synthetic store write failure');
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+    expect(receipt.affectedIds).toEqual([target.id]);
+    expect(fs.readFileSync(tempStoreFile, 'utf8')).toBe(before);
+    await expect(
+      deleteEarlyAccessRecords({ kind: 'ids', ids: receipt.affectedIds }),
+    ).resolves.toEqual([target.id]);
+    expect(await readAllEarlyAccessRecords()).toEqual([]);
+  });
+
+  it('rejects a malformed row without changing the store', async () => {
+    const contents = JSON.stringify([
+      {
+        id: 'not-a-uuid',
+        receivedAt: '2026-11-09T00:00:00.000Z',
+        name: 'Synthetic',
+      },
+    ]);
+    fs.writeFileSync(tempStoreFile, contents);
+
+    await expect(
+      deleteEarlyAccessRecords({
+        kind: 'before',
+        cutoff: '2026-12-01T00:00:00.000Z',
+      }),
+    ).rejects.toThrow('invalid record');
+    expect(fs.readFileSync(tempStoreFile, 'utf8')).toBe(contents);
+  });
+
+  it('does not discard concurrent writes and leaves stale locks for operator recovery', async () => {
+    const target = await saveEarlyAccessRecord({
+      name: 'Synthetic Target',
+      email: 'target@example.test',
+      company: 'Example Team',
+      teamSize: '1-10',
+      role: 'Engineering lead',
+      primaryChallenge: 'other',
+    });
+    const childEnv = {
+      ...process.env,
+      EARLY_ACCESS_STORAGE_PATH: tempStoreFile,
+    };
+    const writer = `
+      import { saveEarlyAccessRecord } from ${JSON.stringify(storeModuleUrl)};
+      await Promise.all(Array.from({ length: 8 }, (_, index) => saveEarlyAccessRecord({
+        name: \`Synthetic \${index}\`, email: \`synthetic-\${index}@example.test\`,
+        company: 'Example Team', teamSize: '1-10', role: 'Engineering lead',
+        primaryChallenge: 'other',
+      })));
+    `;
+    const deleter = `
+      import { deleteEarlyAccessRecords } from ${JSON.stringify(storeModuleUrl)};
+      await deleteEarlyAccessRecords({ kind: 'id', id: ${JSON.stringify(target.id)} });
+    `;
+    const runNode = (source) =>
+      execFileAsync(
+        process.execPath,
+        ['--experimental-strip-types', '--input-type=module', '-e', source],
+        { env: childEnv },
+      );
+
+    await Promise.all([runNode(writer), runNode(deleter)]);
+    expect(await readAllEarlyAccessRecords()).toHaveLength(8);
+
+    fs.writeFileSync(`${tempStoreFile}.lock`, 'stale lock');
+    await expect(
+      saveEarlyAccessRecord({
+        name: 'Synthetic',
+        email: 'synthetic@example.test',
+        company: 'Example Team',
+        teamSize: '1-10',
+        role: 'Engineering lead',
+        primaryChallenge: 'other',
+      }),
+    ).rejects.toMatchObject({ code: 'ELOCKED' });
+    expect(fs.existsSync(`${tempStoreFile}.lock`)).toBe(true);
+    expect(await readAllEarlyAccessRecords()).toHaveLength(8);
   });
 });
 
@@ -174,13 +333,13 @@ describe('Early Access API Route (POST /api/early-access)', () => {
         'x-forwarded-for': '198.51.100.42',
       },
       body: JSON.stringify({
-        name: 'Sarah Connor',
-        email: 'sarah@cyberdyne.io',
-        company: 'Cyberdyne Systems',
-        role: 'Director of Platform Engineering',
+        name: 'Demo Buyer',
+        email: 'buyer@hirearchy.test',
+        company: 'Synthetic Example Team',
+        role: 'Synthetic Engineering Lead',
         teamSize: '11-50',
         primaryChallenge: 'ai_authenticity_uncertainty',
-        notes: 'Exploring pilots for upcoming Q1 hiring',
+        notes: 'Synthetic preview acceptance record.',
       }),
     });
 
@@ -190,13 +349,13 @@ describe('Early Access API Route (POST /api/early-access)', () => {
     expect(body.ok).toBe(true);
     expect(body.submissionId).toBeDefined();
     expect(body.receivedAt).toBeDefined();
-    expect(body.company).toBe('Cyberdyne Systems');
+    expect(body.company).toBe('Synthetic Example Team');
     expect(body.message).toContain('No email was sent');
     expect(body.message).toContain('authorized operator');
 
     const stored = await readAllEarlyAccessRecords();
     expect(stored).toHaveLength(1);
-    expect(stored[0].company).toBe('Cyberdyne Systems');
+    expect(stored[0].company).toBe('Synthetic Example Team');
     expect(stored[0].clientIp).toBeUndefined();
     expect(stored[0].userAgent).toBeUndefined();
   });
@@ -245,6 +404,33 @@ describe('Early Access API Route (POST /api/early-access)', () => {
         process.env.HIREARCHY_LOG_VERBOSE = originalVerbose;
       }
     }
+  });
+
+  it('returns a retryable response when the operator store lock is unavailable', async () => {
+    const storePath = path.join(tempDir, 'early-access.json');
+    fs.writeFileSync(`${storePath}.lock`, 'stale lock', { mode: 0o600 });
+    const response = await POST(
+      new Request('http://localhost:3000/api/early-access', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          name: 'Demo Buyer',
+          email: 'buyer@hirearchy.test',
+          company: 'Synthetic Example Team',
+          role: 'Synthetic Engineering Lead',
+          teamSize: '1-10',
+          primaryChallenge: 'other',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('2');
+    expect(fs.existsSync(storePath)).toBe(false);
+    expect(fs.existsSync(`${storePath}.lock`)).toBe(true);
   });
 
   it('does not let forwarded-header rotation bypass the shared intake limit', async () => {

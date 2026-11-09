@@ -166,9 +166,13 @@ export async function POST(request: Request) {
             : 'UnknownError',
       ...(errorCode ? { errorCode } : {}),
     });
+    const locked = errorCode === 'ELOCKED';
     return Response.json(
       { error: 'Failed to record your request. Please try again later.' },
-      { status: 500 },
+      {
+        status: locked ? 503 : 500,
+        ...(locked ? { headers: { 'Retry-After': '2' } } : {}),
+      },
     );
   }
 }

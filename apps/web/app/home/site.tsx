@@ -251,17 +251,17 @@ export function ContactCta({
 }) {
   return (
     <section className="ct-contact-cta ct-reveal">
-      <Kicker>Design Partner Program</Kicker>
+      <Kicker>Early access interest</Kicker>
       <h2>{title}</h2>
       <p>
-        Join our early access cohort to run high-signal, evidence-first
-        technical evaluations with verifiable source citations.
+        Tell us you are interested in early access. A request records interest
+        only; it does not create an account or guarantee access.
       </p>
       <div
         className="ct-contact-links"
         style={{ justifyContent: 'center', marginTop: '20px' }}
       >
-        <Button href="/contact">Request early access</Button>
+        <Button href="/early-access">Request early access</Button>
       </div>
     </section>
   );
