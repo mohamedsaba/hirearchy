@@ -2397,6 +2397,11 @@ html.ct-scroll-enhanced::-webkit-scrollbar {
   --ct-nav-rule: #b9aec9;
   --ct-nav-hover: #c0b9c9;
 }
+@media (max-width: 1320px) {
+  .ct-page-navigator[data-page='/early-access'] {
+    display: none;
+  }
+}
 /* Wipe overlay, above the plate and below the label. It is a real element, not
    a ::after, because a CSS animation only restarts when its own computed
    animation properties change. Keying the rule to an attribute value does not
