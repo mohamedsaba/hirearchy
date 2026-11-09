@@ -755,6 +755,39 @@ integration: try {
       waitForDatabase: async () => {
         const deadline = Date.now() + 30000;
         let lastTransientCode;
+        const captureRecoveryFailure = async () => {
+          const state = docker(
+            'inspect',
+            '--format',
+            'state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{.State.Error}} ports={{json .NetworkSettings.Ports}}',
+            source.container,
+          );
+          let publishedPort;
+          try {
+            publishedPort = docker('port', source.container, '5432/tcp');
+          } catch (error) {
+            const code =
+              typeof error === 'object' && error !== null && 'status' in error
+                ? error.status
+                : 'unavailable';
+            publishedPort = `unavailable (docker status ${code})`;
+          }
+          let startupLog;
+          try {
+            startupLog = docker('logs', '--tail', '80', source.container);
+          } catch (error) {
+            const code =
+              typeof error === 'object' && error !== null && 'status' in error
+                ? error.status
+                : 'unavailable';
+            startupLog = `unavailable (docker status ${code})`;
+          }
+          await writeFile(
+            new URL('database-recovery-failure.txt', artifact),
+            `state: ${state}\nexpected port: 127.0.0.1:${source.port}\npublished port: ${publishedPort}\nstartup log:\n${startupLog}\n`,
+            { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+          );
+        };
         while (Date.now() < deadline) {
           const probe = new Client({
             host: '127.0.0.1',
@@ -773,13 +806,21 @@ integration: try {
               typeof error === 'object' && error !== null && 'code' in error
                 ? error.code
                 : undefined;
-            if (code !== 'ECONNREFUSED' && code !== '57P03') throw error;
+            if (
+              code !== 'ECONNREFUSED' &&
+              code !== 'ECONNRESET' &&
+              code !== '57P03'
+            ) {
+              await captureRecoveryFailure();
+              throw error;
+            }
             lastTransientCode = code;
           } finally {
             await probe.end().catch(() => {});
           }
           await delay(200);
         }
+        await captureRecoveryFailure();
         throw new Error(
           `PostgreSQL recovery deadline exceeded (${lastTransientCode ?? 'no response'})`,
         );
