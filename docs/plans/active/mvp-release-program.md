@@ -1,12 +1,12 @@
 # MVP release program
 
-Status: Active; autonomous preparation complete pending PR #17 protected integration and founder/operations decisions. Updated: 2026-11-09.
+Status: Active; track PR #17 protected integration and founder/operations decisions before hosting or external access. Updated: 2026-11-09.
 
 This is the single active plan for the MVP release program. The R2.15 internal staging foundation plan is complete and preserved at `docs/plans/completed/160-r2-15-staging-foundation.md`. The current release evidence and go/no-go state live in [release readiness](../../release-readiness.md). Update that file as source, CI, browser, recovery, or hosting evidence changes; do not create a sequence of R2.x status reports.
 
 ## Objective and architecture
 
-The internal demo and local supervised-alpha rehearsal are complete. This plan remains active for PR #17 protected integration and founder decisions required before hosting or external access. The initial buyer hypothesis is small and mid-sized software companies hiring junior-to-mid-level engineers; validate it with current market sources before making commercial claims.
+The internal demo and local supervised-alpha rehearsal are complete. This plan remains active to track PR #17 protected integration and founder decisions required before hosting or external access. The initial buyer hypothesis is small and mid-sized software companies hiring junior-to-mid-level engineers; validate it with current market sources before making commercial claims.
 
 The release architecture is a Next.js modular monolith with PostgreSQL as the durable product store, GoTrue for user identity, and the verified application-signed identity proof for database operations. Reuse the current PostgreSQL assessment authoring, issuance, candidate workspace, evidence, assignment, and human-review domains. Keep candidate execution as a separate restricted runtime boundary.
 
@@ -16,7 +16,7 @@ Evidence remains separate from evaluator judgment. Do not add candidate scores, 
 
 ## Current integration boundary
 
-The entry baseline is protected `main` at `62bdc5bc05736c3d7b637c50b4decb1df752d974` (PR #18 merge). PRs #15, #16, and #18 merged ordinarily with all four required checks green. Stage A source/browser/package acceptance and the Stage B packaged alpha workflow, recovery, and rollback were rehearsed locally; neither stage is publicly hosted. PR #17 remains open pending its final required checks and protected integration. Exact evidence, current limits, and founder decisions are in [release readiness](../../release-readiness.md).
+The entry baseline is protected `main` at `62bdc5bc05736c3d7b637c50b4decb1df752d974` (PR #18 merge). PRs #15, #16, and #18 merged ordinarily with all four required checks green. Stage A source/browser/package acceptance and the Stage B packaged alpha workflow, recovery, and rollback were rehearsed locally; neither stage is publicly hosted. Track PR #17’s live checks and deploy only its protected merge after all four required checks pass. Exact evidence, current limits, and founder decisions are in [release readiness](../../release-readiness.md).
 
 The existing R2.14 PostgreSQL candidate bridge already has the token-scoped workspace and the restricted-executor integration. Reuse those domains and their evidence model. Do not turn on R2.14 disposable flags in the persistent staging profile.
 
@@ -26,7 +26,7 @@ The existing R2.14 PostgreSQL candidate bridge already has the token-scoped work
 2. **Build the internal demo — complete on protected main.** PRs #6, #8, #10, and #18 cover the durable recruiter, candidate, assigned-reviewer, approved-template, visual, keyboard, and responsive flow. The demo sends no email, uses no live AI, and does not enable candidate execution.
 3. **Prove the complete journey and isolation — complete in local integration and packaged alpha.** The recruiter, candidate, and assigned-reviewer journey, authorization denials, outage recovery, durable restart, consent, submission finality, evidence provenance, independent PostgreSQL restore, and image/snapshot rollback passed. See the dated [release evidence](../../release-readiness.md); these rehearsals do not certify a hosted service.
 4. **Prepare a buyer-facing demo — complete for synthetic, supervised discovery.** Competitive positioning, discovery script, honest capability disclosures, and pricing hypothesis are in `docs/product/competitive-positioning.md` and `docs/product/buyer-demo-and-discovery.md`; no interviews, testimonials, or outcome metrics are claimed.
-5. **Close release-level gates — active.** The supported package, proxy/TLS, access controls, outage behavior, backup restore, and rollback have local rehearsal evidence. Integrate PR #17 through protected main, then obtain founder decisions for host, domain/IP policy, production secret and backup custody, alerting, and privacy/retention/deletion before any hosted or external access.
+5. **Close release-level gates — active.** The supported package, proxy/TLS, access controls, outage behavior, backup restore, and rollback have local rehearsal evidence. Deploy only PR #17’s protected merge after all four required checks pass, then obtain founder decisions for host, domain/IP policy, production secret and backup custody, alerting, and privacy/retention/deletion before any hosted or external access.
 
 ## Acceptance for the internal demo
 

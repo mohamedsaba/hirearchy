@@ -355,7 +355,22 @@ The packaged local rehearsal passed on 2026-11-09. The current web artifact was 
    RESTORE_POSTGRES_ENV="$RESTORE_DIR/postgres.env"
    RESTORE_PG_CONTAINER="hirearchy-restore-postgres-$RESTORE_ID"
    RESTORE_VOLUME="hirearchy-restore-postgres-data-$RESTORE_ID"
-   RECOVERY_PG_PORT=39255
+   read -r -p 'Unused recovery PostgreSQL loopback port: ' RECOVERY_PG_PORT
+   case "$RECOVERY_PG_PORT" in
+     ''|*[!0-9]*) printf 'Port must be a number.\n' >&2; exit 1 ;;
+   esac
+   if ! node --input-type=module - "$RECOVERY_PG_PORT" <<'NODE'
+   import { createServer } from "node:net";
+   const port = Number(process.argv[2]);
+   if (!Number.isSafeInteger(port) || port < 1024 || port > 65535) process.exit(2);
+   const server = createServer();
+   server.once("error", () => process.exit(1));
+   server.listen(port, "127.0.0.1", () => server.close(() => process.exit(0)));
+   NODE
+   then
+     printf 'Recovery port is invalid or already in use; select an unused loopback port.\n' >&2
+     exit 1
+   fi
    POSTGRES_IMAGE="$(awk '{print $1}' "$BACKUP_DIR/postgres-image.txt")"
    node --env-file="$BACKUP_DIR/staging.env" --input-type=module -e '
    if (!process.env.POSTGRES_PASSWORD) process.exit(1);
@@ -368,6 +383,18 @@ The packaged local rehearsal passed on 2026-11-09. The current web artifact was 
      --mount "type=volume,src=$RESTORE_VOLUME,dst=/var/lib/postgresql/data" \
      "$POSTGRES_IMAGE" postgres -c listen_addresses=127.0.0.1 \
      -c port="$RECOVERY_PG_PORT" -c password_encryption=scram-sha-256
+   for ((attempt = 1; attempt <= 30; attempt++)); do
+     if docker exec "$RESTORE_PG_CONTAINER" pg_isready -q \
+       -h 127.0.0.1 -p "$RECOVERY_PG_PORT" -U postgres -d postgres; then
+       break
+     fi
+     if [ "$attempt" -eq 30 ]; then
+       printf 'Restored PostgreSQL did not become ready within 30 seconds.\n' >&2
+       docker logs "$RESTORE_PG_CONTAINER" >&2
+       exit 1
+     fi
+     sleep 1
+   done
    awk '
      /^CREATE ROLE postgres;$/ { removed++; next }
      { print }
