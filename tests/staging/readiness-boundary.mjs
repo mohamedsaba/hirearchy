@@ -16,6 +16,7 @@ export async function checkReadinessBoundary({
   appLog,
   docker,
   waitFor,
+  waitForDatabase,
   closeDatabaseClients,
   reconnectDatabaseClients,
   onCheckpoint = () => {},
@@ -190,6 +191,8 @@ export async function checkReadinessBoundary({
   } finally {
     if (stopped) docker('start', postgresContainer);
   }
+  checkpoint('PostgreSQL TCP recovery before fixture reconnect');
+  await waitForDatabase();
   await reconnectDatabaseClients();
   await waitFor(async () => (await fetch(readinessUrl)).status === 200);
   for (const secret of secrets) {
