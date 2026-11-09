@@ -2,6 +2,11 @@
 	admin off
 	http_port {$CADDY_HTTP_PORT}
 	https_port {$CADDY_HTTPS_PORT}
+	log {
+		format filter {
+			request delete
+		}
+	}
 }
 
 http://{$PREVIEW_HOSTNAME}:{$CADDY_HTTP_PORT} {
