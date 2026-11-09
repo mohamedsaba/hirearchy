@@ -1,6 +1,6 @@
 # Early-access retention and legal drafts
 
-Status: Product implementation complete; final PR #19 checks pending. Updated: 2026-11-09.
+Status: Product implementation complete. Exact-head acceptance is recorded in the authoritative [release-readiness record](../../release-readiness.md). Updated: 2026-11-09.
 
 ## Objective
 
@@ -26,18 +26,18 @@ Update the early-access store, operator CLI, focused tests, privacy and terms dr
 ## Verification
 
 - Focused unit coverage for selection, export permissions, deletion receipts/replay, corrupt-store refusal, lock contention, and concurrent submissions.
-- Re-run existing public-preview/early-access browser acceptance with synthetic data and inspect captured screens. The PR #19 buyer-journey job reached and passed its browser assertions, then hung during Next.js teardown; that run was canceled before package/staging steps.
+- Re-run existing public-preview/early-access browser acceptance with synthetic data and inspect captured screens. PR #19 run `42641459858` passed its browser assertions but hung during teardown and was canceled before package/staging steps. Later run `42646931279` passed the lifecycle regression and exposed a race between a visible form error and its `requestAnimationFrame` focus. The browser suite now waits, with a bounded timeout, for the expected error and success focus while retaining both strict assertions. Current exact-head acceptance is recorded in the authoritative [release-readiness record](../../release-readiness.md).
 - Coordinate any Docker/PostgreSQL/staging or full demo suite with the operations owner to avoid overlapping heavy resource use.
 
-## Current evidence — 2026-11-09
+## Implementation and test evidence — 2026-11-09
 
 - `node_modules/.bin/vitest run tests/unit/early-access.test.ts tests/unit/early-access-admin.test.ts` passed: 2 files, 19 tests. The test source resolved from this isolated worktree; its third-party Vitest install is from the primary checkout and reports 5.0.0, while the lockfile pins 5.0.5. Combined CI remains authoritative.
 - Prettier was run on the changed product files and `git diff --check` passed.
 - `node scripts/test-buyer-journey-server-lifecycle.mjs` passed. It covers an already-exited child, a detached process group with a `SIGTERM`-resistant HTTP listener descendant, bounded `SIGKILL` escalation, descendant process exit, and listener closure.
 - `node --check` passed for the lifecycle helper, regression, and buyer journey runner. The runner now invokes the installed Next CLI through `process.execPath` and terminates only its detached process group.
-- PR #19 buyer-journey assertions passed in run `42641459858` at 15:09:20, but the job was canceled at 15:21:50 after hanging during teardown. The fixed runner has not yet completed a combined-head CI run; see the product/browser evidence in the PR #19 release-readiness section for final protected-check results.
+- Earlier PR #19 runs document the teardown hang and subsequent browser focus race; their outcomes are historical. The runner and browser synchronization fixes are included in the current PR. Use the authoritative [release-readiness record](../../release-readiness.md) and [PR #19 evidence](https://github.com/mohamedsaba/hirearchy/pull/19) for the exact final head, protected-check results, package rehearsal, and remaining caveats.
 - No deployment, public activation, real intake, outreach, or prospect collection was performed.
 
 ## Completion
 
-The product implementation, focused tests, and lifecycle regression are complete. Final combined-head browser and release checks remain pending in PR #19 and are tracked in its release-readiness evidence. Public activation and real prospect collection remain outside this plan's scope. The operations owner has the exact CLI invocation, receipt format, backup replay semantics, and browser command for integration.
+The product implementation, focused tests, and lifecycle regression are complete. The authoritative [release-readiness record](../../release-readiness.md) and [PR #19 evidence](https://github.com/mohamedsaba/hirearchy/pull/19) hold the exact final head, protected-check results, package rehearsal, and remaining caveats. Public activation and real prospect collection remain outside this plan's scope and gated by founder and legal decisions. The operations owner has the exact CLI invocation, receipt format, backup replay semantics, and browser command for integration.
