@@ -10,7 +10,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { statfsSync } from 'node:fs';
+import { readFileSync, statfsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'node:net';
@@ -62,6 +62,145 @@ function docker(...args) {
     env: childEnvironment(),
     maxBuffer: 32 * 1024 * 1024,
   }).trim();
+}
+
+function safeFailureDiagnostic(error, envFiles, privateValues) {
+  const redactions = new Set();
+  const addRedaction = (value) => {
+    if (!value || value.length < 4) return;
+    redactions.add(value);
+    try {
+      const url = new URL(value);
+      if (url.username) redactions.add(decodeURIComponent(url.username));
+      if (url.password) redactions.add(decodeURIComponent(url.password));
+    } catch {
+      // Most values are not URLs.
+    }
+  };
+  for (const value of privateValues) addRedaction(value);
+  for (const name of [
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'http_proxy',
+    'https_proxy',
+  ]) {
+    addRedaction(process.env[name]);
+  }
+  let environmentReadable = true;
+  for (const envFile of envFiles) {
+    try {
+      for (const line of readFileSync(envFile, 'utf8').split(/\r?\n/)) {
+        const match = /^([A-Z0-9_]+)=(.*)$/.exec(line);
+        if (
+          !match ||
+          (!/(PASSWORD|SECRET|TOKEN|PRIVATE|KEY|CREDENTIAL)/i.test(match[1]) &&
+            !/(^|_)DATABASE_URL$/i.test(match[1]))
+        ) {
+          continue;
+        }
+        const value = match[2].trim().replace(/^['"]|['"]$/g, '');
+        addRedaction(value);
+      }
+    } catch {
+      environmentReadable = false;
+    }
+  }
+
+  let errorLine;
+  if (environmentReadable) {
+    let detail = Buffer.isBuffer(error.stderr)
+      ? error.stderr.toString('utf8')
+      : typeof error.stderr === 'string'
+        ? error.stderr
+        : '';
+    for (const value of redactions) {
+      detail = detail.replaceAll(value, '[redacted]');
+    }
+    errorLine = detail
+      .replace(/\u001b\[[0-9;]*m/g, '')
+      .replace(/\b[a-f0-9]{12,64}\b/gi, '[redacted-id]')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) =>
+        /error|failed|invalid|denied|already|not found|cannot|could not/i.test(
+          line,
+        ),
+      )
+      .slice(-1)[0]
+      ?.slice(0, 400);
+  }
+
+  const assertionValues =
+    error.code === 'ERR_ASSERTION' &&
+    ['number', 'boolean'].includes(typeof error.actual) &&
+    ['number', 'boolean'].includes(typeof error.expected)
+      ? ' actual=' + error.actual + ' expected=' + error.expected
+      : '';
+  const diagnostic = [
+    'type=' + (error.name || 'Error'),
+    Number.isInteger(error.status) ? 'exit=' + error.status : null,
+    error.code ? 'code=' + error.code : null,
+    error.code === 'ERR_ASSERTION' && error.operator
+      ? 'assertion=' + error.operator + assertionValues
+      : null,
+    errorLine ? 'stderr=' + errorLine : null,
+  ].filter(Boolean);
+  return diagnostic.join(' ');
+}
+
+async function selfCheckSafeFailureDiagnostic() {
+  const tempDir = await mkdtemp(
+    path.join(os.tmpdir(), 'hirearchy-diagnostic-check-'),
+  );
+  const envFile = path.join(tempDir, 'synthetic.env');
+  const proxyNames = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'];
+  const previousProxyValues = new Map(
+    proxyNames.map((name) => [name, process.env[name]]),
+  );
+  const secrets = [
+    'synthetic-db-password-123',
+    'synthetic-url-password-456',
+    'synthetic-proxy-password-789',
+  ];
+  const proxyUrl =
+    'http://proxy-user:' + secrets[2] + '@proxy.example.test:8080';
+  try {
+    await writeFile(
+      envFile,
+      [
+        'POSTGRES_PASSWORD=' + secrets[0],
+        'DATABASE_URL=postgres://db-user:' +
+          secrets[1] +
+          '@db.example.test/postgres',
+        '',
+      ].join('\n'),
+      { mode: 0o600 },
+    );
+    process.env.HTTP_PROXY = proxyUrl;
+    const error = new Error('synthetic diagnostic');
+    error.stderr = Buffer.from('Error: ' + secrets.join(' ') + ' ' + proxyUrl);
+    const safe = safeFailureDiagnostic(error, [envFile], []);
+    for (const secret of secrets) assert.ok(!safe.includes(secret));
+    assert.ok(!safe.includes('proxy-user'));
+    assert.match(safe, /stderr=Error:/);
+
+    const unreadable = safeFailureDiagnostic(
+      Object.assign(new Error('missing env file'), {
+        stderr: Buffer.from('Error: unreadable-env-secret'),
+      }),
+      [path.join(tempDir, 'missing.env')],
+      [],
+    );
+    assert.ok(!unreadable.includes('stderr='));
+    assert.ok(!unreadable.includes('unreadable-env-secret'));
+  } finally {
+    for (const name of proxyNames) {
+      const value = previousProxyValues.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 function assertLocalDockerTarget() {
@@ -399,13 +538,36 @@ function composePrefix(envFile, composeFile, projectName) {
     '--project-name',
     projectName,
     '--project-directory',
-    root,
+    path.join(root, 'deploy/staging'),
     ...selectedFiles.flatMap((file) => ['-f', file]),
   ];
 }
 
 function compose(envFile, composeFile, projectName, ...args) {
   return docker(...composePrefix(envFile, composeFile, projectName), ...args);
+}
+
+async function assertComposeBuildInputs(envFile, composeFile, projectName) {
+  const config = JSON.parse(
+    compose(envFile, composeFile, projectName, 'config', '--format', 'json'),
+  );
+  const buildServices = Object.entries(config.services).filter(
+    ([, service]) => service.build,
+  );
+  assert.ok(buildServices.length > 0, 'Compose must define build inputs');
+  for (const [serviceName, service] of buildServices) {
+    assert.equal(
+      path.resolve(service.build.context),
+      root,
+      'Compose build context must resolve to the repository root: ' +
+        serviceName,
+    );
+    const dockerfile = path.resolve(
+      service.build.context,
+      service.build.dockerfile || 'Dockerfile',
+    );
+    await stat(dockerfile);
+  }
 }
 
 function composeOperatorTool(envFile, projectName, operatorDir, ...args) {
@@ -593,6 +755,8 @@ async function stopSampler(child, outputPath) {
 }
 
 async function testPackage() {
+  await selfCheckSafeFailureDiagnostic();
+  console.log('Safe failure diagnostic redaction self-check passed.');
   const runId = randomBytes(8).toString('hex');
   const projectName = 'hirearchy-release-smoke-' + runId;
   assert.match(projectName, /^hirearchy-release-smoke-[a-f0-9]{16}$/);
@@ -612,6 +776,7 @@ async function testPackage() {
   let previewStackStarted = false;
   let stagingStackStarted = false;
   let cleanupFailed = false;
+  let syntheticEmail;
   let stage = 'prepare isolated loopback environments';
 
   try {
@@ -673,6 +838,8 @@ async function testPackage() {
     const caddyOverrides = await writeInternalCaddyConfigs(tempDir);
     previewComposeFiles = [previewCompose, caddyOverrides.previewOverride];
     stagingComposeFiles = [stagingCompose, caddyOverrides.stagingOverride];
+    stage = 'validate preview Compose build inputs';
+    await assertComposeBuildInputs(previewEnv, previewCompose, projectName);
     docker(
       ...composePrefix(previewEnv, previewCompose, projectName),
       'config',
@@ -689,6 +856,8 @@ async function testPackage() {
       },
     );
     runNodeWithEnvironment(stagingEnv, 'deploy/staging/preflight.mjs');
+    stage = 'validate staging Compose build inputs';
+    await assertComposeBuildInputs(stagingEnv, stagingCompose, projectName);
     docker(
       ...composePrefix(stagingEnv, stagingCompose, projectName),
       'config',
@@ -752,7 +921,7 @@ async function testPackage() {
       assert.match(response.body, /PREVIEW_ROUTE_UNAVAILABLE/);
     }
 
-    const syntheticEmail = 'release-smoke-' + runId + '@example.test';
+    syntheticEmail = 'release-smoke-' + runId + '@example.test';
     const submission = curlRequest({
       url: 'https://' + previewHostname + ':' + httpsPort + '/api/early-access',
       host: previewHostname,
@@ -992,8 +1161,16 @@ async function testPackage() {
     console.log(
       'Actual preview-to-alpha Compose, trusted local TLS, route boundaries, migration setup, intake persistence, and recovery passed.',
     );
-  } catch {
+  } catch (error) {
     console.error('Deployment package acceptance failed during ' + stage + '.');
+    console.error(
+      'Safe failure diagnostic: ' +
+        safeFailureDiagnostic(
+          error,
+          [previewEnv, stagingEnv],
+          [tempDir, projectName, syntheticEmail || ''],
+        ),
+    );
     process.exitCode = 1;
   } finally {
     if (sampler) {
@@ -1078,6 +1255,9 @@ async function testPackage() {
 if (process.argv[1] && me === process.argv[1]) {
   if (process.argv[2] === '--sample-resources') {
     await runResourceSampler(process.argv[3], process.argv[4]);
+  } else if (process.argv[2] === '--self-check-diagnostics') {
+    await selfCheckSafeFailureDiagnostic();
+    console.log('Safe failure diagnostic redaction self-check passed.');
   } else {
     await testPackage();
   }
