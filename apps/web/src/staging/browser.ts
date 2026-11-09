@@ -109,6 +109,7 @@ import {
   type StagingConfiguration,
   type StagingProofArgs,
 } from './server';
+import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
 
 const ENVELOPE_VERSION = 1;
 const NONCE_LENGTH = 12;
@@ -753,6 +754,16 @@ function errorDetails(error: unknown): {
 
 function failureResponse(request: Request, error: unknown): Response {
   const details = errorDetails(error);
+  if (details.status === 500) {
+    const sanitized = sanitizeError(error);
+    operationalLogger.error('Authenticated staging request failed', {
+      operation: 'browser_api',
+      error: {
+        name: sanitized.name,
+        ...(sanitized.code ? { code: sanitized.code } : {}),
+      },
+    });
+  }
   if (isJsonRequest(request)) {
     return Response.json(
       { error: { code: details.code, message: details.message } },

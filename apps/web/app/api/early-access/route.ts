@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { resolveRateLimitClientIdentity } from '../../../src/access/trusted-proxy-client-identity';
+import { operationalLogger } from '../../../src/observability/logger.mjs';
 import { globalRateLimiter } from '../../../src/security/rate-limit';
 import {
   saveEarlyAccessRecord,
@@ -147,7 +148,24 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    console.error('Failed to save early access request:', error);
+    const errorCode =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof error.code === 'string' &&
+      /^[A-Z][A-Z0-9_]{0,31}$/.test(error.code)
+        ? error.code
+        : undefined;
+    operationalLogger.error('early_access.store_write_failed', {
+      operation: 'save',
+      errorType:
+        error instanceof SyntaxError
+          ? 'SyntaxError'
+          : error instanceof Error
+            ? 'Error'
+            : 'UnknownError',
+      ...(errorCode ? { errorCode } : {}),
+    });
     return Response.json(
       { error: 'Failed to record your request. Please try again later.' },
       { status: 500 },

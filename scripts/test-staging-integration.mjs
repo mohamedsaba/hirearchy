@@ -24,6 +24,7 @@ import {
   checkReviewPacketPersistence,
   checkReviewerRowLockBoundary,
 } from '../tests/staging/security.mjs';
+import { checkReadinessBoundary } from '../tests/staging/readiness-boundary.mjs';
 import {
   checkBrowserAcceptance,
   createActiveCandidateInvitationFingerprint,
@@ -78,7 +79,18 @@ const waitFor = async (check) => {
   }
   throw new Error('Readiness deadline exceeded');
 };
+async function reserveLoopbackPort() {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const port = server.address().port;
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return port;
+}
 async function db(container) {
+  const port = await reserveLoopbackPort();
   docker(
     'run',
     '-d',
@@ -91,7 +103,7 @@ async function db(container) {
     '--network-alias',
     container,
     '-p',
-    '127.0.0.1::5432',
+    `127.0.0.1:${port}:5432`,
     '-e',
     `POSTGRES_PASSWORD=${password}`,
     '-v',
@@ -105,7 +117,11 @@ async function db(container) {
       'accepting connections',
     ),
   );
-  const port = Number(/:(\d+)$/.exec(docker('port', container, '5432/tcp'))[1]);
+  assert.equal(
+    docker('port', container, '5432/tcp'),
+    `127.0.0.1:${port}`,
+    'PostgreSQL uses its reserved loopback-only host port',
+  );
   // pg_isready on the local socket can observe initdb's temporary server.
   // Wait for the final TCP listener used by the application, not that server.
   await waitFor(async () => {
@@ -299,11 +315,7 @@ async function startApp(
   proofKey,
   applicationDirectory = 'apps/web',
 ) {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const port = server.address().port;
-  await new Promise((resolve) => server.close(resolve));
+  const port = await reserveLoopbackPort();
   appLog = '';
   app = spawn(
     process.execPath,
@@ -674,9 +686,10 @@ integration: try {
   );
   assert.deepEqual(installedReadiness.rows, [{ ready: true }]);
   await installedCandidate.end();
+  let gateway;
   if (!presentationMode) {
     stage = 'database proof security';
-    const gateway = await source.connect('r23_gateway');
+    gateway = await source.connect('r23_gateway');
     await checkProofBoundary(
       gateway,
       source.admin,
@@ -690,6 +703,152 @@ integration: try {
     stage = 'database proof security complete';
   }
   let appUrl = await startApp(source, authUrl);
+  let durableSessionWitness;
+  if (!presentationMode) {
+    stage = 'application authentication sessions before database outage';
+    await call(appUrl, recruiter, 'session.open', { organizationId });
+    await call(appUrl, reviewer, 'session.open', { organizationId });
+    const authSessionIds = [recruiter, reviewer].map((token) => {
+      const claims = JSON.parse(
+        Buffer.from(token.split('.')[1], 'base64url').toString('utf8'),
+      );
+      return claims.session_id;
+    });
+    const durableSessionQuery = `
+      SELECT auth_session_id::pg_catalog.text AS auth_session_id,
+             subject_id::pg_catalog.text AS subject_id,
+             organization_id::pg_catalog.text AS organization_id,
+             principal_id::pg_catalog.text AS principal_id
+        FROM hirearchy.staging_sessions
+       WHERE organization_id = $1::pg_catalog.uuid
+         AND auth_session_id = ANY($2::pg_catalog.uuid[])
+       ORDER BY auth_session_id
+    `;
+    const { rows: sessionsBeforeOutage } = await source.admin.query(
+      durableSessionQuery,
+      [organizationId, authSessionIds],
+    );
+    assert.equal(
+      sessionsBeforeOutage.length,
+      2,
+      'recruiter and reviewer Auth sessions are durably opened before outage',
+    );
+    durableSessionWitness = sessionsBeforeOutage;
+    stage = 'readiness operational boundary';
+    await checkReadinessBoundary({
+      admin: source.admin,
+      gateway,
+      appUrl,
+      postgresContainer: source.container,
+      candidateTokenEncryptionKey,
+      secrets: [
+        password,
+        candidatePassword,
+        jwtSecret,
+        proofPrivateKey,
+        candidateTokenEncryptionKey,
+      ],
+      appLog: () => appLog,
+      docker,
+      waitFor,
+      postgresHostPort: source.port,
+      waitForDatabase: async () => {
+        const deadline = Date.now() + 30000;
+        let lastTransientCode;
+        const captureRecoveryFailure = async () => {
+          const state = docker(
+            'inspect',
+            '--format',
+            'state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{.State.Error}} ports={{json .NetworkSettings.Ports}}',
+            source.container,
+          );
+          let publishedPort;
+          try {
+            publishedPort = docker('port', source.container, '5432/tcp');
+          } catch (error) {
+            const code =
+              typeof error === 'object' && error !== null && 'status' in error
+                ? error.status
+                : 'unavailable';
+            publishedPort = `unavailable (docker status ${code})`;
+          }
+          let startupLog;
+          try {
+            startupLog = docker('logs', '--tail', '80', source.container);
+          } catch (error) {
+            const code =
+              typeof error === 'object' && error !== null && 'status' in error
+                ? error.status
+                : 'unavailable';
+            startupLog = `unavailable (docker status ${code})`;
+          }
+          await writeFile(
+            new URL('database-recovery-failure.txt', artifact),
+            `state: ${state}\nexpected port: 127.0.0.1:${source.port}\npublished port: ${publishedPort}\nstartup log:\n${startupLog}\n`,
+            { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+          );
+        };
+        while (Date.now() < deadline) {
+          const probe = new Client({
+            host: '127.0.0.1',
+            port: source.port,
+            user: 'postgres',
+            password,
+            database: 'postgres',
+            connectionTimeoutMillis: 1000,
+          });
+          try {
+            await probe.connect();
+            await probe.query('SELECT 1');
+            return;
+          } catch (error) {
+            const code =
+              typeof error === 'object' && error !== null && 'code' in error
+                ? error.code
+                : undefined;
+            if (
+              code !== 'ECONNREFUSED' &&
+              code !== 'ECONNRESET' &&
+              code !== '57P03'
+            ) {
+              await captureRecoveryFailure();
+              throw error;
+            }
+            lastTransientCode = code;
+          } finally {
+            await probe.end().catch(() => {});
+          }
+          await delay(200);
+        }
+        await captureRecoveryFailure();
+        throw new Error(
+          `PostgreSQL recovery deadline exceeded (${lastTransientCode ?? 'no response'})`,
+        );
+      },
+      closeDatabaseClients: async () => {
+        await gateway.end();
+        await source.admin.end();
+      },
+      reconnectDatabaseClients: async () => {
+        source.admin = await source.connect();
+        gateway = await source.connect('r23_gateway');
+      },
+      onCheckpoint: (checkpoint) => {
+        stage = checkpoint;
+      },
+    });
+    stage =
+      'application authentication sessions persist across PostgreSQL restart';
+    const { rows: sessionsAfterOutage } = await source.admin.query(
+      durableSessionQuery,
+      [organizationId, authSessionIds],
+    );
+    assert.deepEqual(
+      sessionsAfterOutage,
+      durableSessionWitness,
+      'Auth-backed application session rows survive PostgreSQL restart',
+    );
+  }
   stage = 'verified application sessions';
   await call(appUrl, recruiter, 'session.open', { organizationId });
   await call(appUrl, reviewer, 'session.open', { organizationId });

@@ -1,0 +1,46 @@
+{
+	admin off
+	http_port {$CADDY_HTTP_PORT}
+	https_port {$CADDY_HTTPS_PORT}
+	log {
+		format filter {
+			request delete
+		}
+	}
+}
+
+http://{$PREVIEW_HOSTNAME}:{$CADDY_HTTP_PORT} {
+	bind {$CADDY_BIND_ADDRESS}
+	redir https://{$PREVIEW_HOSTNAME}:{$CADDY_HTTPS_PORT}{uri} 308
+}
+
+{$PREVIEW_HOSTNAME} {
+	bind {$CADDY_BIND_ADDRESS}
+	encode zstd gzip
+	@early_access path /api/early-access
+	request_body @early_access {
+		max_size 32KB
+	}
+	reverse_proxy 127.0.0.1:{$PREVIEW_APP_PORT}
+}
+
+http://{$STAGING_HOSTNAME}:{$CADDY_HTTP_PORT} {
+	bind {$CADDY_BIND_ADDRESS}
+	@outside_alpha not remote_ip {$STAGING_ALLOWED_CIDRS}
+	respond @outside_alpha 404
+	redir https://{$STAGING_HOSTNAME}:{$CADDY_HTTPS_PORT}{uri} 308
+}
+
+{$STAGING_HOSTNAME} {
+	bind {$CADDY_BIND_ADDRESS}
+	encode zstd gzip
+	@outside_alpha not remote_ip {$STAGING_ALLOWED_CIDRS}
+	respond @outside_alpha 404
+	@internal_readiness path /api/staging/readiness /api/staging/readiness/*
+	respond @internal_readiness 404
+	@early_access path /api/early-access
+	request_body @early_access {
+		max_size 32KB
+	}
+	reverse_proxy 127.0.0.1:{$APP_PORT}
+}

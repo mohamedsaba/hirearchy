@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Client } from 'pg';
 import { applyMigrations } from '../database/postgres/migrate.mjs';
+import { initializeCandidateTokenStorage } from '../database/postgres/r23/adapter.mjs';
 import { checkOperationalReadiness } from '../apps/web/src/observability/readiness.mjs';
 import {
   encryptInvitationToken,
@@ -216,6 +217,9 @@ try {
 
   // Install Staging API & durable installation markers
   console.log('4. Installing Staging API & durable installation markers...');
+  await initializeCandidateTokenStorage(primaryClient, {
+    key: Buffer.from(candidateEncryptionKey, 'base64'),
+  });
   await primaryClient.query(
     await sqlFile('database/postgres/staging/install-api.sql'),
   );

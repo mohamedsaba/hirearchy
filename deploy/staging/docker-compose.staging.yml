@@ -1,56 +1,229 @@
-version: '3.8'
-
 services:
   postgres:
-    image: hirearchy-staging-postgres-local:latest
-    container_name: hirearchy-staging-pg
+    image: hirearchy/postgres-staging:${HIREARCHY_RELEASE_SHA:?set HIREARCHY_RELEASE_SHA to the checked-out commit}
+    build:
+      context: ../..
+      dockerfile: database/postgres/staging/Dockerfile
+    network_mode: host
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-staging-secure-password-123}
-      POSTGRES_DB: ${POSTGRES_DB:-staging_db}
-    ports:
-      - '127.0.0.1:5432:5432'
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      GOTRUE_DB_PASSWORD: ${GOTRUE_DB_PASSWORD:?set GOTRUE_DB_PASSWORD}
+      MIGRATOR_DATABASE_PASSWORD: ${MIGRATOR_DATABASE_PASSWORD:?set MIGRATOR_DATABASE_PASSWORD}
+      R23_GATEWAY_PASSWORD: ${R23_GATEWAY_PASSWORD:?set R23_GATEWAY_PASSWORD}
+      CANDIDATE_GATEWAY_PASSWORD: ${CANDIDATE_GATEWAY_PASSWORD:?set CANDIDATE_GATEWAY_PASSWORD}
+      APP_EVALUATOR_PASSWORD: ${APP_EVALUATOR_PASSWORD:?set APP_EVALUATOR_PASSWORD}
+      CONTROL_WORKER_PASSWORD: ${CONTROL_WORKER_PASSWORD:?set CONTROL_WORKER_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - listen_addresses=${PG_BIND_ADDRESS:?set PG_BIND_ADDRESS to 127.0.0.1}
+      - -c
+      - port=${PG_PORT:?set PG_PORT}
+      - -c
+      - password_encryption=scram-sha-256
     volumes:
-      - hirearchy-staging-pg-data:/var/lib/postgresql/data
-    networks:
-      - hirearchy-staging-net
+      - staging-postgres-data:/var/lib/postgresql/data
+      - ./postgres-init/10-bootstrap.sh:/docker-entrypoint-initdb.d/10-bootstrap.sh:ro
+      - ./postgres-init/bootstrap-auth.sql:/opt/hirearchy/bootstrap-auth.sql:ro
+      - ./postgres-init/bootstrap-passwords.sql:/opt/hirearchy/bootstrap-passwords.sql:ro
+      - ../../database/postgres/bootstrap-roles.sql:/opt/hirearchy/bootstrap-roles.sql:ro
+      - ../../database/postgres/bootstrap-internal-roles.sql:/opt/hirearchy/bootstrap-internal-roles.sql:ro
+      - ../../database/postgres/staging/bootstrap-verifier.sql:/opt/hirearchy/bootstrap-verifier.sql:ro
     healthcheck:
       test:
-        ['CMD-SHELL', 'pg_isready -U postgres -d ${POSTGRES_DB:-staging_db}']
+        [
+          CMD-SHELL,
+          'pg_isready -h 127.0.0.1 -p ${PG_PORT:?set PG_PORT} -U postgres -d postgres',
+        ]
       interval: 5s
-      timeout: 5s
-      retries: 5
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    cpus: 0.75
+    mem_limit: 1024m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    logging: &rotated-logs
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
 
   gotrue:
-    image: supabase/gotrue:v2.197.0
-    container_name: hirearchy-staging-gotrue
+    image: supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+    network_mode: host
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: 9999
+      GOTRUE_API_HOST: ${AUTH_BIND_ADDRESS:?set AUTH_BIND_ADDRESS to 127.0.0.1}
+      GOTRUE_API_PORT: ${GOTRUE_API_PORT:?set GOTRUE_API_PORT}
+      PORT: ${GOTRUE_API_PORT:?set GOTRUE_API_PORT}
+      API_EXTERNAL_URL: https://${STAGING_HOSTNAME:?set STAGING_HOSTNAME}
+      GOTRUE_SITE_URL: https://${STAGING_HOSTNAME:?set STAGING_HOSTNAME}
+      GOTRUE_URI_ALLOW_LIST: https://${STAGING_HOSTNAME:?set STAGING_HOSTNAME}/*
       GOTRUE_DB_DRIVER: postgres
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-staging-secure-password-123}@postgres:5432/${POSTGRES_DB:-staging_db}?sslmode=disable
-      GOTRUE_SITE_URL: http://127.0.0.1:3000
-      GOTRUE_URI_ALLOW_LIST: http://127.0.0.1:3000/*
-      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET}
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${GOTRUE_DB_PASSWORD:?set GOTRUE_DB_PASSWORD}@127.0.0.1:${PG_PORT:?set PG_PORT}/postgres?sslmode=disable
+      GOTRUE_DB_NAMESPACE: auth
+      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET:?set GOTRUE_JWT_SECRET}
+      GOTRUE_JWT_ISSUER: https://${STAGING_HOSTNAME:?set STAGING_HOSTNAME}
       GOTRUE_JWT_EXP: 3600
       GOTRUE_JWT_AUD: authenticated
-      GOTRUE_DISABLE_SIGNUP: 'false'
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'false'
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_DISABLE_SIGNUP: 'true'
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
       GOTRUE_MAILER_AUTOCONFIRM: 'false'
-    ports:
-      - '127.0.0.1:9998:9999'
-    networks:
-      - hirearchy-staging-net
+      GOTRUE_LOG_LEVEL: info
+    healthcheck:
+      test:
+        [
+          CMD,
+          wget,
+          --no-verbose,
+          --tries=1,
+          --spider,
+          'http://127.0.0.1:${GOTRUE_API_PORT:?set GOTRUE_API_PORT}/health',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    cpus: 0.25
+    mem_limit: 384m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    logging: *rotated-logs
+
+  web:
+    image: hirearchy/web:${HIREARCHY_RELEASE_SHA:?set HIREARCHY_RELEASE_SHA to the checked-out commit}
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile.web
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      gotrue:
+        condition: service_healthy
+    user: '1000:1000'
+    environment:
+      NODE_ENV: production
+      PORT: ${APP_PORT:?set APP_PORT}
+      HOSTNAME: 127.0.0.1
+      NODE_OPTIONS: --max-old-space-size=768
+      HIREARCHY_RUNTIME_PROFILE: staging-authenticated
+      HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED: 'false'
+      HIREARCHY_RATE_LIMIT_ENABLED: 'true'
+      HIREARCHY_TRUSTED_PROXY_HOPS: '${HIREARCHY_TRUSTED_PROXY_HOPS:-0}'
+      STAGING_AUTH_URL: http://127.0.0.1:${GOTRUE_API_PORT:?set GOTRUE_API_PORT}
+      STAGING_AUTH_ISSUER: https://${STAGING_HOSTNAME:?set STAGING_HOSTNAME}
+      STAGING_AUTH_AUDIENCE: authenticated
+      STAGING_DATABASE_URL: postgres://r23_gateway:${R23_GATEWAY_PASSWORD:?set R23_GATEWAY_PASSWORD}@127.0.0.1:${PG_PORT:?set PG_PORT}/postgres
+      STAGING_CANDIDATE_DATABASE_URL: postgres://app_candidate_gateway:${CANDIDATE_GATEWAY_PASSWORD:?set CANDIDATE_GATEWAY_PASSWORD}@127.0.0.1:${PG_PORT:?set PG_PORT}/postgres
+      STAGING_PROOF_ISSUER: ${STAGING_PROOF_ISSUER:?set STAGING_PROOF_ISSUER}
+      STAGING_PROOF_AUDIENCE: ${STAGING_PROOF_AUDIENCE:?set STAGING_PROOF_AUDIENCE}
+      STAGING_PROOF_KEY_ID: ${STAGING_PROOF_KEY_ID:?set STAGING_PROOF_KEY_ID}
+      STAGING_PROOF_PRIVATE_KEY: ${STAGING_PROOF_PRIVATE_KEY:?set STAGING_PROOF_PRIVATE_KEY}
+      HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY: ${HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY:?set HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY}
+      STAGING_PUBLIC_ORIGIN: ${STAGING_PUBLIC_ORIGIN:?set STAGING_PUBLIC_ORIGIN}
+      HIREARCHY_LOG_VERBOSE: 'false'
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'node -e "fetch(''http://127.0.0.1:'' + process.env.PORT + ''/api/staging/readiness'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    cpus: 0.75
+    mem_limit: 1024m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    logging: *rotated-logs
+
+  web-preview:
+    image: hirearchy/web:${HIREARCHY_RELEASE_SHA:?set HIREARCHY_RELEASE_SHA to the checked-out commit}
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile.web
+    network_mode: host
+    restart: unless-stopped
+    user: '1000:1000'
+    environment:
+      NODE_ENV: production
+      PORT: ${PREVIEW_APP_PORT:?set PREVIEW_APP_PORT}
+      HOSTNAME: 127.0.0.1
+      NODE_OPTIONS: --max-old-space-size=512
+      HIREARCHY_RUNTIME_PROFILE: public-preview
+      HIREARCHY_TRUSTED_PROXY_HOPS: '${HIREARCHY_TRUSTED_PROXY_HOPS:-0}'
+      EARLY_ACCESS_STORAGE_PATH: /app/data/early-access-requests.json
+    volumes:
+      - early-access-data:/app/data
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'node -e "fetch(''http://127.0.0.1:'' + process.env.PORT + ''/api/health'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    cpus: 0.5
+    mem_limit: 768m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    logging: *rotated-logs
+
+  caddy:
+    image: caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+      web-preview:
+        condition: service_healthy
+    environment:
+      CADDY_HTTP_PORT: ${CADDY_HTTP_PORT:?set CADDY_HTTP_PORT (80 for deployment)}
+      CADDY_HTTPS_PORT: ${CADDY_HTTPS_PORT:?set CADDY_HTTPS_PORT (443 for deployment)}
+      CADDY_BIND_ADDRESS: ${CADDY_BIND_ADDRESS:?set CADDY_BIND_ADDRESS}
+      APP_PORT: ${APP_PORT:?set APP_PORT}
+      PREVIEW_APP_PORT: ${PREVIEW_APP_PORT:?set PREVIEW_APP_PORT}
+      STAGING_HOSTNAME: ${STAGING_HOSTNAME:?set STAGING_HOSTNAME}
+      PREVIEW_HOSTNAME: ${PREVIEW_HOSTNAME:?set PREVIEW_HOSTNAME}
+      STAGING_ALLOWED_CIDRS: ${STAGING_ALLOWED_CIDRS:?set STAGING_ALLOWED_CIDRS to fixed team or VPN egress CIDRs}
+    volumes:
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    cpus: 0.2
+    mem_limit: 128m
+    pids_limit: 64
+    logging: *rotated-logs
 
 volumes:
-  hirearchy-staging-pg-data:
-    name: hirearchy-staging-pg-data
-
-networks:
-  hirearchy-staging-net:
-    name: hirearchy-staging-net
-    driver: bridge
+  staging-postgres-data:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME}-staging-postgres-data
+  early-access-data:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME}-early-access-data
+  caddy-data:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME}-caddy-data
+  caddy-config:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME}-caddy-config

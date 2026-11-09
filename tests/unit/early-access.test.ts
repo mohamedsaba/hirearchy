@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
   saveEarlyAccessRecord,
   readAllEarlyAccessRecords,
@@ -199,6 +199,52 @@ describe('Early Access API Route (POST /api/early-access)', () => {
     expect(stored[0].company).toBe('Cyberdyne Systems');
     expect(stored[0].clientIp).toBeUndefined();
     expect(stored[0].userAgent).toBeUndefined();
+  });
+
+  it('returns a generic storage failure without logging store contents', async () => {
+    const canary = 'CANARY42XY';
+    const storePath = process.env.EARLY_ACCESS_STORAGE_PATH;
+    const originalVerbose = process.env.HIREARCHY_LOG_VERBOSE;
+    expect(storePath).toBeDefined();
+    fs.writeFileSync(storePath!, `${canary}{`);
+    process.env.HIREARCHY_LOG_VERBOSE = 'true';
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const response = await POST(
+        new Request('http://localhost:3000/api/early-access', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Synthetic Buyer',
+            email: 'buyer@example.test',
+            company: 'Example Team',
+            role: 'Engineering lead',
+            teamSize: '1-10',
+            primaryChallenge: 'other',
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: 'Failed to record your request. Please try again later.',
+      });
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const loggedText = errorSpy.mock.calls
+        .flat()
+        .map((value) => String(value))
+        .join(' ');
+      expect(loggedText).not.toContain(canary);
+      expect(loggedText).toContain('early_access.store_write_failed');
+    } finally {
+      errorSpy.mockRestore();
+      if (originalVerbose === undefined) {
+        delete process.env.HIREARCHY_LOG_VERBOSE;
+      } else {
+        process.env.HIREARCHY_LOG_VERBOSE = originalVerbose;
+      }
+    }
   });
 
   it('does not let forwarded-header rotation bypass the shared intake limit', async () => {

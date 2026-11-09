@@ -1,0 +1,25 @@
+{
+	admin off
+	http_port {$CADDY_HTTP_PORT}
+	https_port {$CADDY_HTTPS_PORT}
+	log {
+		format filter {
+			request delete
+		}
+	}
+}
+
+http://{$PUBLIC_HOSTNAME}:{$CADDY_HTTP_PORT} {
+	bind {$CADDY_BIND_ADDRESS}
+	redir https://{$PUBLIC_HOSTNAME}:{$CADDY_HTTPS_PORT}{uri} 308
+}
+
+{$PUBLIC_HOSTNAME} {
+	bind {$CADDY_BIND_ADDRESS}
+	encode zstd gzip
+	@early_access path /api/early-access
+	request_body @early_access {
+		max_size 32KB
+	}
+	reverse_proxy 127.0.0.1:{$PREVIEW_APP_PORT}
+}

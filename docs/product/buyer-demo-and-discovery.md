@@ -78,12 +78,22 @@ This is copy for possible founder use, not authorization to contact anyone. No r
 
 ## Intake handling for operators
 
-The public early-access form collects name, work email, company/team, role, team size, selected challenge, and optional note. It stores requests on the application data volume. Requests remain there until an authorized operator deletes them; there is no automatic expiry or approved deletion-request process. The stored record excludes client IP and browser user-agent. Forwarded-IP headers are ignored for rate limiting; all visitors share a five-request/15-minute bucket per app process. The current form sends no email and creates no account or pilot. Operators can review the JSON without editing database records:
+The public early-access form collects name, work email, company/team, role, team size, selected challenge, and optional note. It stores requests on the application data volume. Requests remain there until an authorized operator deletes them; there is no automatic expiry or approved deletion-request process. The stored record excludes client IP and browser user-agent. Forwarded-IP headers are ignored for rate limiting; all visitors share a five-request/15-minute bucket per app process. The current form sends no email and creates no account or pilot. Operators can review the JSON without editing database records.
+
+For Stage A, export from the public-preview `web` service:
 
 ```sh
-docker compose -f deploy/staging/docker-compose.preview.yml exec -T web node --experimental-strip-types scripts/export-early-access-requests.mjs
+docker compose --env-file "$PREVIEW_ENV_FILE" -p "$COMPOSE_PROJECT_NAME" -f deploy/staging/docker-compose.preview.yml exec -T web node --experimental-strip-types scripts/export-early-access-requests.mjs
 ```
 
-Run this from the repository root with the same Compose environment/project options used to start the preview. The command reads the configured `EARLY_ACCESS_STORAGE_PATH`, writes JSON to stdout, and does not create an absent request file. Treat the output as personal information; if saving it, use an access-restricted local destination. Corrupt or unreadable storage returns an error rather than an empty list. The preview uses one app process for file-backed storage; do not run multiple app replicas against the same JSON file.
+After upgrading the same Compose project to Stage B, export from `web-preview`:
+
+```sh
+docker compose --env-file "$STAGING_ENV_FILE" -p "$COMPOSE_PROJECT_NAME" -f deploy/staging/docker-compose.staging.yml exec -T web-preview node --experimental-strip-types scripts/export-early-access-requests.mjs
+```
+
+Keep the same `COMPOSE_PROJECT_NAME` across Stage A and Stage B. Both stacks map intake data to `${COMPOSE_PROJECT_NAME}-early-access-data`; changing the project name silently selects a new empty volume. Stop Stage A with `docker compose down` **without** `-v` before starting Stage B. The authenticated `web` service does not own the intake volume.
+
+Run either command from the repository root with the same environment file and Compose project options used to start that stack. The command reads the configured `EARLY_ACCESS_STORAGE_PATH`, writes JSON to stdout, and does not create an absent request file. Treat the output as personal information; if saving it, use an access-restricted local destination. Corrupt or unreadable storage returns an error rather than an empty list. The preview uses one app process for file-backed storage; do not run multiple app replicas against the same JSON file. See [`deploy/staging/README.md`](../../deploy/staging/README.md) for consistent volume backup, restore, retention, and deletion procedures.
 
 The `/contact` page is informational only and does not store messages. Direct buyers to the early-access form for an interest request; the founder must review and approve the privacy notice and retention/deletion process before public intake is enabled.

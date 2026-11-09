@@ -10,7 +10,8 @@ BEGIN
     SELECT * FROM (VALUES
       ('r23_gateway', true),
       ('r23_session_owner', false),
-      ('staging_verifier_owner', false)
+      ('staging_verifier_owner', false),
+      ('staging_readiness_owner', false)
     ) AS required_roles(name, can_login)
   LOOP
     SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,

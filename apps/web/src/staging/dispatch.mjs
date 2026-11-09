@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
 
 let pool;
 let configuredUrl;
@@ -16,6 +17,19 @@ export async function dispatchStagingProof(
       connectionTimeoutMillis: 5000,
       idleTimeoutMillis: 10000,
       statement_timeout: 5000,
+    });
+    pool.on('error', (error) => {
+      const sanitized = sanitizeError(error);
+      operationalLogger.error(
+        'Staging PostgreSQL pool idle connection failed',
+        {
+          service: 'staging_proof_dispatch',
+          error: {
+            name: sanitized.name,
+            ...(sanitized.code ? { code: sanitized.code } : {}),
+          },
+        },
+      );
     });
   }
   if (configuredUrl !== connectionString)

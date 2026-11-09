@@ -5,6 +5,7 @@ BEGIN;
 DO $preflight$
 DECLARE
   owner_role record;
+  readiness_role record;
   gateway_role record;
   candidate_gateway_role record;
 BEGIN
@@ -32,6 +33,92 @@ BEGIN
      OR EXISTS (SELECT 1 FROM pg_catalog.pg_db_role_setting WHERE setrole = owner_role.oid)
      OR EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members WHERE roleid = owner_role.oid OR member = owner_role.oid) THEN
     RAISE EXCEPTION 'staging_verifier_owner is missing or unsafe';
+  END IF;
+
+  SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,
+         rolcreaterole, rolreplication, rolinherit, rolconfig
+    INTO readiness_role
+    FROM pg_catalog.pg_roles
+    WHERE rolname = 'staging_readiness_owner';
+  IF NOT FOUND
+     OR readiness_role.rolcanlogin OR readiness_role.rolsuper
+     OR readiness_role.rolbypassrls OR readiness_role.rolcreatedb
+     OR readiness_role.rolcreaterole OR readiness_role.rolreplication
+     OR readiness_role.rolinherit OR readiness_role.rolconfig IS NOT NULL
+     OR EXISTS (SELECT 1 FROM pg_catalog.pg_db_role_setting WHERE setrole = readiness_role.oid)
+     OR EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members WHERE roleid = readiness_role.oid OR member = readiness_role.oid) THEN
+    RAISE EXCEPTION 'staging_readiness_owner is missing or unsafe';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_class AS relation,
+           LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               relation.relacl,
+               pg_catalog.acldefault('r', relation.relowner)
+             )
+           ) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_class AS relation
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = relation.relnamespace
+      JOIN pg_catalog.pg_attribute AS attribute
+        ON attribute.attrelid = relation.oid
+      CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+       AND NOT (
+         namespace.nspname = 'hirearchy'
+         AND privilege.privilege_type = 'SELECT'
+         AND NOT privilege.is_grantable
+         AND (
+           (relation.relname = 'schema_migrations' AND attribute.attname = 'version')
+           OR (
+             relation.relname IN (
+               'durable_candidate_installation',
+               'durable_onboarding_installation'
+             )
+             AND attribute.attname IN ('marker_key', 'marker_version')
+           )
+           OR (
+             relation.relname = 'candidate_token_storage_meta'
+             AND attribute.attname = 'version'
+           )
+         )
+       )
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_namespace AS namespace,
+           LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               namespace.nspacl,
+               pg_catalog.acldefault('n', namespace.nspowner)
+             )
+           ) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+       AND NOT (
+         namespace.nspname = 'hirearchy'
+         AND privilege.privilege_type = 'USAGE'
+         AND NOT privilege.is_grantable
+       )
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_proc AS routine,
+           LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               routine.proacl,
+               pg_catalog.acldefault('f', routine.proowner)
+             )
+           ) AS privilege
+     WHERE privilege.grantee = readiness_role.oid
+       AND routine.oid IS DISTINCT FROM COALESCE(
+         pg_catalog.to_regprocedure('staging.readiness_probe()'),
+         0::pg_catalog.oid
+       )
+  ) THEN
+    RAISE EXCEPTION 'staging_readiness_owner has grants outside the readiness metadata boundary';
   END IF;
 
   SELECT oid, rolcanlogin, rolsuper, rolbypassrls, rolcreatedb,
@@ -4073,5 +4160,84 @@ BEGIN
   END IF;
 END
 $durable_onboarding_marker$;
+
+-- The gateway can execute one redacted readiness probe. Its dedicated
+-- NOLOGIN owner can read only migration/install metadata and has no tenant,
+-- Auth, mutation, or verifier-dispatch grants.
+GRANT USAGE ON SCHEMA hirearchy TO staging_readiness_owner;
+GRANT SELECT (version) ON hirearchy.schema_migrations
+  TO staging_readiness_owner;
+GRANT SELECT (marker_key, marker_version)
+  ON hirearchy.durable_candidate_installation,
+     hirearchy.durable_onboarding_installation
+  TO staging_readiness_owner;
+GRANT SELECT (version) ON hirearchy.candidate_token_storage_meta
+  TO staging_readiness_owner;
+
+DROP POLICY IF EXISTS staging_readiness_candidate_marker
+  ON hirearchy.durable_candidate_installation;
+CREATE POLICY staging_readiness_candidate_marker
+  ON hirearchy.durable_candidate_installation
+  FOR SELECT TO staging_readiness_owner
+  USING (true);
+
+DROP POLICY IF EXISTS staging_readiness_onboarding_marker
+  ON hirearchy.durable_onboarding_installation;
+CREATE POLICY staging_readiness_onboarding_marker
+  ON hirearchy.durable_onboarding_installation
+  FOR SELECT TO staging_readiness_owner
+  USING (true);
+
+DROP POLICY IF EXISTS staging_readiness_token_metadata
+  ON hirearchy.candidate_token_storage_meta;
+CREATE POLICY staging_readiness_token_metadata
+  ON hirearchy.candidate_token_storage_meta
+  FOR SELECT TO staging_readiness_owner
+  USING (true);
+
+CREATE OR REPLACE FUNCTION staging.readiness_probe()
+RETURNS pg_catalog.jsonb
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT pg_catalog.jsonb_build_object(
+    'migrationVersion', (
+      SELECT version
+        FROM hirearchy.schema_migrations
+       ORDER BY version DESC
+       LIMIT 1
+    ),
+    'markers', pg_catalog.jsonb_build_object(
+      'candidateLifecycle', EXISTS (
+        SELECT 1
+          FROM hirearchy.durable_candidate_installation
+         WHERE marker_key = 'durable-candidate-lifecycle-v1'
+           AND marker_version = 1
+      ),
+      'onboarding', EXISTS (
+        SELECT 1
+          FROM hirearchy.durable_onboarding_installation
+         WHERE marker_key = 'durable-onboarding-v1'
+           AND marker_version = 1
+      ),
+      'candidateTokenStorage', EXISTS (
+        SELECT 1
+          FROM hirearchy.candidate_token_storage_meta
+         WHERE version = 1
+      ),
+      'authoringR211',
+        pg_catalog.to_regclass('hirearchy.assessment_validated_versions') IS NOT NULL,
+      'executionR214',
+        pg_catalog.to_regclass('hirearchy.candidate_execution_operations') IS NOT NULL
+    )
+  );
+$function$;
+ALTER FUNCTION staging.readiness_probe()
+  OWNER TO staging_readiness_owner;
+REVOKE ALL ON FUNCTION staging.readiness_probe()
+  FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker,
+       staging_verifier_owner, hirearchy_migrator;
+GRANT EXECUTE ON FUNCTION staging.readiness_probe() TO r23_gateway;
 
 COMMIT;
