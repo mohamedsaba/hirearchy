@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
 const previewCompose = 'deploy/staging/docker-compose.preview.yml';
 const stagingCompose = 'deploy/staging/docker-compose.staging.yml';
 let previewComposeFiles = [previewCompose];
