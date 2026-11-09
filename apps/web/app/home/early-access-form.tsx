@@ -168,7 +168,7 @@ export function EarlyAccessForm() {
           role="status"
           data-testid="early-access-success-panel"
         >
-          <h2 id="early-access-form-heading">
+          <h2>
             Early access request
             <br />
             recorded.
@@ -232,7 +232,7 @@ export function EarlyAccessForm() {
             <span />
             Early access interest
           </p>
-          <h2 id="early-access-form-heading">Request early access</h2>
+          <h2>Request early access</h2>
           <p className="ct-form-intro">
             Share your team context to request an early-access conversation.
             Submitting this form does not create an account, activate a pilot,
