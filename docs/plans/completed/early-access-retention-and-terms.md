@@ -1,6 +1,6 @@
 # Early-access retention and legal drafts
 
-Status: Active. Updated: 2026-11-09.
+Status: Product implementation complete; final PR #19 checks pending. Updated: 2026-11-09.
 
 ## Objective
 
@@ -26,16 +26,18 @@ Update the early-access store, operator CLI, focused tests, privacy and terms dr
 ## Verification
 
 - Focused unit coverage for selection, export permissions, deletion receipts/replay, corrupt-store refusal, lock contention, and concurrent submissions.
-- Re-run existing public-preview/early-access browser acceptance with synthetic data and inspect captured screens.
+- Re-run existing public-preview/early-access browser acceptance with synthetic data and inspect captured screens. The PR #19 buyer-journey job reached and passed its browser assertions, then hung during Next.js teardown; that run was canceled before package/staging steps.
 - Coordinate any Docker/PostgreSQL/staging or full demo suite with the operations owner to avoid overlapping heavy resource use.
 
 ## Current evidence — 2026-11-09
 
 - `node_modules/.bin/vitest run tests/unit/early-access.test.ts tests/unit/early-access-admin.test.ts` passed: 2 files, 19 tests. The test source resolved from this isolated worktree; its third-party Vitest install is from the primary checkout and reports 5.0.0, while the lockfile pins 5.0.5. Combined CI remains authoritative.
 - Prettier was run on the changed product files and `git diff --check` passed.
-- `node scripts/run-buyer-journey-acceptance.mjs` is the browser command for the combined PR head. It was not run locally because the shared third-party install lacks the declared Playwright package; the operations owner will run it with the combined presentation checks in CI.
+- `node scripts/test-buyer-journey-server-lifecycle.mjs` passed. It covers an already-exited child, a detached process group with a `SIGTERM`-resistant HTTP listener descendant, bounded `SIGKILL` escalation, descendant process exit, and listener closure.
+- `node --check` passed for the lifecycle helper, regression, and buyer journey runner. The runner now invokes the installed Next CLI through `process.execPath` and terminates only its detached process group.
+- PR #19 buyer-journey assertions passed in run `42641459858` at 15:09:20, but the job was canceled at 15:21:50 after hanging during teardown. The fixed runner has not yet completed a combined-head CI run; see the product/browser evidence in the PR #19 release-readiness section for final protected-check results.
 - No deployment, public activation, real intake, outreach, or prospect collection was performed.
 
 ## Completion
 
-After combined browser and required release checks pass, record their exact results here and move this plan to `docs/plans/completed/`. The operations owner has the exact CLI invocation, receipt format, backup replay semantics, and browser command for integration.
+The product implementation, focused tests, and lifecycle regression are complete. Final combined-head browser and release checks remain pending in PR #19 and are tracked in its release-readiness evidence. Public activation and real prospect collection remain outside this plan's scope. The operations owner has the exact CLI invocation, receipt format, backup replay semantics, and browser command for integration.
