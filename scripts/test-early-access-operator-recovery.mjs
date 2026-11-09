@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmod, copyFile, readFile, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +12,7 @@ const syntheticEmail = process.env.SYNTHETIC_EMAIL ?? '';
 const cliPath = fileURLToPath(
   new URL('./manage-early-access-requests.mjs', import.meta.url),
 );
+let phase = 'initialize';
 
 function runCli(args, targetStoragePath = storagePath) {
   return execFileSync(
@@ -43,9 +44,11 @@ function assertRedacted(output) {
 }
 
 async function main() {
+  phase = 'validate private operator directory';
   assert.ok(syntheticEmail.includes('@example.test'));
   assert.equal((await stat(operatorDir)).mode & 0o777, 0o700);
 
+  phase = 'export active intake';
   const initialExportPath = path.join(operatorDir, 'initial-export.json');
   const initialExportResult = runCli([
     'export',
@@ -65,14 +68,20 @@ async function main() {
   );
   assert.ok(selected && typeof selected.id === 'string');
 
+  phase = 'prepare independent restored intake copy';
+  const restoredIntakeDir = path.join(operatorDir, 'restored-intake');
+  await mkdir(restoredIntakeDir, { mode: 0o700 });
+  await chmod(restoredIntakeDir, 0o700);
+  assert.equal((await stat(restoredIntakeDir)).mode & 0o777, 0o700);
   const restoredStorePath = path.join(
-    operatorDir,
-    'restored-intake-store.json',
+    restoredIntakeDir,
+    'early-access-requests.json',
   );
   await copyFile(storagePath, restoredStorePath);
   await chmod(restoredStorePath, 0o600);
   await assertPrivateFile(restoredStorePath);
 
+  phase = 'dry-run selected deletion';
   const dryRun = runCli(['delete', '--id', selected.id]);
   assertRedacted(dryRun);
   const dryRunResult = parseResult(dryRun);
@@ -80,6 +89,7 @@ async function main() {
   assert.equal(dryRunResult.matchedCount, 1);
   assert.equal(dryRunResult.mode, 'dry-run');
 
+  phase = 'apply deletion and write immutable receipt';
   const receiptPath = path.join(operatorDir, 'delete-receipt.json');
   const deleteResultText = runCli([
     'delete',
@@ -100,6 +110,7 @@ async function main() {
   assert.ok(receiptText.includes(selected.id));
   assert.ok(!receiptText.includes(syntheticEmail));
 
+  phase = 'verify active intake deletion';
   const afterDeletePath = path.join(operatorDir, 'live-after-delete.json');
   const afterDeleteResult = runCli([
     'export',
@@ -113,6 +124,7 @@ async function main() {
   const liveAfterDelete = JSON.parse(await readFile(afterDeletePath, 'utf8'));
   assert.ok(!liveAfterDelete.some((record) => record.id === selected.id));
 
+  phase = 'dry-run deletion receipt replay';
   const dryReplay = runCli(
     ['replay', '--receipt', receiptPath],
     restoredStorePath,
@@ -123,6 +135,7 @@ async function main() {
   assert.equal(dryReplayResult.mode, 'dry-run');
   assert.equal(dryReplayResult.matchedCount, 1);
 
+  phase = 'apply deletion receipt replay to restored copy';
   const replayResultText = runCli(
     ['replay', '--receipt', receiptPath, '--apply'],
     restoredStorePath,
@@ -133,6 +146,7 @@ async function main() {
   assert.equal(replayResult.mode, 'applied');
   assert.equal(replayResult.deletedCount, 1);
 
+  phase = 'verify restored copy after replay';
   const restoredExportPath = path.join(
     operatorDir,
     'restored-after-replay.json',
@@ -148,6 +162,7 @@ async function main() {
   );
   assert.ok(!restoredAfterReplay.some((record) => record.id === selected.id));
 
+  phase = 'report successful recovery';
   process.stdout.write(
     JSON.stringify({
       event: 'hirearchy.early_access_operator_recovery',
@@ -162,7 +177,30 @@ async function main() {
 
 try {
   await main();
-} catch {
-  console.error('Early-access operator recovery acceptance failed.');
+} catch (error) {
+  const errorType =
+    error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(error.name)
+      ? error.name
+      : 'UnknownError';
+  const code =
+    error &&
+    typeof error === 'object' &&
+    typeof error.code === 'string' &&
+    /^[A-Za-z0-9_]{1,32}$/.test(error.code)
+      ? ` code=${error.code}`
+      : '';
+  const exit =
+    error && typeof error.status === 'number' && Number.isInteger(error.status)
+      ? ` exit=${error.status}`
+      : '';
+  const assertion =
+    error &&
+    typeof error === 'object' &&
+    ['deepStrictEqual', 'match', 'ok', 'strictEqual'].includes(error.operator)
+      ? ` assertion=${error.operator}`
+      : '';
+  console.error(
+    `Early-access operator recovery acceptance failed at ${phase} (${errorType}${code}${exit}${assertion}).`,
+  );
   process.exitCode = 1;
 }
