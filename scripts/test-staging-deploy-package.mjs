@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
-  appendFile,
   chmod,
   mkdir,
   mkdtemp,
@@ -92,6 +91,27 @@ function assertLocalDockerTarget() {
       'DOCKER_HOST and DOCKER_CONTEXT must select the same local daemon.',
     );
   }
+}
+
+function assertNoProjectResourceCollision(projectName) {
+  const projectLabel = 'label=com.docker.compose.project=' + projectName;
+  const labeled = [
+    docker('ps', '-aq', '--filter', projectLabel),
+    docker('network', 'ls', '-q', '--filter', projectLabel),
+    docker('volume', 'ls', '-q', '--filter', projectLabel),
+  ];
+  const namePrefix = projectName + '-';
+  const namedResources = [
+    docker('ps', '-a', '--format', '{{.Names}}'),
+    docker('network', 'ls', '--format', '{{.Name}}'),
+    docker('volume', 'ls', '--format', '{{.Name}}'),
+  ]
+    .flatMap((listing) => listing.split(/\r?\n/))
+    .filter((name) => name.startsWith(namePrefix));
+  assert.ok(
+    labeled.every((listing) => !listing) && namedResources.length === 0,
+    'Refusing to reuse a Compose project name that already owns resources.',
+  );
 }
 
 async function writeInternalCaddyConfigs(tempDir) {
@@ -301,8 +321,8 @@ async function runResourceSampler(projectName, outputPath) {
         host: {
           cpuCores: os.availableParallelism(),
           memoryTotalMiB: Math.round(os.totalmem() / 1048576),
-          memoryAvailableAtStartMiB: Math.round(os.freemem() / 1048576),
-          memoryAvailableAtEndMiB: Math.round(os.freemem() / 1048576),
+          memoryFreeAtStartMiB: Math.round(os.freemem() / 1048576),
+          memoryFreeAtEndMiB: Math.round(os.freemem() / 1048576),
           dockerDiskTotalGiB: Number(
             ((diskAtStart.blocks * diskAtStart.bsize) / 1073741824).toFixed(2),
           ),
@@ -431,14 +451,17 @@ function runNodeWithEnvironment(envFile, script, extraEnv = {}) {
   });
 }
 
-function runProbe(envFile, appPort) {
+function runProbe(envFile, logPath) {
   return spawnSync(
-    process.execPath,
-    ['--env-file=' + envFile, 'scripts/check-staging-readiness.mjs'],
+    'bash',
+    ['scripts/run-staging-readiness-check.sh'],
     {
       cwd: root,
       encoding: 'utf8',
-      env: childEnvironment({ APP_PORT: String(appPort) }),
+      env: childEnvironment({
+        STAGING_ENV_FILE: envFile,
+        STAGING_READINESS_LOG: logPath,
+      }),
       maxBuffer: 1024 * 1024,
     },
   );
@@ -550,7 +573,7 @@ async function startSampler(projectName, outputPath) {
   const child = spawn(
     process.execPath,
     [me, '--sample-resources', projectName, outputPath],
-    { cwd: root, stdio: 'ignore' },
+    { cwd: root, stdio: 'ignore', env: childEnvironment() },
   );
   await waitFor(
     () => (child.exitCode === null ? true : false),
@@ -573,9 +596,9 @@ async function stopSampler(child, outputPath) {
 }
 
 async function testPackage() {
-  const runId = randomBytes(4).toString('hex');
+  const runId = randomBytes(8).toString('hex');
   const projectName = 'hirearchy-release-smoke-' + runId;
-  assert.match(projectName, /^hirearchy-release-smoke-[a-f0-9]{8}$/);
+  assert.match(projectName, /^hirearchy-release-smoke-[a-f0-9]{16}$/);
   const tempDir = await mkdtemp(
     path.join(os.tmpdir(), 'hirearchy-release-smoke-'),
   );
@@ -591,6 +614,7 @@ async function testPackage() {
   let stagingEnvReady = false;
   let previewStackStarted = false;
   let stagingStackStarted = false;
+  let cleanupFailed = false;
   let stage = 'prepare isolated loopback environments';
 
   try {
@@ -674,6 +698,7 @@ async function testPackage() {
       '--quiet',
     );
 
+    assertNoProjectResourceCollision(projectName);
     sampler = await startSampler(projectName, resourceFile);
     stage = 'public preview Compose, TLS, and route boundary';
     previewStackStarted = true;
@@ -931,23 +956,34 @@ async function testPackage() {
 
     stage = 'readiness outage, local alert dry-run, and recovery';
     compose(stagingEnv, stagingCompose, projectName, 'stop', 'postgres');
-    const outageProbe = runProbe(stagingEnv, appPort);
+    const outageProbe = runProbe(stagingEnv, alertFile);
     assert.equal(outageProbe.status, 1);
     const outageRecord = JSON.parse(outageProbe.stdout.trim());
     assert.equal(outageRecord.state, 'not_ready');
     assert.match(outageRecord.action, /Keep traffic closed/);
-    await appendFile(alertFile, outageProbe.stdout, { mode: 0o600 });
-    await chmod(alertFile, 0o600);
     assert.equal((await stat(alertFile)).mode & 0o777, 0o600);
-    const alertRecord = JSON.parse(await readFile(alertFile, 'utf8'));
-    assert.equal(alertRecord.state, 'not_ready');
-    assert.ok(!JSON.stringify(alertRecord).includes(syntheticEmail));
+    const outageAlertRecords = (await readFile(alertFile, 'utf8'))
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line));
+    assert.equal(outageAlertRecords.length, 1);
+    assert.equal(outageAlertRecords[0].state, 'not_ready');
+    assert.ok(!JSON.stringify(outageAlertRecords).includes(syntheticEmail));
 
     compose(stagingEnv, stagingCompose, projectName, 'start', 'postgres');
     await waitForHealthy(stagingEnv, stagingCompose, projectName, 'postgres');
-    const recoveredProbe = runProbe(stagingEnv, appPort);
+    const recoveredProbe = runProbe(stagingEnv, alertFile);
     assert.equal(recoveredProbe.status, 0);
     assert.equal(JSON.parse(recoveredProbe.stdout.trim()).state, 'ready');
+    const alertRecords = (await readFile(alertFile, 'utf8'))
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(alertRecords.map(({ state }) => state), [
+      'not_ready',
+      'ready',
+    ]);
+    assert.ok(!JSON.stringify(alertRecords).includes(syntheticEmail));
     console.log(
       'Staging readiness probe and local redacted alert-file dry-run passed through PostgreSQL outage and recovery.',
     );
@@ -1003,6 +1039,7 @@ async function testPackage() {
           'Owned release-smoke Compose project requires cleanup: ' +
             projectName,
         );
+        cleanupFailed = true;
         process.exitCode = 1;
       }
     } else if (previewStackStarted && previewEnvReady) {
@@ -1020,10 +1057,24 @@ async function testPackage() {
           'Owned release-smoke Compose project requires cleanup: ' +
             projectName,
         );
+        cleanupFailed = true;
         process.exitCode = 1;
       }
     }
-    await rm(tempDir, { recursive: true, force: true });
+    if (cleanupFailed) {
+      console.error(
+        'Private release-smoke artifacts retained for cleanup at ' + tempDir,
+      );
+    } else {
+      try {
+        await rm(tempDir, { recursive: true, force: true });
+      } catch {
+        console.error(
+          'Private release-smoke artifacts retained for cleanup at ' + tempDir,
+        );
+        process.exitCode = 1;
+      }
+    }
   }
 }
 
