@@ -1,12 +1,18 @@
-import { readAllEarlyAccessRecords } from '../apps/web/src/early-access/store.ts';
+import { runEarlyAccessAdmin } from './manage-early-access-requests.mjs';
 
 try {
-  process.stdout.write(
-    `${JSON.stringify(await readAllEarlyAccessRecords(), null, 2)}\n`,
-  );
-} catch {
-  console.error(
-    'Unable to read early-access requests. Check the configured store and file integrity.',
+  await runEarlyAccessAdmin(['export', ...process.argv.slice(2)]);
+} catch (error) {
+  const code =
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    /^[A-Z][A-Z0-9_]{0,31}$/.test(error.code)
+      ? error.code
+      : 'EARLY_ACCESS_EXPORT_FAILED';
+  process.stderr.write(
+    `${JSON.stringify({ ok: false, code, error: 'Early-access export failed; request fields were not written to stdout.' })}\n`,
   );
   process.exitCode = 1;
 }

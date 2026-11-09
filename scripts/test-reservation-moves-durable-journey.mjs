@@ -1064,6 +1064,18 @@ async function run() {
     restoredPg = await spawnPostgres(restoredContainerName, restoredVolumeName);
     clients.push(restoredPg.admin);
 
+    // PostgreSQL creates its own bootstrap role. Remove only that exact
+    // built-in creation, and stop on any other globals restore error.
+    const globalsSql = globalsBytes.toString('utf8');
+    const postgresRoleCreation = /^CREATE ROLE postgres;[ \t]*$/gm;
+    const postgresRoleCreations = globalsSql.match(postgresRoleCreation) ?? [];
+    assert.equal(
+      postgresRoleCreations.length,
+      1,
+      'Globals dump must contain exactly one built-in postgres role creation',
+    );
+    const restorableGlobals = globalsSql.replace(postgresRoleCreation, '');
+
     // Restore cluster globals first (roles and permissions)
     execFileSync(
       'docker',
@@ -1072,12 +1084,14 @@ async function run() {
         '-i',
         restoredPg.name,
         'psql',
+        '-v',
+        'ON_ERROR_STOP=1',
         '-U',
         'postgres',
         '-d',
         'postgres',
       ],
-      { input: globalsBytes, maxBuffer: 64 * 1024 * 1024 },
+      { input: restorableGlobals, maxBuffer: 64 * 1024 * 1024 },
     );
 
     // Execute pg_restore on the restored container
@@ -1092,6 +1106,7 @@ async function run() {
         'postgres',
         '-d',
         'postgres',
+        '--exit-on-error',
         '--clean',
         '--if-exists',
       ],

@@ -70,30 +70,28 @@ Avoid leading questions that assume review is slow or that a recorded timeline i
 
 For discovery only, test a supervised 30-day pilot for one team, one approved scenario, up to 10 candidate sessions, and onboarding for one recruiter plus two evaluators. An initial **US$250 total** is an internal price hypothesis, not an offer or validated willingness to pay. Hosting, support, candidate assistance, and privacy-operation costs have not been measured. Do not quote or charge this price until the founder approves the hosted workflow, privacy/legal materials, support ownership, and cost model.
 
-## Outreach positioning
+## Outreach drafts — not sent
 
-Suggested one-line opener for a founder-led conversation: “We’re exploring a work-sample review workflow that lets an engineering evaluator inspect saved revisions and task activity before writing a human-owned review; would you show me how your team handles that today?”
+Use only after the founder authorizes outreach. No real prospects have been selected or contacted, and no prospect list has been collected.
 
-This is copy for possible founder use, not authorization to contact anyone. No real outreach has been sent.
+**Email subject:** How does your team review engineering work samples?
+
+**Email draft:**
+
+> Hi [Name],
+>
+> I’m exploring how engineering teams review work samples and what evidence helps reviewers discuss a submission. Would you be open to a 10–15 minute discovery conversation about your current process? This is research only, not a product offer or pilot. If you’re not interested, I won’t follow up.
+>
+> [Founder name]
+
+**Direct-message draft:** “I’m researching how engineering teams review work samples. Would you be open to a 10–15 minute conversation about your current process? This is discovery only, not a product offer.”
+
+Do not add an invented customer result, promise, deadline, or price. No real outreach has been sent.
 
 ## Intake handling for operators
 
-The public early-access form collects name, work email, company/team, role, team size, selected challenge, and optional note. It stores requests on the application data volume. Requests remain there until an authorized operator deletes them; there is no automatic expiry or approved deletion-request process. The stored record excludes client IP and browser user-agent. Forwarded-IP headers are ignored for rate limiting; all visitors share a five-request/15-minute bucket per app process. The current form sends no email and creates no account or pilot. Operators can review the JSON without editing database records.
+When Stage A is explicitly activated, the early-access form collects a name, work email, company/team, role, team size, selected challenge, and optional note. It stores requests on the application data volume for manual operator review; it sends no email and creates no account or pilot. The stored record excludes client IP and browser user-agent. Forwarded-IP headers are ignored for rate limiting; all visitors share a five-request/15-minute bucket per app process. The current deployment is not public, and acceptance checks use synthetic values only.
 
-For Stage A, export from the public-preview `web` service:
+Use the host-only operator commands in the [`deploy/staging` runbook](../../deploy/staging/README.md). Export and deletion default to count-only dry runs. An applied export writes to a new mode-0600 file in a private directory outside the intake volume. Deletion requires an exact request ID or explicit UTC cutoff, an explicit apply flag, and a mode-0600 ID-only receipt outside the backed-up volume. Reapply that receipt to a restored copy before intake resumes. A live-store deletion is not complete while any export or backup copy still contains the request. No automatic retention schedule or numeric period is approved.
 
-```sh
-docker compose --env-file "$PREVIEW_ENV_FILE" -p "$COMPOSE_PROJECT_NAME" -f deploy/staging/docker-compose.preview.yml exec -T web node --experimental-strip-types scripts/export-early-access-requests.mjs
-```
-
-After upgrading the same Compose project to Stage B, export from `web-preview`:
-
-```sh
-docker compose --env-file "$STAGING_ENV_FILE" -p "$COMPOSE_PROJECT_NAME" -f deploy/staging/docker-compose.staging.yml exec -T web-preview node --experimental-strip-types scripts/export-early-access-requests.mjs
-```
-
-Keep the same `COMPOSE_PROJECT_NAME` across Stage A and Stage B. Both stacks map intake data to `${COMPOSE_PROJECT_NAME}-early-access-data`; changing the project name silently selects a new empty volume. Stop Stage A with `docker compose down` **without** `-v` before starting Stage B. The authenticated `web` service does not own the intake volume.
-
-Run either command from the repository root with the same environment file and Compose project options used to start that stack. The command reads the configured `EARLY_ACCESS_STORAGE_PATH`, writes JSON to stdout, and does not create an absent request file. Treat the output as personal information; if saving it, use an access-restricted local destination. Corrupt or unreadable storage returns an error rather than an empty list. The preview uses one app process for file-backed storage; do not run multiple app replicas against the same JSON file. See [`deploy/staging/README.md`](../../deploy/staging/README.md) for consistent volume backup, restore, retention, and deletion procedures.
-
-The `/contact` page is informational only and does not store messages. Direct buyers to the early-access form for an interest request; the founder must review and approve the privacy notice and retention/deletion process before public intake is enabled.
+Do not use real buyer or candidate details in a rehearsal. The `/contact` page is informational and does not store messages. Founder and legal review must approve the privacy notice, retention period, deletion-request owner, backup expiry, and public activation before actual intake begins.

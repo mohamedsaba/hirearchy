@@ -207,9 +207,11 @@ export async function checkReadinessBoundary({
     `127.0.0.1:${postgresHostPort}`,
     'PostgreSQL host port remains stable across restart',
   );
-  checkpoint('PostgreSQL TCP recovery before fixture reconnect');
+  checkpoint('PostgreSQL TCP probe after restart');
   await waitForDatabase();
+  checkpoint('fresh PostgreSQL fixture-client reconnect');
   await reconnectDatabaseClients();
+  checkpoint('application readiness after PostgreSQL restart');
   await waitFor(async () => (await fetch(readinessUrl)).status === 200);
   for (const secret of secrets) {
     assert.equal(

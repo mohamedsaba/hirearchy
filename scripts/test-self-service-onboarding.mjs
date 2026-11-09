@@ -1161,14 +1161,34 @@ try {
     `${restoredPgContainer}:/tmp/backup.dump`,
   ]);
 
-  docker(
-    'exec',
-    restoredPgContainer,
-    'psql',
-    '-U',
-    'postgres',
-    '-f',
-    '/tmp/globals.sql',
+  const globalsSql = await readFile(globalsFile, 'utf8');
+  const postgresRoleCreation = /^CREATE ROLE postgres;[ \t]*$/gm;
+  const postgresRoleCreations = globalsSql.match(postgresRoleCreation) ?? [];
+  assert.equal(
+    postgresRoleCreations.length,
+    1,
+    'Globals dump must contain exactly one built-in postgres role creation',
+  );
+  const restorableGlobals = globalsSql.replace(postgresRoleCreation, '');
+  execFileSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      restoredPgContainer,
+      'psql',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-U',
+      'postgres',
+      '-d',
+      'postgres',
+    ],
+    {
+      input: restorableGlobals,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      maxBuffer: 32 * 1024 * 1024,
+    },
   );
 
   docker(
@@ -1176,6 +1196,7 @@ try {
     restoredPgContainer,
     'pg_restore',
     '-v',
+    '--exit-on-error',
     '--clean',
     '--if-exists',
     '-U',

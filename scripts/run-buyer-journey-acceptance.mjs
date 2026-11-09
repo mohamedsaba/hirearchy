@@ -3,12 +3,17 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { runBuyerJourneyAcceptance } from '../tests/browser/buyer-journey-acceptance.mjs';
+import { stopBuyerJourneyServer } from './buyer-journey-server-process.mjs';
 
 const PORT = 3003;
 const BASE_URL = `http://localhost:${PORT}`;
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 
 async function waitForServer(url, timeoutMs = 45000) {
   const start = Date.now();
@@ -77,6 +82,10 @@ async function verifyPublicPreviewBoundary() {
 }
 
 async function main() {
+  if (process.platform === 'win32') {
+    throw new Error('Buyer journey acceptance requires POSIX process groups');
+  }
+
   const acceptanceStorage = fs.mkdtempSync(
     path.join(os.tmpdir(), 'hirearchy-buyer-acceptance-'),
   );
@@ -84,17 +93,39 @@ async function main() {
     acceptanceStorage,
     'early-access-requests.json',
   );
+  const acceptanceExportDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'hirearchy-buyer-export-'),
+  );
+  const acceptanceExportFile = path.join(
+    acceptanceExportDirectory,
+    'early-access-requests.json',
+  );
   console.log(`Starting Next.js development server on port ${PORT}...`);
-  const server = spawn('npx', ['next', 'dev', 'apps/web', '-p', String(PORT)], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      NODE_ENV: 'development',
-      HIREARCHY_RUNTIME_PROFILE: 'public-preview',
-      EARLY_ACCESS_STORAGE_PATH: acceptanceStorageFile,
+  const nextCli = path.join(
+    repoRoot,
+    'node_modules',
+    'next',
+    'dist',
+    'bin',
+    'next',
+  );
+  const server = spawn(
+    process.execPath,
+    [nextCli, 'dev', 'apps/web', '-p', String(PORT)],
+    {
+      cwd: repoRoot,
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        PORT: String(PORT),
+        NODE_ENV: 'development',
+        HIREARCHY_RUNTIME_PROFILE: 'public-preview',
+        EARLY_ACCESS_STORAGE_PATH: acceptanceStorageFile,
+      },
     },
-  });
+  );
 
   let serverOutput = '';
   server.stdout.on('data', (d) => {
@@ -102,6 +133,9 @@ async function main() {
   });
   server.stderr.on('data', (d) => {
     serverOutput += d.toString();
+  });
+  server.on('error', (error) => {
+    serverOutput += `${error.stack ?? error}\n`;
   });
 
   try {
@@ -132,14 +166,18 @@ async function main() {
       'PREVIEW_ROUTE_UNAVAILABLE',
     );
 
-    const exported = execFileSync(
+    const exportSummary = execFileSync(
       process.execPath,
       [
         '--experimental-strip-types',
         'scripts/export-early-access-requests.mjs',
+        '--all',
+        '--apply',
+        '--output',
+        acceptanceExportFile,
       ],
       {
-        cwd: process.cwd(),
+        cwd: repoRoot,
         encoding: 'utf8',
         env: {
           ...process.env,
@@ -147,9 +185,18 @@ async function main() {
         },
       },
     );
-    const records = JSON.parse(exported);
+    assert.deepEqual(JSON.parse(exportSummary), {
+      ok: true,
+      operation: 'export',
+      mode: 'applied',
+      selector: 'all',
+      exportedCount: 1,
+      outputMode: '0600',
+    });
+    assert.equal(fs.statSync(acceptanceExportFile).mode & 0o777, 0o600);
+    const records = JSON.parse(fs.readFileSync(acceptanceExportFile, 'utf8'));
     assert.equal(records.length, 1);
-    assert.equal(records[0].email, 'alex.chen@acme-infrastructure.com');
+    assert.equal(records[0].email, 'buyer@hirearchy.test');
     assert.equal(records[0].clientIp, undefined);
     assert.equal(records[0].userAgent, undefined);
 
@@ -159,9 +206,13 @@ async function main() {
       [
         '--experimental-strip-types',
         'scripts/export-early-access-requests.mjs',
+        '--all',
+        '--apply',
+        '--output',
+        path.join(acceptanceExportDirectory, 'corrupt.json'),
       ],
       {
-        cwd: process.cwd(),
+        cwd: repoRoot,
         encoding: 'utf8',
         env: {
           ...process.env,
@@ -170,7 +221,7 @@ async function main() {
       },
     );
     assert.equal(corruptExport.status, 1);
-    assert.match(corruptExport.stderr, /Unable to read early-access requests/);
+    assert.match(corruptExport.stderr, /Early-access export failed/);
     assert.equal(fs.readFileSync(acceptanceStorageFile, 'utf8'), '{');
     console.log('Buyer journey acceptance walkthrough completed successfully!');
   } catch (error) {
@@ -179,12 +230,17 @@ async function main() {
     process.exitCode = 1;
   } finally {
     console.log('Shutting down Next.js server...');
-    if (server.exitCode === null) {
-      const stopped = once(server, 'exit');
-      server.kill('SIGTERM');
-      await stopped;
+    try {
+      await stopBuyerJourneyServer(server);
+    } catch (error) {
+      console.error('Could not stop buyer journey server cleanly:', error);
+      console.error('Server output log:\n', serverOutput);
+      process.exitCode = 1;
+      server.stdout.destroy();
+      server.stderr.destroy();
     }
     fs.rmSync(acceptanceStorage, { recursive: true, force: true });
+    fs.rmSync(acceptanceExportDirectory, { recursive: true, force: true });
   }
 }
 
