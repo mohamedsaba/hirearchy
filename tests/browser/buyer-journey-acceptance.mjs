@@ -226,6 +226,14 @@ async function inspectBuyerJourney({ baseUrl, browser }) {
     await errorAlert.textContent(),
     'Request storage is unavailable.',
   );
+  // The form schedules this focus after React commits the error alert.
+  await page.waitForFunction(
+    () =>
+      document.activeElement?.getAttribute('data-testid') ===
+      'early-access-error-alert',
+    null,
+    { timeout: 5000 },
+  );
   assert.equal(
     await page.evaluate(() =>
       document.activeElement?.getAttribute('data-testid'),
@@ -254,6 +262,14 @@ async function inspectBuyerJourney({ baseUrl, browser }) {
     '[data-testid="early-access-success-panel"]',
   );
   await successPanel.waitFor({ state: 'visible', timeout: 5000 });
+  // Success focus is also scheduled after React commits the receipt panel.
+  await page.waitForFunction(
+    () =>
+      document.activeElement?.getAttribute('data-testid') ===
+      'early-access-success-panel',
+    null,
+    { timeout: 5000 },
+  );
   assert.equal(
     await page.evaluate(() =>
       document.activeElement?.getAttribute('data-testid'),
