@@ -1,12 +1,12 @@
 # MVP release program
 
-Status: Active; zero-cost release preparation and exact-head acceptance are in progress. No hosting, paid services, domains, APIs, public activation, real prospect data, or outreach are authorized. Updated: 2026-11-09.
+Status: Active; zero-cost release-preparation evidence and future founder decisions are tracked here. No hosting, paid services, domains, APIs, public activation, real prospect data, or outreach are authorized. Updated: 2026-11-09.
 
 This is the single active plan for the MVP release program. The R2.15 internal staging foundation plan is complete and preserved at `docs/plans/completed/160-r2-15-staging-foundation.md`. The current release evidence and go/no-go state live in [release readiness](../../release-readiness.md). Update that file as source, CI, browser, recovery, or hosting evidence changes; do not create a sequence of R2.x status reports.
 
 ## Objective and architecture
 
-The internal demo and previous local supervised-alpha rehearsal are complete. This plan remains active to complete the zero-cost release-preparation PR and its exact-head browser/package/recovery CI, then record the remaining founder decisions. The initial buyer hypothesis is unvalidated; use only the synthetic internal demo and do not contact real prospects in this task.
+The internal demo and previous local supervised-alpha rehearsal are complete. This plan records the zero-cost release-preparation evidence and the remaining founder decisions; exact-head browser/package/recovery status is tracked in PR #19 and the [release-readiness ledger](../../release-readiness.md). The initial buyer hypothesis is unvalidated; use only the synthetic internal demo and do not contact real prospects in this task.
 
 The release architecture is a Next.js modular monolith with PostgreSQL as the durable product store, GoTrue for user identity, and the verified application-signed identity proof for database operations. Reuse the current PostgreSQL assessment authoring, issuance, candidate workspace, evidence, assignment, and human-review domains. Keep candidate execution as a separate restricted runtime boundary.
 
@@ -16,7 +16,7 @@ Evidence remains separate from evaluator judgment. Do not add candidate scores, 
 
 ## Current integration boundary
 
-The protected-main baseline is PR #17 merge `bbaf2458557389e6ca5291586c08a8deb21a5dea`, which includes PR #18; PRs #15–18 merged normally, with four required jobs green on the baseline. [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19) adds product retention controls, local readiness alerts, and CI browser/package tests. Prior Stage A browser/package checks and Stage B end-to-end/recovery/rollback rehearsals were local; the new exact-head CI is pending. Neither stage is hosted. No deployment follows from passing CI. Exact baseline evidence, current limits, and founder decisions are in [release readiness](../../release-readiness.md).
+The protected-main baseline is PR #17 merge `bbaf2458557389e6ca5291586c08a8deb21a5dea`, which includes PR #18; PRs #15–18 merged normally, with four required jobs green on the baseline. [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19) adds product retention controls, local readiness alerts, and CI browser/package tests. Prior Stage A browser/package checks and Stage B end-to-end/recovery/rollback rehearsals were local; the latest exact-head CI and package status is tracked in PR #19. Neither stage is hosted. No deployment follows from passing CI. Exact baseline evidence, current limits, and founder decisions are in [release readiness](../../release-readiness.md).
 
 The existing R2.14 PostgreSQL candidate bridge already has the token-scoped workspace and the restricted-executor integration. Reuse those domains and their evidence model. Do not turn on R2.14 disposable flags in the persistent staging profile.
 
