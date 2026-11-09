@@ -196,6 +196,7 @@ async function runResourceSampler(projectName, outputPath) {
   });
 
   const startedAt = Date.now();
+  const memoryFreeAtStart = os.freemem();
   const dockerRoot = await dockerAsync(
     'info',
     '--format',
@@ -321,7 +322,7 @@ async function runResourceSampler(projectName, outputPath) {
         host: {
           cpuCores: os.availableParallelism(),
           memoryTotalMiB: Math.round(os.totalmem() / 1048576),
-          memoryFreeAtStartMiB: Math.round(os.freemem() / 1048576),
+          memoryFreeAtStartMiB: Math.round(memoryFreeAtStart / 1048576),
           memoryFreeAtEndMiB: Math.round(os.freemem() / 1048576),
           dockerDiskTotalGiB: Number(
             ((diskAtStart.blocks * diskAtStart.bsize) / 1073741824).toFixed(2),
@@ -452,19 +453,15 @@ function runNodeWithEnvironment(envFile, script, extraEnv = {}) {
 }
 
 function runProbe(envFile, logPath) {
-  return spawnSync(
-    'bash',
-    ['scripts/run-staging-readiness-check.sh'],
-    {
-      cwd: root,
-      encoding: 'utf8',
-      env: childEnvironment({
-        STAGING_ENV_FILE: envFile,
-        STAGING_READINESS_LOG: logPath,
-      }),
-      maxBuffer: 1024 * 1024,
-    },
-  );
+  return spawnSync('bash', ['scripts/run-staging-readiness-check.sh'], {
+    cwd: root,
+    encoding: 'utf8',
+    env: childEnvironment({
+      STAGING_ENV_FILE: envFile,
+      STAGING_READINESS_LOG: logPath,
+    }),
+    maxBuffer: 1024 * 1024,
+  });
 }
 
 async function waitFor(check, description, timeoutMs = 180_000) {
@@ -979,10 +976,10 @@ async function testPackage() {
       .trim()
       .split(/\r?\n/)
       .map((line) => JSON.parse(line));
-    assert.deepEqual(alertRecords.map(({ state }) => state), [
-      'not_ready',
-      'ready',
-    ]);
+    assert.deepEqual(
+      alertRecords.map(({ state }) => state),
+      ['not_ready', 'ready'],
+    );
     assert.ok(!JSON.stringify(alertRecords).includes(syntheticEmail));
     console.log(
       'Staging readiness probe and local redacted alert-file dry-run passed through PostgreSQL outage and recovery.',

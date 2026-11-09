@@ -1,10 +1,10 @@
 # Single-team staging activation and operations runbook
 
-**Status:** Local release rehearsal passed on 2026-11-09; no preview or alpha is hosted. Stage A route, browser, persistence, and export checks passed. Stage B passed the packaged TLS recruiter → candidate → reviewer flow, PostgreSQL outage 503 and automatic recovery, independent restore, prior-image rollback and roll-forward, intake persistence, and Caddy/app log redaction. These are local synthetic-data results, not hosted release acceptance. See the [release-readiness ledger](../../docs/release-readiness.md) and [PR #17 checks](https://github.com/mohamedsaba/hirearchy/pull/17/checks) for the final exact-head status. Off-host backup, public TLS/domain, access/monitor owners, privacy/legal approval, and founder activation remain open.
+**Status:** The previous local synthetic release rehearsal passed on 2026-11-09; no preview or alpha is hosted. The current release-preparation branch adds an actual package/TLS/operator/readiness check and buyer browser acceptance to CI; exact-head evidence is pending in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19). Nothing in this runbook authorizes deployment, public activation, purchases, real prospect data, or outreach. See the [release-readiness ledger](../../docs/release-readiness.md). Off-host backup, public TLS/domain, access/monitor owners, privacy/legal approval, and founder activation remain open.
 
 This guide covers a single Linux host and one supervised team. Read [release readiness](../../docs/release-readiness.md) and the [founder decision packet](../../docs/release-founder-decisions.md) before activation. The local synthetic demo has separate [startup instructions](../../docs/demo/internal-buyer-demo.md).
 
-The entry baseline for this runbook is protected PR #18 merge `62bdc5bc05736c3d7b637c50b4decb1df752d974`; this is provenance, not a permanent pointer to `main`. The full packaged-alpha TLS Reservation Moves flow passed with web image source `a4d32b7cecc07aff42af873da8e2f5895ef08871` on 2026-11-09. Consult [PR #17](https://github.com/mohamedsaba/hirearchy/pull/17) and the release-readiness ledger for its final source SHA, exact-head checks, and operational evidence. Deploy only the protected merge SHA recorded there, not an unmerged branch head.
+The protected-main entry baseline is PR #17 merge `bbaf2458557389e6ca5291586c08a8deb21a5dea`, which includes PR #18. That exact SHA passed the four required checks; the new release-preparation PR must pass the same four checks on its final combined head. The earlier packaged-alpha TLS Reservation Moves flow passed with synthetic data. Use this as an operations reference only; no deploy action is authorized.
 
 Stage C external-candidate beta remains gated. Keep public signup, email delivery, AI-provider calls, untrusted code execution, and external candidate activation disabled.
 
@@ -48,7 +48,7 @@ sudoedit /etc/hirearchy/preview.env
 
 For a local TLS rehearsal, use a `.localhost` preview hostname, loopback Caddy binding, and unused local HTTP/HTTPS ports. Caddy’s local CA must be trusted only on the rehearsal machine. For a hosted preview, configure a founder-approved hostname, public DNS A/AAAA records, and a firewall that exposes only 80/443 before changing `CADDY_BIND_ADDRESS` from `127.0.0.1` to `0.0.0.0 ::`. **Never source either environment file into a shell.** The templates contain space-delimited values; use Node’s `--env-file` for host Node commands, Compose’s `--env-file` for Compose, and extract only non-secret scalar values when a shell variable is required.
 
-Public intake stays disabled until the founder approves the privacy notice, retention and deletion policy, support owner, and incident contact. The current store has no automatic expiry, and no deletion-request process has been accepted. Approval must include how old copies are removed from backups.
+Public intake stays disabled until the founder approves the privacy notice, retention and deletion policy, support owner, and incident contact. The current store has no automatic expiry. An authorized operator can use the CLI below to dry-run or apply a selected deletion, but there is no approved numeric retention period or public deletion-request process. Approval must include how old copies are inventoried and removed from backups.
 
 From the clean release checkout, in a root shell with command tracing off:
 
@@ -71,16 +71,25 @@ Confirm Caddy has a valid TLS certificate and that `/`, `/products/software`, `/
 
 ### Early-access operator export
 
-The export is read-only. Run from the release checkout with the same environment file and project name used to start the stack. Treat the result as personal information:
+Export is explicit and private. The CLI prints counts and file mode only; it writes request rows to a protected file. Use a root-only host directory outside `/app/data` and outside the ordinary operator log path. The one-shot container runs as root only to write into that root-owned directory; the web service remains UID 1000. For Stage A set `STACK_FILE=deploy/staging/docker-compose.preview.yml`, `INTAKE_SERVICE=web`, and `ENV_FILE=/etc/hirearchy/preview.env`; for Stage B use `deploy/staging/docker-compose.staging.yml`, `web-preview`, and `/etc/hirearchy/staging.env`.
 
 ```sh
+set -euo pipefail
 umask 077
-docker compose --env-file "$PREVIEW_ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-  -f deploy/staging/docker-compose.preview.yml exec -T web \
-  node --experimental-strip-types scripts/export-early-access-requests.mjs
+OPERATOR_DIR=/var/lib/hirearchy/operator
+install -d -o root -g root -m 0700 "$OPERATOR_DIR"
+COMPOSE_PROJECT_NAME="$(node --env-file="$ENV_FILE" -p 'process.env.COMPOSE_PROJECT_NAME')"
+docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
+  -f "$STACK_FILE" run --rm --no-deps -T --user 0:0 \
+  --volume "$OPERATOR_DIR:/run/hirearchy/operator:rw" \
+  --entrypoint node "$INTAKE_SERVICE" \
+  --experimental-strip-types scripts/manage-early-access-requests.mjs \
+  export --all --apply --output /run/hirearchy/operator/export.json
+test "$(stat -c '%a' "$OPERATOR_DIR")" = 700
+test "$(stat -c '%a' "$OPERATOR_DIR/export.json")" = 600
 ```
 
-To save a private copy, redirect stdout to an access-restricted destination outside the repository and set mode `0600`. An absent store exports an empty list without creating the request file; corrupt or unreadable storage returns an error. The file-backed store supports one app process only.
+Keep export files out of source control and out of automatic host backups unless explicitly selected as an encrypted snapshot. Corrupt or wrong-shaped stores fail closed. The file-backed intake store is for one app process on one shared filesystem, not multi-host writes.
 
 ## 3. Stage A to Stage B — same-project supervised alpha
 
@@ -166,84 +175,45 @@ Keep provisioning input/output files mode `0600` under a root-only directory. Re
 
 ## 4. Early-access export and deletion
 
-After Stage B, export from `web-preview`, not the authenticated `web` service:
-
-```sh
-docker compose --env-file "$STAGING_ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-  -f deploy/staging/docker-compose.staging.yml exec -T web-preview \
-  node --experimental-strip-types scripts/export-early-access-requests.mjs
-```
-
-Redirect to a root-only file if retention is required. The export does not mutate the store; it refuses corrupt data rather than returning a misleading empty list.
-
-**Current retention behavior:** requests persist on the named volume until an authorized operator deletes them. There is no automatic expiry. Backups contain the same personal information and therefore remain in scope until their approved retention period ends. No public intake should be enabled until the founder/privacy reviewer approves a specific retention period, deletion request owner, and backup expiry policy.
-
-**Manual deletion procedure; only the synthetic-volume rewrite was rehearsed.** The store has no delete API/CLI, and no real-data retention or deletion policy is approved. This procedure requires host-side jq. For Stage A set STACK_FILE=deploy/staging/docker-compose.preview.yml, INTAKE_SERVICE=web, and ENV_FILE=/etc/hirearchy/preview.env; for Stage B set STACK_FILE=deploy/staging/docker-compose.staging.yml, INTAKE_SERVICE=web-preview, and ENV_FILE=/etc/hirearchy/staging.env. Do not source ENV_FILE.
+Use the private CLI for Stage A and Stage B. Set `STACK_FILE`, `INTAKE_SERVICE`, and `ENV_FILE` to the matching profile described above. Create a separate root-only operator directory outside the intake volume and ordinary backups; do not source the environment file. The one-shot operator container is run as root only so it can access the root-owned host directory. The live web process continues to run as UID 1000.
 
 ```sh
 set -euo pipefail
 umask 077
+OPERATOR_DIR=/var/lib/hirearchy/operator
+install -d -o root -g root -m 0700 "$OPERATOR_DIR"
 COMPOSE_PROJECT_NAME="$(node --env-file="$ENV_FILE" -p 'process.env.COMPOSE_PROJECT_NAME')"
-WORK_DIR="$(mktemp -d /run/hirearchy-intake-delete.XXXXXX)"
-chmod 0700 "$WORK_DIR"
-CURRENT="$WORK_DIR/before.json"
-REVISED="$WORK_DIR/after.json"
-AFTER="$WORK_DIR/verified.json"
-INTAKE_STOPPED=0
-restart_intake() {
-  if [ "$INTAKE_STOPPED" = 1 ]; then
-    docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-      -f "$STACK_FILE" up -d --no-build --pull never --no-deps "$INTAKE_SERVICE"
-    INTAKE_STOPPED=0
-  fi
+run_operator() {
+  docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
+    -f "$STACK_FILE" run --rm --no-deps -T --user 0:0 \
+    --volume "$OPERATOR_DIR:/run/hirearchy/operator:rw" \
+    --entrypoint node "$INTAKE_SERVICE" \
+    --experimental-strip-types scripts/manage-early-access-requests.mjs "$@"
 }
-trap 'restart_intake' EXIT
-docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-  -f "$STACK_FILE" stop "$INTAKE_SERVICE"
-INTAKE_STOPPED=1
-docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-  -f "$STACK_FILE" run --rm --no-deps -T --entrypoint node "$INTAKE_SERVICE" \
-  --experimental-strip-types scripts/export-early-access-requests.mjs > "$CURRENT"
-chmod 0600 "$CURRENT"
-read -r -p 'Confirmed request ID to delete: ' REQUEST_ID
-jq -e --arg id "$REQUEST_ID" \
-  'type == "array" and (map(select(.id == $id)) | length) == 1' \
-  "$CURRENT" > /dev/null
-jq --arg id "$REQUEST_ID" 'map(select(.id != $id))' "$CURRENT" > "$REVISED"
-chmod 0600 "$REVISED"
-jq -e --arg id "$REQUEST_ID" \
-  'type == "array" and (map(select(.id == $id)) | length) == 0' \
-  "$REVISED" > /dev/null
-docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-  -f "$STACK_FILE" run --rm --no-deps -T --entrypoint node "$INTAKE_SERVICE" \
-  --input-type=module -e '
-import { randomUUID } from "node:crypto";
-import { rename, writeFile } from "node:fs/promises";
-let text = "";
-for await (const chunk of process.stdin) text += chunk;
-const records = JSON.parse(text);
-if (!Array.isArray(records)) throw new Error("Expected a JSON array");
-const file = process.env.EARLY_ACCESS_STORAGE_PATH;
-const temp = file + "." + randomUUID() + ".tmp";
-await writeFile(temp, `${JSON.stringify(records, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-await rename(temp, file);
-' < "$REVISED"
-docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-  -f "$STACK_FILE" run --rm --no-deps -T --entrypoint node "$INTAKE_SERVICE" \
-  --experimental-strip-types scripts/export-early-access-requests.mjs > "$AFTER"
-jq -e --arg id "$REQUEST_ID" \
-  'type == "array" and (map(select(.id == $id)) | length) == 0' \
-  "$AFTER" > /dev/null
-docker compose --env-file "$ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" \
-  -f "$STACK_FILE" up -d --no-build --pull never --no-deps "$INTAKE_SERVICE"
-INTAKE_STOPPED=0
-trap - EXIT
+
+# Export is explicit; stdout contains operation/count/mode only.
+run_operator export --all --apply \
+  --output /run/hirearchy/operator/export.json
+test "$(stat -c '%a' "$OPERATOR_DIR")" = 700
+test "$(stat -c '%a' "$OPERATOR_DIR/export.json")" = 600
+
+# Dry-run first. Select an exact ID or an operator-approved canonical UTC cutoff.
+read -r -p 'Authorized record UUID: ' REQUEST_ID
+run_operator delete --id "$REQUEST_ID"
+# Alternatively, read an approved canonical UTC cutoff and use:
+# run_operator delete --before "$APPROVED_UTC_CUTOFF"
+
+# Apply only after reviewing the count-only dry-run; the receipt is written and fsynced before deletion.
+RECEIPT_NAME="delete-$(date -u +%Y%m%dT%H%M%SZ).json"
+run_operator delete --id "$REQUEST_ID" --apply \
+  --receipt-out "/run/hirearchy/operator/$RECEIPT_NAME"
+test "$(stat -c '%a' "$OPERATOR_DIR/$RECEIPT_NAME")" = 600
 unset REQUEST_ID
-rm -- "$CURRENT" "$REVISED" "$AFTER"
-rmdir "$WORK_DIR"
 ```
 
-The app is stopped before the authoritative export and stays stopped until the atomic replacement and absence check pass. Keep the ID and deletion audit record separate from the export; do not log the requester’s name or email. Purge or expire every backup copy containing that record under the approved policy before claiming deletion is complete. If the ID is absent/duplicated, JSON is corrupt, the app does not restart, or backup copies cannot be located, stop and escalate to the privacy owner. The technical rewrite was checked using only a copied five-row synthetic store; founder/privacy approval is still required before using it for real requests.
+The CLI supports `export --all|--id UUID|--before UTC`, `delete --id UUID|--before UTC`, and `replay --receipt FILE`; mutations require `--apply`. A delete receipt contains version, request time, selector, and opaque affected IDs but no request fields. Keep receipts restricted outside the intake volume and outside ordinary intake snapshots so they can be applied to a restored copy. Do not include raw IDs or exported rows in terminal transcripts, tickets, or logs.
+
+**Retention remains a founder decision.** Requests persist until an authorized operator deletes them; there is no automatic expiry and no numeric retention period is approved. Deleting from the active store does not delete existing exports, backups, or other copies. Inventory each copy and securely remove or expire it under an approved policy before claiming complete erasure. A restored copy must receive all applicable deletion receipts before Caddy routes traffic. No public intake or real prospect data is authorized by this runbook.
 
 ## 5. Backup, restore, and release rollback
 
@@ -286,7 +256,6 @@ docker compose --env-file "$STAGING_ENV_FILE" --project-name "$COMPOSE_PROJECT_N
   > "$BACKUP_DIR/role-attributes.txt"
 STACK_STOPPED=1
 docker compose --env-file "$STAGING_ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" stop web-preview caddy
-docker cp "$WEB_PREVIEW_CONTAINER:/app/data/early-access-requests.json" "$BACKUP_DIR/early-access.json"
 docker cp "$CADDY_CONTAINER:/data" "$BACKUP_DIR/caddy-data"
 docker cp "$CADDY_CONTAINER:/config" "$BACKUP_DIR/caddy-config"
 install -o root -g root -m 0600 "$STAGING_ENV_FILE" "$BACKUP_DIR/staging.env"
@@ -298,14 +267,17 @@ for service in web postgres gotrue caddy; do
 done
 printf 'Source checkout: %s\n' "$(git rev-parse HEAD)" > "$BACKUP_DIR/manifest.txt"
 printf 'Classification: confidential; includes database/Auth records, intake, secrets, and TLS private keys\n' >> "$BACKUP_DIR/manifest.txt"
+# Export validated intake while its writer remains stopped. The output stays inside the encrypted snapshot.
+chmod 0700 "$BACKUP_DIR"
+docker compose --env-file "$STAGING_ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" run --rm --no-deps -T --user 0:0 \
+  --volume "$BACKUP_DIR:/run/hirearchy/operator:rw" --entrypoint node web-preview \
+  --experimental-strip-types scripts/manage-early-access-requests.mjs \
+  export --all --apply --output /run/hirearchy/operator/early-access.json
+test "$(stat -c '%a' "$BACKUP_DIR/early-access.json")" = 600
 find "$BACKUP_DIR" -type d -exec chmod 0700 {} +
 find "$BACKUP_DIR" -type f -exec chmod 0600 {} +
 (cd "$BACKUP_DIR" && find . -type f ! -name checksums.sha256 -print0 | sort -z | xargs -0 sha256sum > checksums.sha256)
 chmod 0600 "$BACKUP_DIR/checksums.sha256"
-# The writer remains stopped while a one-off exporter verifies the exact copied file.
-docker compose --env-file "$STAGING_ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" run --rm --no-deps -T --entrypoint node web-preview \
-  --experimental-strip-types scripts/export-early-access-requests.mjs \
-  | node -e 'const fs=require("node:fs"); let text=""; process.stdin.on("data",x=>text+=x); process.stdin.on("end",()=>{const a=JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))); const b=JSON.stringify(JSON.parse(text)); if(a!==b) process.exitCode=1; else process.stdout.write("intake snapshot matches live export\n")})' "$BACKUP_DIR/early-access.json"
 docker compose --env-file "$STAGING_ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d --no-build --pull never --no-deps web-preview
 docker compose --env-file "$STAGING_ENV_FILE" --project-name "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d --no-build --pull never --no-deps caddy
 STACK_STOPPED=0
@@ -324,7 +296,48 @@ chmod 0600 "$BACKUP_DIR.tar.gpg" "$BACKUP_DIR.tar.gpg.sha256"
 rm -rf -- "$BACKUP_DIR"
 ```
 
-For Stage A, omit PostgreSQL dumps and capture `early-access.json` from the stopped `web` service plus the protected preview environment, Caddy data/config, Caddyfile, release SHA, image reference/ID, and checksums. Caddy data contains TLS/CA private material. Keep the passphrase in separate restricted custody and send the encrypted archive only to the founder-approved independent destination. Do not write dumps, exports, keys, or Caddy volume copies into the repository.
+For Stage A, omit PostgreSQL dumps and use the same protected operator CLI export against the stopped `web` service to write `early-access.json` into the snapshot directory. Include the protected preview environment, Caddy data/config, Caddyfile, release SHA, image reference/ID, and checksums. Caddy data contains TLS/CA private material. Keep the passphrase in separate restricted custody. Do not write dumps, exports, keys, or Caddy volume copies into the repository.
+
+### Off-host transfer preparation
+
+These commands are prepared for an already existing founder-approved SSH destination. Do not create an account, select a provider, purchase storage, or run the transfer until the destination, custodian, retention period, and restore owner are approved. Pin the destination host key through a trusted channel; do not use `ssh-keyscan` as first-contact trust.
+
+```sh
+set -euo pipefail
+umask 077
+ARCHIVE=/var/backups/hirearchy/replace-with-encrypted-archive.tar.gpg
+BACKUP_HOST=approved-user@approved-existing-host
+REMOTE_DIR=/srv/hirearchy/encrypted
+SSH_KEY_FILE=/etc/hirearchy/backup-transfer.key
+KNOWN_HOSTS_FILE=/etc/hirearchy/backup-transfer-known-hosts
+ARCHIVE_NAME="$(basename "$ARCHIVE")"
+CHECKSUM_NAME="$ARCHIVE_NAME.sha256"
+test -f "$ARCHIVE" && test -f "$ARCHIVE.sha256"
+test "$(stat -c '%a' "$SSH_KEY_FILE")" = 600
+test "$(stat -c '%a' "$KNOWN_HOSTS_FILE")" = 600
+(cd "$(dirname "$ARCHIVE")" && sha256sum -c "$CHECKSUM_NAME")
+SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE")
+ssh "${SSH_OPTIONS[@]}" "$BACKUP_HOST" "install -d -m 0700 -- '$REMOTE_DIR'"
+rsync --recursive --times --protect-args --chmod=F600,D700 \
+  -e "ssh -i $SSH_KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS_FILE" \
+  "$ARCHIVE" "$ARCHIVE.sha256" "$BACKUP_HOST:$REMOTE_DIR/"
+ssh "${SSH_OPTIONS[@]}" "$BACKUP_HOST" \
+  "cd '$REMOTE_DIR' && sha256sum -c '$CHECKSUM_NAME'"
+
+# Retrieve to a new private local directory and validate before any restore.
+FETCH_DIR="$(mktemp -d /run/hirearchy/offhost-restore.XXXXXX)"
+chmod 0700 "$FETCH_DIR"
+rsync --recursive --times --protect-args \
+  -e "ssh -i $SSH_KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS_FILE" \
+  "$BACKUP_HOST:$REMOTE_DIR/$ARCHIVE_NAME" \
+  "$BACKUP_HOST:$REMOTE_DIR/$CHECKSUM_NAME" "$FETCH_DIR/"
+(cd "$FETCH_DIR" && sha256sum -c "$CHECKSUM_NAME")
+gpg --batch --pinentry-mode loopback \
+  --passphrase-file /etc/hirearchy/backup-passphrase \
+  --decrypt "$FETCH_DIR/$ARCHIVE_NAME" | tar -tzf - > /dev/null
+```
+
+Replace the archive placeholder with a real encrypted snapshot path; keep host, key, and known-host files root-only. After transport, compare the remote checksum and test retrieval/decryption. A checksum and decrypt test prove transfer integrity only: independent off-host PostgreSQL/Auth/application restore, readiness, and packet comparison remain untested until performed on an approved independent destination. Keep deletion receipts outside the intake archive and ensure applicable receipts are available before any restored copy receives traffic.
 
 ### Restore drill and rollback boundary
 
@@ -414,7 +427,27 @@ The packaged local rehearsal passed on 2026-11-09. The current web artifact was 
 
    Keep the source database and snapshot untouched. Only after the strict role/dump restore succeeds, start GoTrue and web in a separate recovery Compose project with the remaining secrets from the snapshot; never pass those secrets to the bare PostgreSQL container.
 
-4. Restore the early-access JSON and Caddy data/config to the recovery project. Keep the same GoTrue JWT secret, Ed25519 signing key/public-key row, and candidate-token encryption key/database binding as the snapshot. Reconcile account revocations or key revocations newer than the snapshot before any traffic is routed.
+4. Restore the early-access JSON and Caddy data/config to the recovery project. Keep the same GoTrue JWT secret, Ed25519 signing key/public-key row, and candidate-token encryption key/database binding as the snapshot. Before starting the recovered web service or Caddy, copy the separately retained deletion receipts into a mode-0700 operator directory and replay each receipt against the restored intake volume:
+
+   ```sh
+   RECOVERY_OPERATOR_DIR=/run/hirearchy/recovery-operator
+   install -d -o root -g root -m 0700 "$RECOVERY_OPERATOR_DIR"
+   # Copy only approved receipts from protected custody; do not copy them into the backup archive.
+   find "$RECOVERY_OPERATOR_DIR" -maxdepth 1 -type f -name 'delete-*.json' -print
+   for RECEIPT in "$RECOVERY_OPERATOR_DIR"/delete-*.json; do
+     test -f "$RECEIPT" || continue
+     docker compose --env-file "$RECOVERY_ENV_FILE" --project-name "$RECOVERY_PROJECT_NAME" \
+       -f "$RECOVERY_COMPOSE_FILE" run --rm --no-deps -T --user 0:0 \
+       --volume "$RECOVERY_OPERATOR_DIR:/run/hirearchy/operator:ro" \
+       -e EARLY_ACCESS_STORAGE_PATH=/app/data/early-access-requests.json \
+       --entrypoint node "$RECOVERY_INTAKE_SERVICE" \
+       --experimental-strip-types scripts/manage-early-access-requests.mjs \
+       replay --receipt "/run/hirearchy/operator/$(basename "$RECEIPT")" --apply
+   done
+   ```
+
+   Review only the count-only replay result. Reconcile account revocations or key revocations newer than the snapshot before any traffic is routed. If receipts are missing, fail closed and keep Caddy stopped until the privacy owner resolves the affected-copy inventory.
+
 5. Start the prior application image with the matching restored database snapshot and protected config. Verify liveness, internal readiness, GoTrue health, then sign in as the assigned synthetic reviewer and read the R23 session summary plus the R27 review-packet API. The restored packet must remain FINALIZED at version 2 with the expected snapshot digest before any traffic is routed.
 6. Record the snapshot ID, source and prior image IDs, restore result, capability flags, and time-to-restore. Keep the original service and volumes intact until the recovery owner accepts the result.
 
@@ -424,15 +457,36 @@ Rollback means moving traffic to a prior compatible application image and its ma
 
 ## 6. Monitoring, incident handling, and key changes
 
-- Check `docker compose ... ps` and service health after every start/upgrade. Monitor `GET /api/health` for liveness. On Stage B, query `/api/staging/readiness` only through its loopback app port; Caddy intentionally returns `404` for that route. A stopped database returned readiness 503 while liveness stayed healthy, then recovered without restarting web. Monitor disk space, memory, Docker volume growth, Caddy certificate renewal, and backup freshness. No hosted alerting destination is configured yet; name an owner before activation.
+- `scripts/check-staging-readiness.mjs` accepts readiness only when HTTP is 200, the migration matches the target, and all five known markers are true. It bounds the response to 16 KiB, times out after five seconds, and emits only an allowlisted status/marker record. `scripts/run-staging-readiness-check.sh` reads only `APP_PORT` from the root-only environment file, appends mode-0600 JSONL, and exits nonzero for not-ready/unavailable. From the release checkout, run it with `STAGING_ENV_FILE=/etc/hirearchy/staging.env STAGING_READINESS_LOG=/var/log/hirearchy/staging-readiness.jsonl`; the file is a local alert record, not an external notification channel.
+- Example `/etc/cron.d/hirearchy-readiness` entry (replace the checkout path); its required `root` user field records each failure in local syslog without including response bodies or secrets. This is a local scheduler template; no remote alert destination or delivery is configured or tested:
+
+  ```cron
+  * * * * * root STAGING_ENV_FILE=/etc/hirearchy/staging.env STAGING_READINESS_LOG=/var/log/hirearchy/staging-readiness.jsonl /opt/hirearchy/release/scripts/run-staging-readiness-check.sh >/dev/null || logger -p daemon.warning -t hirearchy-readiness 'Readiness probe failed; inspect the protected JSONL record and service health'
+  ```
+
+- Check `docker compose ... ps` and service health after every start/upgrade. Monitor `GET /api/health` for liveness. On Stage B, query `/api/staging/readiness` only through its loopback app port; Caddy intentionally returns `404` for that route. A stopped database returned readiness 503 while liveness stayed healthy, then recovered without restarting web. Monitor disk space, memory, Docker volume growth, Caddy certificate renewal, and backup freshness. No hosted alert destination or monitor owner is configured.
+- **Example thresholds only; calibrate against measured host behavior and approve with the named operator before activation:** alert after three consecutive one-minute readiness failures; investigate sustained disk use above 80% or memory above 85%; flag a backup older than the approved backup interval. These values are starting examples, not enforced policy. The local rehearsal verifies one PostgreSQL outage and recovery, not notification delivery or sustained threshold behavior.
+- **Resource worksheet:** the `real-docker` run prints a `PACKAGE_RESOURCE_SAMPLE` JSON record in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19). It contains host CPU/memory/Docker disk, configured per-container limits, an approximately one-second Docker stats sample, duration, the small synthetic workload, and observed project CPU/memory peak. The workload covers fresh preview-to-alpha startup, one synthetic intake, probes, a PostgreSQL outage, and recovery; it has no concurrency or sustained load. Record the final sample and runner image in the PR evidence before using it for planning. It does not establish production capacity, latency, disk-growth rate, or fit for a proposed host.
 - Keep Caddy, web, GoTrue, and PostgreSQL logs private. Use `docker compose ... logs --since 15m caddy web web-preview gotrue postgres` for diagnosis; never attach raw logs, exports, environment files, or browser traces to public tickets. Caddy’s native log filter removes the entire request object, including path, query, Referer, and headers; synthetic canaries were absent from both preview and alpha proxy-error logs while 502 context remained. The app logs static error class/code fields, not raw early-access storage or PostgreSQL errors. Backups and GoTrue logs can still contain sensitive information.
 - Public intake is capped at 32 KiB and five accepted attempts per 15 minutes in one shared per-process bucket. It does not identify visitors by forwarded IP and stores neither IP nor user-agent; the shared limit can temporarily affect every visitor. These controls do not replace an owner, alert destination, or approved retention policy.
 - For suspected exposure, restrict Caddy/network access first, preserve the affected service and encrypted backups, and notify the named incident owner. Do not delete volumes or regenerate secrets during triage. Restore only into an isolated project until the recovery procedure is accepted.
-- `scripts/generate-staging-secrets.mjs` is for first-time setup only; it refuses to overwrite configured secrets. Proof-key rotation requires a new key ID/public key in PostgreSQL, switching the application, verification, and revoking the old key. Database role passwords and the GoTrue JWT secret require coordinated service/database changes. The candidate-token key is database-bound and cannot be replaced independently. No packaged hosted rotation rehearsal is accepted yet; use a reviewed key-specific procedure and record the old/new key IDs without recording key material.
+- **Secret custody:** the root-owned environment file is mode 0600 outside the checkout; restrict read access to the named custodian and deployment operator. Generate first-use values only with `scripts/generate-staging-secrets.mjs`; it refuses to overwrite configured secrets and prints no values. Keep database/Auth/signing/candidate-token values out of shell history, CI variables, logs, tickets, and exports. Encrypted snapshots contain the environment file and key material; hold the GPG passphrase separately, and keep off-host transfer credentials and pinned known-hosts files separately at mode 0600.
+- **Rotation and disaster recovery:** the generator is for first-time setup only. Proof-key rotation requires adding a new key ID/public key in PostgreSQL, deploying the matching private key, verifying issuance/validation, then revoking the old key. Database role passwords and the GoTrue JWT secret require a reviewed, coordinated service/database procedure. The candidate-token key is database-bound and cannot be replaced independently. Retain the previous secret/config snapshot needed by each encrypted backup; restore matching database, application key versions, and Caddy material together. Do not rotate during incident containment or independently of a restore plan. No hosted rotation rehearsal is accepted; record key IDs and dates, never key values.
 
 ## 7. Activation gates
 
-Before Stage A is public: approve privacy/legal copy and retention/deletion including backup expiry; choose domain/DNS and an independent encrypted backup destination; name the monitoring, support, and incident owners; restrict host firewall and SSH; use a founder-approved public bind address; and verify TLS and route boundaries. Until privacy/legal review explicitly approves real requests, test intake only with synthetic data.
+### Founder activation checklist
+
+This preparation task does not authorize hosting, purchases, public activation, real prospect data, or outreach. Keep the service local and synthetic until the founder makes a separate explicit decision. For any later Stage A request, record all of the following before changing bind addresses or routing traffic:
+
+- [ ] Founder approves the specific activation, host and any spend; name the billing owner and operating owner.
+- [ ] Privacy/legal reviewer approves the published notice, terms, numeric retention/deletion policy, backup expiry, support contact, and incident contact.
+- [ ] Name credential, backup, monitoring, support, and restore custodians; approve key rotation and tested restore access.
+- [ ] Approve DNS, TLS ownership, firewall/SSH source ranges, and a separately controlled encrypted backup destination; rehearse retrieval, checksum, decryption, restore, receipt replay, readiness, and rollback there.
+- [ ] Review the PR #19 exact-head checks and actual resource sample; size to the chosen host with additional representative load evidence.
+- [ ] Confirm public route allow/deny behavior and that public signup, email, live AI, and candidate execution remain disabled.
+
+Before any Stage B access, separately approve the fixed team/VPN CIDRs, named accounts, operator ownership, and the recovery/rollback proof using the selected private host. Until the founder and privacy/legal reviewer explicitly authorize real requests, test intake only with synthetic data.
 
 Before Stage B team access: keep Stage A’s project/volume identity, verify preflight and migration/key binding, use only fixed team/VPN CIDRs, verify the restricted alpha Caddy routes and internal readiness, provision only approved confirmed users through the operator CLI, and validate the full recovery and rollback procedures on an isolated copy. Keep candidate data synthetic until privacy/legal approval. The authenticated staging app does not enable self-service signup, email, AI, code execution, or external-candidate access.
 
