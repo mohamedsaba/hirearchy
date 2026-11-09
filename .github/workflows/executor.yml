@@ -48,7 +48,7 @@ jobs:
 
   real-docker:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -64,6 +64,8 @@ jobs:
         run: docker pull supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
       - name: Install browser for the application journey
         run: npx playwright install --with-deps chromium
+      - name: Run synthetic buyer public-preview browser acceptance
+        run: node scripts/run-buyer-journey-acceptance.mjs
       - run: node scripts/test-restricted-executor.mjs
       - run: node scripts/test-restricted-executor-dispatch.mjs
       - run: node --test --test-concurrency=1 tests/restricted-executor/service.test.mjs
@@ -73,5 +75,9 @@ jobs:
         run: npm run build
       - name: Verify authenticated staging and separate-instance recovery
         run: npm run test:staging
+      - name: Verify loopback deployment package, trusted TLS, operator recovery, and monitoring
+        run: npm run test:staging:package
+      - name: Run staging presentation browser acceptance
+        run: npm run test:staging:presentation
       - name: Run disposable recruiter-to-evidence journey
         run: node scripts/test-r214-integration.mjs
