@@ -135,6 +135,7 @@ export function PageNavigator() {
     <div
       className="ct-site-controls ct-page-navigator"
       data-surface={surface}
+      data-page={pathname}
       ref={root}
     >
       {/* Remounted on every surface change so the wipe sweep always replays; see
