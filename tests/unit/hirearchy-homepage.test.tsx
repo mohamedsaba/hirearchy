@@ -80,6 +80,9 @@ describe('Hirearchy public website', () => {
   it('provides a functional early access request form with truthful staging disclosures', () => {
     const html = renderToStaticMarkup(createElement(EarlyAccessPage));
     expect(html).toContain('Request an early-access conversation.');
+    expect(html).toContain('href="#early-access-form"');
+    expect(html).toContain('id="early-access-form"');
+    expect(html).toContain('aria-labelledby="early-access-form-heading"');
     expect(html).toContain('does not create an account, activate a pilot');
     expect(html).toMatch(/<form\b/);
     expect(html).toContain('name="name"');

@@ -23,12 +23,16 @@ export default function EarlyAccessPage() {
           assistance, and automated email are disabled in the current demo.
         </p>
         <div className="ct-contact-links">
+          <Button href="#early-access-form">Request early access</Button>
           <Button href="/products/software">Explore Software</Button>
           <Button href="/products/software#demo-limits">See demo limits</Button>
         </div>
       </section>
 
       <section
+        id="early-access-form"
+        aria-labelledby="early-access-form-heading"
+        tabIndex={-1}
         className="ct-editorial ct-editorial--lilac ct-reveal"
         style={{ paddingTop: '2.5cqw', paddingBottom: '4cqw' }}
       >
