@@ -16,6 +16,7 @@ export async function checkReadinessBoundary({
   appLog,
   docker,
   waitFor,
+  postgresHostPort,
   waitForDatabase,
   closeDatabaseClients,
   reconnectDatabaseClients,
@@ -188,9 +189,24 @@ export async function checkReadinessBoundary({
     stopped = true;
     const unavailable = await fetch(readinessUrl);
     assert.equal(unavailable.status, 503, 'database outage returns 503');
+    const live = await fetch(`${appUrl}/api/health`);
+    assert.equal(
+      live.status,
+      200,
+      'application remains live during database outage',
+    );
+    await waitFor(async () =>
+      appLog().includes('Staging PostgreSQL pool idle connection failed'),
+    );
   } finally {
     if (stopped) docker('start', postgresContainer);
   }
+  checkpoint('verify PostgreSQL host port after restart');
+  assert.equal(
+    docker('port', postgresContainer, '5432/tcp'),
+    `127.0.0.1:${postgresHostPort}`,
+    'PostgreSQL host port remains stable across restart',
+  );
   checkpoint('PostgreSQL TCP recovery before fixture reconnect');
   await waitForDatabase();
   await reconnectDatabaseClients();

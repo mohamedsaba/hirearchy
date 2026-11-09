@@ -79,7 +79,18 @@ const waitFor = async (check) => {
   }
   throw new Error('Readiness deadline exceeded');
 };
+async function reserveLoopbackPort() {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const port = server.address().port;
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return port;
+}
 async function db(container) {
+  const port = await reserveLoopbackPort();
   docker(
     'run',
     '-d',
@@ -92,7 +103,7 @@ async function db(container) {
     '--network-alias',
     container,
     '-p',
-    '127.0.0.1::5432',
+    `127.0.0.1:${port}:5432`,
     '-e',
     `POSTGRES_PASSWORD=${password}`,
     '-v',
@@ -106,7 +117,11 @@ async function db(container) {
       'accepting connections',
     ),
   );
-  const port = Number(/:(\d+)$/.exec(docker('port', container, '5432/tcp'))[1]);
+  assert.equal(
+    docker('port', container, '5432/tcp'),
+    `127.0.0.1:${port}`,
+    'PostgreSQL uses its reserved loopback-only host port',
+  );
   // pg_isready on the local socket can observe initdb's temporary server.
   // Wait for the final TCP listener used by the application, not that server.
   await waitFor(async () => {
@@ -300,11 +315,7 @@ async function startApp(
   proofKey,
   applicationDirectory = 'apps/web',
 ) {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const port = server.address().port;
-  await new Promise((resolve) => server.close(resolve));
+  const port = await reserveLoopbackPort();
   appLog = '';
   app = spawn(
     process.execPath,
@@ -740,6 +751,7 @@ integration: try {
       appLog: () => appLog,
       docker,
       waitFor,
+      postgresHostPort: source.port,
       waitForDatabase: async () => {
         const deadline = Date.now() + 30000;
         let lastTransientCode;
