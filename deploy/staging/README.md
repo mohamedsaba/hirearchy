@@ -429,6 +429,8 @@ The packaged local rehearsal passed on 2026-11-09. The current web artifact was 
 
 4. Restore the early-access JSON and Caddy data/config to the recovery project. Keep the same GoTrue JWT secret, Ed25519 signing key/public-key row, and candidate-token encryption key/database binding as the snapshot. Before starting the recovered web service or Caddy, copy the separately retained deletion receipts into a mode-0700 operator directory and replay each receipt against the restored intake volume:
 
+   The backup exports only the atomic `early-access.json` while the `web-preview` writer is stopped; it does not archive the live intake volume or its adjacent `.lock` and `*.tmp` files. Restore only that JSON file into a fresh intake volume. Keep `web-preview` and Caddy stopped until all available deletion receipts have been replayed and count-only verification succeeds, then start the intake writer and proxy.
+
    ```sh
    RECOVERY_OPERATOR_DIR=/run/hirearchy/recovery-operator
    install -d -o root -g root -m 0700 "$RECOVERY_OPERATOR_DIR"

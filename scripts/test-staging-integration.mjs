@@ -7,12 +7,25 @@ import {
   randomBytes,
   randomUUID,
 } from 'node:crypto';
-import { execFileSync, spawn } from 'node:child_process';
-import { chmod, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import {
+  appendFile,
+  chmod,
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createInterface } from 'node:readline';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 import { applyMigrations } from '../database/postgres/migrate.mjs';
 import { provisionStaging } from './provision-staging.mjs';
@@ -51,6 +64,8 @@ const proofPrivateKey = keys.privateKey
   .export({ format: 'der', type: 'pkcs8' })
   .toString('base64');
 const artifact = new URL(`../.data/${name}/`, import.meta.url);
+const repoRoot = fileURLToPath(new URL('../', import.meta.url));
+const artifactPath = fileURLToPath(artifact);
 const browserEvidence = new URL('browser-evidence/', artifact);
 const docker = (...args) =>
   execFileSync('docker', args, {
@@ -503,13 +518,53 @@ const call = async (url, token, op, args, expected = 200) => {
   assert.equal(response.status, expected, `${op} HTTP status`);
   return response.json();
 };
-async function restore(dump, suffix) {
+async function restore(
+  dump,
+  suffix,
+  globals = null,
+  expectedRoleAttributes = null,
+) {
   const target = await db(`${name}-${suffix}`);
-  await bootstrap(target);
-  await authRoles(target, false);
-  await target.admin.query(
-    'DROP SCHEMA hirearchy CASCADE; DROP EXTENSION plpython3u',
-  );
+  if (globals) {
+    const lines = globals.toString('utf8').split(/\r?\n/);
+    const postgresRoleCreateCount = lines.filter(
+      (line) => line === 'CREATE ROLE postgres;',
+    ).length;
+    assert.equal(
+      postgresRoleCreateCount,
+      1,
+      'globals contain one built-in postgres CREATE ROLE statement',
+    );
+    const filteredGlobals = `${lines
+      .filter((line) => line !== 'CREATE ROLE postgres;')
+      .join('\n')}\n`;
+    execFileSync(
+      'docker',
+      [
+        'exec',
+        '-i',
+        target.container,
+        'psql',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-U',
+        'postgres',
+        '-d',
+        'postgres',
+      ],
+      {
+        input: filteredGlobals,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        maxBuffer: 32 * 1024 * 1024,
+      },
+    );
+  } else {
+    await bootstrap(target);
+    await authRoles(target, false);
+    await target.admin.query(
+      'DROP SCHEMA hirearchy CASCADE; DROP EXTENSION plpython3u',
+    );
+  }
   execFileSync(
     'docker',
     [
@@ -530,6 +585,13 @@ async function restore(dump, suffix) {
     },
   );
   await migrate(target);
+  if (expectedRoleAttributes) {
+    assert.deepEqual(
+      await readRoleAttributes(target.admin),
+      expectedRoleAttributes,
+      'restored PostgreSQL role attributes match the encrypted snapshot',
+    );
+  }
   return target;
 }
 async function createSnapshotManifest({
@@ -565,6 +627,367 @@ async function createSnapshotManifest({
     migrationLedger,
     release,
   };
+}
+
+async function readRoleAttributes(admin) {
+  const { rows } = await admin.query(`
+    SELECT rolname,
+           rolsuper,
+           rolcreaterole,
+           rolcreatedb,
+           rolcanlogin,
+           rolreplication,
+           rolbypassrls
+      FROM pg_catalog.pg_roles
+     ORDER BY rolname
+  `);
+  return rows;
+}
+
+async function writePrivateFile(filename, content) {
+  await writeFile(filename, content, { mode: 0o600, flag: 'wx' });
+  await chmod(filename, 0o600);
+}
+
+async function createEncryptedCandidateReviewBackup({
+  dump,
+  globals,
+  snapshotManifest,
+  roleAttributes,
+}) {
+  const suffix = randomBytes(8).toString('hex');
+  const archiveName = `candidate-review-backup-${suffix}.tar.gz.gpg`;
+  const archivePath = path.join(artifactPath, archiveName);
+  const checksumName = `${archiveName}.sha256`;
+  const checksumPath = path.join(artifactPath, checksumName);
+  let snapshotPath;
+  let privatePath;
+  let snapshotName;
+  let tarPath;
+  let passphrasePath;
+  let gpgHome;
+  let decryptedPath;
+  let temporaryArchivePath;
+  let completed = false;
+  let gpgMayHaveStarted = false;
+  let archivePublished = false;
+  let checksumPublished = false;
+
+  try {
+    snapshotPath = await mkdtemp(
+      path.join(artifactPath, 'candidate-review-snapshot-'),
+    );
+    snapshotName = path.basename(snapshotPath);
+    privatePath = await mkdtemp(
+      path.join(artifactPath, 'backup-drill-private-'),
+    );
+    await chmod(snapshotPath, 0o700);
+    await chmod(privatePath, 0o700);
+    tarPath = path.join(privatePath, `${snapshotName}.tar.gz`);
+    passphrasePath = path.join(privatePath, 'passphrase');
+    gpgHome = path.join(privatePath, 'gnupg');
+    decryptedPath = path.join(privatePath, 'decrypted');
+    temporaryArchivePath = path.join(privatePath, archiveName);
+    await mkdir(gpgHome, { mode: 0o700 });
+    await chmod(gpgHome, 0o700);
+    await mkdir(decryptedPath, { mode: 0o700 });
+    await chmod(decryptedPath, 0o700);
+
+    const intakeSourcePath = path.join(privatePath, 'intake-source');
+    await mkdir(intakeSourcePath, { mode: 0o700 });
+    await chmod(intakeSourcePath, 0o700);
+    const intakeStorePath = path.join(
+      intakeSourcePath,
+      'early-access-requests.json',
+    );
+    const intakeRecord = {
+      id: randomUUID(),
+      receivedAt: new Date().toISOString(),
+      name: 'Synthetic Backup Fixture',
+      email: `backup-${suffix}@example.test`,
+      company: 'Synthetic Backup Test',
+      teamSize: '1-10',
+      role: 'recruiter',
+      primaryChallenge: 'other',
+      notes: 'Synthetic encrypted backup fixture.',
+    };
+    await writePrivateFile(
+      intakeStorePath,
+      `${JSON.stringify([intakeRecord], null, 2)}\n`,
+    );
+
+    const intakeExportPath = path.join(snapshotPath, 'early-access.json');
+    const exportResult = execFileSync(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        'scripts/manage-early-access-requests.mjs',
+        'export',
+        '--all',
+        '--apply',
+        '--output',
+        intakeExportPath,
+      ],
+      {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          EARLY_ACCESS_STORAGE_PATH: intakeStorePath,
+        },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    const exportSummary = JSON.parse(exportResult);
+    assert.equal(exportSummary.ok, true);
+    assert.equal(exportSummary.operation, 'export');
+    assert.equal(exportSummary.exportedCount, 1);
+    assert.deepEqual(JSON.parse(await readFile(intakeExportPath, 'utf8')), [
+      intakeRecord,
+    ]);
+
+    const includedFiles = [
+      'candidate-review-snapshot-manifest.json',
+      'early-access.json',
+      'postgres-globals.sql',
+      'postgres.dump',
+      'private-recovery.json',
+      'release-manifest.json',
+      'role-attributes.json',
+    ].sort();
+    const payloadFiles = [
+      ['postgres.dump', dump],
+      ['postgres-globals.sql', globals],
+      [
+        'candidate-review-snapshot-manifest.json',
+        `${JSON.stringify(snapshotManifest, null, 2)}\n`,
+      ],
+      [
+        'release-manifest.json',
+        await readFile(new URL('release-manifest.json', artifact)),
+      ],
+      [
+        'private-recovery.json',
+        await readFile(new URL('private-recovery.json', artifact)),
+      ],
+      ['role-attributes.json', `${JSON.stringify(roleAttributes, null, 2)}\n`],
+    ];
+    for (const [filename, content] of payloadFiles) {
+      await writePrivateFile(path.join(snapshotPath, filename), content);
+    }
+
+    const backupMetadata = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      classification: 'synthetic staging recovery fixture',
+      archiveFormat: 'tar.gz',
+      encryption: 'GPG symmetric AES-256',
+      checksum: 'SHA-256',
+      databaseDumpFormat: 'PostgreSQL custom archive',
+      intakeExport: 'validated JSON snapshot; no lock or temporary siblings',
+      restoreRequirement:
+        'replay available deletion receipts before restarting intake writers',
+      includedFiles: [...includedFiles, 'backup-metadata.json'].sort(),
+      intakeExportCount: exportSummary.exportedCount,
+    };
+    await writePrivateFile(
+      path.join(snapshotPath, 'backup-metadata.json'),
+      `${JSON.stringify(backupMetadata, null, 2)}\n`,
+    );
+    const filesToChecksum = [...includedFiles, 'backup-metadata.json'].sort();
+    const checksums = [];
+    for (const filename of filesToChecksum) {
+      const bytes = await readFile(path.join(snapshotPath, filename));
+      checksums.push(
+        `${createHash('sha256').update(bytes).digest('hex')}  ${filename}`,
+      );
+    }
+    await writePrivateFile(
+      path.join(snapshotPath, 'checksums.sha256'),
+      `${checksums.join('\n')}\n`,
+    );
+    assert.equal((await stat(snapshotPath)).mode & 0o777, 0o700);
+    for (const filename of [...filesToChecksum, 'checksums.sha256']) {
+      assert.equal(
+        (await stat(path.join(snapshotPath, filename))).mode & 0o777,
+        0o600,
+        `snapshot file ${filename} is private`,
+      );
+    }
+
+    execFileSync('tar', ['-czf', tarPath, '-C', artifactPath, snapshotName], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const passphrase = randomBytes(32).toString('base64url');
+    await writePrivateFile(passphrasePath, `${passphrase}\n`);
+    gpgMayHaveStarted = true;
+    execFileSync(
+      'gpg',
+      [
+        '--homedir',
+        gpgHome,
+        '--batch',
+        '--pinentry-mode',
+        'loopback',
+        '--passphrase-file',
+        passphrasePath,
+        '--symmetric',
+        '--cipher-algo',
+        'AES256',
+        '--output',
+        temporaryArchivePath,
+        tarPath,
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    await link(temporaryArchivePath, archivePath);
+    archivePublished = true;
+    await chmod(archivePath, 0o600);
+
+    const archiveBytes = await readFile(archivePath);
+    const archiveSha256 = createHash('sha256')
+      .update(archiveBytes)
+      .digest('hex');
+    await writePrivateFile(checksumPath, `${archiveSha256}  ${archiveName}\n`);
+    checksumPublished = true;
+    assert.equal((await stat(archivePath)).mode & 0o777, 0o600);
+    assert.equal((await stat(checksumPath)).mode & 0o777, 0o600);
+    execFileSync('sha256sum', ['--check', checksumName], {
+      cwd: artifactPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const tamperedName = `${archiveName}.tampered`;
+    const tamperedPath = path.join(privatePath, tamperedName);
+    const tamperedChecksumPath = path.join(privatePath, 'tampered.sha256');
+    await writeFile(tamperedPath, archiveBytes, { mode: 0o600, flag: 'wx' });
+    await appendFile(tamperedPath, Buffer.from([0]));
+    await writePrivateFile(
+      tamperedChecksumPath,
+      `${archiveSha256}  ${tamperedName}\n`,
+    );
+    const tamperCheck = spawnSync('sha256sum', ['--check', 'tampered.sha256'], {
+      cwd: privatePath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    assert.equal(tamperCheck.error, undefined, 'checksum tool is available');
+    assert.equal(
+      tamperCheck.status,
+      1,
+      'tampered archive checksum is rejected',
+    );
+
+    await rm(snapshotPath, { recursive: true, force: true });
+    await rm(tarPath, { force: true });
+    const decryptedTarPath = path.join(decryptedPath, 'backup.tar.gz');
+    execFileSync(
+      'gpg',
+      [
+        '--homedir',
+        gpgHome,
+        '--batch',
+        '--pinentry-mode',
+        'loopback',
+        '--passphrase-file',
+        passphrasePath,
+        '--output',
+        decryptedTarPath,
+        '--decrypt',
+        archivePath,
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    execFileSync(
+      'tar',
+      [
+        '-xzf',
+        decryptedTarPath,
+        '--no-same-owner',
+        '--no-same-permissions',
+        '-C',
+        decryptedPath,
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    const restoredSnapshotPath = path.join(decryptedPath, snapshotName);
+    await chmod(restoredSnapshotPath, 0o700);
+    assert.equal((await stat(decryptedPath)).mode & 0o777, 0o700);
+    assert.equal((await stat(restoredSnapshotPath)).mode & 0o777, 0o700);
+    execFileSync('sha256sum', ['--check', 'checksums.sha256'], {
+      cwd: restoredSnapshotPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const decryptedDump = await readFile(
+      path.join(restoredSnapshotPath, 'postgres.dump'),
+    );
+    const decryptedGlobals = await readFile(
+      path.join(restoredSnapshotPath, 'postgres-globals.sql'),
+    );
+    assert.equal(
+      createHash('sha256').update(decryptedDump).digest('hex'),
+      createHash('sha256').update(dump).digest('hex'),
+      'decrypted database archive matches the captured source bytes',
+    );
+    assert.equal(
+      createHash('sha256').update(decryptedGlobals).digest('hex'),
+      createHash('sha256').update(globals).digest('hex'),
+      'decrypted PostgreSQL globals match the captured source bytes',
+    );
+    const restoredIntake = JSON.parse(
+      await readFile(
+        path.join(restoredSnapshotPath, 'early-access.json'),
+        'utf8',
+      ),
+    );
+    assert.equal(
+      restoredIntake.length,
+      1,
+      'encrypted intake export is present',
+    );
+    const restoredRoles = JSON.parse(
+      await readFile(
+        path.join(restoredSnapshotPath, 'role-attributes.json'),
+        'utf8',
+      ),
+    );
+    assert.deepEqual(restoredRoles, roleAttributes);
+    completed = true;
+    return {
+      archiveName,
+      checksumName,
+      archiveSha256,
+      dump: decryptedDump,
+      globals: decryptedGlobals,
+      roleAttributes: restoredRoles,
+      intakeExportCount: restoredIntake.length,
+    };
+  } finally {
+    if (gpgMayHaveStarted && gpgHome) {
+      try {
+        execFileSync('gpgconf', ['--homedir', gpgHome, '--kill', 'gpg-agent'], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          console.error('Private backup GPG agent cleanup failed.');
+          process.exitCode = 1;
+        }
+      }
+    }
+    if (snapshotPath) {
+      await rm(snapshotPath, { recursive: true, force: true });
+    }
+    if (privatePath) {
+      await rm(privatePath, { recursive: true, force: true });
+    }
+    if (!completed) {
+      if (archivePublished) await rm(archivePath, { force: true });
+      if (checksumPublished) await rm(checksumPath, { force: true });
+    }
+  }
 }
 integration: try {
   await mkdir(artifact, { recursive: true, mode: 0o700 });
@@ -1171,29 +1594,22 @@ integration: try {
     ],
     { maxBuffer: 32 * 1024 * 1024 },
   );
-  const candidateReviewDumpPath = new URL(
-    `candidate-review-${randomBytes(6).toString('hex')}.dump`,
-    artifact,
+  const candidateReviewGlobals = execFileSync(
+    'docker',
+    [
+      'exec',
+      rollback.container,
+      'pg_dumpall',
+      '-U',
+      'postgres',
+      '--globals-only',
+    ],
+    { maxBuffer: 32 * 1024 * 1024 },
   );
-  const candidateReviewDumpDigest = createHash('sha256')
-    .update(candidateReviewDump)
-    .digest('hex');
-  await writeFile(candidateReviewDumpPath, candidateReviewDump, {
-    mode: 0o600,
-    flag: 'wx',
-  });
-  await chmod(candidateReviewDumpPath, 0o600);
-  const savedCandidateReviewDump = await readFile(candidateReviewDumpPath);
-  if (
-    !savedCandidateReviewDump.equals(candidateReviewDump) ||
-    createHash('sha256').update(savedCandidateReviewDump).digest('hex') !==
-      candidateReviewDumpDigest
-  ) {
-    throw new Error('Saved candidate-review snapshot failed byte verification');
-  }
+  const candidateReviewRoles = await readRoleAttributes(rollback.admin);
   const candidateReviewSnapshotManifest = await createSnapshotManifest({
     admin: rollback.admin,
-    dump: savedCandidateReviewDump,
+    dump: candidateReviewDump,
     sourceIdentity,
     release: releaseManifest,
     postgresImageId,
@@ -1204,14 +1620,18 @@ integration: try {
     initialSnapshotManifest.migrationLedger,
     'Candidate-review snapshot preserves the same applied migration set',
   );
-  await writeFile(
-    new URL('candidate-review-snapshot-manifest.json', artifact),
-    JSON.stringify(candidateReviewSnapshotManifest, null, 2),
-    { encoding: 'utf8', mode: 0o600, flag: 'wx' },
-  );
+  const encryptedCandidateReviewBackup =
+    await createEncryptedCandidateReviewBackup({
+      dump: candidateReviewDump,
+      globals: candidateReviewGlobals,
+      snapshotManifest: candidateReviewSnapshotManifest,
+      roleAttributes: candidateReviewRoles,
+    });
   const candidateReviewRecovery = await restore(
-    savedCandidateReviewDump,
+    encryptedCandidateReviewBackup.dump,
     'candidate-review-recovery',
+    encryptedCandidateReviewBackup.globals,
+    encryptedCandidateReviewBackup.roleAttributes,
   );
   const candidateReviewAuth = await auth(
     candidateReviewRecovery,
@@ -1278,16 +1698,30 @@ integration: try {
       {
         passed: true,
         image: postgresImageId,
-        candidateReviewSnapshotManifest:
-          'candidate-review-snapshot-manifest.json',
+        encryptedBackup: {
+          archive: encryptedCandidateReviewBackup.archiveName,
+          checksum: encryptedCandidateReviewBackup.checksumName,
+          encryption: 'GPG symmetric AES-256',
+          checksumAlgorithm: 'SHA-256',
+          archiveSha256: encryptedCandidateReviewBackup.archiveSha256,
+          checksumVerified: true,
+          tamperRejected: true,
+          intakeExportCount: encryptedCandidateReviewBackup.intakeExportCount,
+          separateDatabaseRestore: true,
+          reviewerPacketAndInvitationRestore: true,
+        },
         recovery:
-          'The initial journey and completed candidate/reviewer workflow were independently restored from PostgreSQL snapshots; the protected candidate invitation key remained stable.',
+          'The initial journey and completed candidate/reviewer workflow were independently restored from a decrypted encrypted backup; the protected candidate invitation key remained stable.',
         limitation:
           'Failed signing-key configuration and corrupt production artifact rolled back to retained release archive and matching snapshot; arbitrary schema downgrade is not supported.',
       },
       null,
       2,
     ),
+    { mode: 0o600 },
+  );
+  console.log(
+    `Encrypted backup verified: GPG AES-256; SHA-256 ${encryptedCandidateReviewBackup.archiveSha256}; tamper rejected; decrypted PostgreSQL, app, reviewer packet, invitation and one synthetic intake export restored.`,
   );
   console.log(
     `Persistent staging journey and candidate-review recovery passed. Private recovery artifacts: ${artifact.pathname}`,
@@ -1299,8 +1733,18 @@ integration: try {
     { mode: 0o600 },
   );
   const failureSource = stagingFailureSource(error);
+  const errorLabel =
+    error &&
+    typeof error === 'object' &&
+    typeof error.code === 'string' &&
+    /^[A-Za-z0-9_]{1,32}$/.test(error.code)
+      ? error.code
+      : error instanceof Error &&
+          /^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(error.name)
+        ? error.name
+        : 'UnknownError';
   console.error(
-    `Staging integration failed at ${stage} (${error.code ?? error.name ?? 'unknown'}${failureSource ? `; source=${failureSource}` : ''}); private diagnostics: ${artifact.pathname}`,
+    `Staging integration failed at ${stage} (${errorLabel}${failureSource ? `; source=${failureSource}` : ''}); private diagnostics: ${artifact.pathname}`,
   );
   process.exitCode = 1;
 } finally {
