@@ -690,6 +690,11 @@ function curlRequest({
     '-sS',
     '--max-time',
     '15',
+    '--retry',
+    '5',
+    '--retry-connrefused',
+    '--retry-delay',
+    '1',
     '--dump-header',
     '-',
     '--output',
@@ -1163,12 +1168,6 @@ async function testPackage() {
       'Actual preview-to-alpha Compose, trusted local TLS, route boundaries, migration setup, intake persistence, and recovery passed.',
     );
   } catch (error) {
-    try {
-      console.error(
-        'CADDY_LOGS:',
-        compose(previewEnv, previewComposeFiles, projectName, 'logs', 'caddy'),
-      );
-    } catch {}
     console.error('Deployment package acceptance failed during ' + stage + '.');
     console.error(
       'Safe failure diagnostic: ' +
