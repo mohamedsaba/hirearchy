@@ -104,6 +104,29 @@ async function runReservationMovesBrowserFlow(presenter) {
       }
     });
   };
+  const assertSoftwareStyles = async (
+    page,
+    selector,
+    surface,
+    requireBackground = false,
+  ) => {
+    const styles = await page.locator(selector).evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        softwareCanvas: computed.getPropertyValue('--software-canvas').trim(),
+        background: computed.backgroundColor,
+        color: computed.color,
+        fontFamily: computed.fontFamily,
+      };
+    });
+    assert(
+      styles.softwareCanvas !== '' &&
+        /dm\s*sans/i.test(styles.fontFamily) &&
+        styles.color !== 'rgb(0, 0, 0)' &&
+        (!requireBackground || styles.background !== 'rgba(0, 0, 0, 0)'),
+      `${surface} is missing authored Software computed styles: ${JSON.stringify(styles)}`,
+    );
+  };
 
   try {
     stage = 'recruiter sign-in and organization entry';
@@ -138,6 +161,12 @@ async function runReservationMovesBrowserFlow(presenter) {
     stage = 'Reservation Moves v3 authoring and invitation';
     response = await recruiter.goto(presenter.recruiter.builderUrl);
     assert.equal(response.status(), 200);
+    await assertSoftwareStyles(
+      recruiter,
+      '.assessment-builder-page.software-product',
+      'Authenticated assessment builder',
+      true,
+    );
     await recruiter
       .getByLabel('Assessment template')
       .selectOption('reservation-moves-v3');
@@ -199,6 +228,12 @@ async function runReservationMovesBrowserFlow(presenter) {
     trackErrors(candidate);
     response = await candidate.goto(invitation);
     assert.equal(response.status(), 200);
+    await assertSoftwareStyles(
+      candidate,
+      'main.r26-candidate.software-product',
+      'Candidate workspace',
+      true,
+    );
     await candidate
       .getByRole('button', { name: 'Activate assessment', exact: true })
       .waitFor({ state: 'visible' });
@@ -287,6 +322,11 @@ async function runReservationMovesBrowserFlow(presenter) {
     const reviewUrl = `${presenter.appUrl}/r27/organizations/${presenter.organizationId.toLowerCase()}/sessions/${sessionId}`;
     response = await evaluator.goto(reviewUrl);
     assert.equal(response.status(), 200);
+    await assertSoftwareStyles(
+      evaluator,
+      'main.evaluator-review-shell.software-product',
+      'Evaluator review',
+    );
     await evaluator
       .locator('.evaluator-back-link')
       .waitFor({ state: 'visible' });

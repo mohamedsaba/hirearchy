@@ -52,7 +52,7 @@ async function openPage(path) {
   const page = await context.newPage();
   const assets = [];
   page.on('response', (response) => {
-    if (/\.(?:css|woff2?)(?:\?|$)/i.test(response.url())) {
+    if (/\.(?:css|woff2?|js)(?:\?|$)/i.test(response.url())) {
       assets.push({
         status: response.status(),
         contentType: response.headers()['content-type'] ?? '',
@@ -383,6 +383,11 @@ try {
     failures,
     [],
     'CSS, font, or JavaScript assets failed to load.',
+  );
+  assert.deepEqual(
+    assets.filter((asset) => asset.status >= 400),
+    [],
+    'CSS, font, or JavaScript assets returned an HTTP error.',
   );
   const unexpectedConsoleErrors = consoleErrors.filter((error) => {
     const expectedText = expectedDocumentRejections.some(
