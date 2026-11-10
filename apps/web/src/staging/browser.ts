@@ -2001,7 +2001,7 @@ export async function stagingOrganizationSessionPageGet(
     const invitationManagementUrl = `/r23/organizations/${safeOrgId}/builder?issuedSession=${encodeURIComponent(s.sessionId)}`;
 
     const content = `
-      <header class="software-workspace-heading">
+      <header class="software-page-heading">
         <div><p class="software-eyebrow">Assessment overview</p><h1 id="session-summary-title">${safeHtml(s.scenarioTitle)}</h1><p>Session details, candidate access and the next step for your team.</p></div>
         <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
       </header>
@@ -2012,16 +2012,16 @@ export async function stagingOrganizationSessionPageGet(
           <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(lifecycleLabel)} (${safeHtml(s.status)})</span> ${isTimedOut ? '<span>(Timed out)</span>' : ''}</dd>
           <dt><strong>Review progress:</strong></dt><dd>${safeHtml(reviewLabel)}</dd>
           <dt><strong>Time budget:</strong></dt><dd>${safeHtml(budgetStr)}</dd>
-          <dt><strong>Issued:</strong></dt><dd><time datetime="${safeHtml(s.createdAt)}">${safeHtml(s.createdAt)}</time></dd>
-          <dt><strong>Started:</strong></dt><dd>${s.activatedAt ? `<time datetime="${safeHtml(s.activatedAt)}">${safeHtml(s.activatedAt)}</time>` : 'Not recorded'}</dd>
-          <dt><strong>Submitted:</strong></dt><dd>${s.submittedAt ? `<time datetime="${safeHtml(s.submittedAt)}">${safeHtml(s.submittedAt)}</time>` : 'Not submitted'}</dd>
+          <dt><strong>Issued:</strong></dt><dd><time datetime="${safeHtml(s.createdAt)}">${safeHtml(new Date(s.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time></dd>
+          <dt><strong>Started:</strong></dt><dd>${s.activatedAt ? `<time datetime="${safeHtml(s.activatedAt)}">${safeHtml(new Date(s.activatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time>` : 'Not recorded'}</dd>
+          <dt><strong>Submitted:</strong></dt><dd>${s.submittedAt ? `<time datetime="${safeHtml(s.submittedAt)}">${safeHtml(new Date(s.submittedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time>` : 'Not submitted'}</dd>
           
         </dl>
         <details class="software-session-reference"><summary>Session reference</summary><p><code>${safeHtml(s.sessionId)}</code></p><p>Visibility: ${safeHtml(s.visibilityScope ?? 'authorized_scope')}</p></details>
 
         ${
           isSubmittedReviewerSession
-            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" class="software-primary-link" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
+            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" class="software-document-primary-link" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
             : isSubmittedSession
               ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
                   <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>

@@ -29,6 +29,7 @@ import {
   buildR27Presentation,
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
+import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
 import {
@@ -364,10 +365,12 @@ const R27SummaryView = ({
           <code className="evaluator-integrity-digest">
             {evidence.scenario.snapshotDigest}
           </code>
-          <p>
-            {presentation.scenarioContext.brief ??
-              'Scenario brief unavailable in this snapshot.'}
-          </p>
+          <ScenarioBrief
+            markdown={
+              presentation.scenarioContext.brief ??
+              'Scenario brief unavailable in this snapshot.'
+            }
+          />
           <h3>Acceptance criteria</h3>
           {presentation.scenarioContext.acceptanceCriteria.length ? (
             <ul>

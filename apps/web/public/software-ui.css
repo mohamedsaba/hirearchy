@@ -1250,3 +1250,70 @@ body.software-document-body *::after {
     margin-top: 12px;
   }
 }
+
+.software-scenario-brief {
+  margin: 0;
+  color: #51465d;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.software-scenario-brief :where(h2, h3, h4) {
+  margin: 1.1em 0 0.45em;
+  color: var(--software-ink);
+  line-height: 1.35;
+}
+
+.software-scenario-brief h2 {
+  font-size: 1.05rem;
+}
+
+.software-scenario-brief h3 {
+  font-size: 0.96rem;
+}
+
+.software-scenario-brief h4 {
+  font-size: 0.9rem;
+}
+
+.software-scenario-brief > :first-child {
+  margin-top: 0;
+}
+
+.software-scenario-brief :where(p, ul, ol, pre, hr) {
+  margin: 0.75em 0 0;
+}
+
+.software-scenario-brief :where(ul, ol) {
+  padding-left: 1.4rem;
+}
+
+.software-scenario-brief li + li {
+  margin-top: 0.55em;
+}
+
+.software-scenario-brief code {
+  padding: 0.08em 0.24em;
+  border-radius: 4px;
+  background: var(--software-lilac);
+  color: var(--software-ink);
+  font-family: var(--software-mono, ui-monospace, monospace);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.software-scenario-brief pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.8rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.5rem;
+  background: var(--software-surface);
+  white-space: pre;
+}
+
+.software-scenario-brief pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.9em;
+}

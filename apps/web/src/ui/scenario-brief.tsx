@@ -86,7 +86,7 @@ export function ScenarioBrief({ markdown }: Readonly<{ markdown: string }>) {
       }
       if (index < lines.length) index += 1;
       blocks.push(
-        <pre key={`code-${index}`}>
+        <pre key={`code-${index}`} tabIndex={0} aria-label="Task brief code">
           <code>{codeLines.join('\n')}</code>
         </pre>,
       );
@@ -159,5 +159,5 @@ export function ScenarioBrief({ markdown }: Readonly<{ markdown: string }>) {
     );
   }
 
-  return <div className="r26-brief">{blocks}</div>;
+  return <div className="software-scenario-brief">{blocks}</div>;
 }

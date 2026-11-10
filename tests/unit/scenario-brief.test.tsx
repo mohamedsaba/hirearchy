@@ -57,12 +57,13 @@ describe('ScenarioBrief', () => {
     ].join('\n');
     const html = renderToStaticMarkup(<ScenarioBrief markdown={markdown} />);
 
+    expect(html).toContain('tabindex="0" aria-label="Task brief code"');
     expect(html).toContain('<strong>bold</strong>');
     expect(html).toContain('<em>emphasis</em>');
     expect(html).toContain('<h4>Use C# correctly</h4>');
     expect(html).toContain('<code>inline &lt;script&gt;</code>');
     expect(html).toContain(
-      '<pre><code>print(&quot;&lt;script&gt;alert(1)&lt;/script&gt;&quot;)</code></pre>',
+      '<code>print(&quot;&lt;script&gt;alert(1)&lt;/script&gt;&quot;)</code></pre>',
     );
     expect(html).toContain(
       '<ul><li>item <strong>one</strong></li><li>item two</li></ul>',

@@ -22,7 +22,7 @@ export default function PageNotFound() {
             This page or invitation could not be found. Check the link, or ask
             the person who shared it for a new one.
           </p>
-          <a className="software-primary-link" href="/">
+          <a className="software-document-primary-link" href="/">
             Return to Hirearchy
           </a>
         </section>
