@@ -657,9 +657,6 @@
 }
 
 .assessment-builder-page .assessment-authoring-actions {
-  position: sticky;
-  z-index: 4;
-  bottom: 0;
   gap: 12px;
   margin-top: 6px;
   padding: 16px 0;

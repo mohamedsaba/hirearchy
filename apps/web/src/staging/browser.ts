@@ -5319,7 +5319,7 @@ export async function stagingOrganizationSettingsGet(
 
         <section class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
           <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">03</span><div><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></div></div>
-          <div tabindex="0" role="region" aria-label="Organization members" class="software-overflow-region">
+          <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
             <table class="software-members-table">
               <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
               <tbody>${membersRows}</tbody>
