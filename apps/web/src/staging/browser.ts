@@ -1474,11 +1474,7 @@ export async function stagingLoadOrganizationSessionList(
         membershipVersion: '1',
         displayName: orgContext.displayName,
       };
-      const orgDisplay = resolveOrgDisplay(
-        orgIdLower,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
       const result: R24OrganizationSessionListResult = {
         organizationId: orgIdLower,
         role: orgContext.role,
@@ -1557,11 +1553,7 @@ export async function stagingLoadOrganizationSessionSummary(
         membershipVersion: '1',
         displayName: orgContext.displayName,
       };
-      const orgDisplay = resolveOrgDisplay(
-        orgIdLower,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
       const result: R24OrganizationSessionSummaryResult = {
         organizationId: orgIdLower,
         role: orgContext.role,
@@ -5229,11 +5221,7 @@ export async function stagingOrganizationSettingsGet(
         membershipVersion: '1',
         displayName: orgContext.displayName,
       };
-      const orgDisplay = resolveOrgDisplay(
-        orgIdLower,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
 
       const safeOrgId = safeHtml(orgIdLower);
       const safeOrgName = safeHtml(orgDisplay.name);
