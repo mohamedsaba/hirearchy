@@ -118,6 +118,7 @@ import {
   type StagingProofArgs,
 } from './server';
 import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
+import { renderSoftwareDocument } from '../ui/software-document';
 
 const ENVELOPE_VERSION = 1;
 const NONCE_LENGTH = 12;
@@ -525,7 +526,7 @@ function securityHeaders(): Headers {
   return new Headers({
     'Cache-Control': 'private, no-store',
     'Content-Security-Policy':
-      "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'none'; style-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     'Content-Type': 'text/html; charset=utf-8',
     'Referrer-Policy': 'same-origin',
     'X-Content-Type-Options': 'nosniff',
@@ -538,10 +539,10 @@ function htmlResponse(
   status = 200,
   headers = securityHeaders(),
 ): Response {
-  return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safeHtml(title)}</title></head><body><main><h1>${safeHtml(title)}</h1>${content}</main></body></html>`,
-    { status, headers },
-  );
+  return new Response(renderSoftwareDocument(title, content), {
+    status,
+    headers,
+  });
 }
 
 function loginForm(message = ''): string {

@@ -26,9 +26,10 @@
 
 .software-product-capsule {
   padding: 5px 12px;
-  border: 1px solid rgb(255 255 255 / 48%);
+  border: 1px solid var(--software-mint);
   border-radius: 999px;
-  color: #fff;
+  background: var(--software-mint);
+  color: var(--software-plum);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.01em;
