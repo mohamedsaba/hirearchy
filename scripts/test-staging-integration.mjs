@@ -1225,6 +1225,16 @@ integration: try {
             await probe.query('SELECT 1');
             return;
           } catch (error) {
+            const probeFailure =
+              error instanceof Error && error.message === 'timeout expired'
+                ? 'pg-connect-timeout'
+                : error instanceof Error &&
+                    error.message === 'Connection terminated'
+                  ? 'pg-connection-terminated'
+                  : error instanceof Error &&
+                      error.message === 'Connection terminated unexpectedly'
+                    ? 'pg-connection-terminated-unexpectedly'
+                    : 'unclassified-error';
             const code =
               typeof error === 'object' && error !== null && 'code' in error
                 ? error.code
@@ -1235,6 +1245,9 @@ integration: try {
               code !== '57P03'
             ) {
               await captureRecoveryFailure();
+              console.error(
+                `PostgreSQL recovery probe failure class: ${probeFailure}`,
+              );
               throw error;
             }
             lastTransientCode = code;

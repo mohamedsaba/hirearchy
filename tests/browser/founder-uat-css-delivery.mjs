@@ -4,6 +4,7 @@ import { loadPlaywright } from '../r25/browser-issuance-check.mjs';
 const origin = new URL(
   process.env.FOUNDER_UAT_CSS_ORIGIN ?? 'http://127.0.0.1:3000',
 );
+const profile = process.env.FOUNDER_UAT_CSS_PROFILE ?? 'founder-uat';
 assert(
   origin.protocol === 'http:' &&
     ['127.0.0.1', 'localhost'].includes(origin.hostname) &&
@@ -11,6 +12,10 @@ assert(
     !origin.search &&
     !origin.hash,
   'The CSS delivery check only runs against a loopback application origin.',
+);
+assert(
+  profile === 'founder-uat' || profile === 'staging-authenticated',
+  'The CSS delivery check requires an explicit supported runtime profile.',
 );
 
 const { chromium } = loadPlaywright();
@@ -25,6 +30,19 @@ const browser = await chromium.launch({
 const failures = [];
 const consoleErrors = [];
 const contexts = [];
+const expectedDocumentRejections = [];
+
+function recordExpectedDocumentRejection(response) {
+  assert(
+    response.request().isNavigationRequest(),
+    'Expected an account-form document response.',
+  );
+  expectedDocumentRejections.push({
+    url: response.url(),
+    status: response.status(),
+    statusText: response.statusText(),
+  });
+}
 
 async function openPage(path) {
   const context = await browser.newContext({
@@ -50,8 +68,13 @@ async function openPage(path) {
     }
   });
   page.on('console', (message) => {
-    if (message.type() === 'error')
-      consoleErrors.push(`${path}: ${message.text()}`);
+    if (message.type() === 'error') {
+      consoleErrors.push({
+        path,
+        text: message.text(),
+        url: message.location().url || page.url(),
+      });
+    }
   });
   page.on('pageerror', (error) => {
     consoleErrors.push(`${path}: ${error.message}`);
@@ -60,6 +83,20 @@ async function openPage(path) {
     waitUntil: 'networkidle',
   });
   assert(response, `${path} did not return a document response.`);
+  if (path === '/r23/signup' && profile === 'staging-authenticated') {
+    assert.equal(
+      response.status(),
+      403,
+      `${path} must remain gated in staging.`,
+    );
+    recordExpectedDocumentRejection(response);
+  } else {
+    assert.equal(
+      response.status(),
+      200,
+      `${path} returned an unexpected status.`,
+    );
+  }
   return { page, response, assets };
 }
 
@@ -207,6 +244,7 @@ async function postEmptyForm(page, action) {
     response && response.status() >= 400 && response.status() < 500,
     `${action} invalid form submission must be rejected without mutation.`,
   );
+  recordExpectedDocumentRejection(response);
   return response;
 }
 
@@ -241,13 +279,21 @@ async function postInvalidForm(page, action, fields) {
     response && response.status() >= 400 && response.status() < 500,
     `${action} invalid form submission must be rejected without mutation.`,
   );
+  recordExpectedDocumentRejection(response);
   return response;
 }
 
 try {
-  const entry = await openPage('/');
-  assert.equal(new URL(entry.page.url()).pathname, '/r23/login');
-  await assertStyled(entry, '/ (redirects to /r23/login)', false);
+  const entryPath = profile === 'founder-uat' ? '/' : '/r23/login';
+  const entry = await openPage(entryPath);
+  if (profile === 'founder-uat') {
+    assert.equal(
+      new URL(entry.page.url()).pathname,
+      '/r23/login',
+      'Founder UAT home must send the browser to login.',
+    );
+  }
+  await assertStyled(entry, `${entryPath} entry state`);
 
   const routes = [
     '/r23/signup',
@@ -266,31 +312,34 @@ try {
 
   const signup = await openPage('/r23/signup');
   await assertStyled(signup, '/r23/signup before invalid POST');
-  await signup.page
-    .locator('form[action="/r23/signup"] input[name="email"]')
-    .fill('invalid');
-  await signup.page
-    .locator('form[action="/r23/signup"] input[name="password"]')
-    .fill('short');
-  await signup.page.locator('form[action="/r23/signup"]').evaluate((form) => {
-    form.noValidate = true;
-  });
-  const signupResponse = await Promise.all([
-    signup.page.waitForNavigation({ waitUntil: 'networkidle' }),
-    signup.page
-      .locator('form[action="/r23/signup"] button[type="submit"]')
-      .click(),
-  ]).then(([navigation]) => navigation);
-  assert(
-    signupResponse &&
-      signupResponse.status() >= 400 &&
-      signupResponse.status() < 500,
-    'Invalid signup input must be rejected before any account is created.',
-  );
-  await assertStyled(
-    { ...signup, response: signupResponse },
-    '/r23/signup invalid POST response',
-  );
+  if (profile === 'founder-uat') {
+    await signup.page
+      .locator('form[action="/r23/signup"] input[name="email"]')
+      .fill('invalid');
+    await signup.page
+      .locator('form[action="/r23/signup"] input[name="password"]')
+      .fill('short');
+    await signup.page.locator('form[action="/r23/signup"]').evaluate((form) => {
+      form.noValidate = true;
+    });
+    const signupResponse = await Promise.all([
+      signup.page.waitForNavigation({ waitUntil: 'networkidle' }),
+      signup.page
+        .locator('form[action="/r23/signup"] button[type="submit"]')
+        .click(),
+    ]).then(([navigation]) => navigation);
+    assert(
+      signupResponse &&
+        signupResponse.status() >= 400 &&
+        signupResponse.status() < 500,
+      'Invalid signup input must be rejected before any account is created.',
+    );
+    recordExpectedDocumentRejection(signupResponse);
+    await assertStyled(
+      { ...signup, response: signupResponse },
+      '/r23/signup invalid POST response',
+    );
+  }
 
   const recover = await openPage('/r23/recover');
   await assertStyled(recover, '/r23/recover before invalid POST');
@@ -335,9 +384,22 @@ try {
     [],
     'CSS, font, or JavaScript assets failed to load.',
   );
-  assert.deepEqual(consoleErrors, [], 'The browser logged console errors.');
+  const unexpectedConsoleErrors = consoleErrors.filter((error) => {
+    const expectedText = expectedDocumentRejections.some(
+      (rejection) =>
+        rejection.url === error.url &&
+        error.text ===
+          `Failed to load resource: the server responded with a status of ${rejection.status} (${rejection.statusText})`,
+    );
+    return !expectedText;
+  });
+  assert.deepEqual(
+    unexpectedConsoleErrors,
+    [],
+    'The browser logged errors outside the exact expected 4xx document responses.',
+  );
   console.log(
-    `Founder UAT CSS delivery passed at ${origin.origin}: Next login, account/error GET states, and invalid signup/verification/recovery/reset POST responses.`,
+    `${profile} CSS delivery passed at ${origin.origin}: login, account/error GET states, and supported invalid form POST responses.`,
   );
 } finally {
   await Promise.all(contexts.map((context) => context.close().catch(() => {})));

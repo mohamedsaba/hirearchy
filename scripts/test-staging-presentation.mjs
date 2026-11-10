@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import {
   chmod,
   mkdtemp,
@@ -448,6 +448,30 @@ try {
     !output.includes(presenter.recruiter.password),
     'Presenter password must not be printed to stdout/stderr',
   );
+
+  stage = 'Founder UAT CSS delivery regression';
+  const cssResult = spawnSync(
+    process.execPath,
+    ['tests/browser/founder-uat-css-delivery.mjs'],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        FOUNDER_UAT_CSS_ORIGIN: presenter.appUrl,
+        FOUNDER_UAT_CSS_PROFILE: 'staging-authenticated',
+      },
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+      timeout: 120_000,
+    },
+  );
+  const cssOutput = `${cssResult.stdout ?? ''}${cssResult.stderr ?? ''}`;
+  assert.equal(
+    cssResult.status,
+    0,
+    `Founder UAT CSS delivery regression failed: ${redactDiagnostic(cssOutput || cssResult.error?.code || 'no diagnostic')}`,
+  );
+  console.log(cssResult.stdout.trim());
 
   stage = 'Reservation Moves v3 browser flow';
   await runReservationMovesBrowserFlow(presenter);
