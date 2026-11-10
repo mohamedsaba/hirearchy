@@ -1,6 +1,3 @@
-import { createPrivateKey } from 'node:crypto';
-import { isIP } from 'node:net';
-
 export type FounderUatProfileConfiguration = Readonly<{
   appOrigin: URL;
   authUrl: URL;
@@ -16,7 +13,9 @@ function isLoopback(hostname: string): boolean {
       ? hostname.slice(1, -1)
       : hostname;
   if (host === '::1') return true;
-  return isIP(host) === 4 && host.split('.')[0] === '127';
+  if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host)) return false;
+  const octets = host.split('.').map(Number);
+  return octets[0] === 127 && octets.every((octet) => octet <= 255);
 }
 
 function environmentUrl(
@@ -120,23 +119,6 @@ export function readFounderUatProfileConfiguration(): FounderUatProfileConfigura
     issuer.search ||
     issuer.hash
   ) {
-    return null;
-  }
-
-  try {
-    const privateKey = createPrivateKey({
-      key: Buffer.from(proofKey, 'base64'),
-      format: 'der',
-      type: 'pkcs8',
-    });
-    if (
-      privateKey.asymmetricKeyType !== 'ed25519' ||
-      privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64') !==
-        proofKey
-    ) {
-      return null;
-    }
-  } catch {
     return null;
   }
 

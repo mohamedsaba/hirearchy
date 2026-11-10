@@ -75,6 +75,23 @@ describe('Founder UAT runtime profile', () => {
     expect(getFounderUatAutomationRunId()).toBeNull();
   });
 
+  it('does not attest automation when the signing key is invalid', () => {
+    configureFounderUat();
+    vi.stubEnv(
+      'STAGING_PROOF_PRIVATE_KEY',
+      Buffer.alloc(48).toString('base64'),
+    );
+    vi.stubEnv(
+      'FOUNDER_UAT_AUTOMATION_RUN_ID',
+      'b3a1b6e4-e45d-4d8c-8dab-08ce16a09042',
+    );
+
+    expect(isFounderUatEnabled()).toBe(true);
+    expect(isAuthenticatedStaging()).toBe(true);
+    expect(isStagingLockdown()).toBe(true);
+    expect(getFounderUatAutomationRunId()).toBeNull();
+  });
+
   it('does not activate Founder UAT under another runtime profile', () => {
     configureFounderUat();
     vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'public-preview');

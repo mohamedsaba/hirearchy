@@ -1,3 +1,5 @@
+import { createPrivateKey } from 'node:crypto';
+
 import {
   isFounderUatEnabled,
   readFounderUatProfileConfiguration,
@@ -35,12 +37,35 @@ export function founderUatMailInboxUrl(email: string): string | null {
 export function getFounderUatAutomationRunId(): string | null {
   if (!isFounderUatEnabled()) return null;
   const runId = process.env.FOUNDER_UAT_AUTOMATION_RUN_ID;
-  return runId &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+  const encodedKey = process.env.STAGING_PROOF_PRIVATE_KEY;
+  if (
+    !runId ||
+    !encodedKey ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       runId,
     )
-    ? runId
-    : null;
+  ) {
+    return null;
+  }
+  try {
+    const encoded = Buffer.from(encodedKey, 'base64');
+    const key = createPrivateKey({
+      key: encoded,
+      format: 'der',
+      type: 'pkcs8',
+    });
+    if (
+      encoded.toString('base64') !== encodedKey ||
+      key.asymmetricKeyType !== 'ed25519' ||
+      key.export({ format: 'der', type: 'pkcs8' }).toString('base64') !==
+        encodedKey
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return runId;
 }
 
 export function isValidFounderUatEmail(email: string): boolean {
