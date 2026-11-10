@@ -513,6 +513,10 @@ export async function runFounderUatJourney() {
       404,
       'Invalid candidate session path must return 404',
     );
+    await invalidPage
+      .getByRole('heading', { name: 'Let’s get you back.', exact: true })
+      .waitFor();
+    await audit(invalidPage, 'invalid candidate invitation');
 
     await goto(
       invalidPage,
