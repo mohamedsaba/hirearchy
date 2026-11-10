@@ -1,27 +1,30 @@
 # MVP release readiness
 
 - **As of:** 2026-11-10
-- **Authority:** [Founder UAT plan](plans/active/founder-uat.md) for the current local acceptance gate; [active MVP release program](plans/active/mvp-release-program.md) for historical release scope.
+- **Authority:** [UI/UX recovery plan](plans/completed/ui-ux-recovery.md) for the current local acceptance gate; [active MVP release program](plans/active/mvp-release-program.md) for historical release scope.
 - **Status Summary:**
-  - **Founder UAT:** **ACCEPTANCE INVALIDATED; UI/UX RECOVERY IN PROGRESS.** The founder reported unstyled HTML at `http://127.0.0.1:3000/` after PR #20. Prior automated acceptance does not establish current visual readiness. CSS delivery, the persistent runtime, complete user journeys, responsive presentation, accessibility, restart behavior, and protected CI must be verified again under the [recovery plan](plans/active/ui-ux-recovery.md). Candidate execution (`EXECUTION_DISABLED`) and live paid AI (`AI_DISABLED`) remain disabled.
+  - **Founder UAT:** **UI/UX RECOVERY VERIFIED LOCALLY; FOUNDER VISUAL APPROVAL PENDING.** The checkpoint below takes effect only after [PR #21](https://github.com/mohamedsaba/hirearchy/pull/21) passes all four required checks on its final head and merges through branch protection. The app remains loopback-only at `http://127.0.0.1:3000/`. Candidate execution and live AI remain disabled. Public deployment is not authorized.
   - **Stage A (Public Preview):** **SOURCE AND PREVIOUS LOCAL BROWSER/PACKAGE ACCEPTANCE COMPLETE; NOT PUBLICLY HOSTED.** This release-preparation branch updates buyer copy and retention controls. The latest buyer browser acceptance and exact-head status are tracked in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19). Public DNS, a paid host, and production TLS have not been provisioned. The [single-host activation guide](../deploy/staging/README.md) describes a gated future operation; it does not authorize deployment.
   - **Stage B (Supervised Alpha):** **PREVIOUS LOCAL REHEARSAL COMPLETE; NOT HOSTED.** The prior loopback rehearsal passed the synthetic recruiter → candidate → assigned-reviewer workflow, outage recovery, separate local PostgreSQL restore, and image/snapshot rollback. The latest combined-head package, TLS, operator-receipt, readiness, and resource results are tracked in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19); they do not establish hosted readiness.
   - **Stage C (External-Candidate Beta):** **GATED.** Founder and legal approval for privacy, retention and deletion; approved external access; production host, domain/IP policy, secret and backup custody, off-host retention, and an alert owner remain open. Untrusted execution, live AI, email delivery, and public signup stay disabled.
 
 This is the single authoritative release record for release status and verification evidence. It contains no credentials, candidate personal data, private recovery artifact locations, or unverified commercial claims.
 
-## Founder UAT — 2026-11-10
+## Current UI/UX recovery checkpoint — 2026-11-10
 
-The acceptance claims below describe the earlier PR #20 run and are retained as historical evidence. The founder's subsequent rendering report invalidates their readiness conclusion. Current acceptance is pending the UI/UX recovery evidence; no founder data may be reset to repeat these checks.
+Sol rebuilt the Software presentation after the founder rejected the initial result. Compact account flows, coherent workspace navigation, structured team/assessment views, purposeful authoring and candidate work areas, and chronological evidence review preserve the existing identity. The underlying missing-CSS cause was route-handler HTML bypassing the Next layout; the shared shell now loads one same-origin stylesheet and local font. No broad CSP allowance was added.
 
-### Current recovery evidence
+Local acceptance passed on the real founder origin: the complete signup → local captured mail → organization → assessment → candidate work/submission → separate assigned evaluator → observation/final human review journey; returning-user persistence; recovery and denial checks in attested disposable automation; 165 recorded viewport checks at five required sizes with zero Axe violations, overflow or unexpected browser problems; and 20 fresh core-screen captures. Independent visual, CSS/readiness/provenance and staging integration checks passed. All material findings in [the audit](audits/founder-uat-ui-ux-recovery.md) were resolved and recaptured.
 
-- Fresh remote verification confirmed PR #20 merged as `a10c0ccd996e7e8440329987187a7cbf770bce97`; the recovery branch starts from that main commit.
-- Chromium at the exact founder origin confirmed `/r23/login` receives two `200 text/css` assets and authored DM Sans styling. Signup, verification, recovery, and reset-password HTML responses receive no stylesheet and render browser defaults.
-- The confirmed cause is shared route-handler HTML bypassing the Next root layout. The existing static assets are served successfully; no Tailwind configuration or missing Next static bundle was implicated.
-- `npm run test:founder-uat:css` first reproduced the missing stylesheet on signup, then passed against the repaired persistent `http://127.0.0.1:3000/` after a clean production build and web-only restart. It checks delivered CSS/fonts, computed styles, restrictive CSP, and invalid account-form responses. Full visual/workflow acceptance and protected CI remain pending; the initial recovery CI run failed during its PostgreSQL restart probe.
-- The fresh real-UI journey reached candidate submission, separate-account evaluator observation/finalization, persistence inspection, and sign-out. Acceptance remains blocked by demonstrated builder styling, settings-table readability, raw candidate Markdown, and handler inline-style CSP errors. These are tracked for the next integrated frontend checkpoint.
-- PR #21 checkpoint `1fcfa0f70c9145a5bb0a5c6129b3c966d037bb82` passed `verify`, `postgres`, `real-docker`, and `dependency-audit`. The first restart-probe failure was not reproduced; its cause remains unclassified. Only safe diagnostic classification was added, with no retry-policy change. The final frontend source still requires its own verification and protected checks.
+The supported launcher rebuilt production output and restored the persistent profile after test-profile handover. Read-only digests confirm original founder records and all pre-restart identities remain. Protected runtime/initialization files and database/mail volumes are unchanged; no unrelated worktree, container or volume was removed.
+
+The local full `npm run verify` and final focused tests passed. The final PR must retain and pass `verify`, `postgres`, `real-docker`, and `dependency-audit`; [PR #21](https://github.com/mohamedsaba/hirearchy/pull/21) is the live protected receipt. Until that green merge, acceptance remains gated. Screenshot binaries and private diagnostics stay local and ignored. Existing lint/build warnings remain visible.
+
+AI integration was explicitly excluded by the founder's final instruction. AI generation/assistance, candidate execution, external mail delivery and public hosting remain unavailable. Static validation is not evidence that tests executed. Human reviewers retain every interpretation and verdict.
+
+## Historical Founder UAT — PR #20
+
+The results below describe the earlier implementation run. The founder's rendering report invalidated its visual-readiness conclusion; these historical results do not substitute for the recovery checkpoint above.
 
 The [isolated local UAT decision](decisions/founder-local-uat.md) authorizes local signup and captured account mail only. Public staging/production defaults, external email, live paid AI, and public access remain gated. Existing reviewer invitations and candidate participation are reused with normal accounts and genuine persisted activity.
 

@@ -120,6 +120,9 @@ export async function runR211BrowserBuilderChecks({
     // Step 4: Create assessment draft with task, instructions, starter files
     // -----------------------------------------------------------------------
     console.log('[R2.11 Browser] Step 4: Create assessment draft');
+    await recruiterPage
+      .getByLabel('Assessment template')
+      .selectOption('custom');
     const initialTitle = 'Booking Notification Retry Logic';
     const initialBrief =
       'Implement retry logic with exponential backoff for the notification dispatch service.';
