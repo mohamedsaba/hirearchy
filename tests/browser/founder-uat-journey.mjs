@@ -592,7 +592,25 @@ export async function runFounderUatJourney() {
     await ownerPage.getByTestId('continue-to-issue-button').click();
     const reviewerSelect = ownerPage.getByTestId('issue-reviewer-select');
     await reviewerSelect.waitFor({ state: 'visible' });
-    await reviewerSelect.selectOption({ index: 1 });
+    const invitedReviewerOption = reviewerSelect
+      .locator('option')
+      .filter({ hasText: reviewerEmail });
+    await invitedReviewerOption.waitFor({ state: 'attached' });
+    const invitedReviewerLabel = (
+      (await invitedReviewerOption.textContent()) ?? ''
+    ).trim();
+    assert.ok(
+      invitedReviewerLabel.includes(reviewerEmail),
+      'The eligible reviewer option should show the invited email address',
+    );
+    const invitedReviewerPrincipalId =
+      await invitedReviewerOption.getAttribute('value');
+    assert.ok(invitedReviewerPrincipalId);
+    await reviewerSelect.selectOption(invitedReviewerPrincipalId);
+    const selectedReviewerLabel = await reviewerSelect
+      .locator('option:checked')
+      .textContent();
+    assert.ok(selectedReviewerLabel?.includes(reviewerEmail));
     const issueButton = ownerPage.getByTestId('issue-assessment-button');
     await issueButton.click();
     await ownerPage.getByTestId('issuance-success').waitFor({ timeout: 20000 });
