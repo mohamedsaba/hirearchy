@@ -51,11 +51,10 @@ export default async function R23LoginPage({
           aria-labelledby="signin-title"
         >
           <div className="evaluator-signin-copy">
-            <p className="software-eyebrow">Evaluator access</p>
+            <p className="software-eyebrow">Your workspace</p>
             <h1 id="signin-title">Sign in to Hirearchy Software.</h1>
             <p>
-              Open your organization workspace and review submitted engineering
-              work.
+              Manage assessments or review engineering work assigned to you.
             </p>
             <p className="evaluator-signin-note">
               Evidence informs the decision. You own the decision.
