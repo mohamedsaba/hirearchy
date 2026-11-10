@@ -1743,9 +1743,6 @@ export async function stagingOrganizationGet(
     }
 
     const content = `
-      <p>Current organization: <code>${safeOrgId}</code></p>
-      <p>Organization membership was checked for this request.</p>
-      <p><a href="/r23/organizations">Choose another organization</a></p>
       <header>
         <p>
           <strong>Active organization:</strong>
@@ -1754,6 +1751,10 @@ export async function stagingOrganizationGet(
           <span>Role: ${safeRole}</span>
           <span>${safeEmail}</span>
         </p>
+        <details class="software-reference-details">
+          <summary>Organization reference</summary>
+          <code>${safeOrgId}</code>
+        </details>
         <nav aria-label="Evaluator workspace">
           <a href="/r23/organizations">Switch organization</a>
           <a href="/r23/organizations/${safeOrgId}/settings" data-testid="org-settings-link">Team &amp; Settings</a>
@@ -1787,9 +1788,9 @@ export async function stagingOrganizationGet(
           membership.role === 'recruiter'
             ? `
         <section aria-labelledby="issue-assessment-title">
-          <h3 id="issue-assessment-title">Author & Issue Assessment</h3>
-          <p>Create, statically validate, and issue assessments with an assigned organization reviewer in the Assessment Builder.</p>
-          <p><a href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Open Assessment Builder</a></p>
+          <h3 id="issue-assessment-title">Create an assessment</h3>
+          <p>Create, validate, and issue an assessment with an assigned reviewer.</p>
+          <p><a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Open Assessment Builder</a></p>
         </section>
         `
             : ''
@@ -4639,7 +4640,7 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
       'Self-service registration disabled',
       `
         <section aria-labelledby="gated-signup-heading">
-          <h2 id="gated-signup-heading">Self-service registration disabled</h2>
+        <h1 id="gated-signup-heading">Self-service registration disabled</h1>
           <p>Public self-service signup is gated off in this environment. Registration will open when self-service release gates are met.</p>
           <div role="note" aria-label="Environment restrictions">
             <p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>).</p>
@@ -4661,7 +4662,7 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
     'Create your account',
     `
       <section aria-labelledby="signup-heading">
-        <h2 id="signup-heading">Create your Hirearchy account</h2>
+        <h1 id="signup-heading">Create your Hirearchy account</h1>
         <div role="note" aria-label="Environment notice">${deliveryNotice}</div>
         <form action="/r23/signup" method="post">
           <label for="email">Work email</label>
@@ -4743,13 +4744,13 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
       : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p></div><p>Please proceed to verify your email address before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
 
     return htmlResponse(
-      'Account registered',
+      'Account registration initiated',
       `
         <section aria-labelledby="registered-heading">
-          <h2 id="registered-heading">Account registration initiated</h2>
+          <h1 id="registered-heading">Account registration initiated</h1>
           <p>An account for <strong>${safeHtml(email)}</strong> was successfully registered.</p>
           <section aria-labelledby="verification-instructions-heading">
-            <h3 id="verification-instructions-heading">Verify your email</h3>
+            <h2 id="verification-instructions-heading">Verify your email</h2>
             ${confirmation}
             <p><a href="/r23/login">Sign in</a></p>
           </section>
@@ -4776,7 +4777,7 @@ export async function stagingVerifyEmailGet(
       'Confirm your email address',
       `
         <section aria-labelledby="verify-heading">
-          <h2 id="verify-heading">Confirm your email address</h2>
+          <h1 id="verify-heading">Confirm your email address</h1>
           <p>Open the local inbox to confirm your account.</p>
           ${
             inboxUrl
@@ -4836,7 +4837,7 @@ export async function stagingVerifyEmailGet(
     'Verify your email address',
     `
       <section aria-labelledby="verify-heading">
-        <h2 id="verify-heading">Confirm your email address</h2>
+        <h1 id="verify-heading">Confirm your email address</h1>
         <div role="note" aria-label="Verification instructions">
           <p>Enter the verification token provided for your account to confirm your email.</p>
         </div>
@@ -5286,7 +5287,7 @@ export async function stagingOrganizationSettingsGet(
                 candidateEncryptionKey,
               );
               const acceptUrl = `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`;
-              linkHtml = `<p><strong>Acceptance Link:</strong> <input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}" style="width:100%;max-width:100%;box-sizing:border-box;"></p>`;
+              linkHtml = `<p><strong>Acceptance Link:</strong> <input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"></p>`;
             } catch {
               // decryption fallback
             }
@@ -5374,8 +5375,8 @@ export async function stagingOrganizationSettingsGet(
         <section aria-labelledby="team-members-heading">
           <h2 id="team-members-heading">Organization Members</h2>
           <p>Members with active governance or evaluation roles in this organization.</p>
-          <div tabindex="0" role="region" aria-label="Organization members" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;">
-            <table>
+          <div tabindex="0" role="region" aria-label="Organization members" class="software-overflow-region">
+            <table class="software-members-table">
               <thead>
                 <tr>
                   <th>Name</th>

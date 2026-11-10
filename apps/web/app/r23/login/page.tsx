@@ -137,24 +137,6 @@ export default async function R23LoginPage({
                 </>
               )}
             </nav>
-            {founderUat ? (
-              <form action="/r23/mail" method="get" className="access-form">
-                <label htmlFor="mailbox-email">
-                  Local email inbox
-                  <input
-                    id="mailbox-email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    maxLength={320}
-                  />
-                </label>
-                <button type="submit" className="button-primary">
-                  Open local inbox
-                </button>
-              </form>
-            ) : null}
           </div>
         </section>
       </div>

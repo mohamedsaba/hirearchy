@@ -1328,20 +1328,17 @@ export function AssessmentBuilderClient({
   };
 
   return (
-    <div className="assessment-builder-page">
+    <div className="software-product assessment-builder-page">
       <main className="assessment-builder-shell">
         <div className="assessment-builder-container">
           <header className="assessment-builder-hero">
-            <p className="assessment-eyebrow">
-              Hirearchy <span>/</span> Authoring Lane
-            </p>
-            <h1>PostgreSQL Assessment Builder</h1>
+            <p className="assessment-eyebrow">Hirearchy Software</p>
+            <h1>Assessment Builder</h1>
             <p>
-              Author structured assessment challenges, validate scenario
-              integrity, and issue tamper-evident candidate sessions with
-              immutable content snapshots.
+              Create the task, validate it, assign a reviewer, and issue a
+              candidate session.
             </p>
-            <p style={{ marginTop: '8px' }}>
+            <p className="assessment-builder-back-link">
               <Link
                 href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
                 data-testid="back-to-organization-link"
@@ -1351,24 +1348,15 @@ export function AssessmentBuilderClient({
             </p>
             {isAuthenticatedStaging ? (
               <div
+                className="assessment-builder-capability-note"
                 data-testid="builder-staging-capabilities-banner"
                 role="region"
                 aria-label="Authenticated staging capabilities"
-                style={{
-                  marginTop: '12px',
-                  padding: '12px 16px',
-                  borderRadius: '6px',
-                  border: '1px solid #f59e0b',
-                  backgroundColor: '#fffbeb',
-                  color: '#92400e',
-                  fontSize: '0.85rem',
-                }}
               >
-                <strong>Internal PostgreSQL demo:</strong> Draft persistence,
-                assessment validation and issuance, evaluator assignment,
-                candidate invitations, workspace capture, submission, and human
-                review are available. AI assistance, code execution, and email
-                are disabled.
+                <strong>Staging environment:</strong> Drafts, validation,
+                reviewer assignment, candidate invitations, submission, and
+                human review are available. AI assistance, code execution, and
+                external email delivery are unavailable.
               </div>
             ) : null}
           </header>

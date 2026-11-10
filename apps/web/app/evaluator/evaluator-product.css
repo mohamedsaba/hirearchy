@@ -18,7 +18,7 @@
   align-items: center;
   gap: 12px;
   color: #fff;
-  font-size: 38px;
+  font-size: 32px;
   font-weight: 700;
   text-decoration: none;
   letter-spacing: -0.035em;
@@ -30,7 +30,7 @@
   border-radius: 999px;
   background: var(--software-mint);
   color: var(--software-plum);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.01em;
 }

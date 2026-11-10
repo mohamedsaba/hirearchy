@@ -1798,9 +1798,6 @@ export async function r23OrganizationGet(
     }
 
     const content = `
-      <p>Current organization: <code>${safeOrgId}</code></p>
-      <p>Organization membership was checked for this request.</p>
-      <p><a href="/r23/organizations">Choose another organization</a></p>
       <header>
         <p>
           <strong>Active organization:</strong>
@@ -1809,6 +1806,10 @@ export async function r23OrganizationGet(
           <span>Role: ${safeRole}</span>
           <span>${safeEmail}</span>
         </p>
+        <details class="software-reference-details">
+          <summary>Organization reference</summary>
+          <code>${safeOrgId}</code>
+        </details>
         <nav aria-label="Evaluator workspace">
           <a href="/r23/organizations">Switch organization</a>
         </nav>
@@ -1830,7 +1831,7 @@ export async function r23OrganizationGet(
             ? `
         <section aria-labelledby="issue-assessment-title">
           <h3 id="issue-assessment-title">Issue Assessment</h3>
-          <form action="/r23/api/organizations/${safeOrgId}/sessions" method="post" id="issue-assessment-form">
+          <form action="/r23/api/organizations/${safeOrgId}/sessions" method="post" id="issue-assessment-form" class="software-document-secondary-form">
             <input type="hidden" name="csrf" value="${safeCsrf}">
             <label for="scenarioId">
               <span>Scenario:</span>
@@ -1849,7 +1850,7 @@ export async function r23OrganizationGet(
             </label>
             <button type="submit">Issue assessment</button>
           </form>
-          <p><a href="/r23/organizations/${safeOrgId}/builder">Open Assessment Builder</a></p>
+          <p><a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder">Open Assessment Builder</a></p>
         </section>
         `
             : ''

@@ -286,7 +286,7 @@ body.software-document-body *::after {
   align-items: center;
   gap: 10px;
   color: inherit !important;
-  font: 700 26px / 1 var(--software-sans);
+  font: 700 30px / 1 var(--software-sans);
   letter-spacing: -0.035em;
   text-decoration: none;
 }
@@ -316,6 +316,34 @@ body.software-document-body *::after {
   border: 1px solid var(--software-border);
   border-radius: 20px;
   background: var(--software-surface);
+  overflow-wrap: anywhere;
+}
+
+.software-document-panel > section + section,
+.software-document-panel > form[action='/r23/auth/logout'] + section {
+  margin-top: 28px;
+}
+
+.software-document-panel section > section {
+  margin-top: 20px;
+}
+
+.software-document-panel .software-reference-details {
+  margin-top: 8px;
+  color: var(--software-muted);
+  font-size: 13px;
+}
+
+.software-document-panel .software-reference-details summary {
+  width: fit-content;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.software-document-panel .software-reference-details code {
+  display: inline-block;
+  margin-top: 8px;
   overflow-wrap: anywhere;
 }
 
@@ -393,6 +421,98 @@ body.software-document-body *::after {
 
 .software-document-panel nav p {
   margin: 0;
+}
+
+.software-document-panel a.software-document-primary-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid var(--software-plum);
+  border-radius: 9px;
+  background: var(--software-plum);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.software-document-panel a.software-document-primary-link:hover {
+  background: #3b2b4a;
+  color: #fff;
+}
+
+.software-document-panel a.software-document-primary-link:focus-visible {
+  outline: 2px solid var(--software-focus);
+  outline-offset: 3px;
+}
+
+.software-document-panel form.software-document-secondary-form button {
+  width: fit-content;
+  min-width: 11rem;
+  justify-self: start;
+  border: 1px solid var(--software-border-strong);
+  background: var(--software-surface);
+  color: var(--software-plum);
+}
+
+.software-document-panel
+  form.software-document-secondary-form
+  button:hover:not(:disabled) {
+  background: var(--software-surface-subtle);
+}
+
+.software-document-panel > form[action='/r23/auth/logout'] {
+  display: flex;
+  justify-content: flex-end;
+  margin: 16px 0 0;
+}
+
+.software-document-panel > form[action='/r23/auth/logout'] button {
+  width: auto;
+  min-width: 7rem;
+  border: 1px solid var(--software-border-strong);
+  background: transparent;
+  color: var(--software-plum);
+}
+
+.software-document-panel
+  > form[action='/r23/auth/logout']
+  button:hover:not(:disabled) {
+  background: var(--software-surface-subtle);
+}
+
+.software-document-panel .software-overflow-region {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.software-document-panel .software-overflow-region:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--software-focus);
+  outline-offset: 2px;
+}
+
+.software-document-panel .software-members-table {
+  width: max-content;
+  min-width: 760px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.software-document-panel .software-members-table :is(th, td) {
+  padding: 8px 12px;
+  vertical-align: top;
+}
+
+.software-document-panel .software-members-table th,
+.software-document-panel .software-members-table td:nth-child(2),
+.software-document-panel .software-members-table td:nth-child(5),
+.software-document-panel .software-members-table td:nth-child(6) {
+  white-space: nowrap;
 }
 
 .software-document-panel [role='alert'],

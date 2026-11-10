@@ -25,6 +25,7 @@ import type {
   R213CandidateExecutionView,
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
+import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import './candidate-workspace.css';
 
 type CandidateClientProps = Readonly<{ sessionId: string }>;
@@ -1144,7 +1145,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               <p className="r26-eyebrow">Engineering assessment</p>
               <h1>{scenarioTitle}</h1>
               {brief ? (
-                <p className="r26-brief">{brief}</p>
+                <ScenarioBrief markdown={brief} />
               ) : (
                 <p className="r26-brief">
                   The issued task details are not available in this snapshot.
