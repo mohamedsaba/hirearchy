@@ -1341,12 +1341,12 @@ export async function stagingOrganizationsGet(
               membership.displayName?.trim() ||
                 `Organization ${membership.organizationId.slice(0, 8)}`,
             );
-            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit">Select ${displayName} (${roleLabel})</button><span>Organization ID: <code>${id}</code></span></form></li>`;
+            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span>${displayName}</span><span class="software-role-badge">${membership.role === 'reviewer' ? 'Evaluator' : 'Recruiter'}</span></button></form></li>`;
           })
           .join('');
         let content = '';
         if (memberships.length > 0) {
-          content = `<p>Select one organization for this session.</p><ul>${items}</ul>`;
+          content = `<p class="software-eyebrow">Your workspaces</p><h1>Where would you like to work?</h1><p>Select a workspace to continue.</p><ul class="software-organization-picker">${items}</ul>`;
         } else {
           if (
             statusResult.status === 'needs_team' &&
@@ -1354,10 +1354,11 @@ export async function stagingOrganizationsGet(
           ) {
             content = `
               <section aria-labelledby="create-org-title">
-                <h2 id="create-org-title">Create your first organization</h2>
-                <p>You do not have an active organization membership yet. As the founding owner, create your first organization to begin issuing assessments.</p>
+                <p class="software-eyebrow">A place for your team</p>
+                <h1 id="create-org-title">Create your workspace</h1>
+                <p>Create your first organization, then prepare an assessment and invite your team.</p>
                 <div role="note" aria-label="Governance notice">
-                  <p><strong>Governance:</strong> You will be provisioned as the immutable <strong>owner</strong> and <strong>recruiter</strong> for this organization. <em>Reservation Moves v3</em> will be immediately available in your workspace.</p>
+                  <p>You will be the workspace owner and recruiter. Ownership cannot be transferred in this version.</p>
                 </div>
                 <form action="/r23/organization/bootstrap" method="post">
                   <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
@@ -1704,7 +1705,7 @@ export async function stagingOrganizationGet(
                 <p>${safeHtml(currentTimestampLabel)} ${currentTimestamp ? `<time datetime="${safeHtml(currentTimestamp)}">${safeHtml(new Date(currentTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : '—'}</p>
               </div>
               <div class="software-session-review">
-                <span class="software-table-label">Human review</span>
+                <span class="software-table-label">Review progress</span>
                 <span>${safeHtml(reviewLabel)}</span>
               </div>
               <div class="software-session-actions">
@@ -1777,7 +1778,7 @@ export async function stagingOrganizationGet(
           <button type="submit">Apply filters</button>
         </form>
 
-        <div class="software-list-caption"><p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} sessions</p><a href="/r23/organizations/${safeOrgId}/settings" data-testid="org-settings-link">Team &amp; Settings</a></div>
+        <div class="software-list-caption"><p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} sessions</p></div>
 
         ${sessionsHtml}
       </section>
@@ -4890,7 +4891,7 @@ export function stagingRecoverGet(_request?: Request): Response {
     'Reset your password',
     `
       <section aria-labelledby="recover-heading">
-        <h2 id="recover-heading">Request password recovery</h2>
+        <h1 id="recover-heading">Request password recovery</h1>
         <div role="note" aria-label="Recovery instructions">${recoveryNotice}</div>
         <form action="/r23/recover" method="post">
           <label for="email">Account email</label>
@@ -4946,7 +4947,7 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
       'Password recovery initiated',
       `
         <section aria-labelledby="recovery-receipt-title">
-          <h2 id="recovery-receipt-title">Password recovery initiated</h2>
+          <h1 id="recovery-receipt-title">Password recovery initiated</h1>
           <p>A password recovery request has been processed for <strong>${safeHtml(email)}</strong>.</p>
           ${recoveryNextStep}
           <p><a href="/r23/login">Return to sign in</a></p>
@@ -4973,7 +4974,7 @@ export function stagingResetPasswordGet(request: Request): Response {
       'Set new password',
       `
         <section aria-labelledby="reset-password-heading">
-          <h2 id="reset-password-heading">Set a new password</h2>
+          <h1 id="reset-password-heading">Set a new password</h1>
           ${errorMessage}
           <p>Choose a new password, then sign in again.</p>
           <form action="/api/founder-uat/auth/reset-password" method="post">
@@ -4997,7 +4998,7 @@ export function stagingResetPasswordGet(request: Request): Response {
     'Set new password',
     `
       <section aria-labelledby="reset-password-heading">
-        <h2 id="reset-password-heading">Set new password</h2>
+        <h1 id="reset-password-heading">Set new password</h1>
         <div role="note" aria-label="Quarantine notice">
           <p><strong>Security notice:</strong> Password reset uses a dedicated recovery credential. After resetting your password, you will be directed to sign in with your standard credentials.</p>
         </div>
@@ -5080,7 +5081,7 @@ export async function stagingResetPasswordPost(
       'Password updated successfully',
       `
         <section aria-labelledby="reset-complete-heading">
-          <h2 id="reset-complete-heading">Password Updated Successfully</h2>
+          <h1 id="reset-complete-heading">Password Updated Successfully</h1>
           <p>Your password has been changed. Please sign in with your new credentials.</p>
           <p><a href="/r23/login">Sign in now</a></p>
         </section>
@@ -5249,7 +5250,7 @@ export async function stagingOrganizationSettingsGet(
                 candidateEncryptionKey,
               );
               const acceptUrl = `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`;
-              linkHtml = `<p><strong>Acceptance Link:</strong> <input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"></p>`;
+              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this link and share it with the evaluator.</span></label>`;
             } catch {
               // decryption fallback
             }
@@ -5267,15 +5268,11 @@ export async function stagingOrganizationSettingsGet(
 
           return `
             <li class="software-invitation-row">
-              <div>
-                <strong>Target email:</strong> <code>${safeHtml(inv.targetEmail)}</code> |
-                <strong>Role:</strong> ${safeHtml(inv.role)} |
-                <strong>Status:</strong> <span>${safeHtml(inv.status)}</span>
+              <div class="software-invitation-heading">
+                <div><strong>${safeHtml(inv.targetEmail)}</strong><span>Evaluator invitation</span></div>
+                <span class="software-role-badge">${inv.status === 'active' ? 'Pending' : safeHtml(inv.status)}</span>
               </div>
-              <div>
-                <span>Expires: <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(inv.expiresAt)}</time></span>
-                ${inv.acceptedAt ? ` | <span>Accepted: <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(inv.acceptedAt)}</time></span>` : ''}
-              </div>
+              <p class="software-invitation-meta">Expires <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(new Date(inv.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>${inv.acceptedAt ? ` · Accepted <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(new Date(inv.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : ''}</p>
               ${linkHtml}
               ${revokeButton}
             </li>
@@ -5324,7 +5321,7 @@ export async function stagingOrganizationSettingsGet(
           <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">03</span><div><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></div></div>
           <div tabindex="0" role="region" aria-label="Organization members" class="software-overflow-region">
             <table class="software-members-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th><span class="software-sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
               <tbody>${membersRows}</tbody>
             </table>
           </div>

@@ -39,8 +39,8 @@ export function renderSoftwareDocument(
     : '/r23/login';
   const navigation = workspace
     ? `<aside class="software-workspace-sidebar">
-        <div class="software-workspace-identity"><span class="software-eyebrow">Your workspace</span><strong>${escapeHtml(workspace.organizationName)}</strong><span>${workspace.role === 'recruiter' ? 'Recruiting team' : 'Evaluation team'}</span></div>
-        <nav aria-label="Workspace navigation"><a href="${organizationPath}"${workspace.active === 'assessments' ? ' aria-current="page"' : ''}>Assessments</a><a href="${organizationPath}/settings"${workspace.active === 'settings' ? ' aria-current="page"' : ''}>Team &amp; settings</a></nav>
+        <div class="software-workspace-identity" role="region" aria-label="Active organization"><span class="software-eyebrow">Your workspace</span><strong>${escapeHtml(workspace.organizationName)}</strong><span>${workspace.role === 'recruiter' ? 'Recruiting team' : 'Evaluation team'}</span></div>
+        <nav aria-label="Workspace navigation"><a href="${organizationPath}"${workspace.active === 'assessments' ? ' aria-current="page"' : ''}>Assessments</a><a data-testid="org-settings-link" href="${organizationPath}/settings"${workspace.active === 'settings' ? ' aria-current="page"' : ''}>Team &amp; settings</a></nav>
         <div class="software-workspace-sidebar-footer"><a href="/r23/organizations">Switch workspace</a><span>${escapeHtml(workspace.email)}</span><form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${escapeHtml(workspace.csrf)}"><button type="submit">Sign out</button></form></div>
       </aside>`
     : '';

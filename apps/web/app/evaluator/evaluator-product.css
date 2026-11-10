@@ -268,6 +268,7 @@
 .evaluator-signin-form .access-form {
   display: grid;
   gap: 20px;
+  margin: 0;
 }
 
 .evaluator-signin-form .access-form label {
@@ -338,6 +339,126 @@
   flex-basis: 100%;
   margin-bottom: 8px;
   font-size: 13px;
+}
+
+.software-mail-page .evaluator-product-content {
+  max-width: 800px;
+}
+
+.software-mail-page .evaluator-page-intro h1 {
+  font-size: 30px;
+  font-weight: 650;
+}
+
+.software-mail-page .evaluator-queue-panel {
+  margin-top: 28px;
+  padding: 28px;
+  border-radius: 10px;
+}
+
+.software-mail-page .evaluator-queue-panel > h2 {
+  margin: 0 0 20px;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+
+.software-mail-open-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 12px;
+}
+
+.software-mail-open-form > label {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.software-mail-open-form > input {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.software-mail-open-form > button {
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.software-mail-messages {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--software-border);
+  font-size: 13px;
+}
+
+.software-mail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.software-mail-toolbar > p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.software-mail-toolbar > button {
+  min-height: 36px;
+  border: 1px solid var(--software-border);
+  border-radius: 6px;
+  background: var(--software-surface);
+  color: var(--software-plum);
+  font-size: 12px;
+}
+
+.software-mail-messages > ul {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.software-mail-messages > ul > li {
+  padding: 22px 0;
+  border-top: 1px solid var(--software-border);
+}
+
+.software-mail-messages > ul > li > p {
+  margin: 6px 0;
+  color: var(--software-muted);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.software-mail-messages > ul > li > p:first-child {
+  color: var(--software-plum);
+  font-size: 15px;
+}
+
+.software-mail-messages > ul form {
+  margin-top: 16px;
+}
+
+.software-mail-messages .software-button {
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+@media (max-width: 500px) {
+  .software-mail-page .evaluator-queue-panel {
+    padding: 22px 18px;
+  }
+  .software-mail-open-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .software-mail-open-form > input {
+    font-size: 16px;
+  }
 }
 
 .evaluator-report-header {

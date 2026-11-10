@@ -273,6 +273,9 @@ body.software-document-body *::after {
 }
 
 .software-document-header {
+  position: sticky;
+  z-index: 10;
+  top: 0;
   min-height: 64px;
   display: flex;
   align-items: center;
@@ -529,15 +532,16 @@ body.software-document-body *::after {
 
 .software-workspace-sidebar {
   position: sticky;
-  top: 0;
+  top: 64px;
   display: flex;
   flex-direction: column;
   gap: 36px;
   min-width: 0;
   height: calc(100vh - 64px);
   padding: 30px 20px 20px;
-  border-right: 1px solid var(--software-border);
-  background: var(--software-surface);
+  border-right: 1px solid var(--software-plum);
+  background: var(--software-plum);
+  color: #fff;
 }
 
 .software-workspace-identity {
@@ -555,7 +559,7 @@ body.software-document-body *::after {
 
 .software-workspace-identity .software-eyebrow {
   margin: 0 0 8px;
-  color: var(--software-muted);
+  color: #c7bdd2;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -564,7 +568,7 @@ body.software-document-body *::after {
 
 .software-workspace-identity > span:last-child,
 .software-workspace-sidebar-footer > span {
-  color: var(--software-muted);
+  color: #c7bdd2;
   font-size: 12px;
 }
 
@@ -574,6 +578,7 @@ body.software-document-body *::after {
 }
 
 .software-workspace-sidebar nav a {
+  color: #eee8f4;
   padding: 11px 12px;
   border-left: 2px solid transparent;
   border-radius: 0 6px 6px 0;
@@ -583,12 +588,13 @@ body.software-document-body *::after {
 }
 
 .software-workspace-sidebar nav a:hover {
-  background: var(--software-surface-subtle);
+  background: rgb(255 255 255 / 7%);
 }
 
 .software-workspace-sidebar nav a[aria-current='page'] {
-  border-left-color: var(--software-plum);
+  border-left-color: var(--software-mint);
   background: var(--software-mint);
+  color: var(--software-plum);
   font-weight: 650;
 }
 
@@ -597,7 +603,7 @@ body.software-document-body *::after {
   gap: 14px;
   margin-top: auto;
   padding: 20px 8px 0;
-  border-top: 1px solid var(--software-border);
+  border-top: 1px solid rgb(255 255 255 / 18%);
   overflow-wrap: anywhere;
   font-size: 12px;
 }
@@ -610,9 +616,17 @@ body.software-document-body *::after {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--software-muted);
+  color: #d8cfdf;
   font: inherit;
   cursor: pointer;
+}
+
+.software-workspace-sidebar-footer > a {
+  color: #eee8f4;
+}
+
+.software-workspace-sidebar :is(a, button):focus-visible {
+  outline-color: var(--software-mint);
 }
 
 .software-document-workspace .software-document-shell {
@@ -754,16 +768,80 @@ body.software-document-body *::after {
 
 .software-invitation-list {
   display: grid;
-  gap: 16px;
+  gap: 0;
   padding: 0;
   list-style: none;
 }
 
 .software-invitation-row {
-  padding: 18px;
-  border: 1px solid var(--software-border);
-  border-radius: 7px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--software-border);
   font-size: 13px;
+}
+
+.software-invitation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.software-organization-picker {
+  display: grid;
+  gap: 10px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.software-document-panel .software-organization-picker form {
+  margin: 0;
+}
+
+.software-document-panel .software-organization-picker button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-plum);
+  font-size: 14px;
+  text-align: left;
+}
+
+.software-document-panel .software-organization-picker button:hover {
+  border-color: var(--software-plum);
+  background: var(--software-surface-subtle);
+}
+
+.software-invitation-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.software-invitation-heading > div > span,
+.software-document-panel .software-invitation-meta,
+.software-invitation-share > span {
+  color: var(--software-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.software-document-panel .software-invitation-share {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.software-document-panel .software-invitation-row button {
+  border: 1px solid var(--software-border);
+  background: transparent;
+  color: var(--software-status-danger);
 }
 
 .software-role-badge,
@@ -918,15 +996,6 @@ body.software-document-body *::after {
   font-size: 13px;
 }
 
-.software-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 @media (max-width: 1100px) {
   .software-session-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -972,6 +1041,8 @@ body.software-document-body *::after {
     padding: 18px 20px 0;
     border-right: 0;
     border-bottom: 1px solid var(--software-border);
+    background: var(--software-surface);
+    color: var(--software-plum);
   }
   .software-workspace-identity {
     display: none;
@@ -985,10 +1056,12 @@ body.software-document-body *::after {
     border: 0;
     border-bottom: 2px solid transparent;
     border-radius: 0;
+    color: var(--software-muted);
   }
   .software-workspace-sidebar nav a[aria-current='page'] {
     border-bottom-color: var(--software-plum);
     background: transparent;
+    color: var(--software-plum);
   }
   .software-workspace-sidebar-footer {
     display: flex;
@@ -1000,6 +1073,14 @@ body.software-document-body *::after {
   }
   .software-workspace-sidebar-footer > span {
     display: none;
+  }
+
+  .software-workspace-sidebar-footer > a,
+  .software-workspace-sidebar-footer button {
+    color: var(--software-muted);
+  }
+  .software-workspace-sidebar :is(a, button):focus-visible {
+    outline-color: var(--software-focus);
   }
   .software-document-workspace .software-document-shell {
     padding: 28px 16px 48px;

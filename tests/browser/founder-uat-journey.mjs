@@ -588,7 +588,10 @@ export async function runFounderUatJourney() {
     const organizationId = organizationPath.split('/').at(-1);
     assert.ok(organizationId);
     await audit(ownerPage, 'first organization');
-    await ownerPage.getByText(`Local Test ${runId}`, { exact: true }).waitFor();
+    await ownerPage
+      .getByRole('region', { name: 'Active organization' })
+      .getByText(`Local Test ${runId}`, { exact: true })
+      .waitFor();
     await saveScreenshot(
       ownerPage,
       artifactDirectory,
@@ -606,7 +609,7 @@ export async function runFounderUatJourney() {
       `reviewer-invitation-settings-${runId}`,
     );
     await ownerPage
-      .getByText(/No email is sent for reviewer invitations/i)
+      .getByText(/Invitations are not emailed automatically/i)
       .waitFor();
     const invitationForm = ownerPage.locator('form').filter({
       has: ownerPage.locator('input[value="create_invitation"]'),
@@ -659,8 +662,11 @@ export async function runFounderUatJourney() {
     assert.equal(await acceptForm.locator('input[name="token"]').count(), 0);
     await acceptForm.locator('button[type="submit"]').click();
     await reviewerPage.waitForURL((url) => url.pathname === organizationPath);
-    await reviewerPage.getByText(/Reviewer scope:/).waitFor();
     await reviewerPage
+      .getByRole('heading', { name: 'Assigned reviews', exact: true })
+      .waitFor();
+    await reviewerPage
+      .getByRole('region', { name: 'Active organization' })
       .getByText(`Local Test ${runId}`, { exact: true })
       .waitFor();
     await audit(reviewerPage, 'reviewer organization');

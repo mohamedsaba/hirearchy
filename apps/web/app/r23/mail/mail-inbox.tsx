@@ -101,18 +101,23 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
   };
 
   return (
-    <section aria-label={`Messages for ${email}`}>
-      <p>
-        <strong>Inbox:</strong> {email}
-      </p>
-      <button
-        className="software-button software-button-secondary"
-        disabled={status === 'loading' || busyMessageId !== null}
-        onClick={() => void refresh()}
-        type="button"
-      >
-        {status === 'loading' ? 'Checking inbox…' : 'Refresh inbox'}
-      </button>
+    <section
+      className="software-mail-messages"
+      aria-label={`Messages for ${email}`}
+    >
+      <div className="software-mail-toolbar">
+        <p>
+          <strong>Inbox:</strong> {email}
+        </p>
+        <button
+          className="software-button software-button-secondary"
+          disabled={status === 'loading' || busyMessageId !== null}
+          onClick={() => void refresh()}
+          type="button"
+        >
+          {status === 'loading' ? 'Checking inbox…' : 'Refresh inbox'}
+        </button>
+      </div>
       {error ? <p role="alert">{error}</p> : null}
       {status === 'loading' ? (
         <p role="status">Checking for new messages…</p>

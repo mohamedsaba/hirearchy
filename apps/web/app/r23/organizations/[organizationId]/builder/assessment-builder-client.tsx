@@ -1335,22 +1335,21 @@ export function AssessmentBuilderClient({
   return (
     <div className="software-product assessment-builder-page">
       <header className="software-product-header assessment-app-header">
-        <Link
+        <a
           className="software-wordmark"
           href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
-          prefetch={false}
           aria-label="Hirearchy Software home"
         >
           <span>Hirearchy</span>
           <span className="software-product-capsule">Software</span>
-        </Link>
-        <Link
+        </a>
+        <a
           className="assessment-app-return"
           href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
           data-testid="back-to-organization-link"
         >
           Back to workspace
-        </Link>
+        </a>
       </header>
       <main className="assessment-builder-shell">
         <div className="assessment-builder-container">
@@ -2177,6 +2176,7 @@ export function AssessmentBuilderClient({
 
                 {/* Actions */}
                 <div
+                  className="assessment-authoring-actions"
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -2199,6 +2199,7 @@ export function AssessmentBuilderClient({
                     type="button"
                     data-testid="continue-to-validate-button"
                     className="button button-primary"
+                    disabled={isSaving || isValidating}
                     onClick={() => {
                       setStage('validate');
                       void handleValidate();
@@ -2402,6 +2403,7 @@ export function AssessmentBuilderClient({
 
                 {/* Validate Stage Actions */}
                 <div
+                  className="assessment-authoring-actions"
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -2413,9 +2415,10 @@ export function AssessmentBuilderClient({
                   <button
                     type="button"
                     className="button button-secondary"
+                    aria-label="Back to Define"
                     onClick={navigateToDefine}
                   >
-                    ← Back to Define
+                    Back
                   </button>
 
                   <div style={{ display: 'flex', gap: '10px' }}>
@@ -2423,22 +2426,24 @@ export function AssessmentBuilderClient({
                       type="button"
                       data-testid="validate-assessment-button"
                       className="button button-secondary"
+                      aria-label="Re-run Validation"
                       disabled={isValidating}
                       onClick={handleValidate}
                     >
-                      {isValidating ? 'Validating...' : 'Re-run Validation'}
+                      {isValidating ? 'Checking...' : 'Recheck'}
                     </button>
 
                     <button
                       type="button"
                       data-testid="continue-to-issue-button"
+                      aria-label="Continue to Issue"
                       className="button button-primary"
                       disabled={
                         !validatedVersion || Boolean(validationErrorMessage)
                       }
                       onClick={() => setStage('issue')}
                     >
-                      Continue to Issue →
+                      Continue
                     </button>
                   </div>
                 </div>
@@ -2646,6 +2651,7 @@ export function AssessmentBuilderClient({
                       )}
 
                       <div
+                        className="assessment-authoring-actions"
                         style={{
                           display: 'flex',
                           justifyContent: 'space-between',
