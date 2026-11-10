@@ -16,13 +16,13 @@ Restricted execution service
   └─ separate runtime boundary; off in the durable internal demo
 ```
 
-The candidate and assigned-reviewer path is technically accepted in PR #6, merged as `6f144045a3dcfa523fd7d79112c09721011b4871` from source `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`. Its required CI checks, positive and negative browser journey, and late separate-instance restore passed. This does not establish deployment or authenticated visual acceptance. See [release readiness](../release-readiness.md) for the current evidence and remaining gates.
+The protected-main baseline for Founder UAT is `c4936cd1f6a396854400e363f7dc9d629e6a8b58` (PR #19). Earlier PRs established the durable workflow, onboarding, and technical browser coverage. Independent first-user acceptance is a separate gate. See [release readiness](../release-readiness.md) for exact evidence and remaining gates.
 
 ## Tenant and identity boundary
 
 Organizations scope recruiter and reviewer memberships. Recruiters author, validate, and issue assessments and assign a reviewer. Reviewers can inspect evidence only for sessions assigned to them. The signed proof binds database operations to a live GoTrue user and session; browser-supplied subject or organization values are not trusted as identity. The existing roles are `recruiter` and `reviewer`; there is no generalized administrator-role expansion.
 
-Initial organization provisioning is currently administrator-managed. [The proposed first-team onboarding decision](../decisions/mvp-first-team-onboarding.md) limits future self-service to a confirmed GoTrue identity with no active organization memberships. It is a proposal pending review and implementation.
+Self-service onboarding is implemented but gated by profile. A confirmed GoTrue identity with no active organization memberships can create its first organization as a recruiter and immutable owner. An invited user accepts reviewer membership only for the confirmed invited email. Neither operation bypasses the live identity, signed proof, or PostgreSQL boundary. The [onboarding design](../decisions/mvp-first-team-onboarding.md) records the original design; the [Founder UAT decision](../decisions/founder-local-uat.md) governs local signup and mail capture.
 
 ## Candidate and evidence flow
 
@@ -40,8 +40,10 @@ The restricted R2.14 executor remains separate from the durable recruiter and ca
 
 ## Current integration boundary
 
-- **Merged PR #5:** GoTrue-authenticated sign-in, organization selection, PostgreSQL recruiter authoring, validation, issuance, and reviewer assignment through the proof boundary. It does not issue candidate links or enable candidate activity, evaluator review writes, AI, or execution in authenticated staging.
-- **Merged PR #6:** adds the durable invitation, consent, candidate workspace, submitted evidence, and assigned human-review bridge. Required CI, positive and negative browser acceptance, and late restore passed. Authenticated visual review, the approved-template walkthrough, first-team onboarding, and deployment remain pending. See [release readiness](../release-readiness.md) for current checks and evidence.
+- **Recruiter:** GoTrue-authenticated account and organization selection; PostgreSQL template discovery, authoring, validation, issuance, candidate invitation, and reviewer assignment through the proof boundary.
+- **Candidate:** durable invitation, consent, real workspace save/resume, submission, and retained evidence through the constrained bearer gateway.
+- **Evaluator:** normal GoTrue account, reviewer membership, and session assignment authorize evidence inspection, private observations, and human review. The legacy evaluator key is not part of this supported journey.
+- **Founder UAT:** local signup, captured confirmation/recovery mail, navigation, and the complete independent journey are under current implementation and acceptance. Prior fixture coverage does not establish this gate.
 - **Deployment:** no public or production deployment, external candidate workflow, or visual acceptance is established by those source changes.
 
 Do not duplicate release checklists or reports here. Update [the single readiness record](../release-readiness.md) when a source SHA or acceptance result changes.

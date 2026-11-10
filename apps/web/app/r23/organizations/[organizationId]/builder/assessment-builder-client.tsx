@@ -35,6 +35,23 @@ export interface AssessmentBuilderReviewerOption {
   principalId: string;
   role: string;
   joinedAt?: string;
+  displayName?: string | null;
+  email?: string | null;
+}
+
+export function AssessmentReviewerOptions({
+  reviewers,
+}: Readonly<{ reviewers: AssessmentBuilderReviewerOption[] }>) {
+  return reviewers.map((reviewer) => {
+    const identityLabel = [reviewer.displayName?.trim(), reviewer.email?.trim()]
+      .filter((value): value is string => Boolean(value))
+      .join(' · ');
+    return (
+      <option key={reviewer.principalId} value={reviewer.principalId}>
+        {identityLabel || reviewer.principalId} ({reviewer.role})
+      </option>
+    );
+  });
 }
 
 export interface AssessmentBuilderClientProps {
@@ -2578,14 +2595,9 @@ export function AssessmentBuilderClient({
                               <option value="">
                                 Select an eligible organization reviewer
                               </option>
-                              {reviewers.map((r) => (
-                                <option
-                                  key={r.principalId}
-                                  value={r.principalId}
-                                >
-                                  {r.principalId} ({r.role})
-                                </option>
-                              ))}
+                              <AssessmentReviewerOptions
+                                reviewers={reviewers}
+                              />
                             </select>
                           </div>
                         )}

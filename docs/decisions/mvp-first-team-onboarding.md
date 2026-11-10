@@ -1,6 +1,6 @@
-# Proposed decision: first-team onboarding and reviewer invitations
+# Design: first-team onboarding and reviewer invitations
 
-- **Status:** Proposed; do not implement until reviewed and accepted.
+- **Status:** Historical design reference. Core onboarding and reviewer invitations shipped in PRs #9 and #13. The [Founder UAT decision](founder-local-uat.md) governs isolated local signup/mail and the current verification-flow choice; [release readiness](../release-readiness.md) records acceptance. The original design below is retained and does not establish that every proposed mechanism shipped.
 - **Date:** 2026-11-06
 - **Baseline:** PR #5 is merged to protected `main` at `1a919b40ab45f9788a8cf0f785d33449379b7098`. PR #6 is merged at `6f144045a3dcfa523fd7d79112c09721011b4871` from accepted source `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`. Migration `0016_candidate_invitation_lifecycle.sql` is part of merged PR #6. Any onboarding schema must be additive after `0016`; preserve all existing migration bytes and checksums.
 

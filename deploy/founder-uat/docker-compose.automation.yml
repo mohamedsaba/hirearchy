@@ -1,0 +1,4 @@
+services:
+  web:
+    environment:
+      FOUNDER_UAT_AUTOMATION_RUN_ID: ${FOUNDER_UAT_AUTOMATION_RUN_ID:?set FOUNDER_UAT_AUTOMATION_RUN_ID}

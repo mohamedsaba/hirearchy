@@ -6,6 +6,7 @@ export function r29IsEnabled(): boolean {
     process.env.HIREARCHY_R29_DISPOSABLE === '1' ||
     process.env.NEXT_PUBLIC_HIREARCHY_R29_DISPOSABLE === '1' ||
     process.env.HIREARCHY_RUNTIME_PROFILE === 'staging-authenticated' ||
+    process.env.HIREARCHY_RUNTIME_PROFILE === 'founder-uat' ||
     process.env.NODE_ENV === 'test'
   );
 }

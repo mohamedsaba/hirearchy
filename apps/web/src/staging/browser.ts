@@ -69,6 +69,10 @@ import {
   type R23VerifiedIdentity,
 } from '../r23-auth/identity';
 import {
+  clearFounderUatPendingInvitation,
+  readFounderUatPendingInvitation,
+} from '../r23-auth/founder-uat-state';
+import {
   resolveOrgDisplay,
   type AuthenticatedSessionListContext,
   type AuthenticatedSessionSummaryContext,
@@ -103,6 +107,10 @@ import {
   validateSaveDraftInput,
 } from '../r210-review-packets/presentation';
 import { isAuthenticatedStaging } from '../runtime/profile';
+import {
+  founderUatMailInboxUrl,
+  isFounderUatEnabled,
+} from '../runtime/founder-uat';
 import {
   dispatchVerifiedStagingOperation,
   loadStagingConfiguration,
@@ -157,6 +165,7 @@ type StagingMembershipItem = Readonly<{
   organizationId: string;
   role: 'recruiter' | 'reviewer';
   version: number;
+  displayName: string | null;
 }>;
 
 type StagingReviewerItem = Readonly<{
@@ -209,6 +218,7 @@ type StagingOrganizationContextResponse = Readonly<{
   organizationId: string;
   principalId: string;
   role: 'recruiter' | 'reviewer';
+  displayName: string | null;
   reviewers: StagingReviewerItem[];
   draft: R211AssessmentDraft | null;
   validatedVersions: R211ValidatedVersion[];
@@ -535,7 +545,7 @@ function htmlResponse(
 }
 
 function loginForm(message = ''): string {
-  return `${message ? `<p role="alert">${safeHtml(message)}</p>` : ''}<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options"><p><a href="/r23/signup">Create an account (Sign up)</a></p><p><a href="/r23/recover">Forgot password?</a></p><p><a href="/r23/verify-email">Verify email address</a></p></nav>`;
+  return `${message ? `<p role="alert">${safeHtml(message)}</p>` : ''}<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options"><p><a href="/r23/signup">Create an account (Sign up)</a></p><p><a href="/r23/recover">Forgot password?</a></p><p><a href="/r23/verify-email">Verify email address</a></p>${isFounderUatEnabled() ? '<p><a href="/r23/mail">Open local inbox</a></p>' : ''}</nav>`;
 }
 
 function redirect(
@@ -1142,7 +1152,7 @@ export function stagingLoginGet(): Response {
   }
   try {
     loadStagingConfiguration();
-    return htmlResponse('Evaluator sign in', loginForm());
+    return htmlResponse('Sign in to Hirearchy', loginForm());
   } catch {
     return htmlResponse(
       'Sign in unavailable',
@@ -1283,20 +1293,37 @@ export async function stagingOrganizationsGet(
       request,
       digest(csrf),
       async ({ config, identity, csrfToken, refreshedSessionCookie }) => {
+        const statusResult = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'onboarding.status',
+          {},
+        )) as OnboardingStatusResponse | null;
+        if (
+          !statusResult ||
+          (statusResult.status !== 'needs_team' &&
+            statusResult.status !== 'has_active_membership') ||
+          typeof statusResult.capabilities?.selfServiceOnboardingEnabled !==
+            'boolean'
+        ) {
+          throw new StagingUnavailable();
+        }
+
         let memberships: StagingMembershipItem[] = [];
-        try {
+        if (statusResult.status === 'has_active_membership') {
           const result = (await dispatchVerifiedStagingOperation(
             config,
             identity,
             'membership.list',
             {},
           )) as { memberships?: StagingMembershipItem[] } | null;
-          if (Array.isArray(result?.memberships)) {
-            memberships = result.memberships;
+          if (
+            !Array.isArray(result?.memberships) ||
+            result.memberships.length === 0
+          ) {
+            throw new StagingUnavailable();
           }
-        } catch {
-          // Pre-principal identity without an active principal or zero memberships
-          memberships = [];
+          memberships = result.memberships;
         }
         const items = memberships
           .map((membership) => {
@@ -1305,28 +1332,20 @@ export async function stagingOrganizationsGet(
             }
             const id = safeHtml(membership.organizationId.toLowerCase());
             const roleLabel = safeHtml(membership.role);
-            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit">Select organization ${id} (${roleLabel})</button></form></li>`;
+            const displayName = safeHtml(
+              membership.displayName?.trim() ||
+                `Organization ${membership.organizationId.slice(0, 8)}`,
+            );
+            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit">Select ${displayName} (${roleLabel})</button><span>Organization ID: <code>${id}</code></span></form></li>`;
           })
           .join('');
         let content = '';
         if (memberships.length > 0) {
           content = `<p>Select one organization for this session.</p><ul>${items}</ul>`;
         } else {
-          let onboardingStatus: OnboardingStatusResponse | null = null;
-          try {
-            onboardingStatus = (await dispatchVerifiedStagingOperation(
-              config,
-              identity,
-              'onboarding.status',
-              {},
-            )) as OnboardingStatusResponse;
-          } catch {
-            // Pre-principal or unconfirmed identity
-          }
-
           if (
-            onboardingStatus?.status === 'needs_team' &&
-            onboardingStatus.capabilities.selfServiceOnboardingEnabled
+            statusResult.status === 'needs_team' &&
+            statusResult.capabilities.selfServiceOnboardingEnabled
           ) {
             content = `
               <section aria-labelledby="create-org-title">
@@ -1449,16 +1468,13 @@ export async function stagingLoadOrganizationSessionList(
       const { filtered, totalAuthorizedCount, filteredAuthorizedCount } =
         filterStagingSessions(orgContext.sessions ?? [], queryParams);
 
-      const membership: R23Membership = {
+      const membership: R23Membership & { displayName: string | null } = {
         organizationId: orgIdLower,
         role: orgContext.role,
         membershipVersion: '1',
+        displayName: orgContext.displayName,
       };
-      const orgDisplay = resolveOrgDisplay(
-        orgIdLower,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
       const result: R24OrganizationSessionListResult = {
         organizationId: orgIdLower,
         role: orgContext.role,
@@ -1531,16 +1547,13 @@ export async function stagingLoadOrganizationSessionSummary(
         (s) => s.sessionId === sessionId,
       );
 
-      const membership: R23Membership = {
+      const membership: R23Membership & { displayName: string | null } = {
         organizationId: orgIdLower,
         role: orgContext.role,
         membershipVersion: '1',
+        displayName: orgContext.displayName,
       };
-      const orgDisplay = resolveOrgDisplay(
-        orgIdLower,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
       const result: R24OrganizationSessionSummaryResult = {
         organizationId: orgIdLower,
         role: orgContext.role,
@@ -1751,11 +1764,17 @@ export async function stagingOrganizationGet(
         <button type="submit">Sign out</button>
       </form>
 
+      ${
+        !isFounderUatEnabled()
+          ? `
       <section aria-labelledby="staging-boundaries-title" data-testid="staging-workspace-capability-notice">
         <h2 id="staging-boundaries-title">Authenticated Staging Boundaries (R2.15)</h2>
         <p><strong>Supported in this slice:</strong> Named GoTrue authentication, organization membership verification, assessment authoring, static validation, internal session issuance with evaluator assignment, and read-only inspection of submitted evidence and private review data.</p>
         <p><strong>Unavailable in this slice:</strong> Candidate invitation tokens/links, candidate workspace execution, live AI-provider task generation or assistance, unsubmitted session evidence, and review observation/packet writes.</p>
       </section>
+      `
+          : ''
+      }
 
       <section aria-labelledby="lifecycle-list-title">
         <h2 id="lifecycle-list-title">Session lifecycle</h2>
@@ -2064,7 +2083,7 @@ export async function stagingOrganizationSessionPageGet(
                 </section>`
               : `<section aria-labelledby="unsubmitted-evidence-notice-title" data-testid="staging-unsubmitted-evidence-unavailable">
                 <h3 id="unsubmitted-evidence-notice-title">Candidate evidence &amp; review workbench status</h3>
-                <p role="status">Unsubmitted evidence is unavailable. Candidate execution and live AI-provider operations are disabled in the R2.15 staging slice; evidence reconstruction opens only after a session is in <code>SUBMITTED</code> status.</p>
+                <p role="status">Candidate evidence and review tools become available after the assessment is submitted.</p>
                 ${
                   membership.role === 'reviewer'
                     ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}">View evidence workbench availability status</a></p>`
@@ -4633,15 +4652,16 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const emailParam = url.searchParams.get('email') ?? '';
+  const deliveryNotice = isFounderUatEnabled()
+    ? 'A confirmation message will appear in the local inbox after you sign up. No email leaves this machine.'
+    : '<p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). After registration, verify your email to activate your account.</p>';
 
   return htmlResponse(
     'Create your account',
     `
       <section aria-labelledby="signup-heading">
         <h2 id="signup-heading">Create your Hirearchy account</h2>
-        <div role="note" aria-label="Environment notice">
-          <p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). After registration, verify your email to activate your account.</p>
-        </div>
+        <div role="note" aria-label="Environment notice">${deliveryNotice}</div>
         <form action="/r23/signup" method="post">
           <label for="email">Work email</label>
           <input id="email" name="email" type="email" autocomplete="email" required maxlength="320" value="${safeHtml(emailParam)}" placeholder="you@company.com">
@@ -4714,6 +4734,13 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
       );
     }
 
+    const inboxUrl = isFounderUatEnabled()
+      ? founderUatMailInboxUrl(email.trim().toLowerCase())
+      : null;
+    const confirmation = inboxUrl
+      ? `<p>Open the local inbox to confirm your email and finish setting up your account.</p><p><a href="${safeHtml(inboxUrl)}">Open local inbox for ${safeHtml(email)}</a></p>`
+      : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p></div><p>Please proceed to verify your email address before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
+
     return htmlResponse(
       'Account registered',
       `
@@ -4721,12 +4748,8 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
           <h2 id="registered-heading">Account registration initiated</h2>
           <p>An account for <strong>${safeHtml(email)}</strong> was successfully registered.</p>
           <section aria-labelledby="verification-instructions-heading">
-            <h3 id="verification-instructions-heading">Identity Verification Required</h3>
-            <div role="note" aria-label="Email delivery notice">
-              <p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p>
-            </div>
-            <p>Please proceed to verify your email address before signing in.</p>
-            <p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>
+            <h3 id="verification-instructions-heading">Verify your email</h3>
+            ${confirmation}
             <p><a href="/r23/login">Sign in</a></p>
           </section>
         </section>
@@ -4744,6 +4767,30 @@ export async function stagingVerifyEmailGet(
   const token = url.searchParams.get('token');
   const tokenHash = url.searchParams.get('token_hash');
   const type = url.searchParams.get('type') || 'signup';
+
+  if (isFounderUatEnabled()) {
+    const email = url.searchParams.get('email')?.trim() ?? '';
+    const inboxUrl = email ? founderUatMailInboxUrl(email) : null;
+    return htmlResponse(
+      'Confirm your email address',
+      `
+        <section aria-labelledby="verify-heading">
+          <h2 id="verify-heading">Confirm your email address</h2>
+          <p>Open the local inbox to confirm your account.</p>
+          ${
+            inboxUrl
+              ? `<p><a href="${safeHtml(inboxUrl)}">Open local inbox for ${safeHtml(email)}</a></p>`
+              : `<form action="/r23/mail" method="get">
+                  <label for="verify-email">Account email</label>
+                  <input id="verify-email" name="email" type="email" autocomplete="email" required maxlength="320">
+                  <button type="submit">Open local inbox</button>
+                </form>`
+          }
+          <p><a href="/r23/login">Return to sign in</a></p>
+        </section>
+      `,
+    );
+  }
 
   if (token || tokenHash) {
     try {
@@ -4808,6 +4855,14 @@ export async function stagingVerifyEmailPost(
   request: Request,
 ): Promise<Response> {
   try {
+    if (isFounderUatEnabled()) {
+      return htmlResponse(
+        'Confirm your email address',
+        '<p role="alert">Use the local inbox to confirm your email address. Verification tokens are not accepted on this page.</p><p><a href="/r23/mail">Open local inbox</a></p>',
+        400,
+      );
+    }
+
     const authConfig = resolveAuthAuthConfig();
     const body = await parseBody(request, false);
     allowedFields(body, ['token', 'tokenHash', 'type']);
@@ -4863,15 +4918,16 @@ export async function stagingVerifyEmailPost(
   }
 }
 
-export function stagingRecoverGet(): Response {
+export function stagingRecoverGet(_request?: Request): Response {
+  const recoveryNotice = isFounderUatEnabled()
+    ? '<p>Recovery messages for this local test appear in the local inbox. No email leaves this machine.</p>'
+    : '<p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Recovery tokens are generated by the identity provider.</p>';
   return htmlResponse(
     'Reset your password',
     `
       <section aria-labelledby="recover-heading">
-        <h2 id="recover-heading">Request Password Recovery</h2>
-        <div role="note" aria-label="Environment notice">
-          <p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Recovery tokens are generated by the identity provider.</p>
-        </div>
+        <h2 id="recover-heading">Request password recovery</h2>
+        <div role="note" aria-label="Recovery instructions">${recoveryNotice}</div>
         <form action="/r23/recover" method="post">
           <label for="email">Account email</label>
           <input id="email" name="email" type="email" autocomplete="email" required maxlength="320">
@@ -4915,17 +4971,20 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
       );
     }
 
+    const inboxUrl = isFounderUatEnabled()
+      ? founderUatMailInboxUrl(email.trim().toLowerCase())
+      : null;
+    const recoveryNextStep = inboxUrl
+      ? `<p>Open the local inbox and choose the recovery message for this account.</p><p><a href="${safeHtml(inboxUrl)}">Open local inbox for ${safeHtml(email)}</a></p>`
+      : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> Automated recovery emails are not sent in this environment (<code>emailDeliveryEnabled: false</code>).</p></div><p>If you have received a recovery token, you can set your new password below:</p><p><a href="/r23/reset-password">Enter recovery token and set new password</a></p>`;
+
     return htmlResponse(
       'Password recovery initiated',
       `
         <section aria-labelledby="recovery-receipt-title">
-          <h2 id="recovery-receipt-title">Password Recovery Initiated</h2>
+          <h2 id="recovery-receipt-title">Password recovery initiated</h2>
           <p>A password recovery request has been processed for <strong>${safeHtml(email)}</strong>.</p>
-          <div role="note" aria-label="Email delivery notice">
-            <p><strong>Automated email delivery is disabled:</strong> Automated recovery emails are not sent in this environment (<code>emailDeliveryEnabled: false</code>).</p>
-          </div>
-          <p>If you have received a recovery token, you can set your new password below:</p>
-          <p><a href="/r23/reset-password">Enter recovery token and set new password</a></p>
+          ${recoveryNextStep}
           <p><a href="/r23/login">Return to sign in</a></p>
         </section>
       `,
@@ -4936,6 +4995,36 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
 }
 
 export function stagingResetPasswordGet(request: Request): Response {
+  if (isFounderUatEnabled()) {
+    const error = new URL(request.url).searchParams.get('error');
+    const errorMessage =
+      error === 'expired'
+        ? '<p role="alert">This recovery message has expired or was already used. Request a new recovery message.</p>'
+        : error === 'unavailable'
+          ? '<p role="alert">Your password could not be updated right now. Try again in a moment.</p>'
+          : error === 'password'
+            ? '<p role="alert">Choose a different password that meets the account requirements.</p>'
+            : '';
+    return htmlResponse(
+      'Set new password',
+      `
+        <section aria-labelledby="reset-password-heading">
+          <h2 id="reset-password-heading">Set a new password</h2>
+          ${errorMessage}
+          <p>Choose a new password, then sign in again.</p>
+          <form action="/api/founder-uat/auth/reset-password" method="post">
+            <label for="password">New password</label>
+            <input id="password" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="1024">
+            <button type="submit">Update password</button>
+          </form>
+          <p><a href="/r23/mail">Return to local inbox</a></p>
+          <p><a href="/r23/recover">Request another recovery message</a></p>
+          <p><a href="/r23/login">Cancel and return to sign in</a></p>
+        </section>
+      `,
+    );
+  }
+
   const url = new URL(request.url);
   const token =
     url.searchParams.get('token') ?? url.searchParams.get('access_token') ?? '';
@@ -4965,6 +5054,14 @@ export async function stagingResetPasswordPost(
   request: Request,
 ): Promise<Response> {
   try {
+    if (isFounderUatEnabled()) {
+      return htmlResponse(
+        'Recovery session required',
+        '<p role="alert">Open a recovery message in the local inbox to set a new password.</p><p><a href="/r23/mail">Open local inbox</a></p>',
+        403,
+      );
+    }
+
     const body = await parseBody(request, false);
     allowedFields(body, ['token', 'password']);
     const token = requiredText(body, 'token', 16384);
@@ -5130,16 +5227,13 @@ export async function stagingOrganizationSettingsGet(
       )) as { invitations?: ReviewerInvitationItem[] };
       const invitations = invitationsResult?.invitations ?? [];
 
-      const membership: R23Membership = {
+      const membership: R23Membership & { displayName: string | null } = {
         organizationId: orgIdLower,
         role: orgContext.role,
         membershipVersion: '1',
+        displayName: orgContext.displayName,
       };
-      const orgDisplay = resolveOrgDisplay(
-        orgIdLower,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
 
       const safeOrgId = safeHtml(orgIdLower);
       const safeOrgName = safeHtml(orgDisplay.name);
@@ -5236,6 +5330,7 @@ export async function stagingOrganizationSettingsGet(
           </p>
           <nav aria-label="Settings navigation">
             <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
+            <a href="/r23/organizations/${safeOrgId}/builder">Open assessment builder</a>
             <a href="/r23/organizations">Switch organization</a>
           </nav>
         </header>
@@ -5278,7 +5373,7 @@ export async function stagingOrganizationSettingsGet(
         <section aria-labelledby="team-members-heading">
           <h2 id="team-members-heading">Organization Members</h2>
           <p>Members with active governance or evaluation roles in this organization.</p>
-          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;">
+          <div tabindex="0" role="region" aria-label="Organization members" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;">
             <table>
               <thead>
                 <tr>
@@ -5305,7 +5400,7 @@ export async function stagingOrganizationSettingsGet(
             <section aria-labelledby="issue-invitation-heading">
               <h3 id="issue-invitation-heading">Issue Reviewer Invitation</h3>
               <div role="note" aria-label="Invitation delivery notice">
-                <p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). A copyable invitation link and bearer token will be generated for manual sharing with the reviewer.</p>
+                <p>${isFounderUatEnabled() ? 'No email is sent for reviewer invitations. After creating one, copy its link below and share it with the address you entered.' : '<strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). A copyable invitation link and bearer token will be generated for manual sharing with the reviewer.'}</p>
               </div>
               <form action="/r23/organizations/${safeOrgId}/settings" method="post">
                 <input type="hidden" name="csrf" value="${safeCsrf}">
@@ -5428,6 +5523,107 @@ export async function stagingInvitationAcceptGet(
 ): Promise<Response> {
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
+  const founderUat = isFounderUatEnabled();
+
+  if (founderUat && url.searchParams.get('pending') === '1') {
+    const encodedSession = cookieValue(request, R23_SESSION_COOKIE);
+    const csrf = cookieValue(request, R23_CSRF_COOKIE);
+    if (!encodedSession || !csrf) {
+      return htmlResponse(
+        'Reviewer invitation',
+        '<p role="status">Sign in with the invited account to continue.</p><p><a href="/r23/login">Sign in</a></p>',
+      );
+    }
+
+    try {
+      return await withStagingBrowserSession(
+        request,
+        digest(csrf),
+        async ({ identity, csrfToken }) => {
+          const invitation = await readFounderUatPendingInvitation(
+            request,
+            identity,
+          );
+          if (!invitation) throw new StagingForbidden();
+
+          return htmlResponse(
+            'Accept reviewer invitation',
+            `
+              <section aria-labelledby="accept-invitation-title">
+                <h2 id="accept-invitation-title">Join as a reviewer</h2>
+                <p>You are signed in as <strong>${safeHtml(identity.email ?? '')}</strong>.</p>
+                <p>Accept the invitation to join the organization and review its assessments.</p>
+                <form action="/r23/invitations/accept" method="post">
+                  <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
+                  <button type="submit">Accept invitation and join organization</button>
+                </form>
+                <p><a href="/r23/organizations">Cancel</a></p>
+              </section>
+            `,
+          );
+        },
+      );
+    } catch {
+      return htmlResponse(
+        'Invitation could not be opened',
+        '<p role="alert">This invitation is unavailable for the signed-in account. Sign in with the invited email address or ask the inviter for a new link.</p><p><a href="/r23/login">Sign in</a></p>',
+        403,
+      );
+    }
+  }
+
+  if (founderUat) {
+    if (!token || token.length > 256) {
+      return htmlResponse(
+        'Reviewer invitation',
+        '<p role="alert">An invitation link is required.</p><p><a href="/r23/login">Sign in</a></p>',
+        400,
+      );
+    }
+
+    const safeToken = safeHtml(token);
+    const actions = [
+      ['login', 'Sign in with invited account'],
+      ['signup', 'Create an account'],
+    ] as const;
+    const actionForms = actions
+      .map(
+        ([destination, label]) => `
+          <form action="/api/founder-uat/invitations/context" method="post">
+            <input type="hidden" name="token" value="${safeToken}">
+            <input type="hidden" name="destination" value="${destination}">
+            <button type="submit">${label}</button>
+          </form>`,
+      )
+      .join('');
+    const hasSession =
+      Boolean(cookieValue(request, R23_SESSION_COOKIE)) &&
+      Boolean(cookieValue(request, R23_CSRF_COOKIE));
+
+    return htmlResponse(
+      'Reviewer invitation',
+      `
+        <section aria-labelledby="invitation-intro-title">
+          <h2 id="invitation-intro-title">Join organization as a reviewer</h2>
+          <p>You have been invited to join an engineering organization on Hirearchy as a reviewer.</p>
+          <div role="note" aria-label="Invitation instructions">
+            <p>Use the email address your inviter specified. Your invitation will stay available while you sign in or create an account.</p>
+          </div>
+          <div aria-label="Invitation account options">${actionForms}</div>
+          ${
+            hasSession
+              ? `<form action="/api/founder-uat/invitations/context" method="post">
+                  <input type="hidden" name="token" value="${safeToken}">
+                  <input type="hidden" name="destination" value="accept">
+                  <button type="submit">Continue with this account</button>
+                </form>`
+              : ''
+          }
+        </section>
+      `,
+    );
+  }
+
   if (!token || token.length > 256) {
     return htmlResponse(
       'Invitation link required',
@@ -5500,8 +5696,9 @@ export async function stagingInvitationAcceptPost(
   try {
     const origin = requireSameOrigin(request);
     const body = await parseBody(request, false);
-    allowedFields(body, ['token', 'csrf']);
-    const token = requiredText(body, 'token', 256);
+    const founderUat = isFounderUatEnabled();
+    allowedFields(body, founderUat ? ['csrf'] : ['token', 'csrf']);
+    const token = founderUat ? null : requiredText(body, 'token', 256);
     const csrf = requiredText(body, 'csrf', 100);
     const csrfHash = digest(csrf);
 
@@ -5509,7 +5706,15 @@ export async function stagingInvitationAcceptPost(
       request,
       csrfHash,
       async ({ config, sessionKey, session, identity }) => {
-        const tokenHash = invitationTokenHash(token);
+        const pendingInvitation = founderUat
+          ? await readFounderUatPendingInvitation(request, identity)
+          : null;
+        if (founderUat && !pendingInvitation) {
+          throw new StagingForbidden();
+        }
+        const invitationToken = pendingInvitation?.token ?? token;
+        if (!invitationToken) throw new StagingForbidden();
+        const tokenHash = invitationTokenHash(invitationToken);
         const result = (await dispatchVerifiedStagingOperation(
           config,
           identity,
@@ -5530,13 +5735,21 @@ export async function stagingInvitationAcceptPost(
           selectedOrganizationId: organizationId,
         });
 
-        return redirect(origin, `/r23/organizations/${organizationId}`, [
+        const cookies = [
           cookieHeader(
             R23_SESSION_COOKIE,
             encryptSessionPayload(updatedSession, sessionKey),
             true,
           ),
-        ]);
+        ];
+        if (founderUat && pendingInvitation) {
+          cookies.push(clearFounderUatPendingInvitation());
+        }
+        return redirect(
+          origin,
+          `/r23/organizations/${organizationId}`,
+          cookies,
+        );
       },
     );
   } catch (error) {

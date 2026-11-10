@@ -1,10 +1,17 @@
 import { verifyR23AccessToken } from '../../../../src/r23-auth/identity';
 import { enforceRateLimit } from '../../../../src/security/rate-limit';
 import { loadStagingConfiguration } from '../../../../src/staging/server';
+import { isFounderUatProfile } from '../../../../src/runtime/profile';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<Response> {
+  if (isFounderUatProfile()) {
+    return Response.json(
+      { error: 'Not found' },
+      { status: 404, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
   const rateLimitResponse = enforceRateLimit(request, 'auth');
   if (rateLimitResponse) return rateLimitResponse;
 

@@ -1,0 +1,219 @@
+name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME}
+
+services:
+  postgres:
+    image: hirearchy/postgres-staging:founder-uat
+    build:
+      context: ../..
+      dockerfile: database/postgres/staging/Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      GOTRUE_DB_PASSWORD: ${GOTRUE_DB_PASSWORD:?set GOTRUE_DB_PASSWORD}
+      MIGRATOR_DATABASE_PASSWORD: ${MIGRATOR_DATABASE_PASSWORD:?set MIGRATOR_DATABASE_PASSWORD}
+      R23_GATEWAY_PASSWORD: ${R23_GATEWAY_PASSWORD:?set R23_GATEWAY_PASSWORD}
+      CANDIDATE_GATEWAY_PASSWORD: ${CANDIDATE_GATEWAY_PASSWORD:?set CANDIDATE_GATEWAY_PASSWORD}
+      APP_EVALUATOR_PASSWORD: ${APP_EVALUATOR_PASSWORD:?set APP_EVALUATOR_PASSWORD}
+      CONTROL_WORKER_PASSWORD: ${CONTROL_WORKER_PASSWORD:?set CONTROL_WORKER_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - listen_addresses=127.0.0.1
+      - -c
+      - port=${PG_PORT:?set PG_PORT}
+      - -c
+      - password_encryption=scram-sha-256
+    volumes:
+      - founder-postgres-data:/var/lib/postgresql/data
+      - ../../deploy/staging/postgres-init/10-bootstrap.sh:/docker-entrypoint-initdb.d/10-bootstrap.sh:ro
+      - ../../deploy/staging/postgres-init/bootstrap-auth.sql:/opt/hirearchy/bootstrap-auth.sql:ro
+      - ../../deploy/staging/postgres-init/bootstrap-passwords.sql:/opt/hirearchy/bootstrap-passwords.sql:ro
+      - ../../database/postgres/bootstrap-roles.sql:/opt/hirearchy/bootstrap-roles.sql:ro
+      - ../../database/postgres/bootstrap-internal-roles.sql:/opt/hirearchy/bootstrap-internal-roles.sql:ro
+      - ../../database/postgres/staging/bootstrap-verifier.sql:/opt/hirearchy/bootstrap-verifier.sql:ro
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'pg_isready -h 127.0.0.1 -p ${PG_PORT:?set PG_PORT} -U postgres -d postgres',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    cpus: 0.35
+    mem_limit: 320m
+    pids_limit: 96
+    security_opt:
+      - no-new-privileges:true
+    logging: &rotated-logs
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+  gotrue:
+    image: supabase/gotrue:v2.197.0@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 127.0.0.1
+      GOTRUE_API_PORT: ${GOTRUE_API_PORT:?set GOTRUE_API_PORT}
+      PORT: ${GOTRUE_API_PORT:?set GOTRUE_API_PORT}
+      API_EXTERNAL_URL: ${STAGING_AUTH_URL:?set STAGING_AUTH_URL}
+      GOTRUE_SITE_URL: ${STAGING_PUBLIC_ORIGIN:?set STAGING_PUBLIC_ORIGIN}
+      GOTRUE_URI_ALLOW_LIST: ${STAGING_PUBLIC_ORIGIN:?set STAGING_PUBLIC_ORIGIN}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${GOTRUE_DB_PASSWORD:?set GOTRUE_DB_PASSWORD}@127.0.0.1:${PG_PORT:?set PG_PORT}/postgres?sslmode=disable
+      GOTRUE_DB_NAMESPACE: auth
+      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET:?set GOTRUE_JWT_SECRET}
+      GOTRUE_JWT_ISSUER: ${STAGING_AUTH_ISSUER:?set STAGING_AUTH_ISSUER}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_DISABLE_SIGNUP: '${FOUNDER_UAT_SIGNUP_DISABLED:-false}'
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
+      GOTRUE_EXTERNAL_PHONE_ENABLED: 'false'
+      GOTRUE_MAILER_AUTOCONFIRM: 'false'
+      GOTRUE_MAILER_OTP_EXP: 600
+      GOTRUE_MAILER_OTP_LENGTH: 6
+      GOTRUE_SMTP_HOST: 127.0.0.1
+      GOTRUE_SMTP_PORT: ${MAILPIT_SMTP_PORT:?set MAILPIT_SMTP_PORT}
+      GOTRUE_SMTP_ADMIN_EMAIL: no-reply@hirearchy.local
+      GOTRUE_SMTP_SENDER_NAME: Hirearchy
+      GOTRUE_SMTP_LOGGING_ENABLED: 'false'
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: Hirearchy account confirmation
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: Hirearchy password recovery
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://127.0.0.1:${APP_PORT:?set APP_PORT}/api/founder-uat/mail/template/confirmation
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://127.0.0.1:${APP_PORT:?set APP_PORT}/api/founder-uat/mail/template/recovery
+      GOTRUE_LOG_LEVEL: warn
+    healthcheck:
+      test:
+        [
+          CMD,
+          wget,
+          --no-verbose,
+          --tries=1,
+          --spider,
+          'http://127.0.0.1:${GOTRUE_API_PORT:?set GOTRUE_API_PORT}/health',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    cpus: 0.2
+    mem_limit: 160m
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+    logging: *rotated-logs
+
+  mailpit:
+    image: axllent/mailpit:v1.31.1@sha256:98b916bd3c8d61f7633a52d3ea2f58d00620cb01ca57ab59edde68c347a95365
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_UI_BIND_ADDR: 127.0.0.1:${MAILPIT_API_PORT:?set MAILPIT_API_PORT}
+      MP_SMTP_BIND_ADDR: 127.0.0.1:${MAILPIT_SMTP_PORT:?set MAILPIT_SMTP_PORT}
+      MP_ALLOWED_HOSTS: 127.0.0.1:${MAILPIT_API_PORT:?set MAILPIT_API_PORT}
+      MP_MAX_MESSAGES: 100
+      MP_MAX_AGE: 72h
+      MP_MAX_MESSAGE_SIZE: 1
+      MP_DISABLE_VERSION_CHECK: 'true'
+      MP_QUIET: 'true'
+    volumes:
+      - founder-mailpit-data:/data
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    cpus: 0.1
+    mem_limit: 64m
+    pids_limit: 32
+    security_opt:
+      - no-new-privileges:true
+    logging: *rotated-logs
+
+  web:
+    image: node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+    network_mode: host
+    restart: unless-stopped
+    user: '1000:1000'
+    working_dir: ${FOUNDER_UAT_SOURCE_DIR:?set FOUNDER_UAT_SOURCE_DIR}
+    command:
+      - node
+      - node_modules/next/dist/bin/next
+      - start
+      - apps/web
+      - --hostname
+      - 127.0.0.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gotrue:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=384
+      NEXT_TELEMETRY_DISABLED: '1'
+      PORT: ${APP_PORT:?set APP_PORT}
+      HOSTNAME: 127.0.0.1
+      HIREARCHY_RUNTIME_PROFILE: founder-uat
+      HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED: 'true'
+      HIREARCHY_RATE_LIMIT_ENABLED: 'true'
+      HIREARCHY_TRUSTED_PROXY_HOPS: '0'
+      HIREARCHY_LOG_VERBOSE: 'false'
+      FOUNDER_UAT_APP_ORIGIN: ${STAGING_PUBLIC_ORIGIN:?set STAGING_PUBLIC_ORIGIN}
+      FOUNDER_UAT_MAILPIT_API_URL: http://127.0.0.1:${MAILPIT_API_PORT:?set MAILPIT_API_PORT}
+      STAGING_PUBLIC_ORIGIN: ${STAGING_PUBLIC_ORIGIN:?set STAGING_PUBLIC_ORIGIN}
+      STAGING_AUTH_URL: ${STAGING_AUTH_URL:?set STAGING_AUTH_URL}
+      STAGING_AUTH_ISSUER: ${STAGING_AUTH_ISSUER:?set STAGING_AUTH_ISSUER}
+      STAGING_AUTH_AUDIENCE: authenticated
+      STAGING_DATABASE_URL: ${STAGING_DATABASE_URL:?set STAGING_DATABASE_URL}
+      STAGING_CANDIDATE_DATABASE_URL: ${STAGING_CANDIDATE_DATABASE_URL:?set STAGING_CANDIDATE_DATABASE_URL}
+      STAGING_PROOF_ISSUER: ${STAGING_PROOF_ISSUER:?set STAGING_PROOF_ISSUER}
+      STAGING_PROOF_AUDIENCE: ${STAGING_PROOF_AUDIENCE:?set STAGING_PROOF_AUDIENCE}
+      STAGING_PROOF_KEY_ID: ${STAGING_PROOF_KEY_ID:?set STAGING_PROOF_KEY_ID}
+      STAGING_PROOF_PRIVATE_KEY: ${STAGING_PROOF_PRIVATE_KEY:?set STAGING_PROOF_PRIVATE_KEY}
+      HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY: ${HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY:?set HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY}
+    volumes:
+      - ${FOUNDER_UAT_SOURCE_DIR:?set FOUNDER_UAT_SOURCE_DIR}:${FOUNDER_UAT_SOURCE_DIR:?set FOUNDER_UAT_SOURCE_DIR}:ro
+      - ${FOUNDER_UAT_NODE_MODULES_DIR:?set FOUNDER_UAT_NODE_MODULES_DIR}:${FOUNDER_UAT_NODE_MODULES_DIR:?set FOUNDER_UAT_NODE_MODULES_DIR}:ro
+      - ${FOUNDER_UAT_NEXT_CACHE_DIR:?set FOUNDER_UAT_NEXT_CACHE_DIR}:${FOUNDER_UAT_NEXT_CACHE_DIR:?set FOUNDER_UAT_NEXT_CACHE_DIR}:rw
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'node -e "fetch(''http://127.0.0.1:'' + process.env.PORT + ''/api/staging/readiness'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    cpus: 0.6
+    mem_limit: 640m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    logging: *rotated-logs
+
+volumes:
+  founder-postgres-data:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME}-postgres-data
+  founder-mailpit-data:
+    name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME}-mailpit-data

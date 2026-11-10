@@ -106,10 +106,17 @@ describe('staging proof issuer', () => {
       issueStagingProof(issuer, recovery, 'session.mint', {}),
     ).toThrow(R23AuthenticationDenied);
 
+    const otpOnly = await identityFor([{ method: 'otp', timestamp: 1 }]);
+    expect(otpOnly.isRecovery).toBe(false);
+    expect(() =>
+      issueStagingProof(issuer, otpOnly, 'session.mint', {}),
+    ).toThrow(R23AuthenticationDenied);
+
     for (const amr of [
       undefined,
       [],
       [{ method: 'password', timestamp: -1 }],
+      [{ method: 'unknown', timestamp: 1 }],
     ]) {
       const ineligible = await identityFor(amr);
       expect(ineligible.isRecovery).toBeNull();

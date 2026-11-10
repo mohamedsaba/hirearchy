@@ -15,6 +15,7 @@ export type R23VerifiedIdentity = Readonly<{
   email: string | null;
   emailVerified: boolean;
   isRecovery: boolean | null;
+  authMethods: readonly string[];
   expiresAt: number;
 }>;
 
@@ -36,6 +37,15 @@ export class R23AuthUnavailable extends Error {
   }
 }
 
+export class R23PasswordUpdateDenied extends Error {
+  readonly code = 'PASSWORD_UPDATE_DENIED';
+
+  constructor() {
+    super('Password update denied');
+    this.name = 'R23PasswordUpdateDenied';
+  }
+}
+
 type Claims = Record<string, unknown> & {
   sub: string;
   session_id: string;
@@ -47,9 +57,20 @@ function denied(): never {
   throw new R23AuthenticationDenied();
 }
 
-function classifyRecoveryAmr(amr: unknown): boolean | null {
+const KNOWN_AMR_METHODS = new Set([
+  'password',
+  'otp',
+  'magiclink',
+  'recovery',
+  'mfa/totp',
+]);
+
+function classifyAmr(
+  amr: unknown,
+): { isRecovery: boolean; methods: readonly string[] } | null {
   if (!Array.isArray(amr) || amr.length === 0) return null;
   let isRecovery = false;
+  const methods: string[] = [];
   for (const entry of amr) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry))
       return null;
@@ -57,6 +78,7 @@ function classifyRecoveryAmr(amr: unknown): boolean | null {
     if (
       typeof method !== 'string' ||
       method.trim().length === 0 ||
+      !KNOWN_AMR_METHODS.has(method) ||
       typeof timestamp !== 'number' ||
       !Number.isSafeInteger(timestamp) ||
       timestamp < 0
@@ -64,8 +86,9 @@ function classifyRecoveryAmr(amr: unknown): boolean | null {
       return null;
     }
     if (method === 'recovery') isRecovery = true;
+    methods.push(method);
   }
-  return isRecovery;
+  return Object.freeze({ isRecovery, methods: Object.freeze(methods) });
 }
 
 function parseSegment(segment: string): Record<string, unknown> {
@@ -257,6 +280,47 @@ export async function revokeAuthSession(
   if (!response.ok) return denied();
 }
 
+export async function verifyR23Otp(
+  config: R23IdentityConfig,
+  email: string,
+  token: string,
+  type: 'signup' | 'recovery',
+): Promise<R23TokenGrant & { type: 'signup' | 'recovery' }> {
+  if (!email || email.length > 320 || !/^\d{6}$/.test(token)) return denied();
+  const response = await requestAuth(endpoint(config, '/verify'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, token, type }),
+  });
+  if (!response.ok) return denied();
+  const value = await readJson(response, 65536);
+  return Object.freeze({ ...credentialPair(value), type });
+}
+
+export async function updateR23Password(
+  config: R23IdentityConfig,
+  accessToken: string,
+  password: string,
+): Promise<void> {
+  const response = await requestAuth(endpoint(config, '/user'), {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ password }),
+  });
+  if (response.status === 400 || response.status === 422) {
+    throw new R23PasswordUpdateDenied();
+  }
+  if (!response.ok) return denied();
+  await readJson(response, 65536);
+}
+
 export async function verifyR23AccessToken(
   config: R23IdentityConfig,
   accessToken: string,
@@ -298,13 +362,15 @@ export async function verifyR23AccessToken(
     return denied();
   }
   if (claims.exp <= Date.now() / 1000) return denied();
+  const amr = classifyAmr(claims.amr);
   const identity = Object.freeze({
     subjectId: claims.sub.toLowerCase(),
     sessionId: claims.session_id.toLowerCase(),
     assurance: claims.aal,
     email: typeof user.email === 'string' ? user.email : null,
     emailVerified: typeof user.email_confirmed_at === 'string',
-    isRecovery: classifyRecoveryAmr(claims.amr),
+    isRecovery: amr?.isRecovery ?? null,
+    authMethods: amr?.methods ?? Object.freeze([]),
     expiresAt: claims.exp,
   });
   verifiedIdentities.add(identity);
@@ -321,6 +387,11 @@ export function assertR23StagingEligibleIdentity(
   value: unknown,
 ): R23VerifiedIdentity {
   const identity = assertR23VerifiedIdentity(value);
-  if (identity.isRecovery !== false) return denied();
+  if (
+    identity.isRecovery !== false ||
+    !identity.authMethods.includes('password')
+  ) {
+    return denied();
+  }
   return identity;
 }

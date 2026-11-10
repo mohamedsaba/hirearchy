@@ -2,7 +2,13 @@
 
 Slice 5.1 presents an evidence-first review rather than an analytics dashboard.
 
-## Review entry and discovery
+## Supported release review entry
+
+The durable release path uses a normal GoTrue account, verified application session, active organization `reviewer` membership, and assignment to the submitted session. Recruiter membership does not grant evidence or review access. The organization owner invites the evaluator through the product; the evaluator signs in normally and follows assigned-session navigation. PostgreSQL enforces organization and assignment scope for evidence and human-review operations through the signed proof v2 boundary.
+
+The global evaluator key described below belongs only to the retained legacy prototype. It must not be required or exposed in Founder UAT. [Release readiness](../release-readiness.md) records the current acceptance boundary.
+
+## Legacy prototype review entry and discovery
 
 `/evaluator` is the evaluator entry point. The existing single global
 `HIREARCHY_EVALUATOR_KEY` produces the HTTP-only `hirearchy_evaluator` cookie; a
@@ -85,9 +91,11 @@ explicit projection capabilities and typed presentation data only.
 
 ### Role-depth contract
 
-Depth is a default presentation preference, never authorization. The existing
-evaluator cookie authorizes the same submitted evidence independently of
-`depth` or `role`; a switch neither mutates a session nor persists role state.
+Depth is a default presentation preference, never authorization. On the legacy
+prototype, its evaluator cookie authorizes the same submitted evidence independently
+of `depth` or `role`; a switch neither mutates a session nor persists role state.
+On the durable release path, normal identity, membership, organization, and
+session-assignment checks remain mandatory regardless of presentation depth.
 
 | Flag                     | Presentation meaning                                                                                 | Consumer                                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |

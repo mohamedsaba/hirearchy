@@ -5,6 +5,12 @@ import {
   r211AssessmentDraftApiGet,
   r25OrganizationReviewersApiGet,
 } from '../../../../../src/r23-auth/server';
+import {
+  dispatchVerifiedStagingOperation,
+  loadStagingConfiguration,
+} from '../../../../../src/staging/server';
+import type { OrganizationMemberItem } from '../../../../../src/staging/onboarding';
+import { isFounderUatEnabled } from '../../../../../src/runtime/founder-uat';
 import { isAuthenticatedStaging } from '../../../../../src/runtime/profile';
 import { AssessmentBuilderClient } from './assessment-builder-client';
 import type { R211AssessmentDraft } from '../../../../../src/r211-builder/contract';
@@ -68,6 +74,36 @@ export default async function AssessmentBuilderPage({
     } catch {
       reviewers = [];
     }
+  }
+
+  if (isFounderUatEnabled() && context.membership.role === 'recruiter') {
+    const membersResult = (await dispatchVerifiedStagingOperation(
+      loadStagingConfiguration(),
+      context.identity,
+      'organization.members.list',
+      { organizationId },
+    )) as { members?: OrganizationMemberItem[] } | null;
+    if (!Array.isArray(membersResult?.members)) {
+      throw new Error('Organization member information is unavailable.');
+    }
+
+    const memberByPrincipalId = new Map(
+      membersResult.members
+        .filter(
+          (member) => member.status === 'active' && member.role === 'reviewer',
+        )
+        .map((member) => [member.principalId.toLowerCase(), member]),
+    );
+    reviewers = reviewers.map((reviewer) => {
+      const member = memberByPrincipalId.get(
+        reviewer.principalId.toLowerCase(),
+      );
+      return {
+        ...reviewer,
+        displayName: member?.displayName ?? null,
+        email: member?.email ?? null,
+      };
+    });
   }
 
   let initialDraft: R211AssessmentDraft | null =

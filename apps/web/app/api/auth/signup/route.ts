@@ -1,11 +1,30 @@
 import { enforceRateLimit } from '../../../../src/security/rate-limit';
 import { loadStagingConfiguration } from '../../../../src/staging/server';
+import {
+  founderUatPostMatchesOrigin,
+  readFounderUatConfiguration,
+} from '../../../../src/runtime/founder-uat';
+import { isFounderUatProfile } from '../../../../src/runtime/profile';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<Response> {
   const rateLimitResponse = enforceRateLimit(request, 'auth');
   if (rateLimitResponse) return rateLimitResponse;
+
+  const founderUat = readFounderUatConfiguration();
+  if (isFounderUatProfile() && !founderUat) {
+    return Response.json(
+      { error: 'Not found' },
+      { status: 404, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+  if (founderUat && !founderUatPostMatchesOrigin(request, founderUat)) {
+    return Response.json(
+      { error: 'Request origin denied' },
+      { status: 403, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
 
   const enabled =
     process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
@@ -74,9 +93,10 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       {
         user: data?.id ? data : data?.user,
-        emailDeliveryEnabled: false,
-        message:
-          'User registration initiated. Automated email delivery is disabled in this environment.',
+        emailDeliveryEnabled: Boolean(founderUat),
+        message: founderUat
+          ? 'Check the local inbox for your verification code.'
+          : 'User registration initiated. Automated email delivery is disabled in this environment.',
       },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );

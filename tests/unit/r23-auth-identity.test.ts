@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { R23Config } from '../../apps/web/src/r23-auth/config';
 import {
+  assertR23StagingEligibleIdentity,
   assertR23VerifiedIdentity,
   R23AuthenticationDenied,
+  verifyR23Otp,
   verifyR23AccessToken,
 } from '../../apps/web/src/r23-auth/identity';
 
@@ -45,6 +47,37 @@ function accessToken(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('R23 Auth identity verification', () => {
+  it('uses GoTrue email OTP verification without relying on a response type field', async () => {
+    const authFetch = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        access_token: 'synthetic-access-token',
+        refresh_token: 'synthetic-refresh-token',
+        expires_in: 300,
+      }),
+    );
+    vi.stubGlobal('fetch', authFetch);
+
+    await expect(
+      verifyR23Otp(config, 'founder@example.test', '123456', 'recovery'),
+    ).resolves.toEqual({
+      accessToken: 'synthetic-access-token',
+      refreshToken: 'synthetic-refresh-token',
+      expiresIn: 300,
+      reportedExpiresAt: null,
+      type: 'recovery',
+    });
+
+    expect(authFetch).toHaveBeenCalledOnce();
+    const [requestUrl, requestInit] = authFetch.mock.calls[0];
+    expect(String(requestUrl)).toBe('http://127.0.0.1:54321/verify');
+    expect(requestInit?.method).toBe('POST');
+    expect(JSON.parse(String(requestInit?.body))).toEqual({
+      email: 'founder@example.test',
+      token: '123456',
+      type: 'recovery',
+    });
+  });
+
   it('requires GoTrue to accept the bearer before branding its identity', async () => {
     const token = accessToken();
     const authFetch = vi.fn<typeof fetch>(
@@ -155,6 +188,54 @@ describe('R23 Auth identity verification', () => {
       isRecovery: true,
     });
     expect(authFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('requires a known password AMR for product eligibility and rejects OTP-only or recovery grants', async () => {
+    const authFetch = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        id: subjectA,
+        email_confirmed_at: '2026-10-30T00:00:00.000Z',
+      }),
+    );
+    vi.stubGlobal('fetch', authFetch);
+
+    const password = await verifyR23AccessToken(
+      config,
+      accessToken({ amr: [{ method: 'password', timestamp: 1 }] }),
+    );
+    expect(assertR23StagingEligibleIdentity(password)).toBe(password);
+
+    const otpOnly = await verifyR23AccessToken(
+      config,
+      accessToken({ amr: [{ method: 'otp', timestamp: 1 }] }),
+    );
+    expect(otpOnly).toMatchObject({ isRecovery: false, authMethods: ['otp'] });
+    expect(() => assertR23StagingEligibleIdentity(otpOnly)).toThrow(
+      R23AuthenticationDenied,
+    );
+
+    const mixedRecovery = await verifyR23AccessToken(
+      config,
+      accessToken({
+        amr: [
+          { method: 'password', timestamp: 1 },
+          { method: 'recovery', timestamp: 2 },
+        ],
+      }),
+    );
+    expect(() => assertR23StagingEligibleIdentity(mixedRecovery)).toThrow(
+      R23AuthenticationDenied,
+    );
+
+    const unknown = await verifyR23AccessToken(
+      config,
+      accessToken({ amr: [{ method: 'unknown', timestamp: 1 }] }),
+    );
+    expect(unknown.isRecovery).toBeNull();
+    expect(() => assertR23StagingEligibleIdentity(unknown)).toThrow(
+      R23AuthenticationDenied,
+    );
+    expect(authFetch).toHaveBeenCalledTimes(4);
   });
 
   it('marks missing, empty, or malformed AMR ineligible without breaking legacy verification', async () => {

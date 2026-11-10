@@ -38,6 +38,8 @@ import { r26IsEnabled } from '../r26-candidate/config';
 import { r27IsEnabled } from '../r27-evidence/config';
 import { r29IsEnabled } from '../r29-observations/config';
 import { isAuthenticatedStaging } from '../runtime/profile';
+import { readFounderUatConfiguration } from '../runtime/founder-uat';
+import { hasFounderUatPendingInvitation } from './founder-uat-state';
 import {
   stagingAssessmentDraftApiGet,
   stagingAssessmentDraftApiPut,
@@ -900,37 +902,20 @@ export function resolveOrgDisplay(
   organizationId: string,
   membership?: {
     role?: string;
-    organizationName?: string;
-    organizationSlug?: string;
+    displayName?: string | null;
+    organizationName?: string | null;
+    organizationSlug?: string | null;
   } | null,
-  userEmail?: string | null,
 ): { name: string; slug: string } {
-  if (membership?.organizationName && membership?.organizationSlug) {
-    return {
-      name: membership.organizationName,
-      slug: membership.organizationSlug,
-    };
-  }
-  if (membership?.role === 'admin' || userEmail?.includes('beta')) {
-    return {
-      name: 'Beta Engineering Org',
-      slug: 'beta-eval',
-    };
-  }
-  if (
-    userEmail?.includes('acme') ||
-    membership?.role === 'recruiter' ||
-    membership?.role === 'reviewer'
-  ) {
-    return {
-      name: 'Acme Evaluation Org',
-      slug: 'acme-eval',
-    };
-  }
-  const idLower = organizationId.toLowerCase();
+  const idLower = organizationId.trim().toLowerCase();
+  const idPrefix = idLower.replace(/[^a-z0-9]/g, '').slice(0, 8) || 'unknown';
+  const name =
+    membership?.displayName?.trim() ||
+    membership?.organizationName?.trim() ||
+    `Organization ${idPrefix}`;
   return {
-    name: `Organization ${idLower.slice(0, 8)}`,
-    slug: idLower.slice(0, 8),
+    name,
+    slug: membership?.organizationSlug?.trim() || idPrefix,
   };
 }
 
@@ -1023,11 +1008,7 @@ export async function loadAuthenticatedOrganizationSessionList(
         };
       }
 
-      const orgDisplay = resolveOrgDisplay(
-        targetOrganizationId,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(targetOrganizationId, membership);
 
       return {
         identity,
@@ -1121,11 +1102,7 @@ export async function loadAuthenticatedOrganizationSessionSummary(
         };
       }
 
-      const orgDisplay = resolveOrgDisplay(
-        targetOrganizationId,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(targetOrganizationId, membership);
 
       let reviewers: Array<{
         principalId: string;
@@ -1440,7 +1417,24 @@ export function r23LoginGet(): Response {
 }
 
 export async function r23LoginPost(request: Request): Promise<Response> {
-  if (isAuthenticatedStaging()) return stagingLoginPost(request);
+  if (isAuthenticatedStaging()) {
+    const response = await stagingLoginPost(request);
+    const founderUat = readFounderUatConfiguration();
+    if (!founderUat || (response.status !== 401 && response.status !== 503)) {
+      return response;
+    }
+    const path =
+      response.status === 401
+        ? '/r23/login?error=credentials'
+        : '/r23/login?error=unavailable';
+    const headers = new Headers({
+      'Cache-Control': 'private, no-store, max-age=0',
+      Location: new URL(path, founderUat.appOrigin).toString(),
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new Response(null, { status: 303, headers });
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -1495,7 +1489,40 @@ export async function r23LoginPost(request: Request): Promise<Response> {
 }
 
 export async function r23CallbackGet(request: Request): Promise<Response> {
-  if (isAuthenticatedStaging()) return stagingCallbackGet(request);
+  if (isAuthenticatedStaging()) {
+    const response = await stagingCallbackGet(request);
+    const founderUat = readFounderUatConfiguration();
+    if (
+      !founderUat ||
+      response.status !== 303 ||
+      !hasFounderUatPendingInvitation(request)
+    ) {
+      return response;
+    }
+    const location = response.headers.get('location');
+    if (!location) return response;
+    let callbackTarget: URL;
+    try {
+      callbackTarget = new URL(location);
+    } catch {
+      return response;
+    }
+    if (
+      callbackTarget.origin !== founderUat.appOrigin.origin ||
+      callbackTarget.pathname !== '/r23/organizations'
+    ) {
+      return response;
+    }
+    const headers = new Headers(response.headers);
+    headers.set(
+      'Location',
+      new URL(
+        '/r23/invitations/accept?pending=1',
+        founderUat.appOrigin,
+      ).toString(),
+    );
+    return new Response(null, { status: response.status, headers });
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   let sessionPending = false;
   try {

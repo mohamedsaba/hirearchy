@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { isFounderUatEnabled } from '../src/runtime/founder-uat';
 import { Hero } from './home/hero';
 import {
   Site,
@@ -15,6 +17,7 @@ export const metadata = {
   description:
     'A family of tools for seeing work clearly. Real tasks, visible work and human review. Start with Hirearchy Software.',
 };
+export const dynamic = 'force-dynamic';
 const processSteps = [
   ['task', 'A real task', 'A practical assignment relevant to the role.'],
   ['work', 'Work in context', 'Candidates show their process and output.'],
@@ -28,6 +31,8 @@ const softwareSteps = [
   ['person', 'The decision', 'Humans decide what comes next.'],
 ];
 export default function HomePage() {
+  if (isFounderUatEnabled()) redirect('/r23/login');
+
   return (
     <Site home>
       <Hero />

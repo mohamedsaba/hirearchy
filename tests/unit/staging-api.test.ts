@@ -6,7 +6,11 @@ vi.mock('../../apps/web/src/staging/dispatch.mjs', () => ({
   dispatchStagingProof: vi.fn(async () => ({ ok: true })),
 }));
 import { dispatchStagingProof } from '../../apps/web/src/staging/dispatch.mjs';
-import { stagingLoginPost } from '../../apps/web/src/staging/browser';
+import {
+  stagingCallbackGet,
+  stagingLoginPost,
+  stagingOrganizationsGet,
+} from '../../apps/web/src/staging/browser';
 import { stagingPost } from '../../apps/web/src/staging/server';
 import { proxy } from '../../apps/web/proxy';
 import { r23IsEnabled } from '../../apps/web/src/r23-auth/config';
@@ -391,6 +395,11 @@ describe('authenticated staging boundary', () => {
         { method: 'password', timestamp: 1 },
         { method: 'recovery', timestamp: 2 },
       ],
+      [{ method: 'otp', timestamp: 1 }],
+      [
+        { method: 'password', timestamp: 1 },
+        { method: 'unknown', timestamp: 2 },
+      ],
       undefined,
     ]) {
       grantedToken = makeToken(amr);
@@ -401,5 +410,148 @@ describe('authenticated staging boundary', () => {
       expect((await stagingPost(request(grantedToken))).status).toBe(401);
       expect(dispatchStagingProof).not.toHaveBeenCalled();
     }
+  });
+
+  it('surfaces organization database failures and renders persisted names', async () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    const { privateKey } = generateKeyPairSync('ed25519');
+    const env = {
+      STAGING_AUTH_URL: 'http://127.0.0.1:54321',
+      STAGING_AUTH_ISSUER: 'https://auth.example.test',
+      STAGING_AUTH_AUDIENCE: 'authenticated',
+      STAGING_DATABASE_URL:
+        'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
+      STAGING_PROOF_PRIVATE_KEY: privateKey
+        .export({ format: 'der', type: 'pkcs8' })
+        .toString('base64'),
+      STAGING_PROOF_ISSUER: 'hirearchy',
+      STAGING_PROOF_AUDIENCE: 'database',
+      STAGING_PROOF_KEY_ID: 'key-1',
+    };
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+
+    const token = `${encode({ alg: 'HS256' })}.${encode({
+      sub: subject,
+      session_id: session,
+      aal: 'aal1',
+      iss: env.STAGING_AUTH_ISSUER,
+      aud: env.STAGING_AUTH_AUDIENCE,
+      exp: Math.floor(Date.now() / 1000) + 300,
+      amr: [{ method: 'password', timestamp: 1 }],
+    })}.signature`;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        if (String(input).includes('/token?grant_type=password')) {
+          return Response.json({
+            access_token: token,
+            refresh_token: 'synthetic-refresh-token',
+            expires_in: 300,
+          });
+        }
+        return Response.json({ id: subject });
+      }),
+    );
+
+    const login = await stagingLoginPost(
+      new Request('http://localhost/r23/auth/login', {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'evaluator@example.test',
+          password: 'synthetic-password',
+        }),
+      }),
+    );
+    expect(login.status).toBe(303);
+
+    const cookies = new Map<string, string>();
+    const mergeResponseCookies = (response: Response) => {
+      const raw = response.headers.get('set-cookie') ?? '';
+      for (const match of raw.matchAll(
+        /(?:^|,\s*)(__Host-r23-[^=;, ]+=[^;,]*)/g,
+      )) {
+        const pair = match[1].trim();
+        const separator = pair.indexOf('=');
+        const name = pair.slice(0, separator);
+        if (pair.slice(separator + 1) === '') cookies.delete(name);
+        else cookies.set(name, pair);
+      }
+    };
+    mergeResponseCookies(login);
+    const callback = await stagingCallbackGet(
+      new Request('http://localhost/r23/auth/callback', {
+        headers: { cookie: [...cookies.values()].join('; ') },
+      }),
+    );
+    expect(callback.status).toBe(303);
+    mergeResponseCookies(callback);
+    const browserCookies = [...cookies.values()].join('; ');
+    const organizationsRequest = () =>
+      new Request('http://localhost/r23/organizations', {
+        headers: { cookie: browserCookies },
+      });
+
+    vi.mocked(dispatchStagingProof).mockClear();
+    vi.mocked(dispatchStagingProof).mockRejectedValueOnce(
+      Object.assign(new Error('database connection failed'), { code: '08006' }),
+    );
+    const unavailable = await stagingOrganizationsGet(organizationsRequest());
+    const unavailableHtml = await unavailable.text();
+    expect(unavailable.status).toBe(500);
+    expect(unavailableHtml).toContain('The request could not be completed.');
+    expect(unavailableHtml).not.toContain('No active organization membership');
+    expect(dispatchStagingProof).toHaveBeenCalledTimes(1);
+    expect(
+      JSON.parse(vi.mocked(dispatchStagingProof).mock.calls[0][1].toString())
+        .op,
+    ).toBe('onboarding.status');
+
+    vi.mocked(dispatchStagingProof).mockClear();
+    vi.mocked(dispatchStagingProof).mockResolvedValueOnce({
+      status: 'needs_team',
+      email: 'evaluator@example.test',
+      capabilities: {
+        selfServiceOnboardingEnabled: true,
+        emailDeliveryEnabled: false,
+      },
+    });
+    const needsTeam = await stagingOrganizationsGet(organizationsRequest());
+    expect(needsTeam.status).toBe(200);
+    expect(await needsTeam.text()).toContain('Create your first organization');
+    expect(dispatchStagingProof).toHaveBeenCalledTimes(1);
+
+    vi.mocked(dispatchStagingProof).mockClear();
+    vi.mocked(dispatchStagingProof)
+      .mockResolvedValueOnce({
+        status: 'has_active_membership',
+        email: 'evaluator@example.test',
+        capabilities: {
+          selfServiceOnboardingEnabled: true,
+          emailDeliveryEnabled: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        memberships: [
+          {
+            organizationId: '11111111-1111-4111-8111-111111111111',
+            role: 'recruiter',
+            version: 1,
+            displayName: 'Meridian Works',
+          },
+        ],
+      });
+    const withMembership = await stagingOrganizationsGet(
+      organizationsRequest(),
+    );
+    const organizationsHtml = await withMembership.text();
+    expect(withMembership.status).toBe(200);
+    expect(organizationsHtml).toContain('Select Meridian Works (recruiter)');
+    expect(organizationsHtml).not.toContain('Acme Evaluation Org');
+    expect(dispatchStagingProof).toHaveBeenCalledTimes(2);
   });
 });
