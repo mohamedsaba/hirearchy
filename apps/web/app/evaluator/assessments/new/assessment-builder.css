@@ -1864,6 +1864,10 @@
   }
 }
 
+.assessment-snapshot-facts {
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+
 .assessment-snapshot-facts dd {
   min-width: 0;
   margin: 0;
@@ -1882,8 +1886,7 @@
 
 @media (max-width: 700px) {
   .assessment-builder-page .assessment-snapshot-facts {
-    grid-template-columns: minmax(0, 1fr) !important;
-    gap: 5px !important;
+    grid-template-columns: minmax(0, 1fr);
   }
   .assessment-snapshot-facts dd + dt {
     margin-top: 12px;

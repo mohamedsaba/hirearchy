@@ -2356,8 +2356,6 @@ export function AssessmentBuilderClient({
                       <dl
                         style={{
                           display: 'grid',
-                          gridTemplateColumns:
-                            'minmax(0, 140px) minmax(0, 1fr)',
                           gap: '6px',
                           fontSize: '0.85rem',
                           margin: 0,
@@ -2565,8 +2563,6 @@ export function AssessmentBuilderClient({
                           className="assessment-snapshot-facts"
                           style={{
                             display: 'grid',
-                            gridTemplateColumns:
-                              'minmax(0, 160px) minmax(0, 1fr)',
                             gap: '6px',
                             fontSize: '0.85rem',
                             margin: 0,
@@ -2736,8 +2732,6 @@ export function AssessmentBuilderClient({
                       <dl
                         style={{
                           display: 'grid',
-                          gridTemplateColumns:
-                            'minmax(0, 140px) minmax(0, 1fr)',
                           gap: '8px',
                           fontSize: '0.9rem',
                           margin: 0,
