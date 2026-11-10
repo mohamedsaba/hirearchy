@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import {
   isAuthenticatedStaging,
+  isFounderUatEnabled,
   isPublicPreview,
   isStagingLockdown,
 } from './src/runtime/profile';
@@ -145,6 +146,9 @@ function isAllowedPublicPreviewRequest(
 }
 
 function isFounderUatRoute(method: string, pathname: string): boolean {
+  if ((method === 'GET' || method === 'HEAD') && pathname === '/') {
+    return isFounderUatEnabled();
+  }
   if (method === 'GET' || method === 'HEAD') {
     return (
       pathname === '/r23/mail' ||
