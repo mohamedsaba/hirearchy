@@ -3187,3 +3187,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.evaluator-integrity-digest {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

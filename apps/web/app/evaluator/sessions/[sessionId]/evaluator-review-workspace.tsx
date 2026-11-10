@@ -361,14 +361,7 @@ const R27SummaryView = ({
             </div>
           </header>
           <p style={{ overflowWrap: 'anywhere' }}>Scenario snapshot digest:</p>
-          <code
-            style={{
-              display: 'block',
-              maxWidth: '100%',
-              overflowX: 'auto',
-              whiteSpace: 'nowrap',
-            }}
-          >
+          <code className="evaluator-integrity-digest">
             {evidence.scenario.snapshotDigest}
           </code>
           <p>
@@ -621,14 +614,7 @@ const R27SummaryView = ({
             <div>
               <dt>Workspace digest</dt>
               <dd>
-                <code
-                  style={{
-                    display: 'block',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <code className="evaluator-integrity-digest">
                   {evidence.submission.workspaceDigest}
                 </code>
               </dd>
@@ -636,14 +622,7 @@ const R27SummaryView = ({
             <div>
               <dt>Manifest digest</dt>
               <dd>
-                <code
-                  style={{
-                    display: 'block',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <code className="evaluator-integrity-digest">
                   {evidence.submission.manifestDigest}
                 </code>
               </dd>
