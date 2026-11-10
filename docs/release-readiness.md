@@ -1,13 +1,24 @@
 # MVP release readiness
 
-- **As of:** 2026-11-09
-- **Authority:** [active MVP release program](plans/active/mvp-release-program.md)
+- **As of:** 2026-11-10
+- **Authority:** [Founder UAT plan](plans/active/founder-uat.md) for the current local acceptance gate; [active MVP release program](plans/active/mvp-release-program.md) for historical release scope.
 - **Status Summary:**
+  - **Founder UAT:** **IN PROGRESS; NOT READY.** Protected-main baseline `c4936cd1f6a396854400e363f7dc9d629e6a8b58` (PR #19) is confirmed. The current first-user journey is blocked by undiscoverable account entry, absent local verification/recovery mail, and invitation context loss across registration. Genuine first-user browser acceptance and a persistent local founder runtime are not yet established.
   - **Stage A (Public Preview):** **SOURCE AND PREVIOUS LOCAL BROWSER/PACKAGE ACCEPTANCE COMPLETE; NOT PUBLICLY HOSTED.** This release-preparation branch updates buyer copy and retention controls. The latest buyer browser acceptance and exact-head status are tracked in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19). Public DNS, a paid host, and production TLS have not been provisioned. The [single-host activation guide](../deploy/staging/README.md) describes a gated future operation; it does not authorize deployment.
   - **Stage B (Supervised Alpha):** **PREVIOUS LOCAL REHEARSAL COMPLETE; NOT HOSTED.** The prior loopback rehearsal passed the synthetic recruiter → candidate → assigned-reviewer workflow, outage recovery, separate local PostgreSQL restore, and image/snapshot rollback. The latest combined-head package, TLS, operator-receipt, readiness, and resource results are tracked in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19); they do not establish hosted readiness.
   - **Stage C (External-Candidate Beta):** **GATED.** Founder and legal approval for privacy, retention and deletion; approved external access; production host, domain/IP policy, secret and backup custody, off-host retention, and an alert owner remain open. Untrusted execution, live AI, email delivery, and public signup stay disabled.
 
 This is the single authoritative release record for release status and verification evidence. It contains no credentials, candidate personal data, private recovery artifact locations, or unverified commercial claims.
+
+## Founder UAT — 2026-11-10
+
+The [isolated local UAT decision](decisions/founder-local-uat.md) authorizes local signup and captured account mail only. Public staging/production defaults, external email, live paid AI, and public access remain gated. Existing reviewer invitations and candidate participation are reused with normal accounts and genuine persisted activity.
+
+Source inspection found that previous onboarding browser acceptance confirms users with direct database writes, while the demo suite uses fixture accounts and can insert reviewer assignments. Those remain technical checks; they do not establish independent Founder UAT. Current acceptance must create the accounts, organization, invitations, assessment, candidate activity, observations, and review through supported UI and actual GoTrue mail.
+
+The initial host check found about 1.4 GiB available RAM and many unrelated containers. No unrelated process, database, worktree, or container was stopped or cleaned. Local startup, steady resource use, persistence, recovery, execution safety, responsive/accessibility acceptance, and exact-head CI are pending. Founder data must be persistent and separate from disposable automated acceptance data.
+
+No founder URL or readiness claim is issued at this stage. Record the accepted source, current test/CI evidence, verified local runtime, and material limitations here before opening this gate.
 
 ---
 
