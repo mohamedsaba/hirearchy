@@ -149,7 +149,7 @@ services:
     network_mode: host
     restart: unless-stopped
     user: '1000:1000'
-    working_dir: /app
+    working_dir: ${FOUNDER_UAT_SOURCE_DIR:?set FOUNDER_UAT_SOURCE_DIR}
     command:
       - node
       - node_modules/next/dist/bin/next
@@ -189,9 +189,9 @@ services:
       STAGING_PROOF_PRIVATE_KEY: ${STAGING_PROOF_PRIVATE_KEY:?set STAGING_PROOF_PRIVATE_KEY}
       HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY: ${HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY:?set HIREARCHY_CANDIDATE_TOKEN_ENCRYPTION_KEY}
     volumes:
-      - ${FOUNDER_UAT_SOURCE_DIR:?set FOUNDER_UAT_SOURCE_DIR}:/app:ro
-      - ${FOUNDER_UAT_NODE_MODULES_DIR:?set FOUNDER_UAT_NODE_MODULES_DIR}:/app/node_modules:ro
-      - ${FOUNDER_UAT_NEXT_CACHE_DIR:?set FOUNDER_UAT_NEXT_CACHE_DIR}:/app/apps/web/.next/cache:rw
+      - ${FOUNDER_UAT_SOURCE_DIR:?set FOUNDER_UAT_SOURCE_DIR}:${FOUNDER_UAT_SOURCE_DIR:?set FOUNDER_UAT_SOURCE_DIR}:ro
+      - ${FOUNDER_UAT_NODE_MODULES_DIR:?set FOUNDER_UAT_NODE_MODULES_DIR}:${FOUNDER_UAT_NODE_MODULES_DIR:?set FOUNDER_UAT_NODE_MODULES_DIR}:ro
+      - ${FOUNDER_UAT_NEXT_CACHE_DIR:?set FOUNDER_UAT_NEXT_CACHE_DIR}:${FOUNDER_UAT_NEXT_CACHE_DIR:?set FOUNDER_UAT_NEXT_CACHE_DIR}:rw
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
