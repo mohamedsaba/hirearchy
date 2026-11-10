@@ -5318,6 +5318,7 @@ export async function stagingOrganizationSettingsGet(
           </p>
           <nav aria-label="Settings navigation">
             <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
+            <a href="/r23/organizations/${safeOrgId}/builder">Open assessment builder</a>
             <a href="/r23/organizations">Switch organization</a>
           </nav>
         </header>
@@ -5360,7 +5361,7 @@ export async function stagingOrganizationSettingsGet(
         <section aria-labelledby="team-members-heading">
           <h2 id="team-members-heading">Organization Members</h2>
           <p>Members with active governance or evaluation roles in this organization.</p>
-          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;">
+          <div tabindex="0" role="region" aria-label="Organization members" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;">
             <table>
               <thead>
                 <tr>

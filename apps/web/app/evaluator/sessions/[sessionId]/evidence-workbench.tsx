@@ -1579,8 +1579,8 @@ const R28WorkspaceRevisionView = ({
                   style={{
                     display: 'block',
                     maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'anywhere',
                   }}
                 >
                   {revision.contentDigest}
@@ -1594,8 +1594,8 @@ const R28WorkspaceRevisionView = ({
                   style={{
                     display: 'block',
                     maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'anywhere',
                   }}
                 >
                   {revision.requestId}
@@ -1834,8 +1834,8 @@ const R28WorkspaceRevisionView = ({
               style={{
                 display: 'block',
                 maxWidth: '100%',
-                overflowX: 'auto',
-                whiteSpace: 'nowrap',
+                wordBreak: 'break-all',
+                overflowWrap: 'anywhere',
               }}
             >
               {sourceReference}
@@ -2028,8 +2028,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   display: 'block',
                   maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
                 {sourceReference}
@@ -2448,8 +2448,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   display: 'block',
                   maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
                 {sourceReference}
@@ -2572,8 +2572,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   display: 'block',
                   maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
                 {sourceReference}
@@ -2606,6 +2606,33 @@ const R27EvidenceSourceInspector = ({
   }
 
   const { file } = source.r27;
+  const matchingEvent = [...r27Evidence.events]
+    .reverse()
+    .find(
+      (ev) =>
+        ev.type === 'WORKSPACE_CHANGED' &&
+        (ev.payload as Record<string, unknown> | undefined)?.path === file.path,
+    );
+  const eventSequence =
+    matchingEvent?.sequence ??
+    [...r27Evidence.events]
+      .reverse()
+      .find((ev) => ev.type === 'SESSION_SUBMITTED')?.sequence ??
+    r27Evidence.events[0]?.sequence ??
+    '1';
+  const fileVersion =
+    (matchingEvent?.payload as Record<string, unknown> | undefined)?.version != null
+      ? String(
+          (matchingEvent?.payload as Record<string, unknown> | undefined)?.version,
+        )
+      : file.submittedVersion ?? '1';
+  const rawDigest =
+    ((matchingEvent?.payload as Record<string, unknown> | undefined)?.digest as
+      | string
+      | undefined) ??
+    file.submittedDigest ??
+    r27Evidence.submission.workspaceDigest;
+  const evidenceDigest = rawDigest.replace(/^sha256:/i, '').toLowerCase();
   return (
     <section
       className="evaluator-source-inspector"
@@ -2702,8 +2729,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   display: 'block',
                   maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
                 {file.starterVersion ?? 'Unavailable'}
@@ -2717,8 +2744,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   display: 'block',
                   maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
                 {file.starterDigest ?? 'Unavailable'}
@@ -2732,8 +2759,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   display: 'block',
                   maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
                 {file.submittedVersion ?? 'Unavailable'}
@@ -2747,8 +2774,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   display: 'block',
                   maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'nowrap',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
                 {file.submittedDigest ?? 'Unavailable'}
@@ -2770,8 +2797,8 @@ const R27EvidenceSourceInspector = ({
           style={{
             display: 'inline-block',
             maxWidth: '100%',
-            overflowX: 'auto',
-            whiteSpace: 'nowrap',
+            wordBreak: 'break-all',
+            overflowWrap: 'anywhere',
             verticalAlign: 'bottom',
           }}
         >
@@ -2790,8 +2817,8 @@ const R27EvidenceSourceInspector = ({
               style={{
                 display: 'block',
                 maxWidth: '100%',
-                overflowX: 'auto',
-                whiteSpace: 'nowrap',
+                wordBreak: 'break-all',
+                overflowWrap: 'anywhere',
               }}
             >
               {sourceReference}
@@ -2806,6 +2833,16 @@ const R27EvidenceSourceInspector = ({
           {copyStatus ? <span role="status">{copyStatus}</span> : null}
         </details>
       ) : null}
+
+      <R29ObservationPanel
+        organizationId={r27Evidence.organizationId}
+        sessionId={r27Evidence.sessionId}
+        evidenceSourceType={matchingEvent ? 'file_revision' : 'timeline_event'}
+        eventSequence={eventSequence}
+        filePath={matchingEvent ? file.path : null}
+        fileVersion={matchingEvent ? fileVersion : null}
+        evidenceDigest={evidenceDigest}
+      />
     </section>
   );
 };

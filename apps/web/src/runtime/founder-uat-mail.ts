@@ -33,9 +33,15 @@ function exactRecipient(value: unknown, email: string): boolean {
     Array.isArray(value) &&
     value.some((entry) => {
       const address = record(entry);
+      const recipient =
+        typeof address?.Address === 'string'
+          ? address.Address
+          : typeof address?.Email === 'string'
+            ? address.Email
+            : null;
       return (
-        typeof address?.Email === 'string' &&
-        address.Email.trim().toLowerCase() === email
+        typeof recipient === 'string' &&
+        recipient.trim().toLowerCase() === email
       );
     })
   );

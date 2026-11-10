@@ -107,6 +107,11 @@ export default async function R23LoginPage({
               <p>
                 <Link href="/r23/verify-email">Verify your email</Link>
               </p>
+              {founderUat ? (
+                <p>
+                  <Link href="/r23/mail">Local email inbox</Link>
+                </p>
+              ) : null}
             </nav>
             {founderUat ? (
               <form action="/r23/mail" method="get" className="access-form">

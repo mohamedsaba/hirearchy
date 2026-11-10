@@ -209,6 +209,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [clockNow, setClockNow] = useState(0);
   const refreshInFlight = useRef(false);
+  const submitInFlight = useRef(false);
   const consentAccepted = Boolean(
     view?.dataNotice &&
     acceptedConsent?.sessionId === sessionId &&
@@ -927,6 +928,17 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
   }, [isDirty, pendingSave, pendingSubmit]);
 
+  useEffect(() => {
+    const scrollers = document.querySelectorAll('.cm-scroller');
+    for (const scroller of scrollers) {
+      if (scroller.getAttribute('tabindex') !== '0') {
+        scroller.setAttribute('tabindex', '0');
+        scroller.setAttribute('role', 'region');
+        scroller.setAttribute('aria-label', 'Code editor scrollable area');
+      }
+    }
+  });
+
   const loadLatestVersion = () => {
     if (!conflictLatest) return;
     setSelectedPath(conflictLatest.path);
@@ -958,7 +970,13 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   };
 
   const submit = async () => {
-    if (!view || busy || !view.workspaceDigest) return;
+    if (
+      !view ||
+      busy ||
+      submitInFlight.current ||
+      !view.workspaceDigest
+    )
+      return;
     if (!pendingSubmit && !canEdit) return;
     if (!pendingSubmit && isDirty) {
       setMessage(
@@ -976,6 +994,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
       setMessage('Resolve the saved-version conflict before submitting.');
       return;
     }
+    submitInFlight.current = true;
     const intent = pendingSubmit ?? {
       requestId: requestId(),
       expectedWorkspaceDigest: view.workspaceDigest,
@@ -1009,6 +1028,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         );
       }
     } finally {
+      submitInFlight.current = false;
       setBusy(false);
     }
   };
@@ -1077,7 +1097,11 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           view?.capabilities.ai === true && aiView?.enabled ? 'true' : 'false'
         }
       >
-        <aside className="r26-task-panel" aria-label="Assessment task">
+        <aside
+          className="r26-task-panel"
+          aria-label="Assessment task"
+          tabIndex={0}
+        >
           {loading ? <p role="status">Loading assessment…</p> : null}
           {loadFailure ? (
             <div className="r26-notice r26-notice-error" role="alert">
@@ -1536,12 +1560,23 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 editable={!editorLocked}
                 extensions={[
                   ...fileExtensions(activeFile.path),
+                  EditorView.lineWrapping,
                   EditorView.contentAttributes.of({
                     'aria-label': 'Edit file',
                     'aria-readonly': editorLocked ? 'true' : 'false',
                     spellcheck: 'false',
                   }),
                 ]}
+                onCreateEditor={(view) => {
+                  if (view.scrollDOM) {
+                    view.scrollDOM.setAttribute('tabindex', '0');
+                    view.scrollDOM.setAttribute('role', 'region');
+                    view.scrollDOM.setAttribute(
+                      'aria-label',
+                      'Code editor scrollable area',
+                    );
+                  }
+                }}
                 onChange={(content) => {
                   setDraft((current) => {
                     if (!currentDraft) return current;

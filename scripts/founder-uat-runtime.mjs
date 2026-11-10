@@ -279,6 +279,7 @@ async function createRuntimeEnvironment(mode) {
     MAILPIT_API_PORT: '8025',
     MAILPIT_SMTP_PORT: '1025',
     FOUNDER_UAT_SIGNUP_ENABLED: 'false',
+    FOUNDER_UAT_SIGNUP_DISABLED: 'true',
     FOUNDER_UAT_APP_ORIGIN: appOrigin,
     FOUNDER_UAT_MAILPIT_API_URL: 'http://127.0.0.1:8025',
     STAGING_PUBLIC_ORIGIN: appOrigin,
@@ -336,12 +337,17 @@ function compose(state, mode, args, options = {}) {
 
 async function setSignupEnabled(state, mode, enabled) {
   state.values.FOUNDER_UAT_SIGNUP_ENABLED = enabled ? 'true' : 'false';
+  state.values.FOUNDER_UAT_SIGNUP_DISABLED = enabled ? 'false' : 'true';
   await writeAtomic(state.envPath, formatEnv(state.values));
   const updated = await readFile(state.envPath, 'utf8');
   state.values = parseEnv(updated);
   assert.equal(
     state.values.FOUNDER_UAT_SIGNUP_ENABLED,
     enabled ? 'true' : 'false',
+  );
+  assert.equal(
+    state.values.FOUNDER_UAT_SIGNUP_DISABLED,
+    enabled ? 'false' : 'true',
   );
   await compose(state, mode, ['config', '--quiet']);
 }

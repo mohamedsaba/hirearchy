@@ -27,7 +27,7 @@ describe('Founder UAT local mail capture', () => {
           messages: [
             {
               ID: 'confirmation_1',
-              To: [{ Email: 'Founder@Local.Test' }],
+              To: [{ Address: 'Founder@Local.Test' }],
               Subject: 'Hirearchy account confirmation',
               Created: '2026-11-10T10:00:00Z',
               Snippet: '123456',

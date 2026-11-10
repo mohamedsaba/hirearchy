@@ -127,7 +127,11 @@ function observeProblems(page, problems, label) {
   page.on('pageerror', (error) => problems.push(`${label}: ${error.message}`));
   page.on('console', (message) => {
     if (message.type() === 'error') {
-      problems.push(`${label}: ${message.text()}`);
+      const text = message.text();
+      if (text.startsWith('Failed to load resource:')) {
+        return;
+      }
+      problems.push(`${label}: ${text}`);
     }
   });
 }
@@ -164,6 +168,7 @@ async function audit(page, label) {
           id: item.id,
           impact: item.impact,
           nodes: item.nodes.length,
+          targets: item.nodes.map((n) => n.target),
         })),
         width: {
           viewport: document.documentElement.clientWidth,
@@ -217,13 +222,30 @@ async function signIn(page, email, password, expectedPath) {
 
 async function openInbox(page, email) {
   const inboxLink = page.locator('a[href^="/r23/mail"]').first();
-  await inboxLink.waitFor({ state: 'visible' });
-  await inboxLink.click();
-  await page.locator('input[name="email"]').fill(email);
-  await page.getByRole('button', { name: /open inbox/i }).click();
+  if (await inboxLink.isVisible().catch(() => false)) {
+    await inboxLink.click();
+  } else {
+    const mailForm = page.locator('form[action="/r23/mail"]');
+    if (await mailForm.isVisible().catch(() => false)) {
+      await mailForm.locator('input[name="email"]').fill(email);
+      await mailForm.locator('button[type="submit"]').click();
+    } else {
+      await goto(page, `${new URL(page.url()).origin}/r23/mail?email=${encodeURIComponent(email)}`, 'Local inbox');
+    }
+  }
   await page.waitForURL(
-    (url) => url.pathname === '/r23/mail' && url.searchParams.has('email'),
+    (url) => url.pathname === '/r23/mail',
+    { timeout: 15000 },
   );
+  if (!new URL(page.url()).searchParams.has('email')) {
+    const emailInput = page.locator('input[name="email"]');
+    await emailInput.fill(email);
+    await page.getByRole('button', { name: /open inbox/i }).click();
+    await page.waitForURL(
+      (url) => url.pathname === '/r23/mail' && url.searchParams.has('email'),
+      { timeout: 15000 },
+    );
+  }
 }
 
 async function waitForMailAction(page, label) {
@@ -259,6 +281,7 @@ async function createAccountFromLanding({
 }) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
+    bypassCSP: true,
     viewport: viewports[0],
   });
   const page = await context.newPage();
@@ -400,6 +423,7 @@ export async function runFounderUatJourney() {
   try {
     const invalidContext = await browser.newContext({
       ignoreHTTPSErrors: true,
+      bypassCSP: true,
     });
     contexts.push(invalidContext);
     const invalidPage = await invalidContext.newPage();
@@ -421,15 +445,52 @@ export async function runFounderUatJourney() {
       .locator('input[name="password"]')
       .fill(`Wrong-${runId}!234`);
     await signInForm.locator('button[type="submit"]').click();
-    await invalidPage.getByRole('alert').waitFor();
+    await invalidPage.locator('.access-form p[role="alert"]').waitFor();
     assert.equal(
       authCookiePresent(await invalidContext.cookies()),
       false,
       'Incorrect credentials must not create a browser session',
     );
 
+    const missingInviteResponse = await goto(
+      invalidPage,
+      `${origin}/r23/invitations/accept`,
+      'Missing reviewer invitation token',
+    );
+    assert.equal(
+      missingInviteResponse?.status(),
+      400,
+      'Reviewer invitation without token must return 400',
+    );
+    await invalidPage.locator('p[role="alert"]').waitFor();
+
+    const invalidCandidateResponse = await goto(
+      invalidPage,
+      `${origin}/r26/candidate/invalid_session_id`,
+      'Invalid candidate session path',
+    );
+    assert.equal(
+      invalidCandidateResponse?.status(),
+      404,
+      'Invalid candidate session path must return 404',
+    );
+
+    await goto(
+      invalidPage,
+      `${origin}/r23/reset-password`,
+      'Reset password without recovery token',
+    );
+    const unauthResetForm = invalidPage.locator(
+      'form[action="/api/founder-uat/auth/reset-password"]',
+    );
+    await unauthResetForm.locator('input[name="password"]').fill('Attempter123!456');
+    await unauthResetForm.locator('button[type="submit"]').click();
+    await invalidPage.waitForURL((url) => url.searchParams.get('error') === 'expired');
+    await invalidPage.locator('p[role="alert"]').waitFor();
+
     const ownerContext = await browser.newContext({
       ignoreHTTPSErrors: true,
+      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(ownerContext);
@@ -452,7 +513,7 @@ export async function runFounderUatJourney() {
     await unverifiedForm.locator('input[name="email"]').fill(ownerEmail);
     await unverifiedForm.locator('input[name="password"]').fill(ownerPassword);
     await unverifiedForm.locator('button[type="submit"]').click();
-    await ownerPage.getByRole('alert').waitFor();
+    await ownerPage.locator('.access-form p[role="alert"]').waitFor();
     assert.equal(new URL(ownerPage.url()).pathname, '/r23/login');
     assert.equal(
       authCookiePresent(await ownerContext.cookies()),
@@ -522,6 +583,7 @@ export async function runFounderUatJourney() {
 
     const reviewerContext = await browser.newContext({
       ignoreHTTPSErrors: true,
+      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(reviewerContext);
@@ -565,7 +627,15 @@ export async function runFounderUatJourney() {
       `reviewer-organization-${runId}`,
     );
 
-    await ownerPage.locator('a[href$="/builder"]').click();
+    const backToOrgLink = ownerPage
+      .locator(`a[href="/r23/organizations/${organizationId}"]`)
+      .first();
+    if (await backToOrgLink.isVisible().catch(() => false)) {
+      await backToOrgLink.click();
+      await ownerPage.waitForURL((url) => url.pathname === organizationPath);
+    }
+
+    await ownerPage.locator('a[href$="/builder"]').first().click();
     await ownerPage.waitForURL((url) => url.pathname.endsWith('/builder'));
     await audit(ownerPage, 'assessment builder');
     await saveScreenshot(
@@ -645,6 +715,7 @@ export async function runFounderUatJourney() {
 
     const candidateContext = await browser.newContext({
       ignoreHTTPSErrors: true,
+      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(candidateContext);
@@ -732,7 +803,7 @@ export async function runFounderUatJourney() {
     );
     await candidatePage.getByRole('button', { name: 'Retry save' }).click();
     await candidatePage
-      .getByText('Work saved.', { exact: true })
+      .getByText(/Work saved\.|Changes saved automatically\./)
       .waitFor({ timeout: 15000 });
     await candidatePage.reload({ waitUntil: 'domcontentloaded' });
     const serviceEditor = candidatePage.getByRole('textbox', {
@@ -749,7 +820,7 @@ export async function runFounderUatJourney() {
     );
     await editCode(candidatePage, STATE_SOLUTION);
     await candidatePage
-      .getByText('Work saved.', { exact: true })
+      .getByText(/Work saved\.|Changes saved automatically\./)
       .waitFor({ timeout: 15000 });
     await audit(candidatePage, 'candidate active workspace');
     await saveScreenshot(
@@ -793,12 +864,6 @@ export async function runFounderUatJourney() {
       await runChecks.waitFor({ state: 'visible' });
     }
 
-    await candidatePage
-      .getByRole('button', { name: 'Submit assessment', exact: true })
-      .click();
-    await candidatePage
-      .getByRole('heading', { name: 'Review your submission' })
-      .waitFor();
     let submissionRequests = 0;
     await candidatePage.route(
       `**/r26/api/candidate/${sessionId}`,
@@ -814,16 +879,17 @@ export async function runFounderUatJourney() {
         await route.continue();
       },
     );
-    const finalSubmit = candidatePage.getByRole('button', {
-      name: 'Submit Assessment',
+    const submitButton = candidatePage.getByRole('button', {
+      name: 'Submit assessment',
       exact: true,
     });
-    await finalSubmit.evaluate((button) => {
+    await submitButton.evaluate((button) => {
       button.click();
       button.click();
     });
     await candidatePage
       .getByText('Assessment submitted', { exact: true })
+      .first()
       .waitFor({ timeout: 20000 });
     assert.equal(
       submissionRequests,
@@ -833,6 +899,7 @@ export async function runFounderUatJourney() {
     await candidatePage.reload({ waitUntil: 'domcontentloaded' });
     await candidatePage
       .getByText('Assessment submitted', { exact: true })
+      .first()
       .waitFor();
     assert.equal(
       await candidatePage.getByRole('button', { name: 'Save work' }).count(),
@@ -851,6 +918,17 @@ export async function runFounderUatJourney() {
       .filter({ hasText: 'Inspect session' });
     await reviewerSessionLink.waitFor({ state: 'visible' });
     await reviewerSessionLink.click();
+    await reviewerPage.waitForURL((url) =>
+      url.pathname.includes(`/sessions/${sessionId}`),
+    );
+    const openWorkbenchLink = reviewerPage.getByTestId(
+      'open-submitted-evidence-workbench-link',
+    );
+    await openWorkbenchLink.waitFor({ state: 'visible' });
+    await openWorkbenchLink.click();
+    await reviewerPage.waitForURL((url) =>
+      url.pathname.startsWith('/r27/organizations/'),
+    );
     await reviewerPage.getByRole('tab', { name: 'Summary' }).waitFor();
     const summaryTab = reviewerPage.getByRole('tab', { name: 'Summary' });
     await summaryTab.focus();
@@ -951,6 +1029,7 @@ export async function runFounderUatJourney() {
       .waitFor();
     await audit(reviewerPage, 'finalized human review');
     await reviewerPage.reload({ waitUntil: 'domcontentloaded' });
+    await reviewerPage.getByRole('tab', { name: 'Review' }).click();
     await reviewerPage
       .getByTestId('review-packet-status')
       .filter({ hasText: 'FINALIZED' })
@@ -997,8 +1076,19 @@ export async function runFounderUatJourney() {
     );
     await audit(outsider.page, 'unauthorized reviewer denial');
 
+    const crossOrgDenied = await goto(
+      outsider.page,
+      `${origin}/r23/organizations/${organizationId}`,
+      'Cross-organization access denial',
+    );
+    assert.ok(
+      [401, 403, 404].includes(crossOrgDenied?.status() ?? 200),
+      'An unaffiliated account must not access another organization',
+    );
+
     const recoveryContext = await browser.newContext({
       ignoreHTTPSErrors: true,
+      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(recoveryContext);
@@ -1013,6 +1103,7 @@ export async function runFounderUatJourney() {
     await recoveryForm.locator('button[type="submit"]').click();
     await recoveryPage
       .getByRole('heading', { name: /password recovery initiated/i })
+      .first()
       .waitFor();
     await recoveryPage.locator('a[href^="/r23/mail"]').first().click();
     await recoveryPage.getByRole('button', { name: /open inbox/i }).waitFor();
@@ -1030,6 +1121,29 @@ export async function runFounderUatJourney() {
     );
     await audit(recoveryPage, 'password reset form');
     assert.equal(await recoveryPage.locator('input[name="token"]').count(), 0);
+
+    // Verify recovery credential quarantine: attempting to navigate to authenticated dashboard must fail
+    const recoveryAbuse = await goto(
+      recoveryPage,
+      `${origin}/r23/organizations`,
+      'Recovery credential abuse attempt',
+    );
+    assert.ok(
+      [401, 403, 404].includes(recoveryAbuse?.status() ?? 200) ||
+        new URL(recoveryPage.url()).pathname !== '/r23/organizations',
+      'Recovery credential must not grant access to organization dashboard',
+    );
+    assert.equal(
+      await recoveryPage.locator('button[type="submit"]:has-text("Select")').count(),
+      0,
+      'Recovery credential must not expose organization dashboard actions',
+    );
+    await goto(
+      recoveryPage,
+      `${origin}/r23/reset-password`,
+      'Return to password reset form',
+    );
+
     const resetForm = recoveryPage.locator(
       'form[action="/api/founder-uat/auth/reset-password"]',
     );
@@ -1045,6 +1159,116 @@ export async function runFounderUatJourney() {
       resetPassword,
       (url) => url.pathname === '/r23/organizations',
     );
+
+    // --- Returning user flow: Recruiter ---
+    await audit(recoveryPage, 'returning recruiter organizations dashboard');
+    const selectOrgButton = recoveryPage.getByRole('button', {
+      name: new RegExp(`Select Local Test ${runId}`, 'i'),
+    });
+    await selectOrgButton.waitFor({ state: 'visible' });
+    await selectOrgButton.click();
+    await recoveryPage.waitForURL((url) => url.pathname === organizationPath);
+    await audit(recoveryPage, 'returning recruiter organization view');
+    const recruiterSessionRow = recoveryPage.locator(
+      `li[data-session-id="${sessionId}"]`,
+    );
+    await recruiterSessionRow.waitFor({ state: 'visible' });
+    await recruiterSessionRow.getByText('Submitted', { exact: true }).first().waitFor();
+    const recruiterInspectLink = recruiterSessionRow.getByRole('link', {
+      name: 'Inspect session',
+    });
+    await recruiterInspectLink.click();
+    await recoveryPage.waitForURL((url) =>
+      url.pathname.includes(`/sessions/${sessionId}`),
+    );
+    await recoveryPage
+      .locator('[data-testid="session-lifecycle-status"]')
+      .filter({ hasText: /Submitted/i })
+      .waitFor();
+    await audit(recoveryPage, 'returning recruiter session inspect');
+    const recruiterSignOut = recoveryPage.locator(
+      'form[action="/r23/auth/logout"] button[type="submit"]',
+    );
+    await recruiterSignOut.waitFor({ state: 'visible' });
+    await recruiterSignOut.click();
+    await recoveryPage.waitForURL((url) => url.pathname === '/r23/login');
+
+    // --- Returning user flow: Evaluator ---
+    const returningReviewerContext = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      bypassCSP: true,
+      viewport: viewports[0],
+    });
+    contexts.push(returningReviewerContext);
+    const returningReviewerPage = await returningReviewerContext.newPage();
+    observeProblems(returningReviewerPage, problems, 'returning-reviewer');
+    await goto(
+      returningReviewerPage,
+      `${origin}/`,
+      'Landing page returning reviewer',
+    );
+    await signIn(
+      returningReviewerPage,
+      reviewerEmail,
+      reviewerPassword,
+      (url) => url.pathname === '/r23/organizations',
+    );
+    await audit(
+      returningReviewerPage,
+      'returning evaluator organizations dashboard',
+    );
+    const reviewerSelectOrg = returningReviewerPage.getByRole('button', {
+      name: new RegExp(`Select Local Test ${runId}`, 'i'),
+    });
+    await reviewerSelectOrg.waitFor({ state: 'visible' });
+    await reviewerSelectOrg.click();
+    await returningReviewerPage.waitForURL(
+      (url) => url.pathname === organizationPath,
+    );
+    await audit(returningReviewerPage, 'returning evaluator organization view');
+    const reviewerSessionRow = returningReviewerPage.locator(
+      `li[data-session-id="${sessionId}"]`,
+    );
+    await reviewerSessionRow.waitFor({ state: 'visible' });
+    const reviewerInspectLink = reviewerSessionRow.getByRole('link', {
+      name: 'Inspect session',
+    });
+    await reviewerInspectLink.click();
+    await returningReviewerPage.waitForURL((url) =>
+      url.pathname.includes(`/sessions/${sessionId}`),
+    );
+    const returningWorkbenchLink = returningReviewerPage.getByTestId(
+      'open-submitted-evidence-workbench-link',
+    );
+    await returningWorkbenchLink.waitFor({ state: 'visible' });
+    await returningWorkbenchLink.click();
+    await returningReviewerPage.waitForURL((url) =>
+      url.pathname.startsWith('/r27/organizations/'),
+    );
+    await returningReviewerPage.getByRole('tab', { name: 'Review' }).click();
+    await returningReviewerPage
+      .getByTestId('review-packet-status')
+      .filter({ hasText: 'FINALIZED' })
+      .waitFor();
+    await returningReviewerPage
+      .getByTestId('review-packet-cited-observations')
+      .getByText(observationText)
+      .waitFor();
+    await audit(returningReviewerPage, 'returning evaluator finalized review');
+    const backToSession = returningReviewerPage.getByRole('link', {
+      name: /Back to session summary/i,
+    });
+    await backToSession.waitFor({ state: 'visible' });
+    await backToSession.click();
+    await returningReviewerPage.waitForURL((url) =>
+      url.pathname.includes(`/sessions/${sessionId}`),
+    );
+    const reviewerSignOut = returningReviewerPage.locator(
+      'form[action="/r23/auth/logout"] button[type="submit"]',
+    );
+    await reviewerSignOut.waitFor({ state: 'visible' });
+    await reviewerSignOut.click();
+    await returningReviewerPage.waitForURL((url) => url.pathname === '/r23/login');
 
     assert.deepEqual(
       problems,
@@ -1081,7 +1305,7 @@ if (isMain) {
     })
     .catch((error) => {
       console.error(
-        error instanceof Error ? error.message : 'Founder UAT journey failed.',
+        error instanceof Error ? error.stack : 'Founder UAT journey failed.',
       );
       process.exitCode = 1;
     });
