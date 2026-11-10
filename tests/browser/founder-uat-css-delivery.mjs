@@ -143,6 +143,11 @@ async function assertStyled(
   });
 
   assert(style.styleSheets.some(Boolean), `${path} has no browser stylesheet.`);
+  assert.deepEqual(
+    assets.filter((asset) => asset.status >= 400),
+    [],
+    `${path} CSS, font, or JavaScript assets returned an HTTP error.`,
+  );
   assert.equal(
     style.headingCount,
     1,
@@ -383,11 +388,6 @@ try {
     failures,
     [],
     'CSS, font, or JavaScript assets failed to load.',
-  );
-  assert.deepEqual(
-    assets.filter((asset) => asset.status >= 400),
-    [],
-    'CSS, font, or JavaScript assets returned an HTTP error.',
   );
   const unexpectedConsoleErrors = consoleErrors.filter((error) => {
     const expectedText = expectedDocumentRejections.some(
