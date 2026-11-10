@@ -38,7 +38,8 @@ export default async function R23LoginPage({
       <header className="software-product-header">
         <Link
           className="software-wordmark"
-          href="/"
+          href={founderUat ? '/' : '/r23/login'}
+          prefetch={false}
           aria-label="Hirearchy Software home"
         >
           <span>Hirearchy</span>
@@ -98,20 +99,43 @@ export default async function R23LoginPage({
               </button>
             </form>
             <nav aria-label="Account help">
-              <p>
-                <Link href="/r23/signup">Sign up</Link>
-              </p>
-              <p>
-                <Link href="/r23/recover">Reset your password</Link>
-              </p>
-              <p>
-                <Link href="/r23/verify-email">Verify your email</Link>
-              </p>
               {founderUat ? (
-                <p>
-                  <Link href="/r23/mail">Local email inbox</Link>
-                </p>
-              ) : null}
+                <>
+                  <p>
+                    <Link href="/r23/signup" prefetch={false}>
+                      Sign up
+                    </Link>
+                  </p>
+                  <p>
+                    <Link href="/r23/recover" prefetch={false}>
+                      Reset your password
+                    </Link>
+                  </p>
+                  <p>
+                    <Link href="/r23/verify-email" prefetch={false}>
+                      Verify your email
+                    </Link>
+                  </p>
+                  <p>
+                    <Link href="/r23/mail" prefetch={false}>
+                      Local email inbox
+                    </Link>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    <Link href="/r23/recover" prefetch={false}>
+                      Reset your password
+                    </Link>
+                  </p>
+                  <p>
+                    <Link href="/r23/verify-email" prefetch={false}>
+                      Verify your email
+                    </Link>
+                  </p>
+                </>
+              )}
             </nav>
             {founderUat ? (
               <form action="/r23/mail" method="get" className="access-form">
