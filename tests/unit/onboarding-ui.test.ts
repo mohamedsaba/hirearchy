@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { generateKeyPairSync } from 'node:crypto';
 import {
   stagingSignupGet,
   stagingSignupPost,
@@ -21,12 +22,17 @@ describe('Self-Service Onboarding Frontend UI & Staging Handlers', () => {
     'STAGING_AUTH_AUDIENCE',
     'STAGING_DATABASE_URL',
     'FOUNDER_UAT_MAILPIT_API_URL',
+    'STAGING_PROOF_ISSUER',
+    'STAGING_PROOF_AUDIENCE',
+    'STAGING_PROOF_KEY_ID',
+    'STAGING_PROOF_PRIVATE_KEY',
   ];
   const originalFounderUatEnv = new Map(
     founderUatEnvKeys.map((key) => [key, process.env[key]]),
   );
 
   const enableFounderUat = () => {
+    const { privateKey } = generateKeyPairSync('ed25519');
     Object.assign(process.env, {
       HIREARCHY_RUNTIME_PROFILE: 'founder-uat',
       FOUNDER_UAT_APP_ORIGIN: 'http://127.0.0.1:3000',
@@ -37,6 +43,12 @@ describe('Self-Service Onboarding Frontend UI & Staging Handlers', () => {
       STAGING_DATABASE_URL:
         'postgresql://r23_gateway:local-test@127.0.0.1:5432/postgres',
       FOUNDER_UAT_MAILPIT_API_URL: 'http://127.0.0.1:8025',
+      STAGING_PROOF_ISSUER: 'hirearchy',
+      STAGING_PROOF_AUDIENCE: 'database',
+      STAGING_PROOF_KEY_ID: 'unit-test-key',
+      STAGING_PROOF_PRIVATE_KEY: privateKey
+        .export({ format: 'der', type: 'pkcs8' })
+        .toString('base64'),
     });
   };
 
@@ -134,7 +146,7 @@ describe('Self-Service Onboarding Frontend UI & Staging Handlers', () => {
       const response = stagingRecoverGet();
       expect(response.status).toBe(200);
       return response.text().then((html) => {
-        expect(html).toContain('Request Password Recovery');
+        expect(html).toContain('Request password recovery');
         expect(html).toContain('emailDeliveryEnabled: false');
         expect(html).toContain('name="email"');
         expect(html).toContain('/r23/login');

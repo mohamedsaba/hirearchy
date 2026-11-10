@@ -165,6 +165,7 @@ type StagingMembershipItem = Readonly<{
   organizationId: string;
   role: 'recruiter' | 'reviewer';
   version: number;
+  displayName: string | null;
 }>;
 
 type StagingReviewerItem = Readonly<{
@@ -217,6 +218,7 @@ type StagingOrganizationContextResponse = Readonly<{
   organizationId: string;
   principalId: string;
   role: 'recruiter' | 'reviewer';
+  displayName: string | null;
   reviewers: StagingReviewerItem[];
   draft: R211AssessmentDraft | null;
   validatedVersions: R211ValidatedVersion[];
@@ -1291,20 +1293,37 @@ export async function stagingOrganizationsGet(
       request,
       digest(csrf),
       async ({ config, identity, csrfToken, refreshedSessionCookie }) => {
+        const statusResult = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'onboarding.status',
+          {},
+        )) as OnboardingStatusResponse | null;
+        if (
+          !statusResult ||
+          (statusResult.status !== 'needs_team' &&
+            statusResult.status !== 'has_active_membership') ||
+          typeof statusResult.capabilities?.selfServiceOnboardingEnabled !==
+            'boolean'
+        ) {
+          throw new StagingUnavailable();
+        }
+
         let memberships: StagingMembershipItem[] = [];
-        try {
+        if (statusResult.status === 'has_active_membership') {
           const result = (await dispatchVerifiedStagingOperation(
             config,
             identity,
             'membership.list',
             {},
           )) as { memberships?: StagingMembershipItem[] } | null;
-          if (Array.isArray(result?.memberships)) {
-            memberships = result.memberships;
+          if (
+            !Array.isArray(result?.memberships) ||
+            result.memberships.length === 0
+          ) {
+            throw new StagingUnavailable();
           }
-        } catch {
-          // Pre-principal identity without an active principal or zero memberships
-          memberships = [];
+          memberships = result.memberships;
         }
         const items = memberships
           .map((membership) => {
@@ -1313,28 +1332,20 @@ export async function stagingOrganizationsGet(
             }
             const id = safeHtml(membership.organizationId.toLowerCase());
             const roleLabel = safeHtml(membership.role);
-            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit">Select organization ${id} (${roleLabel})</button></form></li>`;
+            const displayName = safeHtml(
+              membership.displayName?.trim() ||
+                `Organization ${membership.organizationId.slice(0, 8)}`,
+            );
+            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit">Select ${displayName} (${roleLabel})</button><span>Organization ID: <code>${id}</code></span></form></li>`;
           })
           .join('');
         let content = '';
         if (memberships.length > 0) {
           content = `<p>Select one organization for this session.</p><ul>${items}</ul>`;
         } else {
-          let onboardingStatus: OnboardingStatusResponse | null = null;
-          try {
-            onboardingStatus = (await dispatchVerifiedStagingOperation(
-              config,
-              identity,
-              'onboarding.status',
-              {},
-            )) as OnboardingStatusResponse;
-          } catch {
-            // Pre-principal or unconfirmed identity
-          }
-
           if (
-            onboardingStatus?.status === 'needs_team' &&
-            onboardingStatus.capabilities.selfServiceOnboardingEnabled
+            statusResult.status === 'needs_team' &&
+            statusResult.capabilities.selfServiceOnboardingEnabled
           ) {
             content = `
               <section aria-labelledby="create-org-title">
@@ -1457,10 +1468,11 @@ export async function stagingLoadOrganizationSessionList(
       const { filtered, totalAuthorizedCount, filteredAuthorizedCount } =
         filterStagingSessions(orgContext.sessions ?? [], queryParams);
 
-      const membership: R23Membership = {
+      const membership: R23Membership & { displayName: string | null } = {
         organizationId: orgIdLower,
         role: orgContext.role,
         membershipVersion: '1',
+        displayName: orgContext.displayName,
       };
       const orgDisplay = resolveOrgDisplay(
         orgIdLower,
@@ -1539,10 +1551,11 @@ export async function stagingLoadOrganizationSessionSummary(
         (s) => s.sessionId === sessionId,
       );
 
-      const membership: R23Membership = {
+      const membership: R23Membership & { displayName: string | null } = {
         organizationId: orgIdLower,
         role: orgContext.role,
         membershipVersion: '1',
+        displayName: orgContext.displayName,
       };
       const orgDisplay = resolveOrgDisplay(
         orgIdLower,
@@ -5210,10 +5223,11 @@ export async function stagingOrganizationSettingsGet(
       )) as { invitations?: ReviewerInvitationItem[] };
       const invitations = invitationsResult?.invitations ?? [];
 
-      const membership: R23Membership = {
+      const membership: R23Membership & { displayName: string | null } = {
         organizationId: orgIdLower,
         role: orgContext.role,
         membershipVersion: '1',
+        displayName: orgContext.displayName,
       };
       const orgDisplay = resolveOrgDisplay(
         orgIdLower,

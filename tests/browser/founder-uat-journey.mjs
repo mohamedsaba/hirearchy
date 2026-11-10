@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
-import { resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadPlaywright } from '../r25/browser-issuance-check.mjs';
 
@@ -15,7 +15,53 @@ const viewports = [
   { name: 'mobile', width: 390, height: 844 },
 ];
 
+function localArtifactDirectory() {
+  const configured = process.env.FOUNDER_UAT_ARTIFACT_DIR?.trim();
+  if (!configured) return null;
+  if (!isAbsolute(configured)) {
+    throw new Error('FOUNDER_UAT_ARTIFACT_DIR must be an absolute local path.');
+  }
+
+  const outputDirectory = resolve(configured);
+  const repositoryRoot = resolve(
+    fileURLToPath(new URL('../..', import.meta.url)),
+  );
+  const relativePath = relative(repositoryRoot, outputDirectory);
+  if (
+    relativePath === '' ||
+    (relativePath !== '..' && !relativePath.startsWith(`..${sep}`))
+  ) {
+    throw new Error('Keep Founder UAT screenshots outside the repository.');
+  }
+  mkdirSync(outputDirectory, { recursive: true });
+  return outputDirectory;
+}
+
+async function captureScreenshot(page, outputDirectory, name, viewport) {
+  if (!outputDirectory) return null;
+  await page.setViewportSize(viewport);
+  const path = join(outputDirectory, `${name}.png`);
+  await page.screenshot({ path, fullPage: true, animations: 'disabled' });
+  return path;
+}
+
+async function saveScreenshot(
+  page,
+  outputDirectory,
+  screenshots,
+  name,
+  viewport = viewports[0],
+) {
+  const path = await captureScreenshot(page, outputDirectory, name, viewport);
+  if (path) screenshots.push(path);
+}
+
 function loopbackOrigin() {
+  if (process.env.FOUNDER_UAT_DISPOSABLE_AUTOMATION !== '1') {
+    throw new Error(
+      'Set FOUNDER_UAT_DISPOSABLE_AUTOMATION=1 only for the disposable UAT automation runtime.',
+    );
+  }
   const configured = process.env.FOUNDER_UAT_APP_ORIGIN;
   if (!configured) {
     throw new Error(
@@ -43,6 +89,40 @@ function loopbackOrigin() {
   return url.origin;
 }
 
+async function assertDisposableRuntime(origin) {
+  const expectedRunId = process.env.FOUNDER_UAT_AUTOMATION_RUN_ID?.trim();
+  if (!expectedRunId) {
+    throw new Error(
+      'Set FOUNDER_UAT_AUTOMATION_RUN_ID from the disposable runtime launcher.',
+    );
+  }
+
+  let response;
+  try {
+    response = await fetch(`${origin}/api/staging/readiness`, {
+      cache: 'no-store',
+      redirect: 'error',
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    throw new Error(
+      'The disposable runtime readiness check could not be reached.',
+    );
+  }
+  const readiness = await response.json().catch(() => null);
+  assert.equal(response.status, 200, 'The disposable database must be ready');
+  assert.equal(
+    readiness?.status,
+    'ready',
+    'The disposable database must be ready',
+  );
+  assert.equal(
+    readiness?.founderUatAutomationRunId,
+    expectedRunId,
+    'The app must attest the disposable automation runtime ID before test data is created',
+  );
+}
+
 function observeProblems(page, problems, label) {
   page.on('pageerror', (error) => problems.push(`${label}: ${error.message}`));
   page.on('console', (message) => {
@@ -66,35 +146,39 @@ async function goto(page, target, label) {
 async function audit(page, label) {
   await page.setViewportSize(viewports[0]);
   await page.waitForLoadState('domcontentloaded');
-  await page.addScriptTag({ content: axeSource });
-  const violations = await page.evaluate(async () => {
-    const result = await window.axe.run(document, {
-      runOnly: {
-        type: 'tag',
-        values: ['wcag2a', 'wcag2aa', 'wcag21aa'],
-      },
-    });
-    return result.violations.map((item) => ({
-      id: item.id,
-      impact: item.impact,
-      nodes: item.nodes.length,
-    }));
-  });
-  assert.deepEqual(
-    violations,
-    [],
-    `${label} has automated accessibility violations`,
-  );
+  if (!(await page.evaluate(() => Boolean(window.axe)))) {
+    await page.addScriptTag({ content: axeSource });
+  }
 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
-    const width = await page.evaluate(() => ({
-      viewport: document.documentElement.clientWidth,
-      document: Math.max(
-        document.documentElement.scrollWidth,
-        document.body?.scrollWidth ?? 0,
-      ),
-    }));
+    const { violations, width } = await page.evaluate(async () => {
+      const result = await window.axe.run(document, {
+        runOnly: {
+          type: 'tag',
+          values: ['wcag2a', 'wcag2aa', 'wcag21aa'],
+        },
+      });
+      return {
+        violations: result.violations.map((item) => ({
+          id: item.id,
+          impact: item.impact,
+          nodes: item.nodes.length,
+        })),
+        width: {
+          viewport: document.documentElement.clientWidth,
+          document: Math.max(
+            document.documentElement.scrollWidth,
+            document.body?.scrollWidth ?? 0,
+          ),
+        },
+      };
+    });
+    assert.deepEqual(
+      violations,
+      [],
+      `${label} has automated accessibility violations at ${viewport.name} width`,
+    );
     assert.ok(
       width.document <= width.viewport + 1,
       `${label} overflows at ${viewport.name} width: ${width.document}px > ${width.viewport}px`,
@@ -287,7 +371,10 @@ async function editCode(page, text) {
 
 export async function runFounderUatJourney() {
   const origin = loopbackOrigin();
+  await assertDisposableRuntime(origin);
   const runId = randomUUID().slice(0, 8);
+  const artifactDirectory = localArtifactDirectory();
+  const screenshots = [];
   const ownerEmail = `owner-${runId}@example.test`;
   const reviewerEmail = `reviewer-${runId}@example.test`;
   const outsiderEmail = `outsider-${runId}@example.test`;
@@ -320,6 +407,12 @@ export async function runFounderUatJourney() {
     await goto(invalidPage, `${origin}/`, 'Landing page');
     assert.equal(new URL(invalidPage.url()).pathname, '/r23/login');
     await audit(invalidPage, 'sign-in screen');
+    await saveScreenshot(
+      invalidPage,
+      artifactDirectory,
+      screenshots,
+      `login-${runId}`,
+    );
     const signInForm = invalidPage.locator('form[action="/r23/auth/login"]');
     await signInForm
       .locator('input[name="email"]')
@@ -346,6 +439,12 @@ export async function runFounderUatJourney() {
     await audit(ownerPage, 'landing sign-in');
     await clickLink(ownerPage, 'a[href="/r23/signup"]', '/r23/signup');
     await audit(ownerPage, 'signup screen');
+    await saveScreenshot(
+      ownerPage,
+      artifactDirectory,
+      screenshots,
+      `signup-${runId}`,
+    );
     await signup(ownerPage, ownerEmail, ownerPassword);
 
     await ownerPage.locator('a[href="/r23/login"]').click();
@@ -383,9 +482,23 @@ export async function runFounderUatJourney() {
     const organizationId = organizationPath.split('/').at(-1);
     assert.ok(organizationId);
     await audit(ownerPage, 'first organization');
+    await ownerPage.getByText(`Local Test ${runId}`, { exact: true }).waitFor();
+    await saveScreenshot(
+      ownerPage,
+      artifactDirectory,
+      screenshots,
+      `recruiter-organization-${runId}`,
+    );
 
     await ownerPage.locator('a[href$="/settings"]').click();
     await ownerPage.waitForURL((url) => url.pathname.endsWith('/settings'));
+    await audit(ownerPage, 'reviewer invitation settings');
+    await saveScreenshot(
+      ownerPage,
+      artifactDirectory,
+      screenshots,
+      `reviewer-invitation-settings-${runId}`,
+    );
     await ownerPage
       .getByText(/No email is sent for reviewer invitations/i)
       .waitFor();
@@ -441,11 +554,26 @@ export async function runFounderUatJourney() {
     await acceptForm.locator('button[type="submit"]').click();
     await reviewerPage.waitForURL((url) => url.pathname === organizationPath);
     await reviewerPage.getByText(/Reviewer scope:/).waitFor();
+    await reviewerPage
+      .getByText(`Local Test ${runId}`, { exact: true })
+      .waitFor();
     await audit(reviewerPage, 'reviewer organization');
+    await saveScreenshot(
+      reviewerPage,
+      artifactDirectory,
+      screenshots,
+      `reviewer-organization-${runId}`,
+    );
 
     await ownerPage.locator('a[href$="/builder"]').click();
     await ownerPage.waitForURL((url) => url.pathname.endsWith('/builder'));
     await audit(ownerPage, 'assessment builder');
+    await saveScreenshot(
+      ownerPage,
+      artifactDirectory,
+      screenshots,
+      `assessment-builder-${runId}`,
+    );
     await ownerPage
       .getByLabel('Assessment template')
       .selectOption('reservation-moves-v3');
@@ -517,6 +645,12 @@ export async function runFounderUatJourney() {
     await goto(candidatePage, candidateInvitationUrl, 'Candidate invitation');
     await candidatePage.getByTestId('candidate-data-use-notice').waitFor();
     await audit(candidatePage, 'candidate consent screen');
+    await saveScreenshot(
+      candidatePage,
+      artifactDirectory,
+      screenshots,
+      `candidate-consent-${runId}`,
+    );
     assert.match(
       await candidatePage.getByTestId('candidate-data-use-notice').innerText(),
       /task uses sample data/i,
@@ -600,6 +734,20 @@ export async function runFounderUatJourney() {
       .getByText('Work saved.', { exact: true })
       .waitFor({ timeout: 15000 });
     await audit(candidatePage, 'candidate active workspace');
+    await saveScreenshot(
+      candidatePage,
+      artifactDirectory,
+      screenshots,
+      `candidate-workspace-desktop-${runId}`,
+    );
+    await saveScreenshot(
+      candidatePage,
+      artifactDirectory,
+      screenshots,
+      `candidate-workspace-mobile-${runId}`,
+      viewports[2],
+    );
+    await candidatePage.setViewportSize(viewports[0]);
     const executionStatusBadge = candidatePage.getByTestId(
       'terminal-capability-status',
     );
@@ -693,6 +841,20 @@ export async function runFounderUatJourney() {
     await evidenceTab.waitFor();
     assert.equal(await evidenceTab.getAttribute('aria-selected'), 'true');
     await audit(reviewerPage, 'review evidence screen');
+    await saveScreenshot(
+      reviewerPage,
+      artifactDirectory,
+      screenshots,
+      `review-evidence-desktop-${runId}`,
+    );
+    await saveScreenshot(
+      reviewerPage,
+      artifactDirectory,
+      screenshots,
+      `review-evidence-mobile-${runId}`,
+      viewports[2],
+    );
+    await reviewerPage.setViewportSize(viewports[0]);
     await reviewerPage.getByRole('tab', { name: 'Code changes' }).click();
     const serviceRow = reviewerPage
       .locator('.evaluator-source-row')
@@ -735,15 +897,19 @@ export async function runFounderUatJourney() {
       .fill(
         'The change preserves the original reservation when the destination is full.',
       );
-    await packet
-      .getByRole('button', { name: 'Save draft', exact: true })
-      .click();
-    await reviewerPage.waitForResponse(
-      (response) =>
-        response.url().includes('/review-packet') &&
-        response.request().method() === 'PUT' &&
-        response.status() === 200,
-    );
+    const savePacketDraft = packet.getByRole('button', {
+      name: 'Save draft',
+      exact: true,
+    });
+    await Promise.all([
+      reviewerPage.waitForResponse(
+        (response) =>
+          response.url().includes('/review-packet') &&
+          response.request().method() === 'PUT' &&
+          response.status() === 200,
+      ),
+      savePacketDraft.click(),
+    ]);
     await packet
       .getByTestId('review-packet-status')
       .filter({ hasText: 'DRAFT' })
@@ -775,6 +941,20 @@ export async function runFounderUatJourney() {
       .getByTestId('review-packet-cited-observations')
       .getByText(observationText)
       .waitFor();
+    await saveScreenshot(
+      reviewerPage,
+      artifactDirectory,
+      screenshots,
+      `human-review-packet-desktop-${runId}`,
+    );
+    await saveScreenshot(
+      reviewerPage,
+      artifactDirectory,
+      screenshots,
+      `human-review-packet-mobile-${runId}`,
+      viewports[2],
+    );
+    await reviewerPage.setViewportSize(viewports[0]);
 
     const outsider = await createAccountFromLanding({
       browser,
@@ -858,6 +1038,7 @@ export async function runFounderUatJourney() {
       sessionId,
       execution: `${executionStatus?.trim() ?? 'unknown'}; no execution or AI request was sent`,
       result: 'passed',
+      screenshots,
     };
   } finally {
     await Promise.all(
@@ -876,6 +1057,9 @@ if (isMain) {
       console.log(
         `Founder UAT journey ${result.result}: org ${result.organizationId}, session ${result.sessionId}; execution ${result.execution}.`,
       );
+      for (const path of result.screenshots) {
+        console.log(`Local screenshot: ${path}`);
+      }
     })
     .catch((error) => {
       console.error(
