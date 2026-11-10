@@ -2656,6 +2656,10 @@ const R27EvidenceSourceInspector = ({
         className="evaluator-source-inspector-output"
         style={{ minWidth: 0, maxWidth: '100%' }}
       >
+        <p className="evaluator-code-scroll-hint">
+          Long lines scroll horizontally. Focus a code block to use the arrow
+          keys.
+        </p>
         <h3>Starter content</h3>
         {file.starterContent === null ? (
           <p className="evaluator-muted-copy">

@@ -2354,6 +2354,7 @@ export function AssessmentBuilderClient({
                         Snapshot Summary
                       </h4>
                       <dl
+                        className="assessment-snapshot-facts"
                         style={{
                           display: 'grid',
                           gap: '6px',
@@ -2730,6 +2731,7 @@ export function AssessmentBuilderClient({
                       }}
                     >
                       <dl
+                        className="assessment-snapshot-facts"
                         style={{
                           display: 'grid',
                           gap: '8px',

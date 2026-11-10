@@ -3137,10 +3137,14 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
+  .evaluator-evidence-browser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .evaluator-evidence-filter-bar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     overflow: visible;
     border-bottom: 0;
@@ -3169,5 +3173,17 @@
   .evaluator-review-tabpanel,
   .activity-item {
     scroll-behavior: auto;
+  }
+}
+
+.evaluator-code-scroll-hint {
+  margin: 0 0 16px;
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .evaluator-evidence-filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
