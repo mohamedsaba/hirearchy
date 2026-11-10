@@ -52,13 +52,11 @@ export default async function R23LoginPage({
           aria-labelledby="signin-title"
         >
           <div className="evaluator-signin-copy">
-            <p className="software-eyebrow">Your workspace</p>
-            <h1 id="signin-title">Sign in to Hirearchy Software.</h1>
+            <p className="software-eyebrow">Welcome back</p>
+            <h1 id="signin-title">Sign in to your workspace</h1>
             <p>
-              Manage assessments or review engineering work assigned to you.
-            </p>
-            <p className="evaluator-signin-note">
-              Evidence informs the decision. You own the decision.
+              Create assessments, follow candidate work, and review the
+              evidence.
             </p>
           </div>
           <div className="evaluator-signin-form">
@@ -83,8 +81,13 @@ export default async function R23LoginPage({
                   maxLength={320}
                 />
               </label>
-              <label htmlFor="password">
-                Password
+              <div className="software-password-field">
+                <div className="software-field-heading">
+                  <label htmlFor="password">Password</label>
+                  <Link href="/r23/recover" prefetch={false}>
+                    Reset your password
+                  </Link>
+                </div>
                 <input
                   id="password"
                   name="password"
@@ -93,7 +96,7 @@ export default async function R23LoginPage({
                   required
                   maxLength={1024}
                 />
-              </label>
+              </div>
               <button type="submit" className="button-primary">
                 Sign in
               </button>
@@ -102,13 +105,9 @@ export default async function R23LoginPage({
               {founderUat ? (
                 <>
                   <p>
+                    <span>New to Hirearchy? </span>
                     <Link href="/r23/signup" prefetch={false}>
                       Sign up
-                    </Link>
-                  </p>
-                  <p>
-                    <Link href="/r23/recover" prefetch={false}>
-                      Reset your password
                     </Link>
                   </p>
                   <p>
@@ -124,11 +123,6 @@ export default async function R23LoginPage({
                 </>
               ) : (
                 <>
-                  <p>
-                    <Link href="/r23/recover" prefetch={false}>
-                      Reset your password
-                    </Link>
-                  </p>
                   <p>
                     <Link href="/r23/verify-email" prefetch={false}>
                       Verify your email

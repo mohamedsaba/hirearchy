@@ -1,15 +1,23 @@
 # Founder UAT UI and CSS recovery
 
-- Status: in progress; readiness is **INVALIDATED** pending current browser evidence.
+- Status: founder rejected the visual result; readiness remains **INVALIDATED**. Sol now owns all UI/UX design and implementation directly.
 - Baseline: `origin/main` at `a10c0ccd996e7e8440329987187a7cbf770bce97` (PR #20).
 - Scope: diagnose the exact loopback application, restore styled HTML responses, complete the full route/state UI/UX and landing-first user-journey acceptance, add a browser-delivered CSS regression, and verify a production build and persistent runtime restart without changing founder data.
 - Boundaries: keep GoTrue authentication, AMR checks, proof v2, tenant authorization, and evaluator assignment unchanged. Candidate execution and live AI stay disabled. Use only synthetic/disposable journey data. Keep screenshot binaries local.
 
+## Final design direction
+
+The application must feel like a deliberate engineering workbench, not a set of generic form cards. Keep the Hirearchy wordmark, DM Sans, plum identity and restrained mint accent. Use compact navigation, clear working areas, fine rules, readable code and a consistent hierarchy. Separate compact account pages from the wider organization workspace. Authoring, candidate work and evidence review each need layouts suited to their task.
+
+The founder challenged the manual builder, then explicitly selected **Finish UI/UX only**. AI integration and paid calls are outside this phase. Make existing capabilities truthful and the supported authoring flow clear. New unsaved assessments start with the approved Reservation Moves template rather than a pre-filled fictional custom exercise; existing drafts keep their selected template and content. Custom authoring remains available as an explicit choice. This is a presentation/default-selection change, not a change to validation, issuance or evidence rules.
+
 ## Ownership
 
-- Worker A: presentation wrapper for HTML response routes and page/component/style corrections; no authentication or authorization changes.
-- Worker B: runtime and packaging diagnosis, browser-delivered CSS regression, restart/build evidence, and this plan.
-- Parent: integrated review, authoritative `docs/release-readiness.md`, acceptance decision, and protected PR process.
+- Sol: all UI/UX decisions and implementation, integration, authoritative release record, acceptance and protected PR process.
+- Worker A: read-only visual evidence and independent QA; no UI implementation.
+- Worker B: read-only AI/runtime investigation and independent technical verification; changes require a scoped assignment from Sol.
+
+The final tablet pass found Settings at 1118 px document width inside a 768 px viewport. The exact overflowing element still needs live inspection. This is an open P1 and all prior responsive-readiness claims remain provisional.
 
 Worker A's audit must cover every major landing, account, recruiter, candidate, and evaluator route and important state, with actual screenshot inspection at 1440×900, 1280×800, 768×1024, 390×844, and 375×812. The full real journey starts at `/` and uses supported browser navigation, local captured mail, normal separate accounts, and synthetic/disposable data. Include responsive overflow, keyboard/focus, Axe, contrast, and browser console checks. Resolve every P0 and material P1; keep a concise finding/evidence/resolution ledger. This plan does not close when CSS alone passes.
 

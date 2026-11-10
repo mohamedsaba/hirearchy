@@ -1046,13 +1046,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     <main className="r26-candidate software-product">
       <header className="r26-header">
         <div className="r26-brand">
-          <span className="r26-brand-mark" aria-hidden="true">
-            H
-          </span>
-          <div>
-            <strong>Hirearchy Software</strong>
-            <span>Candidate workspace</span>
-          </div>
+          <strong>Hirearchy</strong>
+          <span className="r26-product-tab">Software</span>
+          <span className="r26-workspace-label">Candidate workspace</span>
         </div>
         <div className="r26-header-status">
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
@@ -1087,13 +1083,23 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         </div>
       </header>
 
+      {view ? (
+        <nav className="r26-mobile-navigation" aria-label="Workspace sections">
+          <a href="#candidate-code-editor">Workspace</a>
+          <a href="#candidate-task-brief">Task brief</a>
+          <a href="#candidate-activity">Recorded activity</a>
+        </nav>
+      ) : null}
+
       <div
         className="r26-workspace"
+        data-session-state={view?.status.toLowerCase() ?? 'loading'}
         data-ai-enabled={
           view?.capabilities.ai === true && aiView?.enabled ? 'true' : 'false'
         }
       >
         <aside
+          id="candidate-task-brief"
           className="r26-task-panel"
           aria-label="Assessment task"
           tabIndex={0}
@@ -1334,6 +1340,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 </p>
               </section>
               <section
+                id="candidate-activity"
                 className="r26-activity"
                 aria-labelledby="r26-activity-title"
               >
@@ -1363,7 +1370,12 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           ) : null}
         </aside>
 
-        <section className="r26-editor-panel" aria-label="Candidate editor">
+        <section
+          id="candidate-code-editor"
+          tabIndex={-1}
+          className="r26-editor-panel"
+          aria-label="Candidate editor"
+        >
           <div className="r26-editor-heading">
             <div>
               <p className="r26-eyebrow">Workspace files</p>
@@ -2052,7 +2064,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           ) : null}
         </section>
 
-        {view ? (
+        {view?.capabilities.ai === true ? (
           <aside
             className={`r26-ai-panel ${view.capabilities.ai !== true || !aiView?.enabled ? 'r26-ai-panel-disabled' : ''}`}
             aria-label="AI assistance"

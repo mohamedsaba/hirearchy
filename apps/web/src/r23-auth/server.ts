@@ -105,7 +105,10 @@ import {
 } from '../scenarios/generated-assessment';
 import { scenario002 } from '../scenarios/scenario-002-booking-notification-retry';
 import type { ScenarioSnapshot } from '../scenarios/slice-one-scenario';
-import { renderSoftwareDocument } from '../ui/software-document';
+import {
+  renderSoftwareDocument,
+  type SoftwareWorkspace,
+} from '../ui/software-document';
 import {
   R23_CALLBACK_COOKIE,
   R23_CSRF_COOKIE,
@@ -321,8 +324,9 @@ function htmlResponse(
   content: string,
   status = 200,
   headers = securityHeaders(),
+  workspace?: SoftwareWorkspace,
 ): Response {
-  return new Response(renderSoftwareDocument(title, content), {
+  return new Response(renderSoftwareDocument(title, content, workspace), {
     status,
     headers,
   });

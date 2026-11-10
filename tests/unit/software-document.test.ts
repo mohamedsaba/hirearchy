@@ -27,4 +27,26 @@ describe('Software HTML document shell', () => {
     expect(existingHeading.match(/<h1(?:\s|>)/gi)).toHaveLength(1);
     expect(existingHeading).not.toContain('<h1>Sign in to Hirearchy</h1>');
   });
+
+  it('renders scoped workspace navigation without interpreting account data as HTML', () => {
+    const document = renderSoftwareDocument(
+      'Team & settings',
+      '<h1>Your team</h1>',
+      {
+        organizationId: 'd0b718ac-503a-4552-87e1-d24aa8a0b10c',
+        organizationName: '<Research & Development>',
+        email: 'owner@example.test',
+        role: 'recruiter',
+        csrf: 'token"<value>',
+        active: 'settings',
+      },
+    );
+
+    expect(document).toContain('software-document-workspace');
+    expect(document).toContain('&lt;Research &amp; Development&gt;');
+    expect(document).toContain('value="token&quot;&lt;value&gt;"');
+    expect(document).toContain('/settings" aria-current="page"');
+    expect(document).toContain('aria-label="Workspace navigation"');
+    expect(document).not.toContain('<Research');
+  });
 });

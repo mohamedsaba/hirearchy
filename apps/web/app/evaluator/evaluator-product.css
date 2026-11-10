@@ -4,33 +4,34 @@
 }
 
 .software-product-header {
-  min-height: 72px;
+  min-height: 64px;
   padding: 0 28px;
   display: flex;
   align-items: center;
   gap: 24px;
-  background: var(--software-plum);
-  color: #fff;
+  border-bottom: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-plum);
 }
 
 .software-wordmark {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  color: #fff;
-  font-size: 32px;
-  font-weight: 700;
+  color: var(--software-plum);
+  font-size: 24px;
+  font-weight: 750;
   text-decoration: none;
   letter-spacing: -0.035em;
 }
 
 .software-product-capsule {
-  padding: 5px 12px;
+  padding: 5px 8px;
   border: 1px solid var(--software-mint);
-  border-radius: 999px;
+  border-radius: 5px;
   background: var(--software-mint);
   color: var(--software-plum);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
@@ -48,14 +49,14 @@
   display: inline-flex;
   align-items: center;
   padding: 3px 8px 0;
-  color: rgb(255 255 255 / 78%);
+  color: var(--software-muted);
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
 }
 
 .software-product-header nav a[aria-current='page'] {
-  color: #fff;
+  color: var(--software-plum);
 }
 
 .software-product-header nav a[aria-current='page']::after {
@@ -232,15 +233,26 @@
 
 .evaluator-signin-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-  gap: 56px;
-  align-items: center;
-  max-width: 920px;
-  margin: 64px auto;
-  padding: 48px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  max-width: 440px;
+  margin: 24px auto;
+  padding: 36px;
   border: 1px solid var(--software-border);
-  border-radius: 20px;
+  border-radius: 12px;
   background: var(--software-surface);
+}
+
+.evaluator-signin-copy h1 {
+  max-width: 330px;
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.14;
+}
+
+.evaluator-signin-copy > p:not(.software-eyebrow) {
+  font-size: 14px;
 }
 
 .evaluator-signin-copy > p.evaluator-signin-note {
@@ -255,7 +267,7 @@
 
 .evaluator-signin-form .access-form {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .evaluator-signin-form .access-form label {
@@ -264,26 +276,68 @@
   color: var(--software-ink);
   font-size: 13px;
   font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .evaluator-signin-form .access-form input {
-  min-height: 46px;
+  min-height: 42px;
   padding: 0 12px;
   border: 1px solid var(--software-border);
-  border-radius: 9px;
+  border-radius: 7px;
   color: var(--software-ink);
   font: inherit;
 }
 
 .evaluator-signin-form .access-form .button-primary {
-  min-height: 46px;
+  min-height: 44px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 7px;
   background: var(--software-plum);
   color: white;
   font: inherit;
   font-weight: 650;
   cursor: pointer;
+}
+
+.software-password-field {
+  display: grid;
+  gap: 8px;
+}
+
+.software-field-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.software-field-heading a {
+  color: var(--software-muted);
+  font-size: 11px;
+  text-underline-offset: 3px;
+}
+
+.evaluator-signin-form nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 18px;
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--software-border);
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+.evaluator-signin-form nav > p {
+  margin: 0;
+}
+
+.evaluator-signin-form nav > p:first-child {
+  flex-basis: 100%;
+  margin-bottom: 8px;
+  font-size: 13px;
 }
 
 .evaluator-report-header {
@@ -313,8 +367,8 @@
   margin: 14px 0 0;
   color: var(--software-plum);
   font-family: var(--software-sans);
-  font-size: clamp(27px, 3.5vw, 38px);
-  font-weight: 700;
+  font-size: clamp(26px, 2.8vw, 32px);
+  font-weight: 650;
   letter-spacing: -0.04em;
   line-height: 1.1;
   text-transform: none;
@@ -327,7 +381,7 @@
 
 @media (max-width: 760px) {
   .software-product-header {
-    min-height: 68px;
+    min-height: 64px;
     padding: 0 18px;
     gap: 12px;
   }
@@ -339,12 +393,12 @@
 
   .software-wordmark {
     gap: 7px;
-    font-size: 25px;
+    font-size: 24px;
   }
 
   .software-product-capsule {
     padding: 4px 8px;
-    font-size: 12px;
+    font-size: 10px;
   }
 
   .software-product-header nav {
@@ -377,8 +431,8 @@
   .evaluator-signin-panel {
     grid-template-columns: 1fr;
     gap: 28px;
-    margin: 28px auto;
-    padding: 26px 20px;
+    margin: 8px auto;
+    padding: 30px 24px;
   }
 
   .evaluator-report-heading {

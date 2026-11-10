@@ -1,13 +1,7 @@
-html,
-body {
-  overflow-x: clip;
-  max-width: 100vw;
-}
-
 .assessment-builder-page {
+  min-width: 0;
   min-height: 100dvh;
   background: var(--software-canvas);
-  overflow-x: clip;
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -18,21 +12,22 @@ body {
 }
 
 .assessment-builder-shell {
-  padding: 24px 24px 56px;
+  min-width: 0;
+  padding: 42px 32px 64px;
   max-width: 100%;
   box-sizing: border-box;
 }
 
 .assessment-builder-container {
-  width: min(100%, 1040px);
+  min-width: 0;
+  width: min(100%, 1100px);
   max-width: 100%;
   box-sizing: border-box;
   margin-inline: auto;
-  overflow-x: clip;
 }
 
 .assessment-builder-hero {
-  margin: 0 0 21px;
+  margin: 0 0 28px;
 }
 
 .assessment-eyebrow,
@@ -53,8 +48,8 @@ body {
 
 .assessment-builder-hero h1 {
   margin: 8px 0 3px;
-  font-size: clamp(1.8rem, 3vw, 2.25rem);
-  font-weight: 700;
+  font-size: 32px;
+  font-weight: 650;
   letter-spacing: -0.04em;
   line-height: 1.12;
 }
@@ -72,14 +67,118 @@ body {
   font-size: 0.88rem;
 }
 
+.assessment-app-header {
+  justify-content: space-between;
+}
+
+.assessment-app-return {
+  color: var(--software-muted);
+  font-size: 12px;
+  text-underline-offset: 3px;
+}
+
+.assessment-template-choice {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 480px);
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.assessment-template-choice select {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  font: inherit;
+}
+
+.assessment-template-preview {
+  padding: 28px;
+  border: 1px solid var(--software-border);
+  border-left: 3px solid var(--software-plum);
+  border-radius: 0 8px 8px 0;
+  background: var(--software-canvas);
+}
+
+.assessment-template-heading,
+.assessment-template-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+.assessment-template-tag {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--software-mint);
+  color: var(--software-plum);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.assessment-template-preview h3 {
+  margin: 20px 0 10px;
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+}
+
+.assessment-template-preview > p {
+  max-width: 650px;
+  color: var(--software-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.assessment-template-details {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--software-border);
+}
+
+.assessment-template-preview > p.assessment-template-footnote {
+  margin: 20px 0 0;
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .assessment-builder-shell {
+    padding: 28px 16px 48px;
+  }
+  .assessment-stage-nav ol {
+    gap: 12px;
+  }
+  .assessment-stage-heading {
+    padding: 24px 20px;
+  }
+  .assessment-template-preview {
+    padding: 22px 18px;
+  }
+  .assessment-builder-capability-note {
+    display: block;
+  }
+  .assessment-builder-capability-note strong {
+    display: block;
+    margin-bottom: 5px;
+  }
+}
+
 .assessment-builder-capability-note {
-  margin-top: 12px;
-  padding: 12px 16px;
-  border: 1px solid var(--software-status-info-border);
-  border-radius: var(--software-radius-control);
-  background: var(--software-status-info-surface);
-  color: var(--software-status-info);
-  font-size: 0.85rem;
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--software-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--software-muted);
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -88,13 +187,14 @@ body {
 }
 
 .assessment-stage-nav {
-  margin-bottom: 15px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--software-border);
 }
 
 .assessment-stage-nav ol {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 24px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -108,14 +208,15 @@ body {
 .assessment-stage-button {
   display: grid;
   width: 100%;
-  min-height: 58px;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 66px;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 5px 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--software-border);
-  border-radius: var(--software-radius-surface);
-  background: var(--software-surface);
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
   color: var(--software-ink);
   font: inherit;
   text-align: left;
@@ -127,24 +228,24 @@ body {
 }
 
 .assessment-stage-button:hover {
-  border-color: var(--software-border-strong);
-  box-shadow: 0 3px 10px rgb(37 26 53 / 5%);
+  border-bottom-color: var(--software-border-strong);
+  box-shadow: none;
 }
 
 .assessment-stage-button[aria-current='step'] {
-  border-color: var(--software-plum);
-  background: var(--software-mint);
-  box-shadow: inset 0 0 0 1px var(--software-plum);
+  border-bottom-color: var(--software-plum);
+  background: transparent;
+  box-shadow: none;
 }
 
 .assessment-stage-number {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   place-items: center;
-  border: 1px solid var(--software-border);
-  border-radius: 50%;
-  background: var(--software-surface);
+  border: 0;
+  border-radius: 5px;
+  background: var(--software-surface-subtle);
   color: var(--software-muted);
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
@@ -152,7 +253,7 @@ body {
 }
 
 .assessment-stage-button[aria-current='step'] .assessment-stage-number {
-  border-color: var(--software-plum);
+  background: var(--software-mint);
   color: var(--software-plum);
 }
 
@@ -163,6 +264,7 @@ body {
 }
 
 .assessment-stage-caption {
+  grid-column: 2;
   overflow: hidden;
   color: var(--software-muted);
   font-size: 0.68rem;
@@ -176,11 +278,11 @@ body {
 }
 
 .assessment-stage-panel {
-  overflow: hidden;
+  min-width: 0;
   border: 1px solid var(--software-border);
   border-radius: var(--software-radius-surface);
   background: var(--software-surface);
-  box-shadow: 0 4px 18px rgb(37 26 53 / 4%);
+  box-shadow: none;
 }
 
 .assessment-stage-heading {
@@ -188,7 +290,7 @@ body {
   grid-template-columns: 52px minmax(0, 1fr);
   align-items: start;
   gap: 13px;
-  padding: 21px 24px 18px;
+  padding: 28px 32px 24px;
   border-bottom: 1px solid var(--software-border-subtle);
 }
 

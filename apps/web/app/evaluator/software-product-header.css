@@ -15,7 +15,7 @@
 }
 
 .software-product-capsule {
-  border-radius: var(--radius-pill, 999px);
+  border-radius: 5px;
 }
 
 .software-product-header nav a.software-nav-link {
@@ -24,7 +24,7 @@
   padding: 0 14px;
   border: 1px solid transparent;
   border-radius: var(--software-radius-control, 0.5rem);
-  color: rgb(255 255 255 / 78%);
+  color: var(--software-muted);
   transition:
     background-color var(--software-transition, 180ms ease),
     border-color var(--software-transition, 180ms ease),
@@ -36,9 +36,9 @@
 }
 
 .software-product-header nav a.software-nav-link:hover {
-  border-color: rgb(255 255 255 / 24%);
-  background: rgb(255 255 255 / 8%);
-  color: #fff;
+  border-color: var(--software-border);
+  background: var(--software-surface-subtle);
+  color: var(--software-plum);
 }
 
 .software-product-header nav a.software-nav-link[aria-current='page'] {
@@ -54,7 +54,7 @@
 }
 
 .software-product-header nav a.software-nav-link:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--software-focus);
   outline-offset: var(--focus-offset, 2px);
 }
 

@@ -20,11 +20,11 @@ body.software-document-body *::after {
   --software-mint: #b0f0ce;
   --software-ink: #251a35;
   --software-muted: #625871;
-  --software-canvas: #faf8fc;
+  --software-canvas: #f7f6f9;
   --software-surface: #fff;
-  --software-surface-subtle: var(--software-lilac);
+  --software-surface-subtle: #f2f0f5;
   --software-surface-note: #eee7f4;
-  --software-border: #ddd6e5;
+  --software-border: #e2dee8;
   --software-border-subtle: #eeeaf2;
   --software-border-strong: #8b7c99;
   --software-focus: #291e36;
@@ -273,12 +273,15 @@ body.software-document-body *::after {
 }
 
 .software-document-header {
-  min-height: 72px;
+  min-height: 64px;
   display: flex;
   align-items: center;
-  padding-inline: clamp(16px, 3vw, 28px);
-  background: var(--software-plum);
-  color: #fff;
+  justify-content: space-between;
+  gap: 24px;
+  padding-inline: 28px;
+  border-bottom: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-plum);
 }
 
 .software-document-wordmark {
@@ -286,35 +289,38 @@ body.software-document-body *::after {
   align-items: center;
   gap: 10px;
   color: inherit !important;
-  font: 700 30px / 1 var(--software-sans);
+  font: 750 24px / 1 var(--software-sans);
   letter-spacing: -0.035em;
   text-decoration: none;
 }
 
 .software-document-product {
-  padding: 5px 10px;
-  border-radius: 999px;
+  padding: 5px 8px;
+  border-radius: 5px;
   background: var(--software-mint);
   color: var(--software-plum);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.01em;
 }
 
 .software-document-shell {
-  min-height: calc(100vh - 72px);
+  min-width: 0;
+  min-height: calc(100vh - 64px);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   justify-items: center;
-  padding: clamp(24px, 6vh, 64px) 24px;
+  padding: 64px 24px;
   background: var(--software-canvas);
 }
 
 .software-document-panel {
-  width: min(100%, 720px);
-  padding: clamp(24px, 4vw, 40px);
+  min-width: 0;
+  width: min(100%, 460px);
+  padding: 32px;
   border: 1px solid var(--software-border);
-  border-radius: 20px;
+  border-radius: 12px;
   background: var(--software-surface);
   overflow-wrap: anywhere;
 }
@@ -353,13 +359,13 @@ body.software-document-body *::after {
 }
 
 .software-document-panel h1 {
-  font-size: clamp(28px, 3.2vw, 36px);
+  font-size: clamp(26px, 3vw, 30px);
   letter-spacing: -0.04em;
   line-height: 1.12;
 }
 
 .software-document-panel h2 {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1.3;
 }
 
@@ -371,7 +377,7 @@ body.software-document-body *::after {
 
 .software-document-panel form {
   display: grid;
-  gap: 16px;
+  gap: 8px;
   margin: 24px 0 0;
 }
 
@@ -379,7 +385,7 @@ body.software-document-body *::after {
   display: grid;
   gap: 7px;
   color: var(--software-ink);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -391,16 +397,16 @@ body.software-document-body *::after {
   ) {
   box-sizing: border-box;
   width: 100%;
-  min-height: 46px;
+  min-height: 42px;
   padding: 0 12px;
 }
 
 .software-document-panel :where(button, input[type='submit']) {
   width: 100%;
-  min-height: 44px;
+  min-height: 42px;
   padding: 0 18px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 7px;
   background: var(--software-plum);
   color: #fff;
   font: 650 14px / 1.2 var(--software-sans);
@@ -484,6 +490,7 @@ body.software-document-body *::after {
 }
 
 .software-document-panel .software-overflow-region {
+  min-width: 0;
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
@@ -497,15 +504,543 @@ body.software-document-body *::after {
 }
 
 .software-document-panel .software-members-table {
-  width: max-content;
-  min-width: 760px;
+  width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   text-align: left;
 }
 
 .software-document-panel .software-members-table :is(th, td) {
-  padding: 8px 12px;
+  padding: 16px 14px;
+  border-bottom: 1px solid var(--software-border);
   vertical-align: top;
+}
+
+.software-document-purpose {
+  color: var(--software-muted);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+.software-document-workspace .software-document-layout {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+}
+
+.software-workspace-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  min-width: 0;
+  height: calc(100vh - 64px);
+  padding: 30px 20px 20px;
+  border-right: 1px solid var(--software-border);
+  background: var(--software-surface);
+}
+
+.software-workspace-identity {
+  display: grid;
+  gap: 5px;
+  padding-inline: 8px;
+  overflow-wrap: anywhere;
+}
+
+.software-workspace-identity strong {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.software-workspace-identity .software-eyebrow {
+  margin: 0 0 8px;
+  color: var(--software-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.software-workspace-identity > span:last-child,
+.software-workspace-sidebar-footer > span {
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+.software-workspace-sidebar nav {
+  display: grid;
+  gap: 6px;
+}
+
+.software-workspace-sidebar nav a {
+  padding: 11px 12px;
+  border-left: 2px solid transparent;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.software-workspace-sidebar nav a:hover {
+  background: var(--software-surface-subtle);
+}
+
+.software-workspace-sidebar nav a[aria-current='page'] {
+  border-left-color: var(--software-plum);
+  background: var(--software-mint);
+  font-weight: 650;
+}
+
+.software-workspace-sidebar-footer {
+  display: grid;
+  gap: 14px;
+  margin-top: auto;
+  padding: 20px 8px 0;
+  border-top: 1px solid var(--software-border);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.software-workspace-sidebar-footer form {
+  margin: 0;
+}
+
+.software-workspace-sidebar-footer button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--software-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.software-document-workspace .software-document-shell {
+  display: block;
+  padding: 44px clamp(24px, 4vw, 64px) 64px;
+}
+
+.software-document-workspace .software-document-panel {
+  width: min(100%, 1180px);
+  margin-inline: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.software-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.software-page-heading > div,
+.software-settings-section,
+.software-settings-grid > *,
+.software-work-list {
+  min-width: 0;
+}
+
+.software-document-panel .software-page-heading h1 {
+  font-size: 32px;
+  font-weight: 650;
+}
+
+.software-document-panel .software-eyebrow {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--software-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.software-document-panel .software-page-heading p:not(.software-eyebrow) {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.software-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.software-document-panel .software-settings-section {
+  margin-top: 20px;
+  padding: 26px;
+  border: 1px solid var(--software-border);
+  border-radius: 10px;
+  background: var(--software-surface);
+}
+
+.software-settings-grid .software-settings-section {
+  margin-top: 0;
+}
+
+.software-section-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.software-section-number {
+  padding-top: 4px;
+  color: var(--software-muted);
+  font: 11px / 1.5 var(--software-mono);
+}
+
+.software-document-panel .software-section-intro h2 {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.software-document-panel .software-section-intro p {
+  margin-top: 5px;
+  font-size: 13px;
+}
+
+.software-document-panel .software-settings-section button {
+  justify-self: start;
+  width: auto;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.software-document-panel form input + label {
+  margin-top: 10px;
+}
+
+.software-document-panel .software-settings-section form > input + button {
+  margin-top: 12px;
+}
+
+.software-account-email {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.software-document-panel .software-field-help,
+.software-table-label {
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+.software-document-panel .software-invite-form {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) auto;
+  align-items: end;
+  justify-content: start;
+  gap: 12px;
+}
+
+.software-invite-form > div {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.software-invitation-history {
+  margin-top: 30px;
+  padding-top: 24px;
+  border-top: 1px solid var(--software-border);
+}
+
+.software-invitation-list {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.software-invitation-row {
+  padding: 18px;
+  border: 1px solid var(--software-border);
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.software-role-badge,
+.software-owner-badge,
+.software-state-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--software-border);
+  border-radius: 5px;
+  background: var(--software-surface-subtle);
+  font-size: 11px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.software-owner-badge {
+  margin-left: 6px;
+  border-color: transparent;
+  background: var(--software-mint);
+}
+
+.software-members-table {
+  font-size: 13px;
+}
+
+.software-members-table th {
+  color: var(--software-muted);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.software-members-table form {
+  margin: 0;
+}
+
+.software-document-panel .software-members-table button {
+  min-height: 32px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--software-border);
+  background: transparent;
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+.software-session-filters {
+  grid-template-columns: minmax(200px, 1.5fr) repeat(2, minmax(150px, 1fr)) auto;
+  align-items: end;
+  padding: 20px;
+  border: 1px solid var(--software-border);
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
+  background: var(--software-surface);
+}
+
+.software-document-panel .software-session-filters button {
+  width: auto;
+  background: var(--software-surface-subtle);
+  color: var(--software-plum);
+  font-size: 12px;
+}
+
+.software-list-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  font-size: 12px;
+}
+
+.software-list-caption > p[role='status'] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.software-session-list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--software-border);
+  border-top: 0;
+  border-radius: 0 0 9px 9px;
+  background: var(--software-surface);
+  list-style: none;
+}
+
+.software-session-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.8fr) minmax(130px, 1fr) minmax(120px, 1fr)
+    auto;
+  align-items: center;
+  gap: 20px;
+  padding: 22px 20px;
+  border-bottom: 1px solid var(--software-border);
+  font-size: 13px;
+}
+
+.software-session-row:last-child {
+  border-bottom: 0;
+}
+
+.software-session-identity h3 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.software-document-panel .software-session-row p {
+  margin-top: 7px;
+  font-size: 12px;
+}
+
+.software-session-review {
+  display: grid;
+  gap: 5px;
+}
+
+.software-session-actions details {
+  margin-top: 8px;
+  color: var(--software-muted);
+  font-size: 11px;
+}
+
+.software-empty-state {
+  padding: 58px 28px;
+  border: 1px solid var(--software-border);
+  border-top: 0;
+  border-radius: 0 0 9px 9px;
+  background: var(--software-surface);
+  text-align: center;
+}
+
+.software-empty-marker {
+  display: block;
+  width: 36px;
+  margin: 0 auto 18px;
+  padding-bottom: 9px;
+  border-bottom: 2px solid var(--software-mint);
+  color: var(--software-muted);
+  font: 12px / 1 var(--software-mono);
+}
+
+.software-empty-state p {
+  max-width: 380px;
+  margin-inline: auto;
+  font-size: 13px;
+}
+
+.software-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .software-session-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .software-session-row {
+    grid-template-columns: minmax(0, 1.5fr) minmax(120px, 1fr) auto;
+  }
+  .software-session-review {
+    grid-column: 1 / 3;
+  }
+  .software-session-actions {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}
+
+@media (max-width: 900px) {
+  .software-document-workspace .software-document-layout {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+  .software-workspace-sidebar {
+    padding-inline: 12px;
+  }
+  .software-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .software-document-workspace .software-document-shell {
+    padding-inline: 24px;
+  }
+}
+
+@media (max-width: 700px) {
+  .software-document-purpose {
+    display: none;
+  }
+  .software-document-workspace .software-document-layout {
+    display: block;
+  }
+  .software-workspace-sidebar {
+    position: static;
+    height: auto;
+    gap: 16px;
+    padding: 18px 20px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--software-border);
+  }
+  .software-workspace-identity {
+    display: none;
+  }
+  .software-workspace-sidebar nav {
+    display: flex;
+    gap: 20px;
+  }
+  .software-workspace-sidebar nav a {
+    padding: 12px 0;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+  }
+  .software-workspace-sidebar nav a[aria-current='page'] {
+    border-bottom-color: var(--software-plum);
+    background: transparent;
+  }
+  .software-workspace-sidebar-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 0;
+    padding: 12px 0;
+  }
+  .software-workspace-sidebar-footer > span {
+    display: none;
+  }
+  .software-document-workspace .software-document-shell {
+    padding: 28px 16px 48px;
+  }
+  .software-page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .software-document-panel .software-page-heading h1 {
+    font-size: 28px;
+  }
+  .software-document-panel .software-settings-section {
+    padding: 22px 18px;
+  }
+  .software-document-panel .software-invite-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .software-session-filters {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+  .software-list-caption {
+    align-items: flex-start;
+    padding: 14px 16px;
+  }
+  .software-session-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 20px 16px;
+    gap: 16px;
+  }
+  .software-session-state {
+    grid-row: 2;
+  }
+  .software-session-review {
+    grid-column: 1 / -1;
+  }
+  .software-session-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
 }
 
 .software-document-panel .software-members-table th,
