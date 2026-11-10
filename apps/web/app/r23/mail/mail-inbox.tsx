@@ -81,7 +81,7 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
       }
       if (!response.ok) {
         setError(
-          'This email has expired or was already used. Refresh the inbox for the current message.',
+          'We could not process this email. Refresh the inbox and try again.',
         );
         setBusyMessageId(null);
         return;
