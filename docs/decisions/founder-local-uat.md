@@ -13,6 +13,14 @@ Use the existing real GoTrue verification flow where it satisfies confirmation a
 
 Recovery credentials remain confined to password update. A new normal sign-in is required before product operations. GoTrue live identity checks, proof v2, PostgreSQL live-session checks, replay protection, email matching, membership, organization scope, and per-session reviewer assignment remain mandatory.
 
+### Positive password authentication for product proofs
+
+The supported account journey uses email/password sign-in. Require a valid password authentication-method entry for proof-bound product access, in addition to the existing rejection of every recovery entry and missing, empty, or malformed authentication-method claims. Enforce this centrally after live GoTrue identity verification for application sessions and direct bearer proof issuance. OTP-only credentials do not authorize product operations, regardless of browser cookies. Proof v2 and PostgreSQL's strict `isRecovery: false` requirement remain unchanged.
+
+This is necessary because pinned GoTrue `v2.197.0` issues an `otp` authentication method for both signup and recovery through `POST /verify`; the absence of a `recovery` entry alone cannot establish normal password sign-in. Its numeric OTP request requires the email address and verification type, and its successful response does not include a separate verification-type field. See the pinned [verification implementation](https://github.com/supabase/auth/blob/v2.197.0/internal/api/verify.go) and [token implementation](https://github.com/supabase/auth/blob/v2.197.0/internal/tokens/service.go).
+
+Discard signup verification grants before normal sign-in. A successful actual GoTrue recovery OTP exchange, bound to the selected captured message's exact recipient and recovery purpose, may create only a sealed short-lived recovery cookie. Independently verify its live identity before password update. Do not relabel an `otp` claim as `recovery`, create a product session, or issue a proof from this state. Clear recovery state after password update and require a fresh password sign-in. Actual recovery-OTP bearer denial, explicit recovery-AMR denial, and successful normal password access are required live acceptance checks.
+
 ## Runtime and data boundary
 
 Bind the application, Auth service, mail capture, and database to loopback or a private local service network. Fail closed for non-loopback public entry configuration. Keep the public/staging/production defaults unchanged. This is a founder-controlled test environment, not a public or hostile-code security certification.
