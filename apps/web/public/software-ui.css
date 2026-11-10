@@ -704,6 +704,8 @@ body.software-document-body *::after {
 }
 
 .software-section-number {
+  flex: 0 0 16px;
+  white-space: nowrap;
   padding-top: 4px;
   color: var(--software-muted);
   font: 11px / 1.5 var(--software-mono);
