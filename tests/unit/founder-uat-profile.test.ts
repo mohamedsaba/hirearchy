@@ -7,7 +7,10 @@ import {
   isFounderUatProfile,
   isStagingLockdown,
 } from '../../apps/web/src/runtime/profile';
-import { founderUatMailInboxUrl } from '../../apps/web/src/runtime/founder-uat';
+import {
+  founderUatMailInboxUrl,
+  getFounderUatAutomationRunId,
+} from '../../apps/web/src/runtime/founder-uat';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -47,16 +50,29 @@ describe('Founder UAT runtime profile', () => {
       '/r23/mail?email=founder%40local.test',
     );
     expect(founderUatMailInboxUrl('not-an-email')).toBeNull();
+    expect(getFounderUatAutomationRunId()).toBeNull();
+
+    const runId = 'b3a1b6e4-e45d-4d8c-8dab-08ce16a09042';
+    vi.stubEnv('FOUNDER_UAT_AUTOMATION_RUN_ID', runId);
+    expect(getFounderUatAutomationRunId()).toBe(runId);
+
+    vi.stubEnv('FOUNDER_UAT_AUTOMATION_RUN_ID', 'not-a-run-id');
+    expect(getFounderUatAutomationRunId()).toBeNull();
   });
 
   it('fails closed on any non-loopback or mismatched configured endpoint', () => {
     configureFounderUat();
     vi.stubEnv('FOUNDER_UAT_MAILPIT_API_URL', 'http://mailpit:8025');
+    vi.stubEnv(
+      'FOUNDER_UAT_AUTOMATION_RUN_ID',
+      'b3a1b6e4-e45d-4d8c-8dab-08ce16a09042',
+    );
 
     expect(isFounderUatEnabled()).toBe(false);
     expect(isAuthenticatedStaging()).toBe(false);
     expect(isStagingLockdown()).toBe(true);
     expect(founderUatMailInboxUrl('founder@local.test')).toBeNull();
+    expect(getFounderUatAutomationRunId()).toBeNull();
   });
 
   it('does not activate Founder UAT under another runtime profile', () => {
@@ -67,5 +83,10 @@ describe('Founder UAT runtime profile', () => {
     expect(isFounderUatEnabled()).toBe(false);
     expect(isAuthenticatedStaging()).toBe(false);
     expect(isStagingLockdown()).toBe(true);
+    vi.stubEnv(
+      'FOUNDER_UAT_AUTOMATION_RUN_ID',
+      'b3a1b6e4-e45d-4d8c-8dab-08ce16a09042',
+    );
+    expect(getFounderUatAutomationRunId()).toBeNull();
   });
 });
