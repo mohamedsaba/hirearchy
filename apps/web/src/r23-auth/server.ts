@@ -38,6 +38,8 @@ import { r26IsEnabled } from '../r26-candidate/config';
 import { r27IsEnabled } from '../r27-evidence/config';
 import { r29IsEnabled } from '../r29-observations/config';
 import { isAuthenticatedStaging } from '../runtime/profile';
+import { readFounderUatConfiguration } from '../runtime/founder-uat';
+import { hasFounderUatPendingInvitation } from './founder-uat-state';
 import {
   stagingAssessmentDraftApiGet,
   stagingAssessmentDraftApiPut,
@@ -1440,7 +1442,24 @@ export function r23LoginGet(): Response {
 }
 
 export async function r23LoginPost(request: Request): Promise<Response> {
-  if (isAuthenticatedStaging()) return stagingLoginPost(request);
+  if (isAuthenticatedStaging()) {
+    const response = await stagingLoginPost(request);
+    const founderUat = readFounderUatConfiguration();
+    if (!founderUat || (response.status !== 401 && response.status !== 503)) {
+      return response;
+    }
+    const path =
+      response.status === 401
+        ? '/r23/login?error=credentials'
+        : '/r23/login?error=unavailable';
+    const headers = new Headers({
+      'Cache-Control': 'private, no-store, max-age=0',
+      Location: new URL(path, founderUat.appOrigin).toString(),
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new Response(null, { status: 303, headers });
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   try {
     const active = getRuntime();
@@ -1495,7 +1514,40 @@ export async function r23LoginPost(request: Request): Promise<Response> {
 }
 
 export async function r23CallbackGet(request: Request): Promise<Response> {
-  if (isAuthenticatedStaging()) return stagingCallbackGet(request);
+  if (isAuthenticatedStaging()) {
+    const response = await stagingCallbackGet(request);
+    const founderUat = readFounderUatConfiguration();
+    if (
+      !founderUat ||
+      response.status !== 303 ||
+      !hasFounderUatPendingInvitation(request)
+    ) {
+      return response;
+    }
+    const location = response.headers.get('location');
+    if (!location) return response;
+    let callbackTarget: URL;
+    try {
+      callbackTarget = new URL(location);
+    } catch {
+      return response;
+    }
+    if (
+      callbackTarget.origin !== founderUat.appOrigin.origin ||
+      callbackTarget.pathname !== '/r23/organizations'
+    ) {
+      return response;
+    }
+    const headers = new Headers(response.headers);
+    headers.set(
+      'Location',
+      new URL(
+        '/r23/invitations/accept?pending=1',
+        founderUat.appOrigin,
+      ).toString(),
+    );
+    return new Response(null, { status: response.status, headers });
+  }
   if (!r23IsEnabled()) return disabledResponse(request);
   let sessionPending = false;
   try {

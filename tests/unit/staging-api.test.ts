@@ -391,6 +391,11 @@ describe('authenticated staging boundary', () => {
         { method: 'password', timestamp: 1 },
         { method: 'recovery', timestamp: 2 },
       ],
+      [{ method: 'otp', timestamp: 1 }],
+      [
+        { method: 'password', timestamp: 1 },
+        { method: 'unknown', timestamp: 2 },
+      ],
       undefined,
     ]) {
       grantedToken = makeToken(amr);
