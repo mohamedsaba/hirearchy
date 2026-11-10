@@ -1484,7 +1484,8 @@ export function AssessmentBuilderClient({
                     data-testid="draft-status"
                     style={{
                       borderColor: 'var(--software-mint-border, #10b981)',
-                      background: 'var(--software-mint, #ecfdf5)',
+                      background:
+                        'var(--software-status-success-surface, #ecfdf3)',
                       color: 'var(--software-ink, #064e3b)',
                       marginBottom: '16px',
                     }}
@@ -2282,7 +2283,8 @@ export function AssessmentBuilderClient({
                         padding: '16px',
                         borderRadius: 'var(--software-radius-control, 6px)',
                         border: '1px solid var(--software-border, #10b981)',
-                        background: 'var(--software-mint, #ecfdf5)',
+                        background:
+                          'var(--software-status-success-surface, #ecfdf3)',
                         marginBottom: '16px',
                       }}
                     >
