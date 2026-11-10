@@ -1242,7 +1242,11 @@ integration: try {
             if (
               code !== 'ECONNREFUSED' &&
               code !== 'ECONNRESET' &&
-              code !== '57P03'
+              code !== '57P03' &&
+              !(
+                code === undefined &&
+                probeFailure === 'pg-connection-terminated-unexpectedly'
+              )
             ) {
               await captureRecoveryFailure();
               console.error(
@@ -1250,7 +1254,7 @@ integration: try {
               );
               throw error;
             }
-            lastTransientCode = code;
+            lastTransientCode = code ?? probeFailure;
           } finally {
             await probe.end().catch(() => {});
           }
