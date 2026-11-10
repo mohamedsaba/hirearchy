@@ -1,6 +1,6 @@
 # Decision: isolated Founder UAT profile
 
-- Status: accepted and verified; live UAT acceptance completed.
+- Status: local-profile decision accepted; the subsequent UI/UX recovery and protected acceptance gate are tracked in [release readiness](../release-readiness.md).
 - Baseline: protected `main` at `c4936cd1f6a396854400e363f7dc9d629e6a8b58`.
 
 The supported local test must be a real product journey, beginning with account creation rather than fixture credentials. The existing self-service onboarding and durable workflow are reused. This decision changes only the isolated local testing profile; it does not activate public signup or external candidate access.

@@ -118,6 +118,10 @@ import {
   type StagingProofArgs,
 } from './server';
 import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
+import {
+  renderSoftwareDocument,
+  type SoftwareWorkspace,
+} from '../ui/software-document';
 
 const ENVELOPE_VERSION = 1;
 const NONCE_LENGTH = 12;
@@ -525,7 +529,7 @@ function securityHeaders(): Headers {
   return new Headers({
     'Cache-Control': 'private, no-store',
     'Content-Security-Policy':
-      "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'none'; style-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     'Content-Type': 'text/html; charset=utf-8',
     'Referrer-Policy': 'same-origin',
     'X-Content-Type-Options': 'nosniff',
@@ -537,11 +541,12 @@ function htmlResponse(
   content: string,
   status = 200,
   headers = securityHeaders(),
+  workspace?: SoftwareWorkspace,
 ): Response {
-  return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safeHtml(title)}</title></head><body><main><h1>${safeHtml(title)}</h1>${content}</main></body></html>`,
-    { status, headers },
-  );
+  return new Response(renderSoftwareDocument(title, content, workspace), {
+    status,
+    headers,
+  });
 }
 
 function loginForm(message = ''): string {
@@ -1336,12 +1341,12 @@ export async function stagingOrganizationsGet(
               membership.displayName?.trim() ||
                 `Organization ${membership.organizationId.slice(0, 8)}`,
             );
-            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit">Select ${displayName} (${roleLabel})</button><span>Organization ID: <code>${id}</code></span></form></li>`;
+            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span>${displayName}</span><span class="software-role-badge">${membership.role === 'reviewer' ? 'Evaluator' : 'Recruiter'}</span></button></form></li>`;
           })
           .join('');
         let content = '';
         if (memberships.length > 0) {
-          content = `<p>Select one organization for this session.</p><ul>${items}</ul>`;
+          content = `<p class="software-eyebrow">Your workspaces</p><h1>Where would you like to work?</h1><p>Select a workspace to continue.</p><ul class="software-organization-picker">${items}</ul>`;
         } else {
           if (
             statusResult.status === 'needs_team' &&
@@ -1349,10 +1354,11 @@ export async function stagingOrganizationsGet(
           ) {
             content = `
               <section aria-labelledby="create-org-title">
-                <h2 id="create-org-title">Create your first organization</h2>
-                <p>You do not have an active organization membership yet. As the founding owner, create your first organization to begin issuing assessments.</p>
+                <p class="software-eyebrow">A place for your team</p>
+                <h1 id="create-org-title">Create your workspace</h1>
+                <p>Create your first organization, then prepare an assessment and invite your team.</p>
                 <div role="note" aria-label="Governance notice">
-                  <p><strong>Governance:</strong> You will be provisioned as the immutable <strong>owner</strong> and <strong>recruiter</strong> for this organization. <em>Reservation Moves v3</em> will be immediately available in your workspace.</p>
+                  <p>You will be the workspace owner and recruiter. Ownership cannot be transferred in this version.</p>
                 </div>
                 <form action="/r23/organization/bootstrap" method="post">
                   <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
@@ -1628,15 +1634,10 @@ export async function stagingOrganizationGet(
     const { organization, membership, identity, csrfToken, result } = context;
     const safeOrgId = safeHtml(organizationId.toLowerCase());
     const safeOrgName = safeHtml(organization.name);
-    const safeOrgSlug = safeHtml(organization.slug);
-    const safeRole = safeHtml(membership.role);
-    const safeEmail = safeHtml(identity.email ?? 'evaluator');
-    const safeCsrf = safeHtml(csrfToken);
-
     const roleScopeText =
       membership.role === 'recruiter'
-        ? 'Recruiter scope: sessions issued by your account'
-        : 'Reviewer scope: sessions actively assigned to your evaluator account';
+        ? 'Assessments issued by you, from invitation to human review.'
+        : 'The submitted work assigned to you for review.';
 
     let sessionsHtml = '';
     if (result.sessions.length === 0) {
@@ -1646,8 +1647,9 @@ export async function stagingOrganizationGet(
           : 'No assessment sessions are currently assigned to your reviewer account in this organization.';
 
       sessionsHtml = `
-        <section aria-labelledby="empty-sessions-title">
-          <h3 id="empty-sessions-title">No authorized sessions in this organization</h3>
+        <section class="software-empty-state" aria-labelledby="empty-sessions-title">
+          <span class="software-empty-marker" aria-hidden="true">01</span>
+          <h3 id="empty-sessions-title">${membership.role === 'recruiter' ? 'Your first assessment starts here' : 'Your review queue is clear'}</h3>
           <p>${safeHtml(emptyExplanation)}</p>
         </section>
       `;
@@ -1692,30 +1694,22 @@ export async function stagingOrganizationGet(
           const inspectUrl = `/r23/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(s.sessionId)}`;
 
           return `
-            <li data-session-id="${safeHtml(s.sessionId)}">
-              <div>
+            <li class="software-session-row" data-session-id="${safeHtml(s.sessionId)}">
+              <div class="software-session-identity">
                 <h3>${safeHtml(s.scenarioTitle)}</h3>
-                <p>Session <code>${safeHtml(s.sessionId.slice(0, 8))}</code></p>
+                <p><code>${safeHtml(s.sessionId.slice(0, 8))}</code> <span>· ${safeHtml(budgetStr)}</span></p>
               </div>
-              <div>
-                <span>Lifecycle: </span>
-                <span>${safeHtml(lifecycleLabel)}</span>
+              <div class="software-session-state">
+                <span class="software-state-badge" data-state="${safeHtml(s.status.toLowerCase())}">${safeHtml(lifecycleLabel)}</span>
                 ${isTimedOut ? '<span>(Timed out)</span>' : ''}
-                <p>
-                  <span>${safeHtml(currentTimestampLabel)}: </span>
-                  ${currentTimestamp ? `<time datetime="${safeHtml(currentTimestamp)}">${safeHtml(currentTimestamp)}</time>` : '<span>Not recorded</span>'}
-                </p>
+                <p>${safeHtml(currentTimestampLabel)} ${currentTimestamp ? `<time datetime="${safeHtml(currentTimestamp)}">${safeHtml(new Date(currentTimestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : '—'}</p>
               </div>
-              <div>
-                <span>Time budget: </span>
-                <strong>${safeHtml(budgetStr)}</strong>
-              </div>
-              <div>
-                <span>Review progress: </span>
+              <div class="software-session-review">
+                <span class="software-table-label">Review progress</span>
                 <span>${safeHtml(reviewLabel)}</span>
               </div>
-              <div>
-                <p><a href="${safeHtml(inspectUrl)}">Inspect session</a></p>
+              <div class="software-session-actions">
+                <a href="${safeHtml(inspectUrl)}">Inspect session</a>
                 <details>
                   <summary aria-label="Session details for ${safeHtml(s.scenarioTitle)}">Details</summary>
                   <div>
@@ -1734,35 +1728,15 @@ export async function stagingOrganizationGet(
         .join('');
 
       sessionsHtml = `
-        <div>
-          <span>Assessment</span> | <span>Lifecycle</span> | <span>Time budget</span> | <span>Review progress</span> | <span>Action</span>
-        </div>
-        <ul>${rows}</ul>
+        <ul class="software-session-list">${rows}</ul>
       `;
     }
 
     const content = `
-      <p>Current organization: <code>${safeOrgId}</code></p>
-      <p>Organization membership was checked for this request.</p>
-      <p><a href="/r23/organizations">Choose another organization</a></p>
-      <header>
-        <p>
-          <strong>Active organization:</strong>
-          <span>${safeOrgName}</span>
-          <span>(${safeOrgSlug})</span>
-          <span>Role: ${safeRole}</span>
-          <span>${safeEmail}</span>
-        </p>
-        <nav aria-label="Evaluator workspace">
-          <a href="/r23/organizations">Switch organization</a>
-          <a href="/r23/organizations/${safeOrgId}/settings" data-testid="org-settings-link">Team &amp; Settings</a>
-        </nav>
+      <header class="software-page-heading">
+        <div><p class="software-eyebrow">${safeOrgName}</p><h1>${membership.role === 'recruiter' ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
+        ${membership.role === 'recruiter' ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>` : ''}
       </header>
-
-      <form action="/r23/auth/logout" method="post">
-        <input type="hidden" name="csrf" value="${safeCsrf}">
-        <button type="submit">Sign out</button>
-      </form>
 
       ${
         !isFounderUatEnabled()
@@ -1776,27 +1750,10 @@ export async function stagingOrganizationGet(
           : ''
       }
 
-      <section aria-labelledby="lifecycle-list-title">
-        <h2 id="lifecycle-list-title">Session lifecycle</h2>
-        <div role="region" aria-label="Authorized visibility scope">
-          <p>${safeHtml(roleScopeText)}</p>
-        </div>
-
-        ${
-          membership.role === 'recruiter'
-            ? `
-        <section aria-labelledby="issue-assessment-title">
-          <h3 id="issue-assessment-title">Author & Issue Assessment</h3>
-          <p>Create, statically validate, and issue assessments with an assigned organization reviewer in the Assessment Builder.</p>
-          <p><a href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Open Assessment Builder</a></p>
-        </section>
-        `
-            : ''
-        }
-
-        <form method="get" action="/r23/organizations/${safeOrgId}">
+      <section class="software-work-list" aria-label="Assessment sessions">
+        <form class="software-session-filters" method="get" action="/r23/organizations/${safeOrgId}">
           <label>
-            <span>Search assessment title or session reference</span>
+            <span>Find an assessment</span>
             <input type="search" name="search" value="${safeHtml(search ?? '')}" placeholder="Assessment title or session reference" aria-label="Search by assessment title or session reference">
           </label>
           <label>
@@ -1821,7 +1778,7 @@ export async function stagingOrganizationGet(
           <button type="submit">Apply filters</button>
         </form>
 
-        <p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} sessions</p>
+        <div class="software-list-caption"><p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} sessions</p></div>
 
         ${sessionsHtml}
       </section>
@@ -1832,6 +1789,14 @@ export async function stagingOrganizationGet(
       content,
       200,
       securityHeaders(),
+      {
+        organizationId: organizationId.toLowerCase(),
+        organizationName: organization.name,
+        role: membership.role,
+        email: identity.email ?? '',
+        csrf: csrfToken,
+        active: 'assessments',
+      },
     );
     return attachRefreshedCookie(response, context.refreshedSessionCookie);
   } catch (error) {
@@ -2001,10 +1966,6 @@ export async function stagingOrganizationSessionPageGet(
     const s = sessionRecord;
     const safeOrgId = safeHtml(organizationId.toLowerCase());
     const safeOrgName = safeHtml(organization.name);
-    const safeOrgSlug = safeHtml(organization.slug);
-    const safeRole = safeHtml(membership.role);
-    const safeEmail = safeHtml(identity.email ?? 'evaluator');
-    const safeCsrf = safeHtml(csrfToken);
 
     const isTimedOut =
       s.status === 'SUBMITTED' && s.closureReason === 'timeout';
@@ -2040,42 +2001,27 @@ export async function stagingOrganizationSessionPageGet(
     const invitationManagementUrl = `/r23/organizations/${safeOrgId}/builder?issuedSession=${encodeURIComponent(s.sessionId)}`;
 
     const content = `
-      <header>
-        <p>
-          <strong>Active organization:</strong>
-          <span>${safeOrgName}</span>
-          <span>(${safeOrgSlug})</span>
-          <span>Role: ${safeRole}</span>
-          <span>${safeEmail}</span>
-        </p>
-        <nav aria-label="Evaluator workspace">
-          <p><a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a></p>
-          <p><a href="/r23/organizations">Switch organization</a></p>
-        </nav>
+      <header class="software-page-heading">
+        <div><p class="software-eyebrow">Assessment overview</p><h1 id="session-summary-title">${safeHtml(s.scenarioTitle)}</h1><p>Session details, candidate access and the next step for your team.</p></div>
+        <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
       </header>
 
-      <form action="/r23/auth/logout" method="post">
-        <input type="hidden" name="csrf" value="${safeCsrf}">
-        <button type="submit">Sign out</button>
-      </form>
-
-      <section aria-labelledby="session-summary-title">
-        <h2 id="session-summary-title">${safeHtml(s.scenarioTitle)}</h2>
-        <p>Session ID: <code>${safeHtml(s.sessionId)}</code></p>
-        <dl>
+      <section class="software-settings-section software-session-overview" aria-labelledby="session-summary-title">
+        <dl class="software-session-facts">
           <dt><strong>Scenario ID:</strong></dt><dd><code>${safeHtml(s.scenarioId)}</code> (v${safeHtml(s.scenarioVersion)})</dd>
           <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(lifecycleLabel)} (${safeHtml(s.status)})</span> ${isTimedOut ? '<span>(Timed out)</span>' : ''}</dd>
           <dt><strong>Review progress:</strong></dt><dd>${safeHtml(reviewLabel)}</dd>
           <dt><strong>Time budget:</strong></dt><dd>${safeHtml(budgetStr)}</dd>
-          <dt><strong>Issued:</strong></dt><dd><time datetime="${safeHtml(s.createdAt)}">${safeHtml(s.createdAt)}</time></dd>
-          <dt><strong>Started:</strong></dt><dd>${s.activatedAt ? `<time datetime="${safeHtml(s.activatedAt)}">${safeHtml(s.activatedAt)}</time>` : 'Not recorded'}</dd>
-          <dt><strong>Submitted:</strong></dt><dd>${s.submittedAt ? `<time datetime="${safeHtml(s.submittedAt)}">${safeHtml(s.submittedAt)}</time>` : 'Not submitted'}</dd>
-          <dt><strong>Visibility scope:</strong></dt><dd>${safeHtml(s.visibilityScope ?? 'authorized_scope')}</dd>
+          <dt><strong>Issued:</strong></dt><dd><time datetime="${safeHtml(s.createdAt)}">${safeHtml(new Date(s.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time></dd>
+          <dt><strong>Started:</strong></dt><dd>${s.activatedAt ? `<time datetime="${safeHtml(s.activatedAt)}">${safeHtml(new Date(s.activatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time>` : 'Not recorded'}</dd>
+          <dt><strong>Submitted:</strong></dt><dd>${s.submittedAt ? `<time datetime="${safeHtml(s.submittedAt)}">${safeHtml(new Date(s.submittedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time>` : 'Not submitted'}</dd>
+          
         </dl>
+        <details class="software-session-reference"><summary>Session reference</summary><p><code>${safeHtml(s.sessionId)}</code></p><p>Visibility: ${safeHtml(s.visibilityScope ?? 'authorized_scope')}</p></details>
 
         ${
           isSubmittedReviewerSession
-            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
+            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" class="software-document-primary-link" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
             : isSubmittedSession
               ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
                   <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>
@@ -2094,7 +2040,7 @@ export async function stagingOrganizationSessionPageGet(
 
         <section aria-labelledby="reviewer-assignments-title">
           <h3 id="reviewer-assignments-title">Reviewer assignments</h3>
-          <p>Reviewer assignment is bound during internal assessment issuance in the authenticated staging slice.</p>
+          <p>The assigned evaluator can inspect submitted work and prepare a human review.</p>
           <h4>Assigned reviewers</h4>
           ${
             context.assignments && context.assignments.length > 0
@@ -2130,6 +2076,14 @@ export async function stagingOrganizationSessionPageGet(
         content,
         200,
         securityHeaders(),
+        {
+          organizationId: organizationId.toLowerCase(),
+          organizationName: organization.name,
+          role: membership.role,
+          email: identity.email ?? '',
+          csrf: csrfToken,
+          active: 'assessments',
+        },
       ),
       context.refreshedSessionCookie,
     );
@@ -4638,7 +4592,7 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
       'Self-service registration disabled',
       `
         <section aria-labelledby="gated-signup-heading">
-          <h2 id="gated-signup-heading">Self-service registration disabled</h2>
+        <h1 id="gated-signup-heading">Self-service registration disabled</h1>
           <p>Public self-service signup is gated off in this environment. Registration will open when self-service release gates are met.</p>
           <div role="note" aria-label="Environment restrictions">
             <p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>).</p>
@@ -4660,7 +4614,7 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
     'Create your account',
     `
       <section aria-labelledby="signup-heading">
-        <h2 id="signup-heading">Create your Hirearchy account</h2>
+        <h1 id="signup-heading">Create your Hirearchy account</h1>
         <div role="note" aria-label="Environment notice">${deliveryNotice}</div>
         <form action="/r23/signup" method="post">
           <label for="email">Work email</label>
@@ -4742,13 +4696,13 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
       : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p></div><p>Please proceed to verify your email address before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
 
     return htmlResponse(
-      'Account registered',
+      'Account registration initiated',
       `
         <section aria-labelledby="registered-heading">
-          <h2 id="registered-heading">Account registration initiated</h2>
+          <h1 id="registered-heading">Account registration initiated</h1>
           <p>An account for <strong>${safeHtml(email)}</strong> was successfully registered.</p>
           <section aria-labelledby="verification-instructions-heading">
-            <h3 id="verification-instructions-heading">Verify your email</h3>
+            <h2 id="verification-instructions-heading">Verify your email</h2>
             ${confirmation}
             <p><a href="/r23/login">Sign in</a></p>
           </section>
@@ -4775,7 +4729,7 @@ export async function stagingVerifyEmailGet(
       'Confirm your email address',
       `
         <section aria-labelledby="verify-heading">
-          <h2 id="verify-heading">Confirm your email address</h2>
+          <h1 id="verify-heading">Confirm your email address</h1>
           <p>Open the local inbox to confirm your account.</p>
           ${
             inboxUrl
@@ -4835,7 +4789,7 @@ export async function stagingVerifyEmailGet(
     'Verify your email address',
     `
       <section aria-labelledby="verify-heading">
-        <h2 id="verify-heading">Confirm your email address</h2>
+        <h1 id="verify-heading">Confirm your email address</h1>
         <div role="note" aria-label="Verification instructions">
           <p>Enter the verification token provided for your account to confirm your email.</p>
         </div>
@@ -4926,7 +4880,7 @@ export function stagingRecoverGet(_request?: Request): Response {
     'Reset your password',
     `
       <section aria-labelledby="recover-heading">
-        <h2 id="recover-heading">Request password recovery</h2>
+        <h1 id="recover-heading">Request password recovery</h1>
         <div role="note" aria-label="Recovery instructions">${recoveryNotice}</div>
         <form action="/r23/recover" method="post">
           <label for="email">Account email</label>
@@ -4982,7 +4936,7 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
       'Password recovery initiated',
       `
         <section aria-labelledby="recovery-receipt-title">
-          <h2 id="recovery-receipt-title">Password recovery initiated</h2>
+          <h1 id="recovery-receipt-title">Password recovery initiated</h1>
           <p>A password recovery request has been processed for <strong>${safeHtml(email)}</strong>.</p>
           ${recoveryNextStep}
           <p><a href="/r23/login">Return to sign in</a></p>
@@ -5009,7 +4963,7 @@ export function stagingResetPasswordGet(request: Request): Response {
       'Set new password',
       `
         <section aria-labelledby="reset-password-heading">
-          <h2 id="reset-password-heading">Set a new password</h2>
+          <h1 id="reset-password-heading">Set a new password</h1>
           ${errorMessage}
           <p>Choose a new password, then sign in again.</p>
           <form action="/api/founder-uat/auth/reset-password" method="post">
@@ -5033,7 +4987,7 @@ export function stagingResetPasswordGet(request: Request): Response {
     'Set new password',
     `
       <section aria-labelledby="reset-password-heading">
-        <h2 id="reset-password-heading">Set new password</h2>
+        <h1 id="reset-password-heading">Set new password</h1>
         <div role="note" aria-label="Quarantine notice">
           <p><strong>Security notice:</strong> Password reset uses a dedicated recovery credential. After resetting your password, you will be directed to sign in with your standard credentials.</p>
         </div>
@@ -5116,7 +5070,7 @@ export async function stagingResetPasswordPost(
       'Password updated successfully',
       `
         <section aria-labelledby="reset-complete-heading">
-          <h2 id="reset-complete-heading">Password Updated Successfully</h2>
+          <h1 id="reset-complete-heading">Password Updated Successfully</h1>
           <p>Your password has been changed. Please sign in with your new credentials.</p>
           <p><a href="/r23/login">Sign in now</a></p>
         </section>
@@ -5237,15 +5191,15 @@ export async function stagingOrganizationSettingsGet(
 
       const safeOrgId = safeHtml(orgIdLower);
       const safeOrgName = safeHtml(orgDisplay.name);
-      const safeOrgSlug = safeHtml(orgDisplay.slug);
-      const safeRole = safeHtml(orgContext.role);
       const safeCsrf = safeHtml(csrfToken);
       const safeEmail = safeHtml(profile.email || identity.email || '');
       const safeDisplayName = safeHtml(profile.displayName || '');
 
       const membersRows = members
         .map((m) => {
-          const ownerLabel = m.isOwner ? '<strong>(Sole Owner)</strong>' : '';
+          const ownerLabel = m.isOwner
+            ? '<span class="software-owner-badge">Owner</span>'
+            : '';
           const removeButton =
             !m.isOwner &&
             (orgContext.role === 'recruiter' ||
@@ -5257,16 +5211,16 @@ export async function stagingOrganizationSettingsGet(
                   <button type="submit" aria-label="Remove member ${safeHtml(m.email || m.principalId)}">Remove member</button>
                 </form>`
               : m.isOwner
-                ? '<span>Sole owner (protected)</span>'
+                ? '<span class="software-field-help">Workspace owner</span>'
                 : '';
 
           return `
             <tr>
               <td>${safeHtml(m.displayName || 'No display name')}</td>
-              <td><code>${safeHtml(m.email || m.principalId)}</code></td>
-              <td>${safeHtml(m.role)}</td>
+              <td>${safeHtml(m.email || 'Email unavailable')}</td>
+              <td><span class="software-role-badge">${m.role === 'reviewer' ? 'Evaluator' : safeHtml(m.role)}</span></td>
               <td>${safeHtml(m.status)} ${ownerLabel}</td>
-              <td><time datetime="${safeHtml(m.joinedAt)}">${safeHtml(m.joinedAt)}</time></td>
+              <td><time datetime="${safeHtml(m.joinedAt)}" title="${safeHtml(m.joinedAt)}">${safeHtml(new Date(m.joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time></td>
               <td>${removeButton}</td>
             </tr>
           `;
@@ -5285,7 +5239,7 @@ export async function stagingOrganizationSettingsGet(
                 candidateEncryptionKey,
               );
               const acceptUrl = `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`;
-              linkHtml = `<p><strong>Acceptance Link:</strong> <input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}" style="width:100%;max-width:100%;box-sizing:border-box;"></p>`;
+              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this link and share it with the evaluator.</span></label>`;
             } catch {
               // decryption fallback
             }
@@ -5302,16 +5256,12 @@ export async function stagingOrganizationSettingsGet(
               : '';
 
           return `
-            <li>
-              <div>
-                <strong>Target email:</strong> <code>${safeHtml(inv.targetEmail)}</code> |
-                <strong>Role:</strong> ${safeHtml(inv.role)} |
-                <strong>Status:</strong> <span>${safeHtml(inv.status)}</span>
+            <li class="software-invitation-row">
+              <div class="software-invitation-heading">
+                <div><strong>${safeHtml(inv.targetEmail)}</strong><span>Evaluator invitation</span></div>
+                <span class="software-role-badge">${inv.status === 'active' ? 'Pending' : safeHtml(inv.status)}</span>
               </div>
-              <div>
-                <span>Expires: <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(inv.expiresAt)}</time></span>
-                ${inv.acceptedAt ? ` | <span>Accepted: <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(inv.acceptedAt)}</time></span>` : ''}
-              </div>
+              <p class="software-invitation-meta">Expires <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(new Date(inv.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>${inv.acceptedAt ? ` · Accepted <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(new Date(inv.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : ''}</p>
               ${linkHtml}
               ${revokeButton}
             </li>
@@ -5320,112 +5270,85 @@ export async function stagingOrganizationSettingsGet(
         .join('');
 
       const content = `
-        <header>
-          <p>
-            <strong>Active organization:</strong>
-            <span>${safeOrgName}</span>
-            <span>(${safeOrgId})</span>
-            <span>Role: ${safeRole}</span>
-            <span>${safeEmail}</span>
-          </p>
-          <nav aria-label="Settings navigation">
-            <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
-            <a href="/r23/organizations/${safeOrgId}/builder">Open assessment builder</a>
-            <a href="/r23/organizations">Switch organization</a>
-          </nav>
+        <header class="software-page-heading">
+          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1><p>The people and details behind your hiring workspace.</p></div>
+          <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
         </header>
 
-        <form action="/r23/auth/logout" method="post">
-          <input type="hidden" name="csrf" value="${safeCsrf}">
-          <button type="submit">Sign out</button>
-        </form>
-
-        <section aria-labelledby="account-profile-heading">
-          <h2 id="account-profile-heading">Account Profile</h2>
-          <p>Email: <code>${safeEmail}</code> | Principal ID: <code>${safeHtml(profile.principalId)}</code></p>
-          <form action="/r23/organizations/${safeOrgId}/settings" method="post">
-            <input type="hidden" name="csrf" value="${safeCsrf}">
-            <input type="hidden" name="action" value="update_account_profile">
-            <label for="accountDisplayName">Display name</label>
-            <input id="accountDisplayName" name="displayName" type="text" maxlength="100" value="${safeDisplayName}" placeholder="Your full name">
-            <button type="submit">Update profile</button>
-          </form>
-        </section>
-
-        <section aria-labelledby="org-profile-heading">
-          <h2 id="org-profile-heading">Organization Details</h2>
-          <p>Organization ID: <code>${safeOrgId}</code> | Slug: <code>${safeOrgSlug}</code></p>
-          ${
-            orgContext.role === 'recruiter'
-              ? `
+        <div class="software-settings-grid">
+          <section class="software-settings-section" aria-labelledby="account-profile-heading">
+            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">01</span><div><h2 id="account-profile-heading">Your profile</h2><p>How your name appears to your team.</p></div></div>
+            <p class="software-account-email">${safeEmail}</p>
             <form action="/r23/organizations/${safeOrgId}/settings" method="post">
               <input type="hidden" name="csrf" value="${safeCsrf}">
-              <input type="hidden" name="action" value="update_organization_profile">
-              <label for="orgDisplayName">Organization display name</label>
-              <input id="orgDisplayName" name="organizationDisplayName" type="text" required maxlength="100" value="${safeOrgName}">
-              <button type="submit">Update organization name</button>
+              <input type="hidden" name="action" value="update_account_profile">
+              <label for="accountDisplayName">Display name</label>
+              <input id="accountDisplayName" name="displayName" type="text" maxlength="100" value="${safeDisplayName}" placeholder="Your full name">
+              <button type="submit">Update profile</button>
             </form>
-            `
-              : ''
-          }
-        </section>
+          </section>
 
-        <section aria-labelledby="team-members-heading">
-          <h2 id="team-members-heading">Organization Members</h2>
-          <p>Members with active governance or evaluation roles in this organization.</p>
-          <div tabindex="0" role="region" aria-label="Organization members" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email / Principal</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Joined</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${membersRows}
-              </tbody>
+          <section class="software-settings-section" aria-labelledby="org-profile-heading">
+            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">02</span><div><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></div></div>
+            ${
+              orgContext.role === 'recruiter'
+                ? `
+              <form action="/r23/organizations/${safeOrgId}/settings" method="post">
+                <input type="hidden" name="csrf" value="${safeCsrf}">
+                <input type="hidden" name="action" value="update_organization_profile">
+                <label for="orgDisplayName">Organization display name</label>
+                <input id="orgDisplayName" name="organizationDisplayName" type="text" required maxlength="100" value="${safeOrgName}">
+                <button type="submit">Update organization name</button>
+              </form>`
+                : `<p>${safeOrgName}</p>`
+            }
+            <details class="software-reference-details"><summary>Workspace reference</summary><code>${safeOrgId}</code></details>
+          </section>
+        </div>
+
+        <section class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
+          <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">03</span><div><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></div></div>
+          <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
+            <table class="software-members-table">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+              <tbody>${membersRows}</tbody>
             </table>
           </div>
         </section>
 
-        <section aria-labelledby="invitations-heading">
-          <h2 id="invitations-heading">Reviewer Invitations</h2>
+        <section class="software-settings-section" aria-labelledby="invitations-heading">
+          <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">04</span><div><h2 id="invitations-heading">Invite an evaluator</h2><p>Bring the right person into the review.</p></div></div>
           ${
             orgContext.role === 'recruiter'
               ? `
-            <section aria-labelledby="issue-invitation-heading">
-              <h3 id="issue-invitation-heading">Issue Reviewer Invitation</h3>
-              <div role="note" aria-label="Invitation delivery notice">
-                <p>${isFounderUatEnabled() ? 'No email is sent for reviewer invitations. After creating one, copy its link below and share it with the address you entered.' : '<strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). A copyable invitation link and bearer token will be generated for manual sharing with the reviewer.'}</p>
-              </div>
-              <form action="/r23/organizations/${safeOrgId}/settings" method="post">
-                <input type="hidden" name="csrf" value="${safeCsrf}">
-                <input type="hidden" name="action" value="create_invitation">
-                <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
-                <label for="targetEmail">Reviewer email</label>
-                <input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="reviewer@example.com">
-                <button type="submit">Create reviewer invitation</button>
-              </form>
-            </section>
-            `
+            <p class="software-field-help">Create an invitation, then share its link with the evaluator. Invitations are not emailed automatically.</p>
+            <form class="software-invite-form" action="/r23/organizations/${safeOrgId}/settings" method="post">
+              <input type="hidden" name="csrf" value="${safeCsrf}">
+              <input type="hidden" name="action" value="create_invitation">
+              <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
+              <div><label for="targetEmail">Reviewer email</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
+              <button type="submit">Create reviewer invitation</button>
+            </form>`
               : ''
           }
-          <section aria-labelledby="invitation-history-heading">
-            <h3 id="invitation-history-heading">Pending &amp; Past Invitations</h3>
-            ${
-              invitations.length === 0
-                ? '<p>No invitations have been issued for this organization.</p>'
-                : `<ul>${invitationsList}</ul>`
-            }
-          </section>
+          <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet. Your next reviewer starts here.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
         </section>
       `;
 
-      const response = htmlResponse('Team & Settings', content);
+      const response = htmlResponse(
+        'Team & Settings',
+        content,
+        200,
+        securityHeaders(),
+        {
+          organizationId: orgIdLower,
+          organizationName: orgDisplay.name,
+          role: orgContext.role,
+          email: profile.email || identity.email || '',
+          csrf: csrfToken,
+          active: 'settings',
+        },
+      );
       return attachRefreshedCookie(response, refreshedSessionCookie);
     },
   );

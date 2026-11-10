@@ -468,11 +468,21 @@ export async function checkCandidateReviewBrowserAcceptance({
       0,
       'Execution UI stays unavailable when the server disables execution',
     );
+    const capabilities = candidatePage.getByRole('region', {
+      name: 'Workspace capabilities',
+    });
     assert.ok(
-      (await candidatePage
-        .locator('[data-testid="ai-disabled-notice"]')
-        .count()) > 0,
-      'The AI-disabled state must be explicit',
+      await capabilities
+        .getByText('AI assistance is unavailable in this demo.', {
+          exact: true,
+        })
+        .isVisible(),
+      'The AI-disabled state must be explicit in workspace capabilities',
+    );
+    assert.equal(
+      await candidatePage.getByTestId('candidate-ai-panel').count(),
+      0,
+      'A disabled AI capability must expose no assistant panel',
     );
     await notice.scrollIntoViewIfNeeded();
     await saveBrowserEvidence(

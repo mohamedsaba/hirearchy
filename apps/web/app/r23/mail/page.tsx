@@ -18,7 +18,7 @@ export default async function FounderUatMailPage({
   const email = typeof params.email === 'string' ? params.email.trim() : '';
 
   return (
-    <main className="software-product evaluator-product-shell">
+    <main className="software-product evaluator-product-shell software-mail-page">
       <header className="software-product-header">
         <Link
           className="software-wordmark"
@@ -35,8 +35,8 @@ export default async function FounderUatMailPage({
             <p className="software-eyebrow">Local email</p>
             <h1 id="mail-title">Check your inbox</h1>
             <p>
-              Confirmation and password recovery messages are captured locally
-              for this local test. No email is sent outside this machine.
+              Confirm your account or recover access. Messages stay on this
+              machine during local testing.
             </p>
           </div>
         </section>
@@ -44,8 +44,12 @@ export default async function FounderUatMailPage({
           className="evaluator-queue-panel"
           aria-labelledby="inbox-title"
         >
-          <h2 id="inbox-title">Open an email</h2>
-          <form action="/r23/mail" method="get">
+          <h2 id="inbox-title">Find your messages</h2>
+          <form
+            className="software-mail-open-form"
+            action="/r23/mail"
+            method="get"
+          >
             <label htmlFor="inbox-email">Email address</label>
             <input
               autoComplete="email"

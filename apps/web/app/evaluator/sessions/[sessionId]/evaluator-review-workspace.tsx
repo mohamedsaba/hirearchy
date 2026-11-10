@@ -29,6 +29,7 @@ import {
   buildR27Presentation,
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
+import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
 import {
@@ -361,20 +362,15 @@ const R27SummaryView = ({
             </div>
           </header>
           <p style={{ overflowWrap: 'anywhere' }}>Scenario snapshot digest:</p>
-          <code
-            style={{
-              display: 'block',
-              maxWidth: '100%',
-              overflowX: 'auto',
-              whiteSpace: 'nowrap',
-            }}
-          >
+          <code className="evaluator-integrity-digest">
             {evidence.scenario.snapshotDigest}
           </code>
-          <p>
-            {presentation.scenarioContext.brief ??
-              'Scenario brief unavailable in this snapshot.'}
-          </p>
+          <ScenarioBrief
+            markdown={
+              presentation.scenarioContext.brief ??
+              'Scenario brief unavailable in this snapshot.'
+            }
+          />
           <h3>Acceptance criteria</h3>
           {presentation.scenarioContext.acceptanceCriteria.length ? (
             <ul>
@@ -621,14 +617,7 @@ const R27SummaryView = ({
             <div>
               <dt>Workspace digest</dt>
               <dd>
-                <code
-                  style={{
-                    display: 'block',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <code className="evaluator-integrity-digest">
                   {evidence.submission.workspaceDigest}
                 </code>
               </dd>
@@ -636,14 +625,7 @@ const R27SummaryView = ({
             <div>
               <dt>Manifest digest</dt>
               <dd>
-                <code
-                  style={{
-                    display: 'block',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <code className="evaluator-integrity-digest">
                   {evidence.submission.manifestDigest}
                 </code>
               </dd>

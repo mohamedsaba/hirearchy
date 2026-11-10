@@ -91,6 +91,34 @@ export async function readBrowserCsrf(context, appUrl) {
   return cookie.value;
 }
 
+async function assertWorkspaceChrome(page, organizationId, expectedTeamLabel) {
+  const organizationPath = `/r23/organizations/${organizationId.toLowerCase()}`;
+  const activeOrganization = page.getByRole('region', {
+    name: 'Active organization',
+  });
+  await activeOrganization.waitFor({ state: 'visible' });
+  assert.ok(
+    (await activeOrganization.textContent()).includes(expectedTeamLabel),
+    `Workspace identity must show ${expectedTeamLabel}`,
+  );
+
+  const workspaceNavigation = page.getByRole('navigation', {
+    name: 'Workspace navigation',
+  });
+  const assessmentsLink = workspaceNavigation.getByRole('link', {
+    name: 'Assessments',
+    exact: true,
+  });
+  assert.equal(await assessmentsLink.getAttribute('href'), organizationPath);
+  assert.equal(await assessmentsLink.getAttribute('aria-current'), 'page');
+  assert.equal(
+    await workspaceNavigation
+      .getByTestId('org-settings-link')
+      .getAttribute('href'),
+    `${organizationPath}/settings`,
+  );
+}
+
 async function signInAndSelectOrganization(
   page,
   appUrl,
@@ -704,19 +732,33 @@ export async function checkBrowserAcceptance({
       'Browser Acceptance [3/8]: Testing organization selection and isolation...',
     );
     {
-      const orgsText = await recruiterPage.textContent('body');
-      assert.ok(
-        orgsText.includes(organizationId.toLowerCase()),
-        'Organization list must include authorized organization',
-      );
-
       // Select authorized organization
-      const selectForm = recruiterPage.locator('form').filter({
-        has: recruiterPage.locator(
-          `input[value="${organizationId.toLowerCase()}"]`,
-        ),
-      });
-      await selectForm.locator('button[type="submit"]').click();
+      const selectForm = recruiterPage
+        .locator('form[action="/r23/organization"]')
+        .filter({
+          has: recruiterPage.locator(
+            `input[name="organizationId"][value="${organizationId.toLowerCase()}"]`,
+          ),
+        });
+      assert.equal(
+        await selectForm.count(),
+        1,
+        'Organization picker must contain one form bound to the authorized organization ID',
+      );
+      assert.equal(
+        await selectForm.locator('input[name="csrf"]').count(),
+        1,
+        'Organization selection must retain its CSRF form field',
+      );
+      const selectButton = selectForm.locator('button[type="submit"]');
+      assert.ok(await selectButton.isVisible());
+      assert.match(
+        (await selectButton.getAttribute('aria-label')) ?? '',
+        /^Select .+ \(recruiter\)$/i,
+        'Visible organization action must identify the recruiter workspace',
+      );
+      assert.match(await selectButton.innerText(), /Recruiter/);
+      await selectButton.click();
       await recruiterPage.waitForURL(
         `**/r23/organizations/${organizationId.toLowerCase()}`,
       );
@@ -725,13 +767,14 @@ export async function checkBrowserAcceptance({
       const workspaceText = await recruiterPage.textContent('body');
       assert.ok(
         workspaceText.includes(
-          'Recruiter scope: sessions issued by your account',
+          'Assessments issued by you, from invitation to human review.',
         ),
-        'Recruiter scope banner must be displayed',
+        'Recruiter scope copy must be displayed',
       );
-      assert.ok(
-        workspaceText.includes(organizationId.toLowerCase()),
-        'Current organization ID must be displayed',
+      await assertWorkspaceChrome(
+        recruiterPage,
+        organizationId,
+        'Recruiting team',
       );
 
       // Verify staging capabilities boundary notice
@@ -755,8 +798,22 @@ export async function checkBrowserAcceptance({
       );
       const foreignBody = await recruiterPage.textContent('body');
       assert.ok(
-        !foreignBody.includes('Current organization:'),
-        'Foreign organization content must not be displayed',
+        !(foreignBody ?? '').includes('Your workspace'),
+        'Foreign organization content must not include the active workspace identity',
+      );
+      assert.equal(
+        await recruiterPage
+          .getByRole('region', { name: 'Active organization' })
+          .count(),
+        0,
+        'Foreign organization response must not render active organization context',
+      );
+      assert.equal(
+        await recruiterPage
+          .getByRole('navigation', { name: 'Workspace navigation' })
+          .count(),
+        0,
+        'Foreign organization response must not render workspace navigation',
       );
 
       // Navigate back to authorized organization workspace
@@ -789,6 +846,13 @@ export async function checkBrowserAcceptance({
       );
 
       // Stage 1: Brief & Starter Files
+      const templateSelect = recruiterPage.locator('#assessment-template');
+      await templateSelect.selectOption('custom');
+      assert.equal(
+        await templateSelect.inputValue(),
+        'custom',
+        'Browser acceptance must author and issue the custom assessment template',
+      );
       await recruiterPage
         .locator('[data-testid="assessment-title-input"]')
         .fill('Browser Staging Verified Assessment');
@@ -963,12 +1027,32 @@ export async function checkBrowserAcceptance({
       await reviewerPage.waitForLoadState('domcontentloaded');
 
       // Reviewer 1 selects organization
-      const selectForm = reviewerPage.locator('form').filter({
-        has: reviewerPage.locator(
-          `input[value="${organizationId.toLowerCase()}"]`,
-        ),
-      });
-      await selectForm.locator('button[type="submit"]').click();
+      const selectForm = reviewerPage
+        .locator('form[action="/r23/organization"]')
+        .filter({
+          has: reviewerPage.locator(
+            `input[name="organizationId"][value="${organizationId.toLowerCase()}"]`,
+          ),
+        });
+      assert.equal(
+        await selectForm.count(),
+        1,
+        'Reviewer organization picker must contain the authorized organization ID',
+      );
+      assert.equal(
+        await selectForm.locator('input[name="csrf"]').count(),
+        1,
+        'Reviewer organization selection must retain its CSRF form field',
+      );
+      const selectButton = selectForm.locator('button[type="submit"]');
+      assert.ok(await selectButton.isVisible());
+      assert.match(
+        (await selectButton.getAttribute('aria-label')) ?? '',
+        /^Select .+ \(reviewer\)$/i,
+        'Visible organization action must identify the reviewer workspace',
+      );
+      assert.match(await selectButton.innerText(), /Evaluator/);
+      await selectButton.click();
       await reviewerPage.waitForURL(
         `**/r23/organizations/${organizationId.toLowerCase()}`,
       );
@@ -976,10 +1060,13 @@ export async function checkBrowserAcceptance({
 
       const revBody = await reviewerPage.textContent('body');
       assert.ok(
-        revBody.includes(
-          'Reviewer scope: sessions actively assigned to your evaluator account',
-        ),
-        'Reviewer scope banner must be displayed',
+        revBody.includes('The submitted work assigned to you for review.'),
+        'Reviewer scope copy must be displayed',
+      );
+      await assertWorkspaceChrome(
+        reviewerPage,
+        organizationId,
+        'Evaluation team',
       );
 
       // Reviewer attempts to access recruiter builder -> 403 Forbidden or 404 Not Found
@@ -1253,10 +1340,10 @@ export async function checkBrowserAcceptance({
         200,
         'Recruiter browser session must persist across application restart',
       );
-      const restartedBody = await recruiterPage.textContent('body');
-      assert.ok(
-        restartedBody.includes(organizationId.toLowerCase()),
-        'Session state and authorized organization remain active without re-login',
+      await assertWorkspaceChrome(
+        recruiterPage,
+        organizationId,
+        'Recruiting team',
       );
     }
 

@@ -96,7 +96,10 @@ function isAllowedAuthenticatedStagingRequest(
 ): boolean {
   if (
     (method === 'GET' || method === 'HEAD') &&
-    (pathname.startsWith('/_next/') || pathname === '/favicon.ico')
+    (pathname.startsWith('/_next/') ||
+      pathname === '/software-ui.css' ||
+      pathname === '/fonts/dm-sans-latin.woff2' ||
+      pathname === '/favicon.ico')
   ) {
     return true;
   }

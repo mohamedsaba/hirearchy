@@ -30,6 +30,7 @@ import {
 
 import '../../../../evaluator/assessments/new/assessment-builder.css';
 import '../../../../evaluator/assessments/new/assessment-choice.css';
+import '../../../../evaluator/evaluator-product.css';
 
 export interface AssessmentBuilderReviewerOption {
   principalId: string;
@@ -157,7 +158,11 @@ export function AssessmentBuilderClient({
   );
   const [templateId, setTemplateId] = useState<
     'custom' | 'reservation-moves-v3'
-  >(initialDraft?.templateId ?? 'custom');
+  >(
+    initialDraft
+      ? (initialDraft.templateId ?? 'custom')
+      : 'reservation-moves-v3',
+  );
   const [title, setTitle] = useState(
     initialDraft?.title ?? 'Booking Notification Retry Logic',
   );
@@ -1328,47 +1333,47 @@ export function AssessmentBuilderClient({
   };
 
   return (
-    <div className="assessment-builder-page">
+    <div className="software-product assessment-builder-page">
+      <header className="software-product-header assessment-app-header">
+        <a
+          className="software-wordmark"
+          href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
+          aria-label="Hirearchy Software home"
+        >
+          <span>Hirearchy</span>
+          <span className="software-product-capsule">Software</span>
+        </a>
+        <a
+          className="assessment-app-return"
+          href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
+          data-testid="back-to-organization-link"
+        >
+          Back to workspace
+        </a>
+      </header>
       <main className="assessment-builder-shell">
         <div className="assessment-builder-container">
           <header className="assessment-builder-hero">
-            <p className="assessment-eyebrow">
-              Hirearchy <span>/</span> Authoring Lane
-            </p>
-            <h1>PostgreSQL Assessment Builder</h1>
+            <p className="assessment-eyebrow">Assessment authoring</p>
+            <h1>Assessment Builder</h1>
             <p>
-              Author structured assessment challenges, validate scenario
-              integrity, and issue tamper-evident candidate sessions with
-              immutable content snapshots.
-            </p>
-            <p style={{ marginTop: '8px' }}>
-              <Link
-                href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
-                data-testid="back-to-organization-link"
-              >
-                ← Back to organization workspace
-              </Link>
+              Start with meaningful work. Set the expectations. Invite a
+              candidate when it is ready.
             </p>
             {isAuthenticatedStaging ? (
               <div
+                className="assessment-builder-capability-note"
                 data-testid="builder-staging-capabilities-banner"
                 role="region"
                 aria-label="Authenticated staging capabilities"
-                style={{
-                  marginTop: '12px',
-                  padding: '12px 16px',
-                  borderRadius: '6px',
-                  border: '1px solid #f59e0b',
-                  backgroundColor: '#fffbeb',
-                  color: '#92400e',
-                  fontSize: '0.85rem',
-                }}
               >
-                <strong>Internal PostgreSQL demo:</strong> Draft persistence,
-                assessment validation and issuance, evaluator assignment,
-                candidate invitations, workspace capture, submission, and human
-                review are available. AI assistance, code execution, and email
-                are disabled.
+                <strong>Local testing</strong>
+                <span>
+                  {' '}
+                  File editing, submissions and human review are available. AI
+                  assistance, code execution and external email delivery are
+                  off.
+                </span>
               </div>
             ) : null}
           </header>
@@ -1387,9 +1392,7 @@ export function AssessmentBuilderClient({
                   <span className="assessment-stage-number">01</span>
                   <span className="assessment-stage-label">Define</span>
                   <span className="assessment-stage-caption">
-                    {saveStatus === 'saved'
-                      ? 'Draft saved'
-                      : 'Author challenge'}
+                    {saveStatus === 'saved' ? 'Draft saved' : 'Shape the task'}
                   </span>
                 </button>
               </li>
@@ -1452,9 +1455,9 @@ export function AssessmentBuilderClient({
                 </h2>
                 <p>
                   {stage === 'define'
-                    ? 'Specify title, instructions, workspace files, duration, and evaluation rubric.'
+                    ? 'Choose a starting point and prepare the candidate experience.'
                     : stage === 'validate'
-                      ? 'Run static validation checks and generate immutable content-integrity digest.'
+                      ? 'Check the structure and review the exact version candidates will receive.'
                       : 'Issue validated assessment version and receive unique candidate workspace link.'}
                 </p>
               </div>
@@ -1481,7 +1484,8 @@ export function AssessmentBuilderClient({
                     data-testid="draft-status"
                     style={{
                       borderColor: 'var(--software-mint-border, #10b981)',
-                      background: 'var(--software-mint, #ecfdf5)',
+                      background:
+                        'var(--software-status-success-surface, #ecfdf3)',
                       color: 'var(--software-ink, #064e3b)',
                       marginBottom: '16px',
                     }}
@@ -1512,7 +1516,7 @@ export function AssessmentBuilderClient({
                   </div>
                 )}
 
-                <div style={{ marginBottom: '20px' }}>
+                <div className="assessment-template-choice">
                   <label htmlFor="assessment-template">
                     Assessment template
                   </label>
@@ -1530,18 +1534,36 @@ export function AssessmentBuilderClient({
                       setValidatedVersion(null);
                     }}
                   >
-                    <option value="custom">Custom authored assessment</option>
                     <option value="reservation-moves-v3">
                       Reservation Moves v3
                     </option>
+                    <option value="custom">Create a custom assessment</option>
                   </select>
                 </div>
                 {templateId === 'reservation-moves-v3' ? (
-                  <p>
-                    The Reservation Moves brief, starter workspace, rubric, and
-                    pytest recipe are fixed by the reviewed template. Duration
-                    and AI settings remain configurable.
-                  </p>
+                  <div className="assessment-template-preview">
+                    <div className="assessment-template-heading">
+                      <span className="assessment-template-tag">
+                        Approved template
+                      </span>
+                      <span>Python · State &amp; retries</span>
+                    </div>
+                    <h3>Reservation Moves</h3>
+                    <p>
+                      A failed request should not lose a booking. An old retry
+                      should not undo a newer move. Candidates repair a small
+                      Python service while preserving its public contract.
+                    </p>
+                    <div className="assessment-template-details">
+                      <span>Real source files</span>
+                      <span>Clear acceptance criteria</span>
+                      <span>Human evidence review</span>
+                    </div>
+                    <p className="assessment-template-footnote">
+                      The brief, workspace and review criteria come from the
+                      approved template. Set the session duration below.
+                    </p>
+                  </div>
                 ) : (
                   <>
                     {/* Title */}
@@ -1955,9 +1977,14 @@ export function AssessmentBuilderClient({
                         id="terminal-enabled"
                         name="terminalEnabled"
                         checked={terminalEnabled}
+                        disabled={isAuthenticatedStaging}
                         onChange={(e) => setTerminalEnabled(e.target.checked)}
                       />
-                      <span>Terminal verification enabled (required)</span>
+                      <span>
+                        {isAuthenticatedStaging
+                          ? 'Verification recipe required by the template'
+                          : 'Terminal verification enabled (required)'}
+                      </span>
                     </label>
                     <label
                       style={{
@@ -1972,9 +1999,14 @@ export function AssessmentBuilderClient({
                         id="integrated-ai"
                         name="integratedAi"
                         checked={integratedAi}
+                        disabled={isAuthenticatedStaging}
                         onChange={(e) => setIntegratedAi(e.target.checked)}
                       />
-                      <span>Integrated AI enabled (synthetic test lane)</span>
+                      <span>
+                        {isAuthenticatedStaging
+                          ? 'AI assistance is unavailable in local testing'
+                          : 'Integrated AI enabled (synthetic test lane)'}
+                      </span>
                     </label>
                     {getFieldIssue('terminalEnabled') && (
                       <p
@@ -2145,6 +2177,7 @@ export function AssessmentBuilderClient({
 
                 {/* Actions */}
                 <div
+                  className="assessment-authoring-actions"
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -2167,6 +2200,7 @@ export function AssessmentBuilderClient({
                     type="button"
                     data-testid="continue-to-validate-button"
                     className="button button-primary"
+                    disabled={isSaving || isValidating}
                     onClick={() => {
                       setStage('validate');
                       void handleValidate();
@@ -2249,7 +2283,8 @@ export function AssessmentBuilderClient({
                         padding: '16px',
                         borderRadius: 'var(--software-radius-control, 6px)',
                         border: '1px solid var(--software-border, #10b981)',
-                        background: 'var(--software-mint, #ecfdf5)',
+                        background:
+                          'var(--software-status-success-surface, #ecfdf3)',
                         marginBottom: '16px',
                       }}
                     >
@@ -2319,9 +2354,9 @@ export function AssessmentBuilderClient({
                         Snapshot Summary
                       </h4>
                       <dl
+                        className="assessment-snapshot-facts"
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '140px 1fr',
                           gap: '6px',
                           fontSize: '0.85rem',
                           margin: 0,
@@ -2370,6 +2405,7 @@ export function AssessmentBuilderClient({
 
                 {/* Validate Stage Actions */}
                 <div
+                  className="assessment-authoring-actions"
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -2381,9 +2417,10 @@ export function AssessmentBuilderClient({
                   <button
                     type="button"
                     className="button button-secondary"
+                    aria-label="Back to Define"
                     onClick={navigateToDefine}
                   >
-                    ← Back to Define
+                    Back
                   </button>
 
                   <div style={{ display: 'flex', gap: '10px' }}>
@@ -2391,22 +2428,26 @@ export function AssessmentBuilderClient({
                       type="button"
                       data-testid="validate-assessment-button"
                       className="button button-secondary"
+                      aria-label="Re-run Validation"
                       disabled={isValidating}
                       onClick={handleValidate}
                     >
-                      {isValidating ? 'Validating...' : 'Re-run Validation'}
+                      {isValidating ? 'Checking...' : 'Recheck'}
                     </button>
 
                     <button
                       type="button"
                       data-testid="continue-to-issue-button"
+                      aria-label="Continue to Issue"
                       className="button button-primary"
                       disabled={
-                        !validatedVersion || Boolean(validationErrorMessage)
+                        isValidating ||
+                        !validatedVersion ||
+                        Boolean(validationErrorMessage)
                       }
                       onClick={() => setStage('issue')}
                     >
-                      Continue to Issue →
+                      Continue
                     </button>
                   </div>
                 </div>
@@ -2520,9 +2561,9 @@ export function AssessmentBuilderClient({
                           {validatedVersion.versionNumber}.
                         </p>
                         <dl
+                          className="assessment-snapshot-facts"
                           style={{
                             display: 'grid',
-                            gridTemplateColumns: '160px 1fr',
                             gap: '6px',
                             fontSize: '0.85rem',
                             margin: 0,
@@ -2614,6 +2655,7 @@ export function AssessmentBuilderClient({
                       )}
 
                       <div
+                        className="assessment-authoring-actions"
                         style={{
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -2650,6 +2692,7 @@ export function AssessmentBuilderClient({
                 {issuedSession && (
                   <div
                     data-testid="issuance-success"
+                    className="assessment-issuance-success"
                     style={{
                       padding: '24px',
                       borderRadius: 'var(--software-radius-surface, 8px)',
@@ -2664,7 +2707,7 @@ export function AssessmentBuilderClient({
                         fontSize: '1.25rem',
                       }}
                     >
-                      Assessment Successfully Issued!
+                      Assessment issued
                     </h3>
                     <p
                       style={{
@@ -2688,9 +2731,9 @@ export function AssessmentBuilderClient({
                       }}
                     >
                       <dl
+                        className="assessment-snapshot-facts"
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '140px 1fr',
                           gap: '8px',
                           fontSize: '0.9rem',
                           margin: 0,
@@ -2744,7 +2787,7 @@ export function AssessmentBuilderClient({
                       </dl>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div className="assessment-issuance-links">
                       <Link
                         href={`/r23/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(issuedSession.sessionId)}`}
                         className="button button-secondary"

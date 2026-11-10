@@ -11,8 +11,10 @@ const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
+  { name: 'laptop', width: 1280, height: 800 },
   { name: 'tablet', width: 768, height: 1024 },
   { name: 'mobile', width: 390, height: 844 },
+  { name: 'small', width: 375, height: 812 },
 ];
 
 function localArtifactDirectory() {
@@ -125,6 +127,28 @@ async function assertDisposableRuntime(origin) {
 
 function observeProblems(page, problems, label) {
   page.on('pageerror', (error) => problems.push(`${label}: ${error.message}`));
+  const criticalAssetTypes = new Set(['script', 'stylesheet', 'font']);
+  const sanitizedResourcePath = (url) => {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  };
+  page.on('response', (response) => {
+    const request = response.request();
+    const resourceType = request.resourceType();
+    if (criticalAssetTypes.has(resourceType) && response.status() >= 400) {
+      problems.push(
+        `${label}: ${resourceType} response ${response.status()} for ${sanitizedResourcePath(response.url())}`,
+      );
+    }
+  });
+  page.on('requestfailed', (request) => {
+    const resourceType = request.resourceType();
+    if (criticalAssetTypes.has(resourceType)) {
+      problems.push(
+        `${label}: ${resourceType} request failed for ${sanitizedResourcePath(request.url())}`,
+      );
+    }
+  });
   page.on('console', (message) => {
     if (message.type() === 'error') {
       const text = message.text();
@@ -151,7 +175,21 @@ async function audit(page, label) {
   await page.setViewportSize(viewports[0]);
   await page.waitForLoadState('domcontentloaded');
   if (!(await page.evaluate(() => Boolean(window.axe)))) {
-    await page.addScriptTag({ content: axeSource });
+    const devtools = await page.context().newCDPSession(page);
+    try {
+      const injected = await devtools.send('Runtime.evaluate', {
+        expression: `window.eval(${JSON.stringify(axeSource)}); typeof window.axe`,
+        returnByValue: true,
+        allowUnsafeEvalBlockedByCSP: true,
+      });
+      assert.equal(
+        injected.result?.value,
+        'object',
+        `${label} could not load Axe through DevTools instrumentation`,
+      );
+    } finally {
+      await devtools.detach();
+    }
   }
 
   for (const viewport of viewports) {
@@ -284,7 +322,6 @@ async function createAccountFromLanding({
 }) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
-    bypassCSP: true,
     viewport: viewports[0],
   });
   const page = await context.newPage();
@@ -426,7 +463,6 @@ export async function runFounderUatJourney() {
   try {
     const invalidContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      bypassCSP: true,
     });
     contexts.push(invalidContext);
     const invalidPage = await invalidContext.newPage();
@@ -477,6 +513,10 @@ export async function runFounderUatJourney() {
       404,
       'Invalid candidate session path must return 404',
     );
+    await invalidPage
+      .getByRole('heading', { name: 'Let’s get you back.', exact: true })
+      .waitFor();
+    await audit(invalidPage, 'invalid candidate invitation');
 
     await goto(
       invalidPage,
@@ -497,7 +537,6 @@ export async function runFounderUatJourney() {
 
     const ownerContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(ownerContext);
@@ -515,7 +554,10 @@ export async function runFounderUatJourney() {
     );
     await signup(ownerPage, ownerEmail, ownerPassword);
 
-    await ownerPage.locator('a[href="/r23/login"]').click();
+    await ownerPage
+      .locator('main')
+      .getByRole('link', { name: 'Sign in', exact: true })
+      .click();
     const unverifiedForm = ownerPage.locator('form[action="/r23/auth/login"]');
     await unverifiedForm.locator('input[name="email"]').fill(ownerEmail);
     await unverifiedForm.locator('input[name="password"]').fill(ownerPassword);
@@ -550,7 +592,10 @@ export async function runFounderUatJourney() {
     const organizationId = organizationPath.split('/').at(-1);
     assert.ok(organizationId);
     await audit(ownerPage, 'first organization');
-    await ownerPage.getByText(`Local Test ${runId}`, { exact: true }).waitFor();
+    await ownerPage
+      .getByRole('region', { name: 'Active organization' })
+      .getByText(`Local Test ${runId}`, { exact: true })
+      .waitFor();
     await saveScreenshot(
       ownerPage,
       artifactDirectory,
@@ -568,7 +613,7 @@ export async function runFounderUatJourney() {
       `reviewer-invitation-settings-${runId}`,
     );
     await ownerPage
-      .getByText(/No email is sent for reviewer invitations/i)
+      .getByText(/Invitations are not emailed automatically/i)
       .waitFor();
     const invitationForm = ownerPage.locator('form').filter({
       has: ownerPage.locator('input[value="create_invitation"]'),
@@ -590,7 +635,6 @@ export async function runFounderUatJourney() {
 
     const reviewerContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(reviewerContext);
@@ -622,8 +666,11 @@ export async function runFounderUatJourney() {
     assert.equal(await acceptForm.locator('input[name="token"]').count(), 0);
     await acceptForm.locator('button[type="submit"]').click();
     await reviewerPage.waitForURL((url) => url.pathname === organizationPath);
-    await reviewerPage.getByText(/Reviewer scope:/).waitFor();
     await reviewerPage
+      .getByRole('heading', { name: 'Assigned reviews', exact: true })
+      .waitFor();
+    await reviewerPage
+      .getByRole('region', { name: 'Active organization' })
       .getByText(`Local Test ${runId}`, { exact: true })
       .waitFor();
     await audit(reviewerPage, 'reviewer organization');
@@ -722,7 +769,6 @@ export async function runFounderUatJourney() {
 
     const candidateContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(candidateContext);
@@ -1095,7 +1141,6 @@ export async function runFounderUatJourney() {
 
     const recoveryContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(recoveryContext);
@@ -1141,9 +1186,7 @@ export async function runFounderUatJourney() {
       'Recovery credential must not grant access to organization dashboard',
     );
     assert.equal(
-      await recoveryPage
-        .locator('button[type="submit"]:has-text("Select")')
-        .count(),
+      await recoveryPage.getByRole('button', { name: /^Select / }).count(),
       0,
       'Recovery credential must not expose organization dashboard actions',
     );
@@ -1208,7 +1251,6 @@ export async function runFounderUatJourney() {
     // --- Returning user flow: Evaluator ---
     const returningReviewerContext = await browser.newContext({
       ignoreHTTPSErrors: true,
-      bypassCSP: true,
       viewport: viewports[0],
     });
     contexts.push(returningReviewerContext);

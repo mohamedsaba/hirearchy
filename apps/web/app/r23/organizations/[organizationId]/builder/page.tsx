@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -18,6 +19,7 @@ import type { R211AssessmentDraft } from '../../../../../src/r211-builder/contra
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
+export const metadata: Metadata = { title: 'Assessment Builder' };
 
 export default async function AssessmentBuilderPage({
   params,

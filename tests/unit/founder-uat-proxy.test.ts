@@ -51,4 +51,30 @@ describe('Founder UAT root routing', () => {
 
     expect(response.status).toBe(503);
   });
+
+  it('allows only the shared software stylesheet and DM Sans font as static UAT assets', () => {
+    configureValidFounderUat();
+
+    for (const path of ['/software-ui.css', '/fonts/dm-sans-latin.woff2']) {
+      for (const method of ['GET', 'HEAD'] as const) {
+        expect(
+          proxy(
+            new NextRequest(`http://localhost${path}`, { method }),
+          ).headers.get('x-middleware-next'),
+        ).toBe('1');
+      }
+    }
+
+    for (const [path, method] of [
+      ['/software-ui.css.map', 'GET'],
+      ['/software-ui.css/extra', 'GET'],
+      ['/fonts/other.woff2', 'GET'],
+      ['/software-ui.css', 'POST'],
+      ['/fonts/dm-sans-latin.woff2', 'POST'],
+    ] as const) {
+      expect(
+        proxy(new NextRequest(`http://localhost${path}`, { method })).status,
+      ).toBe(503);
+    }
+  });
 });
