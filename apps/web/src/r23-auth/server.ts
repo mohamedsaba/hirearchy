@@ -902,9 +902,9 @@ export function resolveOrgDisplay(
   organizationId: string,
   membership?: {
     role?: string;
-    displayName?: string;
-    organizationName?: string;
-    organizationSlug?: string;
+    displayName?: string | null;
+    organizationName?: string | null;
+    organizationSlug?: string | null;
   } | null,
 ): { name: string; slug: string } {
   const idLower = organizationId.trim().toLowerCase();
