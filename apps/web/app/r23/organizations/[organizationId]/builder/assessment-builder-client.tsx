@@ -2356,7 +2356,8 @@ export function AssessmentBuilderClient({
                       <dl
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '140px 1fr',
+                          gridTemplateColumns:
+                            'minmax(0, 140px) minmax(0, 1fr)',
                           gap: '6px',
                           fontSize: '0.85rem',
                           margin: 0,
@@ -2561,9 +2562,11 @@ export function AssessmentBuilderClient({
                           {validatedVersion.versionNumber}.
                         </p>
                         <dl
+                          className="assessment-snapshot-facts"
                           style={{
                             display: 'grid',
-                            gridTemplateColumns: '160px 1fr',
+                            gridTemplateColumns:
+                              'minmax(0, 160px) minmax(0, 1fr)',
                             gap: '6px',
                             fontSize: '0.85rem',
                             margin: 0,
@@ -2692,6 +2695,7 @@ export function AssessmentBuilderClient({
                 {issuedSession && (
                   <div
                     data-testid="issuance-success"
+                    className="assessment-issuance-success"
                     style={{
                       padding: '24px',
                       borderRadius: 'var(--software-radius-surface, 8px)',
@@ -2706,7 +2710,7 @@ export function AssessmentBuilderClient({
                         fontSize: '1.25rem',
                       }}
                     >
-                      Assessment Successfully Issued!
+                      Assessment issued
                     </h3>
                     <p
                       style={{
@@ -2732,7 +2736,8 @@ export function AssessmentBuilderClient({
                       <dl
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '140px 1fr',
+                          gridTemplateColumns:
+                            'minmax(0, 140px) minmax(0, 1fr)',
                           gap: '8px',
                           fontSize: '0.9rem',
                           margin: 0,
@@ -2786,7 +2791,7 @@ export function AssessmentBuilderClient({
                       </dl>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div className="assessment-issuance-links">
                       <Link
                         href={`/r23/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(issuedSession.sessionId)}`}
                         className="button button-secondary"

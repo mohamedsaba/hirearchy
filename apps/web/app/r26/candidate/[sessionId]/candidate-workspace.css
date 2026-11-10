@@ -737,16 +737,46 @@
     font-size: 0.7rem;
   }
 
+  .r26-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   .r26-header-status {
-    gap: 0.55rem;
+    display: contents;
+  }
+
+  .r26-header-status > .r26-status {
+    margin-left: auto;
+  }
+
+  .r26-timer {
+    order: 3;
+    flex-basis: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px 12px;
+    text-align: left;
   }
 
   .r26-timer span {
-    font-size: 0.6rem;
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .r26-timer span:last-child {
+    grid-column: 1 / -1;
   }
 
   .r26-timer strong {
-    font-size: 0.75rem;
+    text-align: right;
+    font-size: 13px;
+  }
+
+  .r26-task-panel,
+  .r26-editor-panel,
+  .r26-activity-panel {
+    scroll-margin-top: 140px;
   }
 
   .r26-status {
