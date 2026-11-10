@@ -1208,3 +1208,45 @@ body.software-document-body *::after {
   color: var(--software-muted);
   font-size: 12px;
 }
+
+.software-session-overview {
+  max-width: 900px;
+}
+
+.software-document-panel .software-session-facts {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px 24px;
+  margin: 0;
+}
+
+.software-session-facts dt {
+  color: var(--software-muted);
+  font-size: 13px;
+}
+
+.software-document-panel .software-session-facts dd {
+  margin: 0;
+}
+
+.software-session-overview > section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--software-border);
+}
+
+.software-session-reference {
+  margin: 24px 0;
+  color: var(--software-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .software-document-panel .software-session-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+  .software-session-facts dd + dt {
+    margin-top: 12px;
+  }
+}

@@ -1966,10 +1966,6 @@ export async function stagingOrganizationSessionPageGet(
     const s = sessionRecord;
     const safeOrgId = safeHtml(organizationId.toLowerCase());
     const safeOrgName = safeHtml(organization.name);
-    const safeOrgSlug = safeHtml(organization.slug);
-    const safeRole = safeHtml(membership.role);
-    const safeEmail = safeHtml(identity.email ?? 'evaluator');
-    const safeCsrf = safeHtml(csrfToken);
 
     const isTimedOut =
       s.status === 'SUBMITTED' && s.closureReason === 'timeout';
@@ -2005,29 +2001,13 @@ export async function stagingOrganizationSessionPageGet(
     const invitationManagementUrl = `/r23/organizations/${safeOrgId}/builder?issuedSession=${encodeURIComponent(s.sessionId)}`;
 
     const content = `
-      <header>
-        <p>
-          <strong>Active organization:</strong>
-          <span>${safeOrgName}</span>
-          <span>(${safeOrgSlug})</span>
-          <span>Role: ${safeRole}</span>
-          <span>${safeEmail}</span>
-        </p>
-        <nav aria-label="Evaluator workspace">
-          <p><a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a></p>
-          <p><a href="/r23/organizations">Switch organization</a></p>
-        </nav>
+      <header class="software-workspace-heading">
+        <div><p class="software-eyebrow">Assessment overview</p><h1 id="session-summary-title">${safeHtml(s.scenarioTitle)}</h1><p>Session details, candidate access and the next step for your team.</p></div>
+        <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
       </header>
 
-      <form action="/r23/auth/logout" method="post">
-        <input type="hidden" name="csrf" value="${safeCsrf}">
-        <button type="submit">Sign out</button>
-      </form>
-
-      <section aria-labelledby="session-summary-title">
-        <h2 id="session-summary-title">${safeHtml(s.scenarioTitle)}</h2>
-        <p>Session ID: <code>${safeHtml(s.sessionId)}</code></p>
-        <dl>
+      <section class="software-settings-section software-session-overview" aria-labelledby="session-summary-title">
+        <dl class="software-session-facts">
           <dt><strong>Scenario ID:</strong></dt><dd><code>${safeHtml(s.scenarioId)}</code> (v${safeHtml(s.scenarioVersion)})</dd>
           <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(lifecycleLabel)} (${safeHtml(s.status)})</span> ${isTimedOut ? '<span>(Timed out)</span>' : ''}</dd>
           <dt><strong>Review progress:</strong></dt><dd>${safeHtml(reviewLabel)}</dd>
@@ -2035,12 +2015,13 @@ export async function stagingOrganizationSessionPageGet(
           <dt><strong>Issued:</strong></dt><dd><time datetime="${safeHtml(s.createdAt)}">${safeHtml(s.createdAt)}</time></dd>
           <dt><strong>Started:</strong></dt><dd>${s.activatedAt ? `<time datetime="${safeHtml(s.activatedAt)}">${safeHtml(s.activatedAt)}</time>` : 'Not recorded'}</dd>
           <dt><strong>Submitted:</strong></dt><dd>${s.submittedAt ? `<time datetime="${safeHtml(s.submittedAt)}">${safeHtml(s.submittedAt)}</time>` : 'Not submitted'}</dd>
-          <dt><strong>Visibility scope:</strong></dt><dd>${safeHtml(s.visibilityScope ?? 'authorized_scope')}</dd>
+          
         </dl>
+        <details class="software-session-reference"><summary>Session reference</summary><p><code>${safeHtml(s.sessionId)}</code></p><p>Visibility: ${safeHtml(s.visibilityScope ?? 'authorized_scope')}</p></details>
 
         ${
           isSubmittedReviewerSession
-            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
+            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" class="software-primary-link" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
             : isSubmittedSession
               ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
                   <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>
@@ -2059,7 +2040,7 @@ export async function stagingOrganizationSessionPageGet(
 
         <section aria-labelledby="reviewer-assignments-title">
           <h3 id="reviewer-assignments-title">Reviewer assignments</h3>
-          <p>Reviewer assignment is bound during internal assessment issuance in the authenticated staging slice.</p>
+          <p>The assigned evaluator can inspect submitted work and prepare a human review.</p>
           <h4>Assigned reviewers</h4>
           ${
             context.assignments && context.assignments.length > 0
@@ -2095,6 +2076,14 @@ export async function stagingOrganizationSessionPageGet(
         content,
         200,
         securityHeaders(),
+        {
+          organizationId: organizationId.toLowerCase(),
+          organizationName: organization.name,
+          role: membership.role,
+          email: identity.email ?? '',
+          csrf: csrfToken,
+          active: 'assessments',
+        },
       ),
       context.refreshedSessionCookie,
     );
