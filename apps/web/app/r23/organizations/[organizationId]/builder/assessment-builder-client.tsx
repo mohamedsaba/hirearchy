@@ -2441,7 +2441,9 @@ export function AssessmentBuilderClient({
                       aria-label="Continue to Issue"
                       className="button button-primary"
                       disabled={
-                        !validatedVersion || Boolean(validationErrorMessage)
+                        isValidating ||
+                        !validatedVersion ||
+                        Boolean(validationErrorMessage)
                       }
                       onClick={() => setStage('issue')}
                     >

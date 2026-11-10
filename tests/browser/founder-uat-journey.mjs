@@ -1182,9 +1182,7 @@ export async function runFounderUatJourney() {
       'Recovery credential must not grant access to organization dashboard',
     );
     assert.equal(
-      await recoveryPage
-        .locator('button[type="submit"]:has-text("Select")')
-        .count(),
+      await recoveryPage.getByRole('button', { name: /^Select / }).count(),
       0,
       'Recovery credential must not expose organization dashboard actions',
     );
