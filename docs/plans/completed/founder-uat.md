@@ -2,7 +2,7 @@
 
 - Date: 2026-11-10
 - Baseline: protected `main` at `c4936cd1f6a396854400e363f7dc9d629e6a8b58` (PR #19).
-- Status: complete; founder local acceptance verified.
+- Status: implementation completed in PR #20; its visual readiness conclusion was subsequently invalidated by the founder's rendering report. Results below are historical. Current acceptance is tracked in [release readiness](../../release-readiness.md).
 - Authority: founder's complete end-user UAT directive. This plan records implementation scope; [release readiness](../../release-readiness.md) remains the single acceptance record.
 
 ## Outcome and boundaries
