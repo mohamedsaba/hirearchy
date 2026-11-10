@@ -35,15 +35,15 @@ Workers implement in isolated scoped worktrees with non-overlapping files. Agree
 
 ## Acceptance evidence required
 
-| Area | Required current proof |
-| --- | --- |
-| First-time customer | Fresh browser; signup, actual GoTrue confirmation via local mail, login/logout, organization bootstrap, template draft/save/validate/issue, evaluator invitation/assignment, candidate invitation |
-| Candidate | Separate fresh context; consent, genuine file edit/save/refresh/resume, one final submission, persisted content/evidence, truthful execution availability |
-| Evaluator | Separate normal account and context; accept invitation, see only assigned sessions, inspect actual changes/events, cite evidence in observations, save/finalize review, return to stored review |
-| Denials and recovery | Incorrect credentials, unverified/expired session, password recovery quarantine, expired/revoked links, unauthorized reviewer, cross-organization access, double submission, late mutation rejection |
-| Failure resilience | Lost save response, refresh while editing, app restart, owned database interruption/recovery; verify retained state through supported APIs or read-only checks |
-| UX | Independent landing-first walkthrough; desktop/tablet/mobile, long content, keyboard/focus, contrast/overflow, service failure feedback, console/runtime errors |
-| Engineering | `npm run verify`, `npm run test:postgres`, `npm run test:staging`, relevant genuine browser/UAT suites, real build, health/readiness, protected PR review and all required GitHub checks on accepted source |
-| Founder delivery | Running local app, clean initial user state, durable storage, bounded service footprint, restart mechanism, no exposed credentials, one verified URL |
+| Area                 | Required current proof                                                                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First-time customer  | Fresh browser; signup, actual GoTrue confirmation via local mail, login/logout, organization bootstrap, template draft/save/validate/issue, evaluator invitation/assignment, candidate invitation           |
+| Candidate            | Separate fresh context; consent, genuine file edit/save/refresh/resume, one final submission, persisted content/evidence, truthful execution availability                                                   |
+| Evaluator            | Separate normal account and context; accept invitation, see only assigned sessions, inspect actual changes/events, cite evidence in observations, save/finalize review, return to stored review             |
+| Denials and recovery | Incorrect credentials, unverified/expired session, password recovery quarantine, expired/revoked links, unauthorized reviewer, cross-organization access, double submission, late mutation rejection        |
+| Failure resilience   | Lost save response, refresh while editing, app restart, owned database interruption/recovery; verify retained state through supported APIs or read-only checks                                              |
+| UX                   | Independent landing-first walkthrough; desktop/tablet/mobile, long content, keyboard/focus, contrast/overflow, service failure feedback, console/runtime errors                                             |
+| Engineering          | `npm run verify`, `npm run test:postgres`, `npm run test:staging`, relevant genuine browser/UAT suites, real build, health/readiness, protected PR review and all required GitHub checks on accepted source |
+| Founder delivery     | Running local app, clean initial user state, durable storage, bounded service footprint, restart mechanism, no exposed credentials, one verified URL                                                        |
 
 Mark each item passed only with direct current evidence. Missing execution is a material limitation, never fabricated output. Technical acceptance does not replace the founder's later personal approval. Demo video and landing-page production do not begin in this task.
