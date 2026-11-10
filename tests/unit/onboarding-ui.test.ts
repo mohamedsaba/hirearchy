@@ -5,15 +5,44 @@ import {
   stagingRecoverGet,
   stagingResetPasswordGet,
   stagingResetPasswordPost,
+  stagingVerifyEmailPost,
   stagingVerifyEmailGet,
   stagingInvitationAcceptGet,
 } from '../../apps/web/src/staging/browser';
 
 describe('Self-Service Onboarding Frontend UI & Staging Handlers', () => {
   const originalEnv = process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED;
+  const founderUatEnvKeys = [
+    'HIREARCHY_RUNTIME_PROFILE',
+    'FOUNDER_UAT_APP_ORIGIN',
+    'STAGING_PUBLIC_ORIGIN',
+    'STAGING_AUTH_URL',
+    'STAGING_AUTH_ISSUER',
+    'STAGING_AUTH_AUDIENCE',
+    'STAGING_DATABASE_URL',
+    'FOUNDER_UAT_MAILPIT_API_URL',
+  ];
+  const originalFounderUatEnv = new Map(
+    founderUatEnvKeys.map((key) => [key, process.env[key]]),
+  );
+
+  const enableFounderUat = () => {
+    Object.assign(process.env, {
+      HIREARCHY_RUNTIME_PROFILE: 'founder-uat',
+      FOUNDER_UAT_APP_ORIGIN: 'http://127.0.0.1:3000',
+      STAGING_PUBLIC_ORIGIN: 'http://127.0.0.1:3000',
+      STAGING_AUTH_URL: 'http://127.0.0.1:9998',
+      STAGING_AUTH_ISSUER: 'http://127.0.0.1:9998/auth/v1',
+      STAGING_AUTH_AUDIENCE: 'authenticated',
+      STAGING_DATABASE_URL:
+        'postgresql://r23_gateway:local-test@127.0.0.1:5432/postgres',
+      FOUNDER_UAT_MAILPIT_API_URL: 'http://127.0.0.1:8025',
+    });
+  };
 
   beforeEach(() => {
     delete process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED;
+    for (const key of founderUatEnvKeys) delete process.env[key];
   });
 
   afterEach(() => {
@@ -21,6 +50,10 @@ describe('Self-Service Onboarding Frontend UI & Staging Handlers', () => {
       process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED = originalEnv;
     } else {
       delete process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED;
+    }
+    for (const [key, value] of originalFounderUatEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   });
 
@@ -177,6 +210,116 @@ describe('Self-Service Onboarding Frontend UI & Staging Handlers', () => {
       expect(html).toContain('Sign in with invited account');
       expect(html).toContain('Create new account');
       expect(html).toContain('sample-invite-token-123');
+    });
+  });
+
+  describe('founder UAT onboarding UI', () => {
+    it('shows local confirmation guidance on signup without claiming email is disabled', async () => {
+      enableFounderUat();
+      process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED = 'true';
+      const response = await stagingSignupGet(
+        new Request('http://127.0.0.1:3000/r23/signup'),
+      );
+
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain(
+        'confirmation message will appear in the local inbox',
+      );
+      expect(html).not.toContain('emailDeliveryEnabled: false');
+    });
+
+    it('offers the local inbox instead of a manual verification token field', async () => {
+      enableFounderUat();
+      const response = await stagingVerifyEmailGet(
+        new Request(
+          'http://127.0.0.1:3000/r23/verify-email?email=person%40example.test&token=do-not-render',
+        ),
+      );
+
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain('/r23/mail?email=person%40example.test');
+      expect(html).not.toContain('name="token"');
+      expect(html).not.toContain('do-not-render');
+    });
+
+    it('rejects manual verification-token submission in founder UAT', async () => {
+      enableFounderUat();
+      const response = await stagingVerifyEmailPost(
+        new Request('http://127.0.0.1:3000/r23/verify-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Origin: 'http://127.0.0.1:3000',
+          },
+          body: new URLSearchParams({ token: 'secret-token' }),
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      const html = await response.text();
+      expect(html).toContain('Use the local inbox');
+      expect(html).not.toContain('secret-token');
+    });
+
+    it('shows captured-mail recovery guidance and keeps the non-UAT disclosure out', async () => {
+      enableFounderUat();
+      const html = await (await stagingRecoverGet()).text();
+      expect(html).toContain('Recovery messages for this local test');
+      expect(html).not.toContain('emailDeliveryEnabled: false');
+    });
+
+    it('uses password-only reset and renders only safe recovery errors', async () => {
+      enableFounderUat();
+      const response = stagingResetPasswordGet(
+        new Request(
+          'http://127.0.0.1:3000/r23/reset-password?token=secret-token&error=expired',
+        ),
+      );
+      const html = await response.text();
+      expect(html).toContain('action="/api/founder-uat/auth/reset-password"');
+      expect(html).not.toContain('name="token"');
+      expect(html).not.toContain('secret-token');
+      expect(html).toContain(
+        'This recovery message has expired or was already used',
+      );
+      expect(html).toContain('sign in again');
+    });
+
+    it('does not accept the legacy raw-token reset POST', async () => {
+      enableFounderUat();
+      const response = await stagingResetPasswordPost(
+        new Request('http://127.0.0.1:3000/r23/reset-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Origin: 'http://127.0.0.1:3000',
+          },
+          body: new URLSearchParams({
+            token: 'secret-token',
+            password: 'NewPassword-123!',
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(403);
+      expect(await response.text()).not.toContain('secret-token');
+    });
+
+    it('preserves reviewer invitation context through explicit login or signup actions', async () => {
+      enableFounderUat();
+      const response = await stagingInvitationAcceptGet(
+        new Request(
+          'http://127.0.0.1:3000/r23/invitations/accept?token=invitation-token-123',
+        ),
+      );
+      const html = await response.text();
+      expect(html).toContain('action="/api/founder-uat/invitations/context"');
+      expect(html).toContain('name="destination" value="login"');
+      expect(html).toContain('name="destination" value="signup"');
+      expect(html).not.toContain('redirect=');
+      expect(html).toContain('Use the email address your inviter specified');
     });
   });
 });

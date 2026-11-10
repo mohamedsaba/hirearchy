@@ -1154,6 +1154,10 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                     Data use and consent
                   </strong>
                   <p>{view.dataNotice.text}</p>
+                  <p>
+                    The task uses sample data. Saved changes and submissions
+                    record the work performed in this workspace.
+                  </p>
                   {view.status === 'CREATED' ? (
                     <label>
                       <input
@@ -1264,7 +1268,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                         </strong>
                         {!view.capabilities.execution ? (
                           <span className="r26-capability-note">
-                            Code execution is unavailable in this demo.
+                            Code execution is unavailable for this assessment.
                           </span>
                         ) : null}
                       </div>
