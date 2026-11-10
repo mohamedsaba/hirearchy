@@ -47,6 +47,9 @@ const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations\/[^/]+$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet$/,
   /^\/api\/staging\/readiness$/,
+  /^\/r23\/mail$/,
+  /^\/api\/founder-uat\/mail$/,
+  /^\/api\/founder-uat\/mail\/template\/(confirmation|recovery)$/,
 ];
 
 const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
@@ -70,6 +73,7 @@ const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/review-packet\/finalize$/,
   /^\/r26\/api\/candidate\/[^/]+$/,
+  /^\/api\/founder-uat\/(mail\/consume|invitations\/context|auth\/reset-password)$/,
 ];
 
 const STAGING_BROWSER_PUT_PATTERNS: readonly RegExp[] = [
@@ -140,6 +144,24 @@ function isAllowedPublicPreviewRequest(
   return method === 'POST' && pathname === '/api/early-access';
 }
 
+function isFounderUatRoute(method: string, pathname: string): boolean {
+  if (method === 'GET' || method === 'HEAD') {
+    return (
+      pathname === '/r23/mail' ||
+      pathname === '/api/founder-uat/mail' ||
+      /^\/api\/founder-uat\/mail\/template\/(confirmation|recovery)$/.test(
+        pathname,
+      )
+    );
+  }
+  return (
+    method === 'POST' &&
+    /^\/api\/founder-uat\/(mail\/consume|invitations\/context|auth\/reset-password)$/.test(
+      pathname,
+    )
+  );
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isPublicPreview()) {
@@ -165,7 +187,8 @@ export function proxy(request: NextRequest) {
     !(
       isAuthenticatedStaging() &&
       isAllowedAuthenticatedStagingRequest(request.method, pathname)
-    )
+    ) &&
+    !isFounderUatRoute(request.method, pathname)
   ) {
     return NextResponse.json(
       {

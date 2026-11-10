@@ -902,37 +902,20 @@ export function resolveOrgDisplay(
   organizationId: string,
   membership?: {
     role?: string;
+    displayName?: string;
     organizationName?: string;
     organizationSlug?: string;
   } | null,
-  userEmail?: string | null,
 ): { name: string; slug: string } {
-  if (membership?.organizationName && membership?.organizationSlug) {
-    return {
-      name: membership.organizationName,
-      slug: membership.organizationSlug,
-    };
-  }
-  if (membership?.role === 'admin' || userEmail?.includes('beta')) {
-    return {
-      name: 'Beta Engineering Org',
-      slug: 'beta-eval',
-    };
-  }
-  if (
-    userEmail?.includes('acme') ||
-    membership?.role === 'recruiter' ||
-    membership?.role === 'reviewer'
-  ) {
-    return {
-      name: 'Acme Evaluation Org',
-      slug: 'acme-eval',
-    };
-  }
-  const idLower = organizationId.toLowerCase();
+  const idLower = organizationId.trim().toLowerCase();
+  const idPrefix = idLower.replace(/[^a-z0-9]/g, '').slice(0, 8) || 'unknown';
+  const name =
+    membership?.displayName?.trim() ||
+    membership?.organizationName?.trim() ||
+    `Organization ${idPrefix}`;
   return {
-    name: `Organization ${idLower.slice(0, 8)}`,
-    slug: idLower.slice(0, 8),
+    name,
+    slug: membership?.organizationSlug?.trim() || idPrefix,
   };
 }
 
@@ -1025,11 +1008,7 @@ export async function loadAuthenticatedOrganizationSessionList(
         };
       }
 
-      const orgDisplay = resolveOrgDisplay(
-        targetOrganizationId,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(targetOrganizationId, membership);
 
       return {
         identity,
@@ -1123,11 +1102,7 @@ export async function loadAuthenticatedOrganizationSessionSummary(
         };
       }
 
-      const orgDisplay = resolveOrgDisplay(
-        targetOrganizationId,
-        membership,
-        identity.email,
-      );
+      const orgDisplay = resolveOrgDisplay(targetOrganizationId, membership);
 
       let reviewers: Array<{
         principalId: string;
