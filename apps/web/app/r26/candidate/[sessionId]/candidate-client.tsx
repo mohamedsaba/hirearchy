@@ -970,12 +970,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   };
 
   const submit = async () => {
-    if (
-      !view ||
-      busy ||
-      submitInFlight.current ||
-      !view.workspaceDigest
-    )
+    if (!view || busy || submitInFlight.current || !view.workspaceDigest)
       return;
     if (!pendingSubmit && !canEdit) return;
     if (!pendingSubmit && isDirty) {

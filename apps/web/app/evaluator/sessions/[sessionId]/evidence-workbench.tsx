@@ -2621,15 +2621,16 @@ const R27EvidenceSourceInspector = ({
     r27Evidence.events[0]?.sequence ??
     '1';
   const fileVersion =
-    (matchingEvent?.payload as Record<string, unknown> | undefined)?.version != null
+    (matchingEvent?.payload as Record<string, unknown> | undefined)?.version !=
+    null
       ? String(
-          (matchingEvent?.payload as Record<string, unknown> | undefined)?.version,
+          (matchingEvent?.payload as Record<string, unknown> | undefined)
+            ?.version,
         )
-      : file.submittedVersion ?? '1';
+      : (file.submittedVersion ?? '1');
   const rawDigest =
     ((matchingEvent?.payload as Record<string, unknown> | undefined)?.digest as
-      | string
-      | undefined) ??
+      string | undefined) ??
     file.submittedDigest ??
     r27Evidence.submission.workspaceDigest;
   const evidenceDigest = rawDigest.replace(/^sha256:/i, '').toLowerCase();

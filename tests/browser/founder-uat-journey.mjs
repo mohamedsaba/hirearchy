@@ -230,13 +230,16 @@ async function openInbox(page, email) {
       await mailForm.locator('input[name="email"]').fill(email);
       await mailForm.locator('button[type="submit"]').click();
     } else {
-      await goto(page, `${new URL(page.url()).origin}/r23/mail?email=${encodeURIComponent(email)}`, 'Local inbox');
+      await goto(
+        page,
+        `${new URL(page.url()).origin}/r23/mail?email=${encodeURIComponent(email)}`,
+        'Local inbox',
+      );
     }
   }
-  await page.waitForURL(
-    (url) => url.pathname === '/r23/mail',
-    { timeout: 15000 },
-  );
+  await page.waitForURL((url) => url.pathname === '/r23/mail', {
+    timeout: 15000,
+  });
   if (!new URL(page.url()).searchParams.has('email')) {
     const emailInput = page.locator('input[name="email"]');
     await emailInput.fill(email);
@@ -483,9 +486,13 @@ export async function runFounderUatJourney() {
     const unauthResetForm = invalidPage.locator(
       'form[action="/api/founder-uat/auth/reset-password"]',
     );
-    await unauthResetForm.locator('input[name="password"]').fill('Attempter123!456');
+    await unauthResetForm
+      .locator('input[name="password"]')
+      .fill('Attempter123!456');
     await unauthResetForm.locator('button[type="submit"]').click();
-    await invalidPage.waitForURL((url) => url.searchParams.get('error') === 'expired');
+    await invalidPage.waitForURL(
+      (url) => url.searchParams.get('error') === 'expired',
+    );
     await invalidPage.locator('p[role="alert"]').waitFor();
 
     const ownerContext = await browser.newContext({
@@ -1134,7 +1141,9 @@ export async function runFounderUatJourney() {
       'Recovery credential must not grant access to organization dashboard',
     );
     assert.equal(
-      await recoveryPage.locator('button[type="submit"]:has-text("Select")').count(),
+      await recoveryPage
+        .locator('button[type="submit"]:has-text("Select")')
+        .count(),
       0,
       'Recovery credential must not expose organization dashboard actions',
     );
@@ -1173,7 +1182,10 @@ export async function runFounderUatJourney() {
       `li[data-session-id="${sessionId}"]`,
     );
     await recruiterSessionRow.waitFor({ state: 'visible' });
-    await recruiterSessionRow.getByText('Submitted', { exact: true }).first().waitFor();
+    await recruiterSessionRow
+      .getByText('Submitted', { exact: true })
+      .first()
+      .waitFor();
     const recruiterInspectLink = recruiterSessionRow.getByRole('link', {
       name: 'Inspect session',
     });
@@ -1268,7 +1280,9 @@ export async function runFounderUatJourney() {
     );
     await reviewerSignOut.waitFor({ state: 'visible' });
     await reviewerSignOut.click();
-    await returningReviewerPage.waitForURL((url) => url.pathname === '/r23/login');
+    await returningReviewerPage.waitForURL(
+      (url) => url.pathname === '/r23/login',
+    );
 
     assert.deepEqual(
       problems,

@@ -1764,6 +1764,18 @@ export async function stagingOrganizationGet(
         <button type="submit">Sign out</button>
       </form>
 
+      ${
+        !isFounderUatEnabled()
+          ? `
+      <section aria-labelledby="staging-boundaries-title" data-testid="staging-workspace-capability-notice">
+        <h2 id="staging-boundaries-title">Authenticated Staging Boundaries (R2.15)</h2>
+        <p><strong>Supported in this slice:</strong> Named GoTrue authentication, organization membership verification, assessment authoring, static validation, internal session issuance with evaluator assignment, and read-only inspection of submitted evidence and private review data.</p>
+        <p><strong>Unavailable in this slice:</strong> Candidate invitation tokens/links, candidate workspace execution, live AI-provider task generation or assistance, unsubmitted session evidence, and review observation/packet writes.</p>
+      </section>
+      `
+          : ''
+      }
+
       <section aria-labelledby="lifecycle-list-title">
         <h2 id="lifecycle-list-title">Session lifecycle</h2>
         <div role="region" aria-label="Authorized visibility scope">

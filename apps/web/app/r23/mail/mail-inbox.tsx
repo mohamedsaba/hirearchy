@@ -31,11 +31,9 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
   const [error, setError] = useState<string | null>(null);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setStatus('loading');
-    setError(null);
+  const fetchInbox = useCallback(async (targetEmail: string) => {
     try {
-      const query = new URLSearchParams({ email });
+      const query = new URLSearchParams({ email: targetEmail });
       const response = await fetch(`/api/founder-uat/mail?${query}`, {
         cache: 'no-store',
         credentials: 'same-origin',
@@ -54,11 +52,18 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
       setError('The local inbox is unavailable. Try refreshing again shortly.');
       setStatus('error');
     }
-  }, [email]);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setStatus('loading');
+    setError(null);
+    await fetchInbox(email);
+  }, [email, fetchInbox]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchInbox(email);
+  }, [email, fetchInbox]);
 
   const consume = async (
     event: React.FormEvent<HTMLFormElement>,
