@@ -113,7 +113,11 @@ describe('Founder UAT assessment draft generation', () => {
     expect(body.messages[1].content).toContain(roleBrief);
     expect(body.messages[1].content).not.toContain(recruiterId);
     expect(JSON.stringify(result)).not.toContain('founder-uat-only-key');
-    expect(body.response_format.json_schema.schema).toMatchObject({
+    expect(body.response_format).toEqual({ type: 'json_object' });
+    const requestedSchema = JSON.parse(
+      body.messages[1].content.split('\nJSON schema\n')[1],
+    );
+    expect(requestedSchema).toMatchObject({
       type: 'object',
       additionalProperties: false,
       properties: {
@@ -227,6 +231,32 @@ describe('Founder UAT assessment draft generation', () => {
     expect(JSON.stringify(warning.mock.calls)).not.toContain(
       'founder-uat-only-key',
     );
+  });
+
+  it('rejects flattened Python source without running it', async () => {
+    runtimeProfile.isFounderUatEnabled.mockReturnValue(true);
+    vi.stubEnv('FOUNDER_UAT_NVIDIA_API_KEY', 'founder-uat-only-key');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        providerResponse({
+          ...modelDraft,
+          starterFiles: [
+            {
+              path: 'src/notifications.py',
+              content: 'class Delivery:    def send(self):        pass',
+            },
+            modelDraft.starterFiles[1],
+          ],
+        }),
+      ),
+    );
+    await expect(
+      generateFounderDraft(
+        { brief: roleBrief, durationMinutes: 45 },
+        recruiterId,
+      ),
+    ).resolves.toEqual({ status: 'invalid' });
   });
 
   it('rejects overlapping generation requests from the same recruiter', async () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { pythonLanguage } from '@codemirror/lang-python';
 
 import { NVIDIA_CHAT_COMPLETIONS_ENDPOINT } from '../ai/server-ai-configuration';
 import { operationalLogger } from '../observability/logger.mjs';
@@ -176,19 +177,15 @@ export async function generateFounderDraft(
               `Role brief (untrusted context): ${JSON.stringify(parsedInput.data.brief)}`,
               'Static assessment constraints: title 8–120 characters; candidate brief 20–5000 characters; 1–8 expectedBehavior items of 8–400 characters each; 1–10 acceptanceCriteria items of 8–300 characters each.',
               'Include a primary Python file and a short README in starterFiles. Use 1–20 unique ordinary candidate-editable files with safe relative .py, .md, .json, or .txt paths, each path at most 160 characters, each file at most 65,536 UTF-8 bytes, and all files together at most 131,072 UTF-8 bytes. Do not use absolute, hidden, parent-traversing, conftest.py, setup.py, sitecustomize.py, or usercustomize.py paths. primaryFilePath must be a .py path that exactly matches one starterFiles path.',
+              'Format every Python file with real line breaks and four-space indentation. JSON-escape those line breaks as backslash-n. Preserve Markdown line breaks in the README. Keep the starter project small and syntactically valid, with a logical defect for the candidate to investigate.',
               'Use 3–6 unique rubric criteria. Each id is 2–64 characters; each weight is a positive integer, and all weights must sum to exactly 100. All criteria use applicability.kind "always" and describe observable evidence for a human evaluator.',
               'Files are candidate-visible editable starting material. Do not include hidden tests, reference fixes, executable commands, setup hooks, external dependencies, or hiring verdicts.',
+              'JSON schema',
+              JSON.stringify(responseSchema),
             ].join('\n'),
           },
         ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'founder_assessment_draft',
-            strict: true,
-            schema: responseSchema,
-          },
-        },
+        response_format: { type: 'json_object' },
         max_tokens: 7000,
         reasoning_effort: 'none',
         temperature: 0.2,
@@ -285,6 +282,26 @@ export async function generateFounderDraft(
           code: 'R211_STATIC_VALIDATION',
         })),
       );
+      return { status: 'invalid' };
+    }
+    const syntaxIssues: { path: string; code: string }[] = [];
+    draft.starterFiles.forEach((file, index) => {
+      if (!file.path.endsWith('.py')) return;
+      let invalidSyntax = false;
+      pythonLanguage.parser.parse(file.content).iterate({
+        enter(node) {
+          if (node.type.isError) invalidSyntax = true;
+        },
+      });
+      if (invalidSyntax) {
+        syntaxIssues.push({
+          path: `starterFiles.${index}.content`,
+          code: 'INVALID_PYTHON_SYNTAX',
+        });
+      }
+    });
+    if (syntaxIssues.length > 0) {
+      logDraftRejection('STARTER_SYNTAX_REJECTED', syntaxIssues);
       return { status: 'invalid' };
     }
     return { status: 'ready', draft };
