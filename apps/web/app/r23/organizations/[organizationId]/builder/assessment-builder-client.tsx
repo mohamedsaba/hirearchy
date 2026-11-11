@@ -2749,7 +2749,7 @@ export function AssessmentBuilderClient({
                         }}
                       >
                         <h3 style={{ margin: '0 0 12px', fontSize: '1.1rem' }}>
-                          Ready to Issue Assessment
+                          Ready to invite
                         </h3>
                         <p
                           style={{
@@ -2762,47 +2762,61 @@ export function AssessmentBuilderClient({
                           immutable validated version{' '}
                           {validatedVersion.versionNumber}.
                         </p>
-                        <dl
-                          className="assessment-snapshot-facts"
-                          style={{
-                            display: 'grid',
-                            gap: '6px',
-                            fontSize: '0.85rem',
-                            margin: 0,
-                          }}
-                        >
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Assessment Title
-                          </dt>
-                          <dd>
-                            <strong>{validatedVersion.scenarioTitle}</strong>
-                          </dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Validated Version
-                          </dt>
-                          <dd>Version {validatedVersion.versionNumber}</dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Content Digest
-                          </dt>
-                          <dd style={{ fontFamily: 'monospace' }}>
-                            {formatDigestBadge(validatedVersion.contentDigest)}
-                          </dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Time Limit
-                          </dt>
-                          <dd>
+                        <p className="assessment-ready-title">
+                          <strong>{validatedVersion.scenarioTitle}</strong>
+                          <span>
                             {Math.round(validatedVersion.durationSeconds / 60)}{' '}
                             minutes
-                          </dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Idempotency Key
-                          </dt>
-                          <dd suppressHydrationWarning>
-                            <code suppressHydrationWarning>
-                              {idempotencyKey}
-                            </code>
-                          </dd>
-                        </dl>
+                          </span>
+                        </p>
+                        <details className="assessment-reference-details">
+                          <summary>Version details</summary>
+                          <dl
+                            className="assessment-snapshot-facts"
+                            style={{
+                              display: 'grid',
+                              gap: '6px',
+                              fontSize: '0.85rem',
+                              margin: 0,
+                            }}
+                          >
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Assessment Title
+                            </dt>
+                            <dd>
+                              <strong>{validatedVersion.scenarioTitle}</strong>
+                            </dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Validated Version
+                            </dt>
+                            <dd>Version {validatedVersion.versionNumber}</dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Content Digest
+                            </dt>
+                            <dd style={{ fontFamily: 'monospace' }}>
+                              {formatDigestBadge(
+                                validatedVersion.contentDigest,
+                              )}
+                            </dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Time Limit
+                            </dt>
+                            <dd>
+                              {Math.round(
+                                validatedVersion.durationSeconds / 60,
+                              )}{' '}
+                              minutes
+                            </dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Idempotency Key
+                            </dt>
+                            <dd suppressHydrationWarning>
+                              <code suppressHydrationWarning>
+                                {idempotencyKey}
+                              </code>
+                            </dd>
+                          </dl>
+                        </details>
 
                         {isAuthenticatedStaging && (
                           <div
@@ -2822,7 +2836,7 @@ export function AssessmentBuilderClient({
                                 fontSize: '0.9rem',
                               }}
                             >
-                              Assign Authorized Evaluator (Reviewer)
+                              Assign an evaluator
                             </label>
                             <select
                               id="issue-reviewer-select"

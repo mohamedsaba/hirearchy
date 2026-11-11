@@ -508,3 +508,16 @@
 .assessment-reference-details dl {
   padding-top: 12px;
 }
+
+.assessment-ready-title {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  color: var(--software-muted);
+  font-size: 14px;
+}
+
+.assessment-ready-title strong {
+  color: var(--software-ink);
+  font-size: 18px;
+}
