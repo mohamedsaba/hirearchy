@@ -2543,12 +2543,6 @@ export async function stagingAssessmentGenerateApiPost(
   request: Request,
   targetOrganizationId: string,
 ): Promise<Response> {
-  const jsonHeaders = new Headers(request.headers);
-  jsonHeaders.set('Accept', 'application/json');
-  const jsonRequest = new Request(request.url, {
-    method: 'POST',
-    headers: jsonHeaders,
-  });
   const json = (message: string, status: number) =>
     Response.json(
       { message },
@@ -2629,7 +2623,7 @@ export async function stagingAssessmentGenerateApiPost(
           );
         }
         return attachRefreshedCookie(
-          json('AI draft generation is unavailable in Founder UAT.', 503),
+          json('AI drafting couldn’t connect. Try again in a moment.', 503),
           refreshedSessionCookie,
         );
       },

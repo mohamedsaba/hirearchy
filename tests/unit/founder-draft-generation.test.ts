@@ -83,9 +83,8 @@ describe('Founder UAT assessment draft generation', () => {
     vi.stubEnv('FOUNDER_UAT_NVIDIA_API_KEY', 'founder-uat-only-key');
     expect(founderDraftGenerationAvailable()).toBe(true);
 
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        providerResponse(modelDraft),
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      providerResponse(modelDraft),
     );
     vi.stubGlobal('fetch', fetchMock);
     const result = await generateFounderDraft(
