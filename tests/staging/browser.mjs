@@ -91,22 +91,32 @@ export async function readBrowserCsrf(context, appUrl) {
   return cookie.value;
 }
 
-async function assertWorkspaceChrome(page, organizationId, expectedTeamLabel) {
+async function assertWorkspaceChrome(page, organizationId, expectedRole) {
   const organizationPath = `/r23/organizations/${organizationId.toLowerCase()}`;
   const activeOrganization = page.getByRole('region', {
     name: 'Active organization',
   });
   await activeOrganization.waitFor({ state: 'visible' });
   assert.ok(
-    (await activeOrganization.textContent()).includes(expectedTeamLabel),
-    `Workspace identity must show ${expectedTeamLabel}`,
+    (await activeOrganization.locator('.software-org-name').innerText()).trim(),
+    'Workspace switcher must show the current organization name',
   );
+  assert.equal(
+    await activeOrganization.getByRole('link').getAttribute('href'),
+    '/r23/organizations',
+  );
+  const accountMenu = page.locator('details.software-account-menu');
+  await accountMenu.locator('summary').click();
+  assert.ok(
+    await accountMenu.getByText(expectedRole, { exact: true }).isVisible(),
+  );
+  await accountMenu.locator('summary').click();
 
   const workspaceNavigation = page.getByRole('navigation', {
     name: 'Workspace navigation',
   });
   const assessmentsLink = workspaceNavigation.getByRole('link', {
-    name: 'Assessments',
+    name: expectedRole === 'Recruiter' ? 'Assessments' : 'Reviews',
     exact: true,
   });
   assert.equal(await assessmentsLink.getAttribute('href'), organizationPath);
@@ -771,11 +781,7 @@ export async function checkBrowserAcceptance({
         ),
         'Recruiter scope copy must be displayed',
       );
-      await assertWorkspaceChrome(
-        recruiterPage,
-        organizationId,
-        'Recruiting team',
-      );
+      await assertWorkspaceChrome(recruiterPage, organizationId, 'Recruiter');
 
       // Verify staging capabilities boundary notice
       const capabilityNotice = recruiterPage.locator(
@@ -1067,11 +1073,7 @@ export async function checkBrowserAcceptance({
         ),
         'Reviewer scope copy must be displayed',
       );
-      await assertWorkspaceChrome(
-        reviewerPage,
-        organizationId,
-        'Evaluation team',
-      );
+      await assertWorkspaceChrome(reviewerPage, organizationId, 'Evaluator');
 
       // Reviewer attempts to access recruiter builder -> 403 Forbidden or 404 Not Found
       const revBuilderRes = await reviewerPage.goto(
@@ -1344,11 +1346,7 @@ export async function checkBrowserAcceptance({
         200,
         'Recruiter browser session must persist across application restart',
       );
-      await assertWorkspaceChrome(
-        recruiterPage,
-        organizationId,
-        'Recruiting team',
-      );
+      await assertWorkspaceChrome(recruiterPage, organizationId, 'Recruiter');
     }
 
     // -------------------------------------------------------------------------
