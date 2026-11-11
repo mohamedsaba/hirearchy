@@ -3174,7 +3174,7 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                 'submissions': decode_json(submission_rows),
                 'observations': decode_json(observation_rows),
                 'observationHistory': decode_json(history_rows),
-                'captureLimitation': 'Candidate execution is disabled in this staging lane; no new candidate work is being captured.',
+                'captureLimitation': 'Terminal and test-run evidence are unavailable because code execution was disabled for this assessment.',
             }
 
         if session['status'] != 'SUBMITTED':
