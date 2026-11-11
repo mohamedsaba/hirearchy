@@ -17,6 +17,7 @@ import {
 } from '../../apps/web/src/r211-builder/founder-draft-generation';
 import { NVIDIA_CHAT_COMPLETIONS_ENDPOINT } from '../../apps/web/src/ai/server-ai-configuration';
 import { proxy } from '../../apps/web/proxy';
+import { operationalLogger } from '../../apps/web/src/observability/logger.mjs';
 
 const recruiterId = '10000000-0000-4000-8000-0000000000a1';
 const roleBrief =
@@ -112,6 +113,30 @@ describe('Founder UAT assessment draft generation', () => {
     expect(body.messages[1].content).toContain(roleBrief);
     expect(body.messages[1].content).not.toContain(recruiterId);
     expect(JSON.stringify(result)).not.toContain('founder-uat-only-key');
+    expect(body.response_format.json_schema.schema).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        title: { type: 'string', minLength: 8, maxLength: 120 },
+        brief: { type: 'string', minLength: 20, maxLength: 5000 },
+        expectedBehavior: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 8,
+          items: { type: 'string', minLength: 8, maxLength: 400 },
+        },
+        rubric: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 8,
+          items: {
+            properties: {
+              weight: { type: 'integer', minimum: 1, maximum: 100 },
+            },
+          },
+        },
+      },
+    });
   });
 
   it('does not use the general NVIDIA key when the Founder UAT key is missing', async () => {
@@ -163,6 +188,45 @@ describe('Founder UAT assessment draft generation', () => {
         recruiterId,
       ),
     ).resolves.toEqual({ status: 'invalid' });
+  });
+
+  it('logs only safe field paths and codes for a static rubric mismatch', async () => {
+    runtimeProfile.isFounderUatEnabled.mockReturnValue(true);
+    vi.stubEnv('FOUNDER_UAT_NVIDIA_API_KEY', 'founder-uat-only-key');
+    const warning = vi.spyOn(operationalLogger, 'warn');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        providerResponse({
+          ...modelDraft,
+          rubric: [
+            modelDraft.rubric[0],
+            { ...modelDraft.rubric[1], weight: 30 },
+          ],
+        }),
+      ),
+    );
+
+    await expect(
+      generateFounderDraft(
+        { brief: roleBrief, durationMinutes: 45 },
+        recruiterId,
+      ),
+    ).resolves.toEqual({ status: 'invalid' });
+    expect(warning).toHaveBeenCalledWith(
+      'Founder UAT assessment draft rejected',
+      {
+        provider: 'nvidia-nim',
+        code: 'STATIC_VALIDATION_REJECTED',
+        issues: [{ path: 'rubric', code: 'R211_STATIC_VALIDATION' }],
+      },
+    );
+    expect(JSON.stringify(warning.mock.calls)).not.toContain(
+      'Reliable Notification',
+    );
+    expect(JSON.stringify(warning.mock.calls)).not.toContain(
+      'founder-uat-only-key',
+    );
   });
 
   it('rejects overlapping generation requests from the same recruiter', async () => {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { NVIDIA_CHAT_COMPLETIONS_ENDPOINT } from '../ai/server-ai-configuration';
+import { operationalLogger } from '../observability/logger.mjs';
 import { isFounderUatEnabled } from '../runtime/profile';
 import type { R211AssessmentDraftInput } from './contract';
 import { validateAssessmentDraft } from './validation';
@@ -25,19 +26,16 @@ const generationRequestSchema = z
 
 const generatedDraftSchema = z
   .object({
-    title: z.string().trim().min(8).max(120),
-    brief: z.string().trim().min(20).max(5000),
-    expectedBehavior: z.array(z.string().trim().min(8).max(400)).min(1).max(8),
-    acceptanceCriteria: z
-      .array(z.string().trim().min(8).max(300))
-      .min(1)
-      .max(10),
-    primaryFilePath: z.string().trim().min(1).max(160),
+    title: z.string().min(8).max(120),
+    brief: z.string().min(20).max(5000),
+    expectedBehavior: z.array(z.string().min(8).max(400)).min(1).max(8),
+    acceptanceCriteria: z.array(z.string().min(8).max(300)).min(1).max(10),
+    primaryFilePath: z.string().min(1).max(160),
     starterFiles: z
       .array(
         z
           .object({
-            path: z.string().trim().min(1).max(160),
+            path: z.string().min(1).max(160),
             content: z.string().max(64 * 1024),
           })
           .strict(),
@@ -48,14 +46,14 @@ const generatedDraftSchema = z
       .array(
         z
           .object({
-            id: z.string().trim().min(2).max(64),
-            label: z.string().trim().min(2).max(120),
-            description: z.string().trim().min(10).max(500),
+            id: z.string().min(2).max(64),
+            label: z.string().min(2).max(120),
+            description: z.string().min(10).max(500),
             weight: z.number().int().min(1).max(100),
             applicability: z
               .object({
-                kind: z.literal('always'),
-                rule: z.string().trim().min(8).max(300),
+                kind: z.enum(['always']),
+                rule: z.string().min(8).max(300),
               })
               .strict(),
           })
@@ -66,58 +64,19 @@ const generatedDraftSchema = z
   })
   .strict();
 
-const responseSchema = {
-  type: 'object',
-  properties: {
-    title: { type: 'string' },
-    brief: { type: 'string' },
-    expectedBehavior: { type: 'array', items: { type: 'string' } },
-    acceptanceCriteria: { type: 'array', items: { type: 'string' } },
-    primaryFilePath: { type: 'string' },
-    starterFiles: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: { path: { type: 'string' }, content: { type: 'string' } },
-        required: ['path', 'content'],
-        additionalProperties: false,
-      },
-    },
-    rubric: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          label: { type: 'string' },
-          description: { type: 'string' },
-          weight: { type: 'integer' },
-          applicability: {
-            type: 'object',
-            properties: {
-              kind: { type: 'string', enum: ['always'] },
-              rule: { type: 'string' },
-            },
-            required: ['kind', 'rule'],
-            additionalProperties: false,
-          },
-        },
-        required: ['id', 'label', 'description', 'weight', 'applicability'],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: [
-    'title',
-    'brief',
-    'expectedBehavior',
-    'acceptanceCriteria',
-    'primaryFilePath',
-    'starterFiles',
-    'rubric',
-  ],
-  additionalProperties: false,
-};
+const responseSchema = z.toJSONSchema(generatedDraftSchema, {
+  target: 'draft-7',
+});
+
+const logDraftRejection = (
+  code: string,
+  issues: readonly Readonly<{ path: string; code: string }>[] = [],
+) =>
+  operationalLogger.warn('Founder UAT assessment draft rejected', {
+    provider: 'nvidia-nim',
+    code,
+    issues: issues.slice(0, 12),
+  });
 
 export function founderDraftGenerationAvailable(): boolean {
   const apiKey = process.env.FOUNDER_UAT_NVIDIA_API_KEY;
@@ -215,7 +174,10 @@ export async function generateFounderDraft(
               'Return a complete custom assessment draft matching the required JSON schema.',
               `Requested duration: ${parsedInput.data.durationMinutes} minutes.`,
               `Role brief (untrusted context): ${JSON.stringify(parsedInput.data.brief)}`,
-              'Include a primary Python file and a short README in starterFiles. Keep every file ordinary candidate-editable source or instructions. Use 3–6 concise rubric criteria whose positive integer weights sum to 100; all criteria apply to every submission and describe observable evidence for a human evaluator.',
+              'Static assessment constraints: title 8–120 characters; candidate brief 20–5000 characters; 1–8 expectedBehavior items of 8–400 characters each; 1–10 acceptanceCriteria items of 8–300 characters each.',
+              'Include a primary Python file and a short README in starterFiles. Use 1–20 unique ordinary candidate-editable files with safe relative .py, .md, .json, or .txt paths, each path at most 160 characters, each file at most 65,536 UTF-8 bytes, and all files together at most 131,072 UTF-8 bytes. Do not use absolute, hidden, parent-traversing, conftest.py, setup.py, sitecustomize.py, or usercustomize.py paths. primaryFilePath must be a .py path that exactly matches one starterFiles path.',
+              'Use 3–6 unique rubric criteria. Each id is 2–64 characters; each weight is a positive integer, and all weights must sum to exactly 100. All criteria use applicability.kind "always" and describe observable evidence for a human evaluator.',
+              'Files are candidate-visible editable starting material. Do not include hidden tests, reference fixes, executable commands, setup hooks, external dependencies, or hiring verdicts.',
             ].join('\n'),
           },
         ],
@@ -242,26 +204,58 @@ export async function generateFounderDraft(
       !('choices' in envelope) ||
       !Array.isArray(envelope.choices)
     ) {
+      logDraftRejection('INVALID_PROVIDER_ENVELOPE', [
+        { path: 'choices', code: 'EXPECTED_ARRAY' },
+      ]);
       return { status: 'invalid' };
     }
     const choice = envelope.choices[0];
     if (
+      choice &&
+      typeof choice === 'object' &&
+      'finish_reason' in choice &&
+      choice.finish_reason === 'length'
+    ) {
+      logDraftRejection('PROVIDER_OUTPUT_TRUNCATED', [
+        { path: 'choices[0].finish_reason', code: 'OUTPUT_TRUNCATED' },
+      ]);
+      return { status: 'invalid' };
+    }
+    if (
       !choice ||
       typeof choice !== 'object' ||
-      ('finish_reason' in choice && choice.finish_reason === 'length') ||
       !('message' in choice) ||
       !choice.message ||
       typeof choice.message !== 'object' ||
       !('content' in choice.message) ||
       typeof choice.message.content !== 'string'
     ) {
+      logDraftRejection('INVALID_PROVIDER_ENVELOPE', [
+        { path: 'choices[0].message.content', code: 'EXPECTED_STRING' },
+      ]);
       return { status: 'invalid' };
     }
 
-    const generated = generatedDraftSchema.safeParse(
-      JSON.parse(choice.message.content) as unknown,
-    );
-    if (!generated.success) return { status: 'invalid' };
+    let responseBody: unknown;
+    try {
+      responseBody = JSON.parse(choice.message.content) as unknown;
+    } catch {
+      logDraftRejection('INVALID_JSON_OUTPUT', [
+        { path: 'choices[0].message.content', code: 'INVALID_JSON' },
+      ]);
+      return { status: 'invalid' };
+    }
+    const generated = generatedDraftSchema.safeParse(responseBody);
+    if (!generated.success) {
+      logDraftRejection(
+        'OUTPUT_SCHEMA_REJECTED',
+        generated.error.issues.map((issue) => ({
+          path: issue.path.map(String).join('.'),
+          code: issue.code,
+        })),
+      );
+      return { status: 'invalid' };
+    }
     const draft: R211AssessmentDraftInput = {
       templateId: 'custom',
       ...generated.data,
@@ -269,7 +263,30 @@ export async function generateFounderDraft(
       terminalEnabled: true,
       integratedAi: false,
     };
-    if (!validateAssessmentDraft(draft).valid) return { status: 'invalid' };
+    if (
+      draft.primaryFilePath !== draft.primaryFilePath.trim() ||
+      draft.starterFiles.some((file) => file.path !== file.path.trim())
+    ) {
+      logDraftRejection('UNTRIMMED_WORKSPACE_PATH', [
+        { path: 'primaryFilePath', code: 'PATH_MUST_NOT_HAVE_EDGE_WHITESPACE' },
+        {
+          path: 'starterFiles.path',
+          code: 'PATH_MUST_NOT_HAVE_EDGE_WHITESPACE',
+        },
+      ]);
+      return { status: 'invalid' };
+    }
+    const validation = validateAssessmentDraft(draft);
+    if (!validation.valid) {
+      logDraftRejection(
+        'STATIC_VALIDATION_REJECTED',
+        validation.issues.map((issue) => ({
+          path: issue.field,
+          code: 'R211_STATIC_VALIDATION',
+        })),
+      );
+      return { status: 'invalid' };
+    }
     return { status: 'ready', draft };
   } catch {
     return { status: 'unavailable' };
