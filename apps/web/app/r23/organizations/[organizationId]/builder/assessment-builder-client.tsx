@@ -882,7 +882,6 @@ export function AssessmentBuilderClient({
 
   const navigateToDefine = () => {
     clearRecoveredSessionContext();
-    setValidatedVersion(null);
     setStage('define');
   };
 
@@ -1716,7 +1715,6 @@ export function AssessmentBuilderClient({
                     disabled={isGenerating || Boolean(issuedSession)}
                     onChange={(event) => {
                       setDurationMinutes(Number(event.target.value));
-                      setValidatedVersion(null);
                       setSaveStatus('idle');
                     }}
                   >
@@ -1833,7 +1831,6 @@ export function AssessmentBuilderClient({
                       className="assessment-draft-editor"
                       aria-labelledby="assessment-draft-heading"
                       onChangeCapture={() => {
-                        setValidatedVersion(null);
                         if (saveStatus === 'saved') setSaveStatus('idle');
                       }}
                     >
@@ -2231,7 +2228,6 @@ export function AssessmentBuilderClient({
                         checked={terminalEnabled}
                         onChange={(event) => {
                           setTerminalEnabled(event.target.checked);
-                          setValidatedVersion(null);
                         }}
                       />{' '}
                       Terminal verification enabled
@@ -2243,7 +2239,6 @@ export function AssessmentBuilderClient({
                         checked={integratedAi}
                         onChange={(event) => {
                           setIntegratedAi(event.target.checked);
-                          setValidatedVersion(null);
                         }}
                       />{' '}
                       Candidate AI assistance
@@ -2256,7 +2251,6 @@ export function AssessmentBuilderClient({
                   <div
                     className="assessment-review-criteria"
                     onChangeCapture={() => {
-                      setValidatedVersion(null);
                       if (saveStatus === 'saved') setSaveStatus('idle');
                     }}
                   >
