@@ -798,7 +798,9 @@ async function start(mode, { forceRestart = false } = {}) {
   console.log(
     `Founder UAT is ready at ${state.values.FOUNDER_UAT_APP_ORIGIN}.`,
   );
-  console.log('Local mail inbox: use the inbox link on the sign-in screen.');
+  console.log(
+    'Confirmation and password reset messages are available from their account flows.',
+  );
 }
 
 async function main() {
