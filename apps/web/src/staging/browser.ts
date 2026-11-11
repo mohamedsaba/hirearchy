@@ -3651,7 +3651,7 @@ function mapStagingEvidenceToR27(
       history: 'metadata_only',
       limitations: [
         raw.captureLimitation ??
-          'Candidate execution is disabled in this staging lane; no new candidate work is being captured.',
+          'Terminal and test-run evidence are unavailable because code execution was disabled for this assessment.',
       ],
     },
   };

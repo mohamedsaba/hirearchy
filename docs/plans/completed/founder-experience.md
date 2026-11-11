@@ -8,3 +8,4 @@
 - Verify ordinary sign-in, account recovery, workspace navigation, the builder at desktop and mobile widths, and AI success and failure with synthetic role briefs. Keep existing founder data and profile volumes.
 - Restore the approved Common Thread identity after the rejected visual direction. Guard the original plum, lilac, and mint values with browser-computed palette checks, keep the Software glyph and discipline tab, and give the workspace switcher its own row on narrow phones.
 - Keep strict generated-file validation. State the exact starter-file object shape in the provider prompt, and verify that an extra metadata key is rejected and can be corrected within the existing single retry.
+- Give reviewer summaries readable UTC dates and expandable session and snapshot references. Preserve exact timestamps and immutable source evidence, and describe missing execution evidence in product terms.
