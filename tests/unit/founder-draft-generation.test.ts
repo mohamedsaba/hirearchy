@@ -112,6 +112,9 @@ describe('Founder UAT assessment draft generation', () => {
     expect(body.model).toBe('nvidia/nemotron-3.5-super-vl-120b-a12b');
     expect(body.messages[1].content).toContain(roleBrief);
     expect(body.messages[1].content).not.toContain(recruiterId);
+    expect(body.messages[1].content).toContain(
+      'Every starterFiles entry must contain exactly two keys: "path" and "content".',
+    );
     expect(JSON.stringify(result)).not.toContain('founder-uat-only-key');
     expect(body.response_format).toEqual({ type: 'json_object' });
     const requestedSchema = JSON.parse(
@@ -264,8 +267,8 @@ describe('Founder UAT assessment draft generation', () => {
       ...modelDraft,
       starterFiles: [
         {
-          path: 'src/notifications.py',
-          content: 'class Delivery:    def send(self):        pass',
+          ...modelDraft.starterFiles[0],
+          language: 'python',
         },
         modelDraft.starterFiles[1],
       ],
@@ -293,9 +296,8 @@ describe('Founder UAT assessment draft generation', () => {
     expect(repairRequest.messages[1].content).toContain(
       'Trusted validator feedback',
     );
-    expect(repairRequest.messages[1].content).toContain(
-      'starterFiles.0.content',
-    );
+    expect(repairRequest.messages[1].content).toContain('starterFiles.0');
+    expect(repairRequest.messages[1].content).toContain('unrecognized_keys');
     expect(repairRequest.messages[1].content).toContain(
       JSON.stringify(JSON.stringify(invalidDraft)),
     );
