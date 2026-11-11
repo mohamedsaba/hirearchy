@@ -598,6 +598,7 @@ export function AssessmentBuilderClient({
       setValidationIssues([]);
       setSaveStatus('idle');
       setGenerated(true);
+      generationHeading.current?.focus();
     } catch {
       setGenerationError('The connection was interrupted. Try again.');
     } finally {
@@ -1727,76 +1728,84 @@ export function AssessmentBuilderClient({
                 {templateId === 'custom' &&
                   founderUat &&
                   (aiDraftAvailable ? (
-                    <form
-                      className="assessment-ai-composer"
-                      onSubmit={generateDraft}
+                    <details
+                      className="assessment-ai-regenerate"
+                      open={!canEditDraft}
+                      data-has-draft={canEditDraft}
                     >
-                      <div className="assessment-ai-intro">
-                        <IconSparkles aria-hidden="true" />
-                        <div>
-                          <h3>Describe the role</h3>
-                          <p>
-                            Tell us what the engineer works on and what you want
-                            to see them do. NVIDIA will draft a task, starter
-                            files, and criteria for you to review.
-                          </p>
+                      <summary>Draft a replacement with AI</summary>
+                      <form
+                        className="assessment-ai-composer"
+                        onSubmit={generateDraft}
+                      >
+                        <div className="assessment-ai-intro">
+                          <IconSparkles aria-hidden="true" />
+                          <div>
+                            <h3>Describe the role</h3>
+                            <p>
+                              Tell us what the engineer works on and what you
+                              want to see them do. NVIDIA will draft a task,
+                              starter files, and criteria for you to review.
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <label htmlFor="assessment-role-brief">
-                        Role and skills
-                      </label>
-                      <textarea
-                        id="assessment-role-brief"
-                        value={roleBrief}
-                        onChange={(event) => setRoleBrief(event.target.value)}
-                        minLength={20}
-                        maxLength={2000}
-                        required
-                        rows={4}
-                        disabled={isGenerating || Boolean(issuedSession)}
-                        placeholder="A backend engineer maintaining a Python scheduling service. I want to see how they handle a stale update and verify the fix."
-                        aria-describedby="assessment-brief-privacy"
-                      />
-                      <p id="assessment-brief-privacy">
-                        Describe a fictional task. This brief is sent to NVIDIA.
-                      </p>
-                      {generationError && (
-                        <p role="alert" className="assessment-ai-error">
-                          {generationError}
+                        <label htmlFor="assessment-role-brief">
+                          Role and skills
+                        </label>
+                        <textarea
+                          id="assessment-role-brief"
+                          value={roleBrief}
+                          onChange={(event) => setRoleBrief(event.target.value)}
+                          minLength={20}
+                          maxLength={2000}
+                          required
+                          rows={4}
+                          disabled={isGenerating || Boolean(issuedSession)}
+                          placeholder="A backend engineer maintaining a Python scheduling service. I want to see how they handle a stale update and verify the fix."
+                          aria-describedby="assessment-brief-privacy"
+                        />
+                        <p id="assessment-brief-privacy">
+                          Describe a fictional task. This brief is sent to
+                          NVIDIA.
                         </p>
-                      )}
-                      <div className="assessment-ai-actions">
-                        <button
-                          className="button button-primary"
-                          type="submit"
-                          disabled={
-                            roleBrief.trim().length < 20 ||
-                            isGenerating ||
-                            isSaving ||
-                            Boolean(issuedSession)
-                          }
-                        >
-                          {isGenerating
-                            ? 'Drafting…'
-                            : canEditDraft
-                              ? 'Replace with a new draft'
-                              : 'Generate draft'}
-                          {isGenerating ? (
-                            <span
-                              className="assessment-ai-spinner"
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            <IconArrowRight size={18} aria-hidden="true" />
-                          )}
-                        </button>
-                        {isGenerating && (
-                          <span role="status">
-                            Preparing the brief and starter files.
-                          </span>
+                        {generationError && (
+                          <p role="alert" className="assessment-ai-error">
+                            {generationError}
+                          </p>
                         )}
-                      </div>
-                    </form>
+                        <div className="assessment-ai-actions">
+                          <button
+                            className="button button-primary"
+                            type="submit"
+                            disabled={
+                              roleBrief.trim().length < 20 ||
+                              isGenerating ||
+                              isSaving ||
+                              Boolean(issuedSession)
+                            }
+                          >
+                            {isGenerating
+                              ? 'Drafting…'
+                              : canEditDraft
+                                ? 'Replace with a new draft'
+                                : 'Generate draft'}
+                            {isGenerating ? (
+                              <span
+                                className="assessment-ai-spinner"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <IconArrowRight size={18} aria-hidden="true" />
+                            )}
+                          </button>
+                          {isGenerating && (
+                            <span role="status">
+                              Preparing the brief and starter files.
+                            </span>
+                          )}
+                        </div>
+                      </form>
+                    </details>
                   ) : (
                     <div className="assessment-ai-unavailable" role="status">
                       <strong>AI drafting is unavailable.</strong>

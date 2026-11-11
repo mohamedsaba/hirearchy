@@ -421,3 +421,16 @@
     flex-basis: 100% !important;
   }
 }
+
+.assessment-ai-regenerate > summary {
+  min-height: 44px;
+  padding-block: 12px;
+  color: var(--software-ink);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.assessment-ai-regenerate[data-has-draft='false'] > summary {
+  display: none;
+}
