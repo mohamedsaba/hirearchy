@@ -720,11 +720,9 @@ body.software-document-body *::after {
 
 @keyframes software-arrive {
   from {
-    opacity: 0;
     transform: translateY(7px);
   }
   to {
-    opacity: 1;
     transform: translateY(0);
   }
 }
@@ -826,6 +824,7 @@ body.software-document-body *::after {
 }
 
 .software-document-panel .software-section-intro h2 {
+  scroll-margin-top: 120px;
   font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.025em;

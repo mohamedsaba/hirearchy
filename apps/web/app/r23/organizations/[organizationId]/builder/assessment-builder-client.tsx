@@ -1756,7 +1756,7 @@ export function AssessmentBuilderClient({
                         required
                         rows={4}
                         disabled={isGenerating || Boolean(issuedSession)}
-                        placeholder="Example: A backend engineer maintaining a Python scheduling service. I want to see how they handle a stale update and verify the fix."
+                        placeholder="A backend engineer maintaining a Python scheduling service. I want to see how they handle a stale update and verify the fix."
                         aria-describedby="assessment-brief-privacy"
                       />
                       <p id="assessment-brief-privacy">
