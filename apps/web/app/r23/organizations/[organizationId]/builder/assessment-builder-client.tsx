@@ -1919,14 +1919,7 @@ export function AssessmentBuilderClient({
 
                       {/* Expected Behavior */}
                       <div style={{ marginBottom: '20px' }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '8px',
-                          }}
-                        >
+                        <div className="assessment-editor-field-heading">
                           <label style={{ fontWeight: 600 }}>
                             Expected behavior
                           </label>
@@ -1988,14 +1981,7 @@ export function AssessmentBuilderClient({
 
                       {/* Acceptance Criteria */}
                       <div style={{ marginBottom: '20px' }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '8px',
-                          }}
-                        >
+                        <div className="assessment-editor-field-heading">
                           <label style={{ fontWeight: 600 }}>
                             Acceptance Criteria
                           </label>
@@ -2099,14 +2085,7 @@ export function AssessmentBuilderClient({
 
                         {/* Starter Workspace Files */}
                         <div style={{ marginBottom: '24px' }}>
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginBottom: '10px',
-                            }}
-                          >
+                          <div className="assessment-editor-field-heading">
                             <label style={{ fontWeight: 600 }}>
                               Starter Workspace Files
                             </label>
@@ -2254,14 +2233,7 @@ export function AssessmentBuilderClient({
                       if (saveStatus === 'saved') setSaveStatus('idle');
                     }}
                   >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '10px',
-                      }}
-                    >
+                    <div className="assessment-editor-field-heading">
                       <div>
                         <span style={{ fontWeight: 600, display: 'block' }}>
                           Human review criteria
@@ -2301,13 +2273,7 @@ export function AssessmentBuilderClient({
                           background: 'var(--software-surface, #fff)',
                         }}
                       >
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: '8px',
-                            marginBottom: '8px',
-                          }}
-                        >
+                        <div className="assessment-criterion-fields">
                           <input
                             type="text"
                             aria-label={`Criterion ${idx + 1} label`}

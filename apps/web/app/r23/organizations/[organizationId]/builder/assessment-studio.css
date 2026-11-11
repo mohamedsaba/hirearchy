@@ -386,3 +386,38 @@
   background: var(--software-lilac);
   font-size: 11px;
 }
+
+.assessment-builder-page .assessment-stage-content {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.assessment-stage-content > *,
+.assessment-draft-editor :is(div, details),
+.assessment-review-criteria > div {
+  min-width: 0;
+}
+
+.assessment-editor-field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.assessment-criterion-fields {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 600px) {
+  .assessment-criterion-fields {
+    flex-wrap: wrap;
+  }
+
+  .assessment-criterion-fields > input {
+    flex-basis: 100% !important;
+  }
+}
