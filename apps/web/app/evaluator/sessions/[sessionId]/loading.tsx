@@ -1,5 +1,5 @@
 const EvaluatorReviewLoading = () => (
-  <main className="evaluator-review-shell" aria-busy="true">
+  <main className="software-product evaluator-review-shell" aria-busy="true">
     <div className="review-loading-state" role="status" aria-live="polite">
       <p className="eyebrow">Evaluator review</p>
       <h1>Opening the recorded session…</h1>

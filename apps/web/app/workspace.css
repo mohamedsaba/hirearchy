@@ -6,22 +6,10 @@
   padding: clamp(1.5rem, 6vw, 5rem);
 }
 
-/* Keep the product workbench on the approved Software palette without
-   changing the public homepage or shared app shell. */
+/* Workbenches inherit the shared Software palette. */
 .workspace-shell,
 .evaluator-review-shell,
 .evaluator-access-shell {
-  --software-plum: #291e36;
-  --software-lilac: #ebe5f2;
-  --software-mint: #b0f0ce;
-  --software-ink: #251a35;
-  --software-muted: #625871;
-  --software-canvas: #faf8fc;
-  --software-surface-subtle: var(--software-lilac);
-  --software-surface-note: #eee7f4;
-  --software-border: #ddd6e5;
-  --software-border-subtle: #eeeaf2;
-  --software-border-strong: #8b7c99;
   --software-status-success: #166534;
   --software-status-success-surface: #ecfdf3;
   --software-status-success-border: #bbf7d0;
@@ -49,7 +37,7 @@
   --surface: #fff;
   --surface-subtle: var(--software-surface-subtle);
   --surface-note: var(--software-surface-note);
-  --surface-muted: #f0ebf5;
+  --surface-muted: var(--software-surface-note);
   --line: var(--software-border);
   --line-subtle: var(--software-border-subtle);
   --line-strong: var(--software-plum);

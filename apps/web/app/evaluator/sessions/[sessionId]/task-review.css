@@ -1714,10 +1714,10 @@
   width: 100%;
   text-align: left;
   padding: 14px;
-  border: 1px solid #dcd5e7;
+  border: 1px solid var(--software-border);
   border-radius: 8px;
   background: white;
-  color: #291e36;
+  color: var(--software-plum);
   cursor: pointer;
   overflow-wrap: anywhere;
 }
