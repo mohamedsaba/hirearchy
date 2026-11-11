@@ -1,11 +1,11 @@
 .r26-candidate {
-  --r26-ink: #251a35;
-  --r26-muted: #625871;
-  --r26-line: #e2dee8;
-  --r26-surface: #fff;
-  --r26-canvas: #f7f6f9;
-  --r26-plum: #291e36;
-  --r26-lilac: #ebe5f2;
+  --r26-ink: var(--software-ink);
+  --r26-muted: var(--software-muted);
+  --r26-line: var(--software-border);
+  --r26-surface: var(--software-surface);
+  --r26-canvas: var(--software-canvas);
+  --r26-plum: var(--software-plum);
+  --r26-lilac: var(--software-lilac);
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
@@ -52,18 +52,6 @@
   gap: 9px;
 }
 
-.r26-brand-mark {
-  display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  border-radius: 0.7rem;
-  color: var(--r26-plum);
-  background: #d7f4e4;
-  font-size: 1.2rem;
-  font-weight: 800;
-}
-
 .r26-brand strong,
 .r26-brand div > span {
   display: block;
@@ -73,15 +61,6 @@
   font-size: 24px;
   font-weight: 750;
   letter-spacing: -0.035em;
-}
-
-.r26-product-tab {
-  padding: 5px 8px;
-  border-radius: 5px;
-  background: var(--software-mint);
-  color: var(--r26-plum);
-  font-size: 10px;
-  font-weight: 600;
 }
 
 .r26-workspace-label {
@@ -652,8 +631,8 @@
   .r26-mobile-navigation {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px;
-    padding: 0 16px;
+    gap: 6px;
+    padding: 4px 12px;
     border-bottom: 1px solid var(--r26-line);
     background: var(--r26-surface);
   }
@@ -661,9 +640,19 @@
     display: inline-flex;
     align-items: center;
     min-height: 44px;
+    gap: 5px;
+    padding-inline: 7px;
+    border-radius: 6px;
     color: var(--r26-plum);
     font-size: 12px;
+    font-weight: 650;
     text-decoration: none;
+    transition: background var(--software-transition);
+  }
+
+  .r26-mobile-navigation a:hover,
+  .r26-mobile-navigation a:focus-visible {
+    background: var(--r26-lilac);
   }
 
   .r26-brand div > span {

@@ -251,10 +251,17 @@ export async function runDemoUxAcceptanceWalkthrough({ origin, users, admin }) {
     // =========================================================================
     // Step 4: Approved-template Selection (Reservation Moves v3)
     // =========================================================================
-    const templateSelector = recruiterPage.getByLabel('Assessment template');
-    await templateSelector.selectOption('custom');
+    const customTemplate = recruiterPage.locator(
+      'input[type="radio"][name="assessment-template"][value="custom"]',
+    );
+    await customTemplate.check();
+    assert.equal(await customTemplate.isChecked(), true);
     await recruiterPage.waitForTimeout(300);
-    await templateSelector.selectOption('reservation-moves-v3');
+    const approvedTemplate = recruiterPage.locator(
+      'input[type="radio"][name="assessment-template"][value="reservation-moves-v3"]',
+    );
+    await approvedTemplate.check();
+    assert.equal(await approvedTemplate.isChecked(), true);
     await recruiterPage.waitForTimeout(600);
 
     // Click Save draft button and wait for response

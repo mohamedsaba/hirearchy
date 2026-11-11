@@ -6,7 +6,7 @@ The current MVP does not include:
 
 - candidate scores, ranks, competence percentages, automatic competence labels, pass/reject decisions, or AI verdicts;
 - ATS integrations, recruiter analytics, billing, an analytics warehouse, or broad enterprise administration and RBAC;
-- a scenario marketplace, automatic scenario generation, multiple technology stacks, or broad assessment customization;
+- a scenario marketplace, automated scenario publishing, multiple technology stacks, or broad assessment customization. The [local Founder UAT](../decisions/founder-local-uat.md) permits recruiter-requested drafts for human review;
 - webcam or biometric collection, full-device monitoring, or complex anti-cheat systems;
 - autonomous AI coding agents, live AI assistance in the durable internal demo, or external-candidate code execution before its separate security and operations gate;
 - candidate invitation email in the internal demo. Owner-copied reviewer invitations are separate from GoTrue account confirmation and password-recovery mail. The isolated [Founder UAT profile](../decisions/founder-local-uat.md) may capture account mail locally; external delivery remains gated;

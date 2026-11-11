@@ -544,6 +544,16 @@ export async function runFounderUatJourney() {
     observeProblems(ownerPage, problems, 'owner');
     await goto(ownerPage, `${origin}/`, 'Landing page');
     await audit(ownerPage, 'landing sign-in');
+    assert.equal(
+      await ownerPage.locator('a[href="/r23/verify-email"]').count(),
+      0,
+      'Founder sign-in must not expose the verification utility link',
+    );
+    assert.equal(
+      await ownerPage.locator('a[href="/r23/mail"]').count(),
+      0,
+      'Founder sign-in must not expose the local inbox utility link',
+    );
     await clickLink(ownerPage, 'a[href="/r23/signup"]', '/r23/signup');
     await audit(ownerPage, 'signup screen');
     await saveScreenshot(
@@ -698,12 +708,20 @@ export async function runFounderUatJourney() {
       screenshots,
       `assessment-builder-${runId}`,
     );
-    await ownerPage
-      .getByLabel('Assessment template')
-      .selectOption('reservation-moves-v3');
-    await ownerPage.getByLabel('Duration').selectOption('45');
-    const aiToggle = ownerPage.locator('#integrated-ai');
-    if (await aiToggle.isChecked()) await aiToggle.uncheck();
+    const approvedTemplate = ownerPage.locator(
+      'input[type="radio"][name="assessment-template"][value="reservation-moves-v3"]',
+    );
+    assert.equal(
+      await approvedTemplate.isChecked(),
+      true,
+      'Founder UAT must start from the approved template',
+    );
+    await ownerPage.getByLabel('Candidate time limit').selectOption('45');
+    assert.equal(
+      await ownerPage.locator('#integrated-ai').count(),
+      0,
+      'Founder UAT must not expose the candidate AI toggle',
+    );
     await ownerPage.getByTestId('save-draft-button').click();
     await ownerPage
       .getByTestId('draft-status')
@@ -1241,6 +1259,9 @@ export async function runFounderUatJourney() {
       .filter({ hasText: /Submitted/i })
       .waitFor();
     await audit(recoveryPage, 'returning recruiter session inspect');
+    await recoveryPage
+      .locator('details.software-account-menu > summary')
+      .click();
     const recruiterSignOut = recoveryPage.locator(
       'form[action="/r23/auth/logout"] button[type="submit"]',
     );
@@ -1317,6 +1338,9 @@ export async function runFounderUatJourney() {
     await returningReviewerPage.waitForURL((url) =>
       url.pathname.includes(`/sessions/${sessionId}`),
     );
+    await returningReviewerPage
+      .locator('details.software-account-menu > summary')
+      .click();
     const reviewerSignOut = returningReviewerPage.locator(
       'form[action="/r23/auth/logout"] button[type="submit"]',
     );

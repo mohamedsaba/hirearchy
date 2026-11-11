@@ -41,6 +41,7 @@ const systemSecrets = [
   'STAGING_MIGRATOR_DATABASE_URL',
   'STAGING_DATABASE_URL',
   'STAGING_CANDIDATE_DATABASE_URL',
+  'FOUNDER_UAT_NVIDIA_API_KEY',
 ];
 
 const modes = {
@@ -227,6 +228,10 @@ async function readState(mode, { createIfMissing = true } = {}) {
   );
   assert(values.STAGING_PROOF_PRIVATE_KEY && values.GOTRUE_JWT_SECRET);
   if (mode === 'automation') {
+    assert(
+      !values.FOUNDER_UAT_NVIDIA_API_KEY,
+      'Automation runtime must not have a live NVIDIA credential',
+    );
     assert.match(
       values.FOUNDER_UAT_AUTOMATION_RUN_ID ?? '',
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -331,7 +336,14 @@ function composePrefix(state, mode) {
 function compose(state, mode, args, options = {}) {
   return docker([...composePrefix(state, mode), ...args], {
     ...options,
-    env: { ...process.env, ...state.values },
+    env: {
+      ...process.env,
+      ...state.values,
+      FOUNDER_UAT_NVIDIA_API_KEY:
+        mode === 'persistent'
+          ? (state.values.FOUNDER_UAT_NVIDIA_API_KEY ?? '')
+          : '',
+    },
   });
 }
 

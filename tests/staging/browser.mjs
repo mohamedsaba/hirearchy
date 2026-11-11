@@ -767,7 +767,7 @@ export async function checkBrowserAcceptance({
       const workspaceText = await recruiterPage.textContent('body');
       assert.ok(
         workspaceText.includes(
-          'Assessments issued by you, from invitation to human review.',
+          'Create assessments and follow each candidate’s work through review.',
         ),
         'Recruiter scope copy must be displayed',
       );
@@ -846,11 +846,13 @@ export async function checkBrowserAcceptance({
       );
 
       // Stage 1: Brief & Starter Files
-      const templateSelect = recruiterPage.locator('#assessment-template');
-      await templateSelect.selectOption('custom');
+      const customTemplate = recruiterPage.locator(
+        'input[type="radio"][name="assessment-template"][value="custom"]',
+      );
+      await customTemplate.check();
       assert.equal(
-        await templateSelect.inputValue(),
-        'custom',
+        await customTemplate.isChecked(),
+        true,
         'Browser acceptance must author and issue the custom assessment template',
       );
       await recruiterPage
@@ -1060,7 +1062,9 @@ export async function checkBrowserAcceptance({
 
       const revBody = await reviewerPage.textContent('body');
       assert.ok(
-        revBody.includes('The submitted work assigned to you for review.'),
+        revBody.includes(
+          'Open assigned work and review the evidence behind each submission.',
+        ),
         'Reviewer scope copy must be displayed',
       );
       await assertWorkspaceChrome(
@@ -1355,6 +1359,9 @@ export async function checkBrowserAcceptance({
     );
     {
       // Sign out
+      await recruiterPage
+        .locator('details.software-account-menu > summary')
+        .click();
       const logoutForm = recruiterPage.locator(
         'form[action="/r23/auth/logout"]',
       );

@@ -45,8 +45,10 @@ export const SoftwareProductHeader = ({
         }
         aria-label="Hirearchy Software home"
       >
-        <span>Hirearchy</span>
-        <span className="software-product-capsule">Software</span>
+        <span className="software-brand-mark" aria-hidden="true" />
+        <span>
+          Hirearchy<span className="software-brand-period">.</span>
+        </span>
       </Link>
       {tenantScope ? (
         <div

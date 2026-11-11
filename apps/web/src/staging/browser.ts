@@ -98,6 +98,7 @@ import type {
   R29EvaluatorObservation,
   R29ObservationHistoryEntry,
 } from '../r29-observations/presentation';
+import { generateFounderDraft } from '../r211-builder/founder-draft-generation';
 import {
   validateCreateObservationInput,
   validateUpdateObservationInput,
@@ -550,7 +551,7 @@ function htmlResponse(
 }
 
 function loginForm(message = ''): string {
-  return `${message ? `<p role="alert">${safeHtml(message)}</p>` : ''}<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options"><p><a href="/r23/signup">Create an account (Sign up)</a></p><p><a href="/r23/recover">Forgot password?</a></p><p><a href="/r23/verify-email">Verify email address</a></p>${isFounderUatEnabled() ? '<p><a href="/r23/mail">Open local inbox</a></p>' : ''}</nav>`;
+  return `${message ? `<p role="alert">${safeHtml(message)}</p>` : ''}<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options"><p><a href="/r23/signup">Create an account (Sign up)</a></p><p><a href="/r23/recover">Forgot password?</a></p></nav>`;
 }
 
 function redirect(
@@ -1634,25 +1635,31 @@ export async function stagingOrganizationGet(
     const { organization, membership, identity, csrfToken, result } = context;
     const safeOrgId = safeHtml(organizationId.toLowerCase());
     const safeOrgName = safeHtml(organization.name);
-    const roleScopeText =
-      membership.role === 'recruiter'
-        ? 'Assessments issued by you, from invitation to human review.'
-        : 'The submitted work assigned to you for review.';
+    const recruiter = membership.role === 'recruiter';
+    const hasSessions = result.totalAuthorizedCount > 0;
+    const builderLink = recruiter
+      ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link"><span aria-hidden="true">${context.draft ? '↗' : '+'}</span> ${context.draft ? 'Continue draft' : 'Create assessment'}</a>`
+      : '';
+    const roleScopeText = recruiter
+      ? 'Create assessments and follow each candidate’s work through review.'
+      : 'Open assigned work and review the evidence behind each submission.';
 
     let sessionsHtml = '';
     if (result.sessions.length === 0) {
-      const emptyExplanation =
-        membership.role === 'recruiter'
-          ? 'No assessment sessions issued by your recruiter account were found in this organization.'
-          : 'No assessment sessions are currently assigned to your reviewer account in this organization.';
-
-      sessionsHtml = `
-        <section class="software-empty-state" aria-labelledby="empty-sessions-title">
-          <span class="software-empty-marker" aria-hidden="true">01</span>
-          <h3 id="empty-sessions-title">${membership.role === 'recruiter' ? 'Your first assessment starts here' : 'Your review queue is clear'}</h3>
-          <p>${safeHtml(emptyExplanation)}</p>
-        </section>
-      `;
+      sessionsHtml = hasSessions
+        ? `<section class="software-empty-state software-empty-filter" aria-labelledby="empty-sessions-title">
+            <h2 id="empty-sessions-title">No matching sessions</h2>
+            <p>Try a different search or clear your filters.</p>
+            <a href="/r23/organizations/${safeOrgId}">Clear filters</a>
+          </section>`
+        : `<section class="software-empty-state software-workspace-start" aria-labelledby="empty-sessions-title">
+            <div class="software-start-copy">
+              <h2 id="empty-sessions-title">${recruiter ? (context.draft ? 'Pick up where you left off.' : 'Build your first assessment.') : 'You’re all caught up.'}</h2>
+              <p>${recruiter ? (context.draft ? 'Review your saved draft and get it ready to share with a candidate.' : 'Choose a ready-to-use assessment or draft one from a short role brief.') : 'New assignments will appear here when your team shares them with you.'}</p>
+              ${builderLink}
+            </div>
+            <div class="software-start-art" aria-hidden="true"><i></i><i></i><i><span></span><span></span><span></span></i></div>
+          </section>`;
     } else {
       const rows = result.sessions
         .map((s) => {
@@ -1734,8 +1741,8 @@ export async function stagingOrganizationGet(
 
     const content = `
       <header class="software-page-heading">
-        <div><p class="software-eyebrow">${safeOrgName}</p><h1>${membership.role === 'recruiter' ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
-        ${membership.role === 'recruiter' ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>` : ''}
+        <div><p class="software-eyebrow">${safeOrgName}</p><h1>${recruiter ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
+        ${hasSessions ? builderLink : ''}
       </header>
 
       ${
@@ -1751,7 +1758,9 @@ export async function stagingOrganizationGet(
       }
 
       <section class="software-work-list" aria-label="Assessment sessions">
-        <form class="software-session-filters" method="get" action="/r23/organizations/${safeOrgId}">
+        ${
+          hasSessions
+            ? `<form class="software-session-filters" method="get" action="/r23/organizations/${safeOrgId}">
           <label>
             <span>Find an assessment</span>
             <input type="search" name="search" value="${safeHtml(search ?? '')}" placeholder="Assessment title or session reference" aria-label="Search by assessment title or session reference">
@@ -1778,7 +1787,9 @@ export async function stagingOrganizationGet(
           <button type="submit">Apply filters</button>
         </form>
 
-        <div class="software-list-caption"><p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} sessions</p></div>
+        <div class="software-list-caption"><p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} sessions</p></div>`
+            : ''
+        }
 
         ${sessionsHtml}
       </section>
@@ -2525,6 +2536,117 @@ export async function stagingAssessmentDraftApiPut(
     );
   } catch (error) {
     return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function stagingAssessmentGenerateApiPost(
+  request: Request,
+  targetOrganizationId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'POST',
+    headers: jsonHeaders,
+  });
+  const json = (message: string, status: number) =>
+    Response.json(
+      { message },
+      {
+        status,
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0',
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      },
+    );
+
+  try {
+    if (!isFounderUatEnabled())
+      return json('Draft generation is unavailable.', 404);
+    if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
+    const organizationId = targetOrganizationId.toLowerCase();
+    const body = await parseBody(request, false, 16_384);
+    allowedFields(body, ['brief', 'durationMinutes']);
+    const { csrfHash } = requireOriginAndCsrf(request, body);
+    if (
+      typeof body.brief !== 'string' ||
+      body.brief.trim().length < 20 ||
+      body.brief.length > 2000 ||
+      typeof body.durationMinutes !== 'number' ||
+      ![30, 45, 60, 90].includes(body.durationMinutes as 30 | 45 | 60 | 90)
+    ) {
+      throw new StagingBadRequest();
+    }
+
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        if (session.selectedOrganizationId !== organizationId) {
+          throw new StagingForbidden();
+        }
+        const context = await fetchOrganizationContext(
+          config,
+          identity,
+          organizationId,
+        );
+        if (context.role !== 'recruiter') throw new StagingForbidden();
+
+        const result = await generateFounderDraft(
+          {
+            brief: body.brief,
+            durationMinutes: body.durationMinutes,
+          },
+          identity.subjectId,
+          request.signal,
+        );
+        if (result.status === 'ready') {
+          return attachRefreshedCookie(
+            Response.json(
+              { draft: result.draft },
+              {
+                status: 200,
+                headers: {
+                  'Cache-Control': 'private, no-store, max-age=0',
+                  'Content-Type': 'application/json; charset=utf-8',
+                },
+              },
+            ),
+            refreshedSessionCookie,
+          );
+        }
+        if (result.status === 'busy') {
+          return attachRefreshedCookie(
+            json('A draft is already being generated. Wait and retry.', 429),
+            refreshedSessionCookie,
+          );
+        }
+        if (result.status === 'invalid') {
+          return attachRefreshedCookie(
+            json('The generated draft could not be validated. Try again.', 502),
+            refreshedSessionCookie,
+          );
+        }
+        return attachRefreshedCookie(
+          json('AI draft generation is unavailable in Founder UAT.', 503),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    const details = errorDetails(error);
+    if (details.status === 500) {
+      const sanitized = sanitizeError(error);
+      operationalLogger.error('Founder assessment draft generation failed', {
+        operation: 'assessment_draft_generation',
+        error: {
+          name: sanitized.name,
+          ...(sanitized.code ? { code: sanitized.code } : {}),
+        },
+      });
+    }
+    return json(details.message, details.status);
   }
 }
 
@@ -5271,13 +5393,12 @@ export async function stagingOrganizationSettingsGet(
 
       const content = `
         <header class="software-page-heading">
-          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1><p>The people and details behind your hiring workspace.</p></div>
-          <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
+          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1><p>Manage your profile, workspace details, and team access.</p></div>
         </header>
 
         <div class="software-settings-grid">
           <section class="software-settings-section" aria-labelledby="account-profile-heading">
-            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">01</span><div><h2 id="account-profile-heading">Your profile</h2><p>How your name appears to your team.</p></div></div>
+            <div class="software-section-intro"><span class="software-section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg></span><div><h2 id="account-profile-heading">Your profile</h2><p>How your name appears to your team.</p></div></div>
             <p class="software-account-email">${safeEmail}</p>
             <form action="/r23/organizations/${safeOrgId}/settings" method="post">
               <input type="hidden" name="csrf" value="${safeCsrf}">
@@ -5289,7 +5410,7 @@ export async function stagingOrganizationSettingsGet(
           </section>
 
           <section class="software-settings-section" aria-labelledby="org-profile-heading">
-            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">02</span><div><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></div></div>
+            <div class="software-section-intro"><span class="software-section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V8l8-4 8 4v12M3 20h18M9 10v2m6-2v2m-5 8v-4h4v4"/></svg></span><div><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></div></div>
             ${
               orgContext.role === 'recruiter'
                 ? `
@@ -5307,7 +5428,7 @@ export async function stagingOrganizationSettingsGet(
         </div>
 
         <section class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
-          <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">03</span><div><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></div></div>
+          <div class="software-section-intro"><span class="software-section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 7v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1m1-13a3 3 0 0 1 0 6m2 2a4 4 0 0 1 3 4v1"/></svg></span><div><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></div></div>
           <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
             <table class="software-members-table">
               <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
@@ -5317,7 +5438,7 @@ export async function stagingOrganizationSettingsGet(
         </section>
 
         <section class="software-settings-section" aria-labelledby="invitations-heading">
-          <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">04</span><div><h2 id="invitations-heading">Invite an evaluator</h2><p>Bring the right person into the review.</p></div></div>
+          <div class="software-section-intro"><span class="software-section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v6m-3-3h6M4 6h16v12H4z"/></svg></span><div><h2 id="invitations-heading">Invite an evaluator</h2><p>Bring the right person into the review.</p></div></div>
           ${
             orgContext.role === 'recruiter'
               ? `

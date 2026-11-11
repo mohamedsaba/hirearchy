@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconFileCode,
+  IconSparkles,
+} from '@tabler/icons-react';
 import Link from 'next/link';
 import {
   useCallback,
@@ -14,6 +20,7 @@ import type {
 } from '../../../../../src/r23-auth/contract';
 import type {
   R211AssessmentDraft,
+  R211AssessmentDraftInput,
   R211StarterFile,
   R211RubricCriterion,
   R211ValidationIssue,
@@ -31,6 +38,7 @@ import {
 import '../../../../evaluator/assessments/new/assessment-builder.css';
 import '../../../../evaluator/assessments/new/assessment-choice.css';
 import '../../../../evaluator/evaluator-product.css';
+import './assessment-studio.css';
 
 export interface AssessmentBuilderReviewerOption {
   principalId: string;
@@ -57,6 +65,10 @@ export function AssessmentReviewerOptions({
 
 export interface AssessmentBuilderClientProps {
   organizationId: string;
+  organizationName?: string;
+  accountEmail?: string;
+  founderUat?: boolean;
+  aiDraftAvailable?: boolean;
   csrfToken: string;
   initialDraft: R211AssessmentDraft | null;
   initialIssuedSessionId?: string | null;
@@ -139,6 +151,10 @@ const defaultRubric: R211RubricCriterion[] = [
 
 export function AssessmentBuilderClient({
   organizationId,
+  organizationName,
+  accountEmail,
+  founderUat = false,
+  aiDraftAvailable = false,
   csrfToken,
   initialDraft,
   initialIssuedSessionId = null,
@@ -209,6 +225,22 @@ export function AssessmentBuilderClient({
       ? [...initialDraft.rubric]
       : defaultRubric,
   );
+
+  const [roleBrief, setRoleBrief] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generated, setGenerated] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const canEditDraft =
+    templateId !== 'custom' ||
+    !founderUat ||
+    initialDraft?.templateId === 'custom' ||
+    generated;
+  const generationHeading = useRef<HTMLHeadingElement>(null);
+  const organizationPath = `/r23/organizations/${encodeURIComponent(organizationId)}`;
+
+  useEffect(() => {
+    if (generated) generationHeading.current?.focus();
+  }, [generated]);
 
   // Status & communication states
   const [isSaving, setIsSaving] = useState(false);
@@ -520,6 +552,59 @@ export function AssessmentBuilderClient({
     return validationIssues.find((issue) => issue.field === fieldName)?.message;
   };
 
+  async function generateDraft(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      !aiDraftAvailable ||
+      isGenerating ||
+      isSaving ||
+      isValidating ||
+      issuedSession
+    )
+      return;
+    setIsGenerating(true);
+    setGenerationError(null);
+
+    try {
+      const response = await fetch(
+        `/r23/api/organizations/${encodeURIComponent(organizationId)}/assessments/generate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken,
+          },
+          body: JSON.stringify({ brief: roleBrief.trim(), durationMinutes }),
+        },
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.draft) {
+        setGenerationError(
+          data?.message ?? 'Could not prepare a draft. Try again.',
+        );
+        return;
+      }
+      const draft: R211AssessmentDraftInput = data.draft;
+      setTitle(draft.title);
+      setBrief(draft.brief);
+      setExpectedBehavior([...draft.expectedBehavior]);
+      setAcceptanceCriteria([...draft.acceptanceCriteria]);
+      setPrimaryFilePath(draft.primaryFilePath);
+      setStarterFiles([...draft.starterFiles]);
+      setRubric([...draft.rubric]);
+      setTerminalEnabled(draft.terminalEnabled);
+      setIntegratedAi(draft.integratedAi);
+      setValidatedVersion(null);
+      setValidationIssues([]);
+      setSaveStatus('idle');
+      setGenerated(true);
+    } catch {
+      setGenerationError('The connection was interrupted. Try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
   // Save Draft Action
   const handleSaveDraft = async () => {
     setIsSaving(true);
@@ -797,6 +882,7 @@ export function AssessmentBuilderClient({
 
   const navigateToDefine = () => {
     clearRecoveredSessionContext();
+    setValidatedVersion(null);
     setStage('define');
   };
 
@@ -1334,33 +1420,76 @@ export function AssessmentBuilderClient({
 
   return (
     <div className="software-product assessment-builder-page">
-      <header className="software-product-header assessment-app-header">
+      <header className="software-document-header software-workspace-header">
         <a
-          className="software-wordmark"
-          href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
+          className="software-document-wordmark"
+          href={organizationPath}
           aria-label="Hirearchy Software home"
         >
-          <span>Hirearchy</span>
-          <span className="software-product-capsule">Software</span>
+          <span className="software-brand-mark" aria-hidden="true" />
+          <span>
+            Hirearchy<span className="software-brand-period">.</span>
+          </span>
         </a>
-        <a
-          className="assessment-app-return"
-          href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
-          data-testid="back-to-organization-link"
+        <div
+          className="software-workspace-switch"
+          role="region"
+          aria-label="Active organization"
         >
-          Back to workspace
-        </a>
+          <a href="/r23/organizations" aria-label="Switch workspace">
+            <span className="software-org-monogram" aria-hidden="true">
+              {organizationName?.trim().slice(0, 1).toUpperCase() || 'H'}
+            </span>
+            <span className="software-org-name">
+              {organizationName ?? 'Workspace'}
+            </span>
+            <span aria-hidden="true" className="software-chevron" />
+          </a>
+        </div>
+        <nav
+          className="software-workspace-tabs"
+          aria-label="Workspace navigation"
+        >
+          <a
+            href={organizationPath}
+            data-testid="back-to-organization-link"
+            aria-current="page"
+          >
+            Assessments
+          </a>
+          <a href={`${organizationPath}/settings`}>Team &amp; settings</a>
+        </nav>
+        {accountEmail && (
+          <details className="software-account-menu">
+            <summary aria-label="Account menu">
+              <span className="software-account-avatar" aria-hidden="true">
+                {accountEmail.slice(0, 1).toUpperCase()}
+              </span>
+              <span aria-hidden="true" className="software-chevron" />
+            </summary>
+            <div className="software-account-popover">
+              <p>{accountEmail}</p>
+              <p>Recruiter</p>
+              <a href={`${organizationPath}/settings#account-profile-heading`}>
+                Your profile
+              </a>
+              <form action="/r23/auth/logout" method="post">
+                <input type="hidden" name="csrf" value={csrfToken} />
+                <button type="submit">Sign out</button>
+              </form>
+            </div>
+          </details>
+        )}
       </header>
       <main className="assessment-builder-shell">
         <div className="assessment-builder-container">
           <header className="assessment-builder-hero">
-            <p className="assessment-eyebrow">Assessment authoring</p>
+            <a className="assessment-breadcrumb" href={organizationPath}>
+              <IconArrowLeft size={15} aria-hidden="true" /> Assessments
+            </a>
             <h1>Assessment Builder</h1>
-            <p>
-              Start with meaningful work. Set the expectations. Invite a
-              candidate when it is ready.
-            </p>
-            {isAuthenticatedStaging ? (
+            <p>Prepare the work you want candidates to do.</p>
+            {isAuthenticatedStaging && !founderUat ? (
               <div
                 className="assessment-builder-capability-note"
                 data-testid="builder-staging-capabilities-banner"
@@ -1385,12 +1514,12 @@ export function AssessmentBuilderClient({
                 <button
                   type="button"
                   aria-current={stage === 'define' ? 'step' : undefined}
-                  aria-label="Go to Define stage"
+                  aria-label="Go to Draft stage"
                   className="assessment-stage-button"
                   onClick={navigateToDefine}
                 >
                   <span className="assessment-stage-number">01</span>
-                  <span className="assessment-stage-label">Define</span>
+                  <span className="assessment-stage-label">Draft</span>
                   <span className="assessment-stage-caption">
                     {saveStatus === 'saved' ? 'Draft saved' : 'Shape the task'}
                   </span>
@@ -1400,8 +1529,11 @@ export function AssessmentBuilderClient({
                 <button
                   type="button"
                   aria-current={stage === 'validate' ? 'step' : undefined}
-                  aria-label="Go to Validate stage"
+                  aria-label="Go to Review stage"
                   className="assessment-stage-button"
+                  disabled={
+                    !canEditDraft || isGenerating || isSaving || isValidating
+                  }
                   onClick={() => {
                     setStage('validate');
                     if (!validatedVersion) {
@@ -1410,7 +1542,7 @@ export function AssessmentBuilderClient({
                   }}
                 >
                   <span className="assessment-stage-number">02</span>
-                  <span className="assessment-stage-label">Validate</span>
+                  <span className="assessment-stage-label">Review</span>
                   <span className="assessment-stage-caption">
                     {validatedVersion ? 'Validated' : 'Verify structure'}
                   </span>
@@ -1420,12 +1552,13 @@ export function AssessmentBuilderClient({
                 <button
                   type="button"
                   aria-current={stage === 'issue' ? 'step' : undefined}
-                  aria-label="Go to Issue stage"
+                  aria-label="Go to Invite stage"
                   className="assessment-stage-button"
+                  disabled={isGenerating || isSaving || isValidating}
                   onClick={() => setStage('issue')}
                 >
                   <span className="assessment-stage-number">03</span>
-                  <span className="assessment-stage-label">Issue</span>
+                  <span className="assessment-stage-label">Invite</span>
                   <span className="assessment-stage-caption">
                     {issuedSession ? 'Session issued' : 'Issue to candidate'}
                   </span>
@@ -1436,6 +1569,7 @@ export function AssessmentBuilderClient({
 
           {/* Stepper Content Panels */}
           <section
+            key={stage}
             className="assessment-stage-panel"
             aria-labelledby="assessment-stage-title"
             data-stage={stage}
@@ -1448,17 +1582,17 @@ export function AssessmentBuilderClient({
               <div>
                 <h2 id="assessment-stage-title">
                   {stage === 'define'
-                    ? 'Define Assessment'
+                    ? 'Choose a starting point'
                     : stage === 'validate'
-                      ? 'Validate Structure & Integrity'
-                      : 'Issue Assessment'}
+                      ? 'Review the candidate version'
+                      : 'Invite a candidate'}
                 </h2>
                 <p>
                   {stage === 'define'
-                    ? 'Choose a starting point and prepare the candidate experience.'
+                    ? 'Use a ready-to-go task or describe the role in your own words.'
                     : stage === 'validate'
                       ? 'Check the structure and review the exact version candidates will receive.'
-                      : 'Issue validated assessment version and receive unique candidate workspace link.'}
+                      : 'Choose an evaluator, then create the candidate’s private link.'}
                 </p>
               </div>
             </header>
@@ -1516,30 +1650,161 @@ export function AssessmentBuilderClient({
                   </div>
                 )}
 
-                <div className="assessment-template-choice">
-                  <label htmlFor="assessment-template">
+                <fieldset
+                  className="assessment-start-options"
+                  disabled={Boolean(issuedSession) || isGenerating || isSaving}
+                >
+                  <legend className="visually-hidden">
                     Assessment template
+                  </legend>
+                  <label className="assessment-start-option">
+                    <input
+                      type="radio"
+                      name="assessment-template"
+                      value="reservation-moves-v3"
+                      checked={templateId === 'reservation-moves-v3'}
+                      onChange={() => {
+                        if (recoveredSessionId || recoveryContextError)
+                          clearRecoveredSessionContext();
+                        setTemplateId('reservation-moves-v3');
+                        setValidatedVersion(null);
+                        setSaveStatus('idle');
+                      }}
+                    />
+                    <IconFileCode aria-hidden="true" />
+                    <span>
+                      <strong>Use a template</strong>
+                      <small>Start with Reservation Moves</small>
+                    </span>
                   </label>
+                  <label className="assessment-start-option">
+                    <input
+                      type="radio"
+                      name="assessment-template"
+                      value="custom"
+                      checked={templateId === 'custom'}
+                      onChange={() => {
+                        if (recoveredSessionId || recoveryContextError)
+                          clearRecoveredSessionContext();
+                        setTemplateId('custom');
+                        setValidatedVersion(null);
+                        setSaveStatus('idle');
+                      }}
+                    />
+                    <IconSparkles aria-hidden="true" />
+                    <span>
+                      <strong>
+                        {founderUat ? 'Draft with AI' : 'Custom assessment'}
+                      </strong>
+                      <small>
+                        {founderUat
+                          ? 'Start with a role brief'
+                          : 'Define your own task'}
+                      </small>
+                    </span>
+                  </label>
+                </fieldset>
+                <div className="assessment-duration">
+                  <label htmlFor="duration-minutes">Candidate time limit</label>
                   <select
-                    id="assessment-template"
-                    value={templateId}
-                    disabled={Boolean(issuedSession)}
+                    id="duration-minutes"
+                    name="durationMinutes"
+                    value={durationMinutes}
+                    disabled={isGenerating || Boolean(issuedSession)}
                     onChange={(event) => {
-                      if (recoveredSessionId || recoveryContextError) {
-                        clearRecoveredSessionContext();
-                      }
-                      setTemplateId(
-                        event.target.value as 'custom' | 'reservation-moves-v3',
-                      );
+                      setDurationMinutes(Number(event.target.value));
                       setValidatedVersion(null);
+                      setSaveStatus('idle');
                     }}
                   >
-                    <option value="reservation-moves-v3">
-                      Reservation Moves v3
-                    </option>
-                    <option value="custom">Create a custom assessment</option>
+                    <option value={30}>30 minutes</option>
+                    <option value={45}>45 minutes</option>
+                    <option value={60}>60 minutes</option>
+                    <option value={90}>90 minutes</option>
                   </select>
                 </div>
+                {templateId === 'custom' &&
+                  founderUat &&
+                  (aiDraftAvailable ? (
+                    <form
+                      className="assessment-ai-composer"
+                      onSubmit={generateDraft}
+                    >
+                      <div className="assessment-ai-intro">
+                        <IconSparkles aria-hidden="true" />
+                        <div>
+                          <h3>Describe the role</h3>
+                          <p>
+                            Tell us what the engineer works on and what you want
+                            to see them do. NVIDIA will draft a task, starter
+                            files, and criteria for you to review.
+                          </p>
+                        </div>
+                      </div>
+                      <label htmlFor="assessment-role-brief">
+                        Role and skills
+                      </label>
+                      <textarea
+                        id="assessment-role-brief"
+                        value={roleBrief}
+                        onChange={(event) => setRoleBrief(event.target.value)}
+                        minLength={20}
+                        maxLength={2000}
+                        required
+                        rows={4}
+                        disabled={isGenerating || Boolean(issuedSession)}
+                        placeholder="Example: A backend engineer maintaining a Python scheduling service. I want to see how they handle a stale update and verify the fix."
+                        aria-describedby="assessment-brief-privacy"
+                      />
+                      <p id="assessment-brief-privacy">
+                        Describe a fictional task. This brief is sent to NVIDIA.
+                      </p>
+                      {generationError && (
+                        <p role="alert" className="assessment-ai-error">
+                          {generationError}
+                        </p>
+                      )}
+                      <div className="assessment-ai-actions">
+                        <button
+                          className="button button-primary"
+                          type="submit"
+                          disabled={
+                            roleBrief.trim().length < 20 ||
+                            isGenerating ||
+                            isSaving ||
+                            Boolean(issuedSession)
+                          }
+                        >
+                          {isGenerating
+                            ? 'Drafting…'
+                            : canEditDraft
+                              ? 'Replace with a new draft'
+                              : 'Generate draft'}
+                          {isGenerating ? (
+                            <span
+                              className="assessment-ai-spinner"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <IconArrowRight size={18} aria-hidden="true" />
+                          )}
+                        </button>
+                        {isGenerating && (
+                          <span role="status">
+                            Preparing the brief and starter files.
+                          </span>
+                        )}
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="assessment-ai-unavailable" role="status">
+                      <strong>AI drafting is unavailable.</strong>
+                      <p>
+                        Choose the approved template to create an assessment
+                        now.
+                      </p>
+                    </div>
+                  ))}
                 {templateId === 'reservation-moves-v3' ? (
                   <div className="assessment-template-preview">
                     <div className="assessment-template-heading">
@@ -1554,294 +1819,129 @@ export function AssessmentBuilderClient({
                       should not undo a newer move. Candidates repair a small
                       Python service while preserving its public contract.
                     </p>
-                    <div className="assessment-template-details">
-                      <span>Real source files</span>
-                      <span>Clear acceptance criteria</span>
-                      <span>Human evidence review</span>
-                    </div>
                     <p className="assessment-template-footnote">
-                      The brief, workspace and review criteria come from the
-                      approved template. Set the session duration below.
+                      Includes a candidate brief, Python starter files, and
+                      review criteria.
                     </p>
                   </div>
                 ) : (
-                  <>
-                    {/* Title */}
-                    <div style={{ marginBottom: '20px' }}>
-                      <label
-                        htmlFor="assessment-title"
-                        style={{
-                          display: 'block',
-                          fontWeight: 600,
-                          marginBottom: '6px',
-                        }}
+                  canEditDraft && (
+                    <section
+                      className="assessment-draft-editor"
+                      aria-labelledby="assessment-draft-heading"
+                      onChangeCapture={() => {
+                        setValidatedVersion(null);
+                        if (saveStatus === 'saved') setSaveStatus('idle');
+                      }}
+                    >
+                      <h3
+                        id="assessment-draft-heading"
+                        ref={generationHeading}
+                        tabIndex={-1}
                       >
-                        Assessment Title
-                      </label>
-                      <input
-                        id="assessment-title"
-                        name="title"
-                        type="text"
-                        suppressHydrationWarning
-                        data-testid="assessment-title-input"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        className="assessment-input-control"
-                      />
-                      {getFieldIssue('title') && (
-                        <p
-                          style={{
-                            color: 'var(--software-status-danger, #dc2626)',
-                            fontSize: '0.8rem',
-                            marginTop: '4px',
-                          }}
-                        >
-                          {getFieldIssue('title')}
+                        {generated ? 'Review your AI draft' : 'Review draft'}
+                      </h3>
+                      {generated && (
+                        <p role="status">
+                          Draft generated. Check the task and starter files
+                          before sharing.
                         </p>
                       )}
-                    </div>
-
-                    {/* Candidate Brief */}
-                    <div style={{ marginBottom: '20px' }}>
-                      <label
-                        htmlFor="assessment-brief"
-                        style={{
-                          display: 'block',
-                          fontWeight: 600,
-                          marginBottom: '6px',
-                        }}
-                      >
-                        Candidate instructions / brief
-                      </label>
-                      <textarea
-                        id="assessment-brief"
-                        name="brief"
-                        rows={5}
-                        suppressHydrationWarning
-                        data-testid="assessment-brief-input"
-                        value={brief}
-                        onChange={(e) => setBrief(e.target.value)}
-                        className="assessment-input-control"
-                      />
-                      {getFieldIssue('brief') && (
-                        <p
+                      {/* Title */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <label
+                          htmlFor="assessment-title"
                           style={{
-                            color: 'var(--software-status-danger, #dc2626)',
-                            fontSize: '0.8rem',
-                            marginTop: '4px',
+                            display: 'block',
+                            fontWeight: 600,
+                            marginBottom: '6px',
                           }}
                         >
-                          {getFieldIssue('brief')}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Expected Behavior */}
-                    <div style={{ marginBottom: '20px' }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '8px',
-                        }}
-                      >
-                        <label style={{ fontWeight: 600 }}>
-                          Expected Behavior Verification Targets
+                          Assessment Title
                         </label>
-                        <button
-                          type="button"
-                          className="button button-secondary"
-                          onClick={addExpectedBehavior}
-                          style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                        >
-                          + Add target
-                        </button>
+                        <input
+                          id="assessment-title"
+                          name="title"
+                          type="text"
+                          suppressHydrationWarning
+                          data-testid="assessment-title-input"
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          className="assessment-input-control"
+                        />
+                        {getFieldIssue('title') && (
+                          <p
+                            style={{
+                              color: 'var(--software-status-danger, #dc2626)',
+                              fontSize: '0.8rem',
+                              marginTop: '4px',
+                            }}
+                          >
+                            {getFieldIssue('title')}
+                          </p>
+                        )}
                       </div>
-                      {expectedBehavior.map((item, idx) => (
+
+                      {/* Candidate Brief */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <label
+                          htmlFor="assessment-brief"
+                          style={{
+                            display: 'block',
+                            fontWeight: 600,
+                            marginBottom: '6px',
+                          }}
+                        >
+                          Candidate instructions / brief
+                        </label>
+                        <textarea
+                          id="assessment-brief"
+                          name="brief"
+                          rows={5}
+                          suppressHydrationWarning
+                          data-testid="assessment-brief-input"
+                          value={brief}
+                          onChange={(e) => setBrief(e.target.value)}
+                          className="assessment-input-control"
+                        />
+                        {getFieldIssue('brief') && (
+                          <p
+                            style={{
+                              color: 'var(--software-status-danger, #dc2626)',
+                              fontSize: '0.8rem',
+                              marginTop: '4px',
+                            }}
+                          >
+                            {getFieldIssue('brief')}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Expected Behavior */}
+                      <div style={{ marginBottom: '20px' }}>
                         <div
-                          key={idx}
                           style={{
                             display: 'flex',
-                            gap: '8px',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
                             marginBottom: '8px',
                           }}
                         >
-                          <input
-                            type="text"
-                            aria-label={`Expected behavior ${idx + 1}`}
-                            value={item}
-                            onChange={(e) =>
-                              updateExpectedBehavior(idx, e.target.value)
-                            }
-                            className="assessment-input-row-item"
-                          />
+                          <label style={{ fontWeight: 600 }}>
+                            Expected behavior
+                          </label>
                           <button
                             type="button"
-                            disabled={expectedBehavior.length <= 1}
-                            onClick={() => removeExpectedBehavior(idx)}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--software-border, #ccc)',
-                              background: '#fff',
-                            }}
+                            className="button button-secondary"
+                            onClick={addExpectedBehavior}
+                            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                           >
-                            Remove
+                            + Add target
                           </button>
                         </div>
-                      ))}
-                      {getFieldIssue('expectedBehavior') && (
-                        <p
-                          style={{
-                            color: 'var(--software-status-danger, #dc2626)',
-                            fontSize: '0.8rem',
-                            marginTop: '4px',
-                          }}
-                        >
-                          {getFieldIssue('expectedBehavior')}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Acceptance Criteria */}
-                    <div style={{ marginBottom: '20px' }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '8px',
-                        }}
-                      >
-                        <label style={{ fontWeight: 600 }}>
-                          Acceptance Criteria
-                        </label>
-                        <button
-                          type="button"
-                          className="button button-secondary"
-                          onClick={addAcceptanceCriterion}
-                          style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                        >
-                          + Add criterion
-                        </button>
-                      </div>
-                      {acceptanceCriteria.map((item, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            gap: '8px',
-                            marginBottom: '8px',
-                          }}
-                        >
-                          <input
-                            type="text"
-                            aria-label={`Acceptance criterion ${idx + 1}`}
-                            value={item}
-                            onChange={(e) =>
-                              updateAcceptanceCriterion(idx, e.target.value)
-                            }
-                            className="assessment-input-row-item"
-                          />
-                          <button
-                            type="button"
-                            disabled={acceptanceCriteria.length <= 1}
-                            onClick={() => removeAcceptanceCriterion(idx)}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--software-border, #ccc)',
-                              background: '#fff',
-                            }}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                      {getFieldIssue('acceptanceCriteria') && (
-                        <p
-                          style={{
-                            color: 'var(--software-status-danger, #dc2626)',
-                            fontSize: '0.8rem',
-                            marginTop: '4px',
-                          }}
-                        >
-                          {getFieldIssue('acceptanceCriteria')}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Primary File Path */}
-                    <div style={{ marginBottom: '20px' }}>
-                      <label
-                        htmlFor="primary-file-path"
-                        style={{
-                          display: 'block',
-                          fontWeight: 600,
-                          marginBottom: '6px',
-                        }}
-                      >
-                        Primary file path (.py)
-                      </label>
-                      <input
-                        id="primary-file-path"
-                        name="primaryFilePath"
-                        type="text"
-                        suppressHydrationWarning
-                        data-testid="primary-file-path-input"
-                        value={primaryFilePath}
-                        onChange={(e) => setPrimaryFilePath(e.target.value)}
-                        className="assessment-input-control"
-                      />
-                      {getFieldIssue('primaryFilePath') && (
-                        <p
-                          style={{
-                            color: 'var(--software-status-danger, #dc2626)',
-                            fontSize: '0.8rem',
-                            marginTop: '4px',
-                          }}
-                        >
-                          {getFieldIssue('primaryFilePath')}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Starter Workspace Files */}
-                    <div style={{ marginBottom: '24px' }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '10px',
-                        }}
-                      >
-                        <label style={{ fontWeight: 600 }}>
-                          Starter Workspace Files
-                        </label>
-                        <button
-                          type="button"
-                          data-testid="add-file-button"
-                          className="button button-secondary"
-                          onClick={addStarterFile}
-                          style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                        >
-                          + Add file
-                        </button>
-                      </div>
-                      {starterFiles.map((file, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            padding: '12px',
-                            border: '1px solid var(--software-border, #e5e7eb)',
-                            borderRadius: 'var(--software-radius-control, 6px)',
-                            marginBottom: '12px',
-                            background: 'var(--software-canvas, #f9fafb)',
-                          }}
-                        >
+                        {expectedBehavior.map((item, idx) => (
                           <div
+                            key={idx}
                             style={{
                               display: 'flex',
                               gap: '8px',
@@ -1850,192 +1950,313 @@ export function AssessmentBuilderClient({
                           >
                             <input
                               type="text"
-                              aria-label={`Starter file ${idx + 1} path`}
-                              placeholder="file path (e.g. app.py)"
-                              data-testid={`file-path-input-${idx}`}
-                              value={file.path}
+                              aria-label={`Expected behavior ${idx + 1}`}
+                              value={item}
                               onChange={(e) =>
-                                updateStarterFile(idx, 'path', e.target.value)
+                                updateExpectedBehavior(idx, e.target.value)
                               }
-                              className="assessment-input-row-item-compact"
+                              className="assessment-input-row-item"
                             />
                             <button
                               type="button"
-                              data-testid={`remove-file-button-${idx}`}
-                              disabled={starterFiles.length <= 1}
-                              onClick={() => removeStarterFile(idx)}
+                              disabled={expectedBehavior.length <= 1}
+                              onClick={() => removeExpectedBehavior(idx)}
                               style={{
                                 padding: '4px 8px',
                                 borderRadius: '4px',
                                 border:
                                   '1px solid var(--software-border, #ccc)',
                                 background: '#fff',
-                                cursor:
-                                  starterFiles.length <= 1
-                                    ? 'not-allowed'
-                                    : 'pointer',
                               }}
                             >
                               Remove
                             </button>
                           </div>
-                          <textarea
-                            rows={4}
-                            aria-label={`Starter file ${idx + 1} content`}
-                            placeholder="file content..."
-                            data-testid={`file-content-input-${idx}`}
-                            value={file.content}
-                            onChange={(e) =>
-                              updateStarterFile(idx, 'content', e.target.value)
-                            }
+                        ))}
+                        {getFieldIssue('expectedBehavior') && (
+                          <p
                             style={{
-                              width: '100%',
-                              fontFamily: 'monospace',
-                              fontSize: '0.85rem',
-                              padding: '8px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--software-border, #ccc)',
+                              color: 'var(--software-status-danger, #dc2626)',
+                              fontSize: '0.8rem',
+                              marginTop: '4px',
                             }}
-                          />
-                        </div>
-                      ))}
-                      {getFieldIssue('starterFiles') && (
-                        <p
+                          >
+                            {getFieldIssue('expectedBehavior')}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Acceptance Criteria */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <div
                           style={{
-                            color: 'var(--software-status-danger, #dc2626)',
-                            fontSize: '0.8rem',
-                            marginTop: '4px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '8px',
                           }}
                         >
-                          {getFieldIssue('starterFiles')}
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-                {/* Duration and Capabilities */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns:
-                      'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
-                    gap: '20px',
-                    marginBottom: '24px',
-                    minWidth: 0,
-                    maxWidth: '100%',
-                  }}
-                >
-                  <div>
-                    <label
-                      htmlFor="duration-minutes"
-                      style={{
-                        display: 'block',
-                        fontWeight: 600,
-                        marginBottom: '6px',
-                      }}
-                    >
-                      Duration
-                    </label>
-                    <select
-                      id="duration-minutes"
-                      name="durationMinutes"
-                      suppressHydrationWarning
-                      value={durationMinutes}
-                      onChange={(e) =>
-                        setDurationMinutes(Number(e.target.value))
-                      }
-                      className="assessment-input-control"
-                    >
-                      <option value={30}>30 minutes</option>
-                      <option value={45}>45 minutes</option>
-                      <option value={60}>60 minutes</option>
-                      <option value={90}>90 minutes</option>
-                    </select>
-                  </div>
+                          <label style={{ fontWeight: 600 }}>
+                            Acceptance Criteria
+                          </label>
+                          <button
+                            type="button"
+                            className="button button-secondary"
+                            onClick={addAcceptanceCriterion}
+                            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                          >
+                            + Add criterion
+                          </button>
+                        </div>
+                        {acceptanceCriteria.map((item, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              gap: '8px',
+                              marginBottom: '8px',
+                            }}
+                          >
+                            <input
+                              type="text"
+                              aria-label={`Acceptance criterion ${idx + 1}`}
+                              value={item}
+                              onChange={(e) =>
+                                updateAcceptanceCriterion(idx, e.target.value)
+                              }
+                              className="assessment-input-row-item"
+                            />
+                            <button
+                              type="button"
+                              disabled={acceptanceCriteria.length <= 1}
+                              onClick={() => removeAcceptanceCriterion(idx)}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                border:
+                                  '1px solid var(--software-border, #ccc)',
+                                background: '#fff',
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        {getFieldIssue('acceptanceCriteria') && (
+                          <p
+                            style={{
+                              color: 'var(--software-status-danger, #dc2626)',
+                              fontSize: '0.8rem',
+                              marginTop: '4px',
+                            }}
+                          >
+                            {getFieldIssue('acceptanceCriteria')}
+                          </p>
+                        )}
+                      </div>
 
-                  <div>
-                    <span
-                      style={{
-                        display: 'block',
-                        fontWeight: 600,
-                        marginBottom: '6px',
-                      }}
-                    >
-                      Capabilities
-                    </span>
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        marginBottom: '8px',
-                        cursor: 'pointer',
-                      }}
-                    >
+                      <details
+                        className="assessment-file-review"
+                        open={!founderUat}
+                      >
+                        <summary>
+                          Starter files <span>{starterFiles.length}</span>
+                        </summary>
+                        {/* Primary File Path */}
+                        <div style={{ marginBottom: '20px' }}>
+                          <label
+                            htmlFor="primary-file-path"
+                            style={{
+                              display: 'block',
+                              fontWeight: 600,
+                              marginBottom: '6px',
+                            }}
+                          >
+                            Primary file path (.py)
+                          </label>
+                          <input
+                            id="primary-file-path"
+                            name="primaryFilePath"
+                            type="text"
+                            suppressHydrationWarning
+                            data-testid="primary-file-path-input"
+                            value={primaryFilePath}
+                            onChange={(e) => setPrimaryFilePath(e.target.value)}
+                            className="assessment-input-control"
+                          />
+                          {getFieldIssue('primaryFilePath') && (
+                            <p
+                              style={{
+                                color: 'var(--software-status-danger, #dc2626)',
+                                fontSize: '0.8rem',
+                                marginTop: '4px',
+                              }}
+                            >
+                              {getFieldIssue('primaryFilePath')}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Starter Workspace Files */}
+                        <div style={{ marginBottom: '24px' }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: '10px',
+                            }}
+                          >
+                            <label style={{ fontWeight: 600 }}>
+                              Starter Workspace Files
+                            </label>
+                            <button
+                              type="button"
+                              data-testid="add-file-button"
+                              className="button button-secondary"
+                              onClick={addStarterFile}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '0.8rem',
+                              }}
+                            >
+                              + Add file
+                            </button>
+                          </div>
+                          {starterFiles.map((file, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                padding: '12px',
+                                border:
+                                  '1px solid var(--software-border, #e5e7eb)',
+                                borderRadius:
+                                  'var(--software-radius-control, 6px)',
+                                marginBottom: '12px',
+                                background: 'var(--software-canvas, #f9fafb)',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '8px',
+                                  marginBottom: '8px',
+                                }}
+                              >
+                                <input
+                                  type="text"
+                                  aria-label={`Starter file ${idx + 1} path`}
+                                  placeholder="file path (e.g. app.py)"
+                                  data-testid={`file-path-input-${idx}`}
+                                  value={file.path}
+                                  onChange={(e) =>
+                                    updateStarterFile(
+                                      idx,
+                                      'path',
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="assessment-input-row-item-compact"
+                                />
+                                <button
+                                  type="button"
+                                  data-testid={`remove-file-button-${idx}`}
+                                  disabled={starterFiles.length <= 1}
+                                  onClick={() => removeStarterFile(idx)}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border:
+                                      '1px solid var(--software-border, #ccc)',
+                                    background: '#fff',
+                                    cursor:
+                                      starterFiles.length <= 1
+                                        ? 'not-allowed'
+                                        : 'pointer',
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <textarea
+                                rows={4}
+                                aria-label={`Starter file ${idx + 1} content`}
+                                placeholder="file content..."
+                                data-testid={`file-content-input-${idx}`}
+                                value={file.content}
+                                onChange={(e) =>
+                                  updateStarterFile(
+                                    idx,
+                                    'content',
+                                    e.target.value,
+                                  )
+                                }
+                                style={{
+                                  width: '100%',
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.85rem',
+                                  padding: '8px',
+                                  borderRadius: '4px',
+                                  border:
+                                    '1px solid var(--software-border, #ccc)',
+                                }}
+                              />
+                            </div>
+                          ))}
+                          {getFieldIssue('starterFiles') && (
+                            <p
+                              style={{
+                                color: 'var(--software-status-danger, #dc2626)',
+                                fontSize: '0.8rem',
+                                marginTop: '4px',
+                              }}
+                            >
+                              {getFieldIssue('starterFiles')}
+                            </p>
+                          )}
+                        </div>
+                      </details>
+                    </section>
+                  )
+                )}
+                {!isAuthenticatedStaging && (
+                  <div className="assessment-draft-tools">
+                    <label>
                       <input
                         type="checkbox"
                         id="terminal-enabled"
-                        name="terminalEnabled"
                         checked={terminalEnabled}
-                        disabled={isAuthenticatedStaging}
-                        onChange={(e) => setTerminalEnabled(e.target.checked)}
-                      />
-                      <span>
-                        {isAuthenticatedStaging
-                          ? 'Verification recipe required by the template'
-                          : 'Terminal verification enabled (required)'}
-                      </span>
+                        onChange={(event) => {
+                          setTerminalEnabled(event.target.checked);
+                          setValidatedVersion(null);
+                        }}
+                      />{' '}
+                      Terminal verification enabled
                     </label>
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        cursor: 'pointer',
-                      }}
-                    >
+                    <label>
                       <input
                         type="checkbox"
                         id="integrated-ai"
-                        name="integratedAi"
                         checked={integratedAi}
-                        disabled={isAuthenticatedStaging}
-                        onChange={(e) => setIntegratedAi(e.target.checked)}
-                      />
-                      <span>
-                        {isAuthenticatedStaging
-                          ? 'AI assistance is unavailable in local testing'
-                          : 'Integrated AI enabled (synthetic test lane)'}
-                      </span>
+                        onChange={(event) => {
+                          setIntegratedAi(event.target.checked);
+                          setValidatedVersion(null);
+                        }}
+                      />{' '}
+                      Candidate AI assistance
                     </label>
-                    {getFieldIssue('terminalEnabled') && (
-                      <p
-                        style={{
-                          color: 'var(--software-status-danger, #dc2626)',
-                          fontSize: '0.8rem',
-                          marginTop: '4px',
-                        }}
-                      >
-                        {getFieldIssue('terminalEnabled')}
-                      </p>
-                    )}
-                    {getFieldIssue('integratedAi') && (
-                      <p
-                        style={{
-                          color: 'var(--software-status-danger, #dc2626)',
-                          fontSize: '0.8rem',
-                          marginTop: '4px',
-                        }}
-                      >
-                        {getFieldIssue('integratedAi')}
-                      </p>
-                    )}
                   </div>
-                </div>
+                )}
 
-                {templateId === 'custom' && (
+                {templateId === 'custom' && canEditDraft && (
                   /* Rubric Criteria */
-                  <div style={{ marginBottom: '28px' }}>
+                  <div
+                    className="assessment-review-criteria"
+                    onChangeCapture={() => {
+                      setValidatedVersion(null);
+                      if (saveStatus === 'saved') setSaveStatus('idle');
+                    }}
+                  >
                     <div
                       style={{
                         display: 'flex',
@@ -2046,7 +2267,7 @@ export function AssessmentBuilderClient({
                     >
                       <div>
                         <span style={{ fontWeight: 600, display: 'block' }}>
-                          Rubric Criteria & Weights
+                          Human review criteria
                         </span>
                         <span
                           data-testid="rubric-total-weight"
@@ -2175,40 +2396,42 @@ export function AssessmentBuilderClient({
                   </div>
                 )}
 
-                {/* Actions */}
-                <div
-                  className="assessment-authoring-actions"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    paddingTop: '16px',
-                    borderTop: '1px solid var(--software-border, #e5e7eb)',
-                  }}
-                >
-                  <button
-                    type="button"
-                    data-testid="save-draft-button"
-                    className="button button-secondary"
-                    disabled={isSaving}
-                    onClick={handleSaveDraft}
-                  >
-                    {isSaving ? 'Saving...' : 'Save draft'}
-                  </button>
-
-                  <button
-                    type="button"
-                    data-testid="continue-to-validate-button"
-                    className="button button-primary"
-                    disabled={isSaving || isValidating}
-                    onClick={() => {
-                      setStage('validate');
-                      void handleValidate();
+                {canEditDraft && (
+                  <div
+                    className="assessment-authoring-actions"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingTop: '16px',
+                      borderTop: '1px solid var(--software-border, #e5e7eb)',
                     }}
                   >
-                    Continue to Validate →
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      data-testid="save-draft-button"
+                      className="button button-secondary"
+                      disabled={isSaving || isGenerating || isValidating}
+                      onClick={handleSaveDraft}
+                    >
+                      {isSaving ? 'Saving...' : 'Save draft'}
+                    </button>
+
+                    <button
+                      type="button"
+                      data-testid="continue-to-validate-button"
+                      className="button button-primary"
+                      disabled={isSaving || isValidating || isGenerating}
+                      onClick={() => {
+                        setStage('validate');
+                        void handleValidate();
+                      }}
+                    >
+                      Review assessment{' '}
+                      <IconArrowRight size={17} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2269,7 +2492,7 @@ export function AssessmentBuilderClient({
                       onClick={navigateToDefine}
                       style={{ flexShrink: 0, marginLeft: '12px' }}
                     >
-                      Fix in Define
+                      Edit draft
                     </button>
                   </div>
                 )}

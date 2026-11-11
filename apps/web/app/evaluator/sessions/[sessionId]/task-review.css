@@ -1945,10 +1945,19 @@
   color: var(--software-muted);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
+  transition:
+    color var(--software-transition),
+    background var(--software-transition);
+}
+
+.evaluator-workbench-modes button:hover {
+  background: var(--software-surface-subtle);
 }
 
 .evaluator-workbench-modes button[aria-selected='true'] {
-  border-bottom-color: var(--software-plum);
+  border-bottom-color: #78944b;
+  border-radius: 7px 7px 0 0;
+  background: var(--software-lilac);
   color: var(--software-plum);
 }
 
@@ -2847,6 +2856,7 @@
 
 .evaluator-workbench-shell > .evaluator-report-heading {
   padding: 20px 0 18px;
+  animation: software-arrive 220ms ease-out both;
 }
 
 .evaluator-workbench h2,

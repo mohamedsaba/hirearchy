@@ -1,16 +1,16 @@
 # MVP release readiness
 
-- **As of:** 2026-11-10
+- **As of:** 2026-11-11
 - **Authority:** [UI/UX recovery plan](plans/completed/ui-ux-recovery.md) for the current local acceptance gate; [active MVP release program](plans/active/mvp-release-program.md) for historical release scope.
 - **Status Summary:**
-  - **Founder UAT:** **UI/UX RECOVERY VERIFIED LOCALLY; FOUNDER VISUAL APPROVAL PENDING.** The checkpoint below takes effect only after [PR #21](https://github.com/mohamedsaba/hirearchy/pull/21) passes all four required checks on its final head and merges through branch protection. The app remains loopback-only at `http://127.0.0.1:3000/`. Candidate execution and live AI remain disabled. Public deployment is not authorized.
+  - **Founder UAT:** **FOUNDER VISUAL APPROVAL PENDING.** [PR #21](https://github.com/mohamedsaba/hirearchy/pull/21) passed the protected checks and merged. The founder’s first walkthrough prompted [follow-up changes](plans/completed/founder-experience.md) to sign-in, navigation, and the assessment builder. The local profile at `http://127.0.0.1:3000/` can use NVIDIA to draft an assessment for recruiter review. Candidate AI assistance, code execution, and external email delivery remain disabled.
   - **Stage A (Public Preview):** **SOURCE AND PREVIOUS LOCAL BROWSER/PACKAGE ACCEPTANCE COMPLETE; NOT PUBLICLY HOSTED.** This release-preparation branch updates buyer copy and retention controls. The latest buyer browser acceptance and exact-head status are tracked in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19). Public DNS, a paid host, and production TLS have not been provisioned. The [single-host activation guide](../deploy/staging/README.md) describes a gated future operation; it does not authorize deployment.
   - **Stage B (Supervised Alpha):** **PREVIOUS LOCAL REHEARSAL COMPLETE; NOT HOSTED.** The prior loopback rehearsal passed the synthetic recruiter → candidate → assigned-reviewer workflow, outage recovery, separate local PostgreSQL restore, and image/snapshot rollback. The latest combined-head package, TLS, operator-receipt, readiness, and resource results are tracked in [PR #19](https://github.com/mohamedsaba/hirearchy/pull/19); they do not establish hosted readiness.
   - **Stage C (External-Candidate Beta):** **GATED.** Founder and legal approval for privacy, retention and deletion; approved external access; production host, domain/IP policy, secret and backup custody, off-host retention, and an alert owner remain open. Untrusted execution, live AI, email delivery, and public signup stay disabled.
 
 This is the single authoritative release record for release status and verification evidence. It contains no credentials, candidate personal data, private recovery artifact locations, or unverified commercial claims.
 
-## Current UI/UX recovery checkpoint — 2026-11-10
+## UI/UX recovery checkpoint — PR #21
 
 Sol rebuilt the Software presentation after the founder rejected the initial result. Compact account flows, coherent workspace navigation, structured team/assessment views, purposeful authoring and candidate work areas, and chronological evidence review preserve the existing identity. The underlying missing-CSS cause was route-handler HTML bypassing the Next layout; the shared shell now loads one same-origin stylesheet and local font. No broad CSP allowance was added.
 
@@ -20,7 +20,7 @@ The supported launcher rebuilt production output and restored the persistent pro
 
 The local full `npm run verify` and final focused tests passed. The final PR must retain and pass `verify`, `postgres`, `real-docker`, and `dependency-audit`; [PR #21](https://github.com/mohamedsaba/hirearchy/pull/21) is the live protected receipt. Until that green merge, acceptance remains gated. Screenshot binaries and private diagnostics stay local and ignored. Existing lint/build warnings remain visible.
 
-AI integration was explicitly excluded by the founder's final instruction. AI generation/assistance, candidate execution, external mail delivery and public hosting remain unavailable. Static validation is not evidence that tests executed. Human reviewers retain every interpretation and verdict.
+PR #21 excluded live AI. The founder later authorized NVIDIA-backed recruiter drafting for the persistent local profile. The [local profile decision](decisions/founder-local-uat.md) defines that scope. Static validation checks the draft structure and does not execute tests. Human reviewers retain every interpretation and verdict.
 
 ## Historical Founder UAT — PR #20
 

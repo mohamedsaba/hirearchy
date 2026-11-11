@@ -161,6 +161,12 @@ function isFounderUatRoute(method: string, pathname: string): boolean {
       )
     );
   }
+  if (
+    method === 'POST' &&
+    /^\/r23\/api\/organizations\/[^/]+\/assessments\/generate$/.test(pathname)
+  ) {
+    return isFounderUatEnabled();
+  }
   return (
     method === 'POST' &&
     /^\/api\/founder-uat\/(mail\/consume|invitations\/context|auth\/reset-password)$/.test(

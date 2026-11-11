@@ -98,9 +98,16 @@ export async function runR214BrowserBridgeJourneyChecks({
     await builderPage.goto(
       `${origin}/r23/organizations/${FIXTURE_IDS.orgA}/builder`,
     );
-    const selector = builderPage.getByLabel('Assessment template');
-    await selector.selectOption('custom');
-    await selector.selectOption('reservation-moves-v3');
+    const customTemplate = builderPage.locator(
+      'input[type="radio"][name="assessment-template"][value="custom"]',
+    );
+    await customTemplate.check();
+    assert.equal(await customTemplate.isChecked(), true);
+    const approvedTemplate = builderPage.locator(
+      'input[type="radio"][name="assessment-template"][value="reservation-moves-v3"]',
+    );
+    await approvedTemplate.check();
+    assert.equal(await approvedTemplate.isChecked(), true);
     const [saved] = await Promise.all([
       builderPage.waitForResponse(
         (response) =>
@@ -112,7 +119,7 @@ export async function runR214BrowserBridgeJourneyChecks({
     assert.equal(saved.status(), 200, await saved.text());
     ({ draft } = await saved.json());
     await builderPage.reload();
-    assert.equal(await selector.inputValue(), 'reservation-moves-v3');
+    assert.equal(await approvedTemplate.isChecked(), true);
     await builderContext.close();
   } finally {
     await builderBrowser.close();
