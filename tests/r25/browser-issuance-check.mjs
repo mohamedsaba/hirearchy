@@ -363,6 +363,7 @@ export async function runR25BrowserIssuanceChecks({
 
     // 19. Logout clears the authenticated application session
     await pageA2.goto(`${origin}/r23/organizations/${FIXTURE_IDS.orgA}`);
+    await pageA2.locator('details.software-account-menu > summary').click();
     await pageA2
       .locator('form[action="/r23/auth/logout"] button[type="submit"]')
       .click();
