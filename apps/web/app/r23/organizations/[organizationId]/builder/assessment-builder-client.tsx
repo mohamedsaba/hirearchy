@@ -781,7 +781,7 @@ export function AssessmentBuilderClient({
             durationMinutes: Math.round(validatedVersion.durationSeconds / 60),
             terminalEnabled: validatedVersion.terminalEnabled,
             integratedAi: validatedVersion.integratedAi,
-            ...(effectiveReviewerPrincipalId
+            ...(isAuthenticatedStaging && effectiveReviewerPrincipalId
               ? { reviewerPrincipalId: effectiveReviewerPrincipalId }
               : {}),
             idempotencyKey,
@@ -2797,7 +2797,7 @@ export function AssessmentBuilderClient({
                           </dd>
                         </dl>
 
-                        {(isAuthenticatedStaging || reviewers.length > 0) && (
+                        {isAuthenticatedStaging && (
                           <div
                             style={{
                               marginTop: '16px',
