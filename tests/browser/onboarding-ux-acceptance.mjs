@@ -626,7 +626,9 @@ export async function runOnboardingUxAcceptanceWalkthrough({
     await recruiterPage.goto(`${origin}/r23/organizations/${orgId}/builder`);
     await recruiterPage.waitForLoadState('load');
     await recruiterPage
-      .getByLabel('Assessment template')
+      .locator(
+        'input[type="radio"][name="assessment-template"][value="reservation-moves-v3"]',
+      )
       .waitFor({ state: 'visible', timeout: 15000 });
     // Allow Turbopack on-demand compilation & fast-refresh to settle
     await recruiterPage.waitForTimeout(5000);
@@ -639,10 +641,17 @@ export async function runOnboardingUxAcceptanceWalkthrough({
     );
 
     // Select reservation-moves-v3 template
-    const templateSelector = recruiterPage.getByLabel('Assessment template');
-    await templateSelector.selectOption('custom');
+    const customTemplate = recruiterPage.locator(
+      'input[type="radio"][name="assessment-template"][value="custom"]',
+    );
+    await customTemplate.check();
+    assert.equal(await customTemplate.isChecked(), true);
     await recruiterPage.waitForTimeout(300);
-    await templateSelector.selectOption('reservation-moves-v3');
+    const approvedTemplate = recruiterPage.locator(
+      'input[type="radio"][name="assessment-template"][value="reservation-moves-v3"]',
+    );
+    await approvedTemplate.check();
+    assert.equal(await approvedTemplate.isChecked(), true);
     await recruiterPage.waitForTimeout(600);
 
     // Save draft

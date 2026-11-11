@@ -1,3 +1,4 @@
+import { SoftwareMark } from '../src/ui/software-mark';
 export default function PageNotFound() {
   return (
     <div className="software-product software-document-body">
@@ -7,6 +8,7 @@ export default function PageNotFound() {
           href="/"
           aria-label="Hirearchy Software home"
         >
+          <SoftwareMark />
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </a>

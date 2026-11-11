@@ -131,6 +131,16 @@ async function assertStyled(
       };
     };
     return {
+      brand: Object.fromEntries(
+        ['plum', 'lilac', 'mint'].map((name) => [
+          name,
+          main
+            ? getComputedStyle(main)
+                .getPropertyValue(`--software-${name}`)
+                .trim()
+            : '',
+        ]),
+      ),
       styleSheets: [...document.styleSheets].map((sheet) => sheet.href),
       headingCount: main?.querySelectorAll('h1').length ?? 0,
       main: read(main),
@@ -143,6 +153,11 @@ async function assertStyled(
   });
 
   assert(style.styleSheets.some(Boolean), `${path} has no browser stylesheet.`);
+  assert.deepEqual(
+    style.brand,
+    { plum: '#291e36', lilac: '#ebe5f2', mint: '#b0f0ce' },
+    `${path} must retain Hirearchy Software's established brand palette.`,
+  );
   assert.deepEqual(
     assets.filter((asset) => asset.status >= 400),
     [],

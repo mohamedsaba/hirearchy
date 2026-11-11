@@ -1,11 +1,11 @@
 .r26-candidate {
-  --r26-ink: #251a35;
-  --r26-muted: #625871;
-  --r26-line: #e2dee8;
-  --r26-surface: #fff;
-  --r26-canvas: #f7f6f9;
-  --r26-plum: #291e36;
-  --r26-lilac: #ebe5f2;
+  --r26-ink: var(--software-ink);
+  --r26-muted: var(--software-muted);
+  --r26-line: var(--software-border);
+  --r26-surface: var(--software-surface);
+  --r26-canvas: var(--software-canvas);
+  --r26-plum: var(--software-plum);
+  --r26-lilac: var(--software-lilac);
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
@@ -52,18 +52,6 @@
   gap: 9px;
 }
 
-.r26-brand-mark {
-  display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  border-radius: 0.7rem;
-  color: var(--r26-plum);
-  background: #d7f4e4;
-  font-size: 1.2rem;
-  font-weight: 800;
-}
-
 .r26-brand strong,
 .r26-brand div > span {
   display: block;
@@ -73,15 +61,6 @@
   font-size: 24px;
   font-weight: 750;
   letter-spacing: -0.035em;
-}
-
-.r26-product-tab {
-  padding: 5px 8px;
-  border-radius: 5px;
-  background: var(--software-mint);
-  color: var(--r26-plum);
-  font-size: 10px;
-  font-weight: 600;
 }
 
 .r26-workspace-label {
@@ -211,7 +190,7 @@
 .r26-notice {
   margin-top: 1.35rem;
   padding-top: 1.2rem;
-  border-top: 1px solid #eeeaf2;
+  border-top: 1px solid var(--software-border-subtle);
 }
 
 .r26-criteria h2,
@@ -286,7 +265,7 @@
 }
 
 .r26-button-secondary:hover:not(:disabled) {
-  background: #f5f1f8;
+  background: var(--software-surface-subtle);
 }
 
 .r26-availability ul {
@@ -303,7 +282,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.55rem 0;
-  border-bottom: 1px solid #f0edf3;
+  border-bottom: 1px solid var(--software-border-subtle);
   color: #51465d;
   font-size: 0.8rem;
 }
@@ -407,7 +386,7 @@
 .r26-editor-heading {
   min-height: 82px;
   padding: 1rem 1.2rem;
-  border-bottom: 1px solid #e9e4ee;
+  border-bottom: 1px solid var(--software-border-subtle);
 }
 
 .r26-editor-heading h2 {
@@ -435,8 +414,8 @@
 .r26-editor-toolbar {
   min-height: 58px;
   padding: 0.6rem 1.2rem;
-  border-bottom: 1px solid #eeeaf2;
-  background: #fcfbfd;
+  border-bottom: 1px solid var(--software-border-subtle);
+  background: var(--software-surface);
 }
 
 .r26-editor-toolbar > span {
@@ -455,9 +434,9 @@
 .r26-message {
   margin: 0;
   padding: 0.65rem 1.2rem;
-  border-bottom: 1px solid #e5dcef;
+  border-bottom: 1px solid var(--software-border);
   color: #4f3f60;
-  background: #f6f1fa;
+  background: var(--software-surface-subtle);
   font-size: 0.78rem;
 }
 
@@ -489,7 +468,7 @@
   min-height: 420px;
   flex: 1;
   overflow: auto;
-  background: #fbfafc;
+  background: var(--software-surface);
 }
 
 .r26-code-mirror,
@@ -499,15 +478,15 @@
 }
 
 .r26-code-mirror .cm-editor {
-  color: #251a35;
-  background: #fbfafc;
+  color: var(--software-ink);
+  background: var(--software-surface);
   font-size: 0.87rem;
 }
 
 .r26-code-mirror .cm-gutters {
-  border-right: 1px solid #ece8f0;
-  color: #594f66;
-  background: #f6f4f8;
+  border-right: 1px solid var(--software-border-subtle);
+  color: var(--software-muted);
+  background: var(--software-surface-subtle);
 }
 
 .r26-code-mirror .cm-content {
@@ -524,7 +503,7 @@
   place-items: center;
   padding: 2rem;
   color: var(--r26-muted);
-  background: #fbfafc;
+  background: var(--software-surface);
   text-align: center;
 }
 
@@ -536,7 +515,7 @@
   gap: 0.5rem;
   margin: 0;
   padding: 0.55rem 1.2rem;
-  border-top: 1px solid #eeeaf2;
+  border-top: 1px solid var(--software-border-subtle);
   color: #645a6e;
   background: #fff;
   font-size: 0.74rem;
@@ -591,7 +570,7 @@
   padding: 0.9rem;
   border: 1px solid #d4c8df;
   border-radius: 0.65rem;
-  background: #f8f4fb;
+  background: var(--software-surface-note);
 }
 
 .r26-notice strong {
@@ -652,8 +631,8 @@
   .r26-mobile-navigation {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px;
-    padding: 0 16px;
+    gap: 6px;
+    padding: 4px 12px;
     border-bottom: 1px solid var(--r26-line);
     background: var(--r26-surface);
   }
@@ -661,9 +640,19 @@
     display: inline-flex;
     align-items: center;
     min-height: 44px;
+    gap: 5px;
+    padding-inline: 7px;
+    border-radius: 6px;
     color: var(--r26-plum);
     font-size: 12px;
+    font-weight: 650;
     text-decoration: none;
+    transition: background var(--software-transition);
+  }
+
+  .r26-mobile-navigation a:hover,
+  .r26-mobile-navigation a:focus-visible {
+    background: var(--r26-lilac);
   }
 
   .r26-brand div > span {
@@ -858,7 +847,7 @@
 .r26-ai-hint {
   margin-top: 0.5rem;
   font-size: 0.78rem;
-  color: #594f66;
+  color: var(--software-muted);
 }
 
 .r26-ai-thread {
@@ -883,14 +872,14 @@
 
 .r26-ai-message-candidate {
   align-self: flex-end;
-  background: #ebe5f2;
+  background: var(--software-lilac);
   color: var(--r26-ink);
   border-bottom-right-radius: 0.15rem;
 }
 
 .r26-ai-message-assistant {
   align-self: flex-start;
-  background: #f7f5f9;
+  background: var(--software-surface-subtle);
   border: 1px solid var(--r26-line);
   color: var(--r26-ink);
   border-bottom-left-radius: 0.15rem;
@@ -924,7 +913,7 @@
   gap: 0.5rem;
   padding: 0.65rem 1rem;
   margin: 0 1rem 0.5rem;
-  background: #f4f0f8;
+  background: var(--software-surface-note);
   border-radius: 0.5rem;
   font-size: 0.82rem;
   color: var(--r26-ink);

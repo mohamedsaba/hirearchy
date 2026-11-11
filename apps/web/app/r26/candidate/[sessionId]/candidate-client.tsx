@@ -1,5 +1,7 @@
 'use client';
 
+import { SoftwareMark } from '../../../../src/ui/software-mark';
+
 import {
   useCallback,
   useEffect,
@@ -11,6 +13,11 @@ import {
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
+import {
+  IconCode,
+  IconFileDescription,
+  IconTimeline,
+} from '@tabler/icons-react';
 
 import type {
   R26CandidateEvent,
@@ -1046,8 +1053,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     <main className="r26-candidate software-product">
       <header className="r26-header">
         <div className="r26-brand">
+          <SoftwareMark />
           <strong>Hirearchy</strong>
-          <span className="r26-product-tab">Software</span>
+          <span className="software-document-product">Software</span>
           <span className="r26-workspace-label">Candidate workspace</span>
         </div>
         <div className="r26-header-status">
@@ -1085,9 +1093,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
 
       {view ? (
         <nav className="r26-mobile-navigation" aria-label="Workspace sections">
-          <a href="#candidate-code-editor">Workspace</a>
-          <a href="#candidate-task-brief">Task brief</a>
-          <a href="#candidate-activity">Recorded activity</a>
+          <a href="#candidate-code-editor">
+            <IconCode size={16} aria-hidden="true" /> Workspace
+          </a>
+          <a href="#candidate-task-brief">
+            <IconFileDescription size={16} aria-hidden="true" /> Task brief
+          </a>
+          <a href="#candidate-activity">
+            <IconTimeline size={16} aria-hidden="true" /> Activity
+          </a>
         </nav>
       ) : null}
 

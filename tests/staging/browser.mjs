@@ -91,22 +91,32 @@ export async function readBrowserCsrf(context, appUrl) {
   return cookie.value;
 }
 
-async function assertWorkspaceChrome(page, organizationId, expectedTeamLabel) {
+async function assertWorkspaceChrome(page, organizationId, expectedRole) {
   const organizationPath = `/r23/organizations/${organizationId.toLowerCase()}`;
   const activeOrganization = page.getByRole('region', {
     name: 'Active organization',
   });
   await activeOrganization.waitFor({ state: 'visible' });
   assert.ok(
-    (await activeOrganization.textContent()).includes(expectedTeamLabel),
-    `Workspace identity must show ${expectedTeamLabel}`,
+    (await activeOrganization.locator('.software-org-name').innerText()).trim(),
+    'Workspace switcher must show the current organization name',
   );
+  assert.equal(
+    await activeOrganization.getByRole('link').getAttribute('href'),
+    '/r23/organizations',
+  );
+  const accountMenu = page.locator('details.software-account-menu');
+  await accountMenu.locator('summary').click();
+  assert.ok(
+    await accountMenu.getByText(expectedRole, { exact: true }).isVisible(),
+  );
+  await accountMenu.locator('summary').click();
 
   const workspaceNavigation = page.getByRole('navigation', {
     name: 'Workspace navigation',
   });
   const assessmentsLink = workspaceNavigation.getByRole('link', {
-    name: 'Assessments',
+    name: expectedRole === 'Recruiter' ? 'Assessments' : 'Reviews',
     exact: true,
   });
   assert.equal(await assessmentsLink.getAttribute('href'), organizationPath);
@@ -767,15 +777,11 @@ export async function checkBrowserAcceptance({
       const workspaceText = await recruiterPage.textContent('body');
       assert.ok(
         workspaceText.includes(
-          'Assessments issued by you, from invitation to human review.',
+          'Create assessments and follow each candidate’s work through review.',
         ),
         'Recruiter scope copy must be displayed',
       );
-      await assertWorkspaceChrome(
-        recruiterPage,
-        organizationId,
-        'Recruiting team',
-      );
+      await assertWorkspaceChrome(recruiterPage, organizationId, 'Recruiter');
 
       // Verify staging capabilities boundary notice
       const capabilityNotice = recruiterPage.locator(
@@ -846,11 +852,13 @@ export async function checkBrowserAcceptance({
       );
 
       // Stage 1: Brief & Starter Files
-      const templateSelect = recruiterPage.locator('#assessment-template');
-      await templateSelect.selectOption('custom');
+      const customTemplate = recruiterPage.locator(
+        'input[type="radio"][name="assessment-template"][value="custom"]',
+      );
+      await customTemplate.check();
       assert.equal(
-        await templateSelect.inputValue(),
-        'custom',
+        await customTemplate.isChecked(),
+        true,
         'Browser acceptance must author and issue the custom assessment template',
       );
       await recruiterPage
@@ -1060,14 +1068,12 @@ export async function checkBrowserAcceptance({
 
       const revBody = await reviewerPage.textContent('body');
       assert.ok(
-        revBody.includes('The submitted work assigned to you for review.'),
+        revBody.includes(
+          'Open assigned work and review the evidence behind each submission.',
+        ),
         'Reviewer scope copy must be displayed',
       );
-      await assertWorkspaceChrome(
-        reviewerPage,
-        organizationId,
-        'Evaluation team',
-      );
+      await assertWorkspaceChrome(reviewerPage, organizationId, 'Evaluator');
 
       // Reviewer attempts to access recruiter builder -> 403 Forbidden or 404 Not Found
       const revBuilderRes = await reviewerPage.goto(
@@ -1340,11 +1346,7 @@ export async function checkBrowserAcceptance({
         200,
         'Recruiter browser session must persist across application restart',
       );
-      await assertWorkspaceChrome(
-        recruiterPage,
-        organizationId,
-        'Recruiting team',
-      );
+      await assertWorkspaceChrome(recruiterPage, organizationId, 'Recruiter');
     }
 
     // -------------------------------------------------------------------------
@@ -1355,6 +1357,9 @@ export async function checkBrowserAcceptance({
     );
     {
       // Sign out
+      await recruiterPage
+        .locator('details.software-account-menu > summary')
+        .click();
       const logoutForm = recruiterPage.locator(
         'form[action="/r23/auth/logout"]',
       );

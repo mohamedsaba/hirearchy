@@ -780,9 +780,9 @@ async function run() {
     assert.equal(evidence.session.status, 'SUBMITTED');
     assert.equal(evidence.session.terminalEnabled, false);
     assert.equal(evidence.session.aiCapabilitySnapshot.enabled, false);
-    assert.match(
+    assert.equal(
       evidence.captureLimitation,
-      /Candidate execution is disabled in this staging lane/i,
+      'Terminal and test-run evidence are unavailable because code execution was disabled for this assessment.',
     );
 
     assert.equal(evidence.events.length, 3); // ACTIVATED, CHANGED, SUBMITTED

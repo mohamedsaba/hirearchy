@@ -42,14 +42,14 @@
 }
 
 .software-product-header nav a.software-nav-link[aria-current='page'] {
-  border-color: rgb(176 240 206 / 54%);
+  border-color: var(--software-mint);
   background: var(--software-mint);
   color: var(--software-plum);
 }
 
 .software-product-header nav a.software-nav-link[aria-current='page']:hover {
   border-color: var(--software-mint);
-  background: #c0f5d8;
+  background: var(--software-surface-note);
   color: var(--software-plum);
 }
 
@@ -75,5 +75,21 @@
 @media (prefers-reduced-motion: reduce) {
   .software-product-header nav a.software-nav-link {
     transition: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .software-product-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px 0;
+  }
+
+  .software-product-header nav {
+    width: 100%;
+    min-height: 44px;
+    margin-left: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }

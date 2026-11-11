@@ -15,6 +15,7 @@ import { isFounderUatEnabled } from '../../../../../src/runtime/founder-uat';
 import { isAuthenticatedStaging } from '../../../../../src/runtime/profile';
 import { AssessmentBuilderClient } from './assessment-builder-client';
 import type { R211AssessmentDraft } from '../../../../../src/r211-builder/contract';
+import { founderDraftGenerationAvailable } from '../../../../../src/r211-builder/founder-draft-generation';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -135,6 +136,10 @@ export default async function AssessmentBuilderPage({
         initialIssuedSessionId,
       ])}
       organizationId={organizationId}
+      organizationName={context.organization.name}
+      accountEmail={context.identity.email ?? undefined}
+      founderUat={isFounderUatEnabled()}
+      aiDraftAvailable={founderDraftGenerationAvailable()}
       csrfToken={context.csrfToken}
       initialDraft={initialDraft}
       reviewers={reviewers}

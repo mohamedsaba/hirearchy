@@ -1,3 +1,10 @@
+import { SoftwareMark } from '../../../src/ui/software-mark';
+import {
+  IconArrowRight,
+  IconBraces,
+  IconGitCommit,
+  IconListCheck,
+} from '@tabler/icons-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -34,30 +41,26 @@ export default async function R23LoginPage({
     params.error === 'credentials' || params.error === 'unavailable';
 
   return (
-    <main className="software-product evaluator-product-shell">
-      <header className="software-product-header">
+    <main className="software-product software-signin">
+      <header className="software-signin-brand">
         <Link
-          className="software-wordmark"
+          className="software-document-wordmark"
           href={founderUat ? '/' : '/r23/login'}
           prefetch={false}
           aria-label="Hirearchy Software home"
         >
+          <SoftwareMark />
           <span>Hirearchy</span>
-          <span className="software-product-capsule">Software</span>
+          <span className="software-document-product">Software</span>
         </Link>
       </header>
-      <div className="evaluator-product-content">
+      <div className="software-signin-layout">
         <section
           className="evaluator-signin-panel"
           aria-labelledby="signin-title"
         >
           <div className="evaluator-signin-copy">
-            <p className="software-eyebrow">Welcome back</p>
             <h1 id="signin-title">Sign in to your workspace</h1>
-            <p>
-              Create assessments, follow candidate work, and review the
-              evidence.
-            </p>
           </div>
           <div className="evaluator-signin-form">
             <form
@@ -98,41 +101,43 @@ export default async function R23LoginPage({
                 />
               </div>
               <button type="submit" className="button-primary">
-                Sign in
+                Sign in <IconArrowRight aria-hidden="true" size={18} />
               </button>
             </form>
-            <nav aria-label="Account help">
-              {founderUat ? (
-                <>
-                  <p>
-                    <span>New to Hirearchy? </span>
-                    <Link href="/r23/signup" prefetch={false}>
-                      Sign up
-                    </Link>
-                  </p>
-                  <p>
-                    <Link href="/r23/verify-email" prefetch={false}>
-                      Verify your email
-                    </Link>
-                  </p>
-                  <p>
-                    <Link href="/r23/mail" prefetch={false}>
-                      Local email inbox
-                    </Link>
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p>
-                    <Link href="/r23/verify-email" prefetch={false}>
-                      Verify your email
-                    </Link>
-                  </p>
-                </>
-              )}
-            </nav>
+            {founderUat && (
+              <p className="software-signin-signup">
+                New to Hirearchy?{' '}
+                <Link href="/r23/signup" prefetch={false}>
+                  Sign up
+                </Link>
+              </p>
+            )}
           </div>
         </section>
+        <aside className="software-signin-story" aria-label="About Hirearchy">
+          <div className="software-story-art" aria-hidden="true">
+            <span>
+              <IconBraces />
+            </span>
+            <span>
+              <IconGitCommit />
+            </span>
+            <span>
+              <IconListCheck />
+            </span>
+          </div>
+          <div className="software-story-copy">
+            <p className="software-story-title">
+              See how
+              <br />
+              engineers work.
+            </p>
+            <p>
+              Give candidates real engineering tasks. Review the work behind the
+              result.
+            </p>
+          </div>
+        </aside>
       </div>
     </main>
   );

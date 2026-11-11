@@ -1,3 +1,4 @@
+import { SoftwareMark } from '../../src/ui/software-mark';
 import Link from 'next/link';
 import './software-product-header.css';
 
@@ -38,15 +39,16 @@ export const SoftwareProductHeader = ({
   return (
     <header className="software-product-header">
       <Link
-        className="software-wordmark"
+        className="software-wordmark software-document-wordmark"
         href={
           sessionSummaryHref ??
           (tenantScope ? tenantScope.switchOrganizationHref : '/evaluator')
         }
         aria-label="Hirearchy Software home"
       >
+        <SoftwareMark />
         <span>Hirearchy</span>
-        <span className="software-product-capsule">Software</span>
+        <span className="software-document-product">Software</span>
       </Link>
       {tenantScope ? (
         <div

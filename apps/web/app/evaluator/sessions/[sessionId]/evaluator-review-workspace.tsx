@@ -273,6 +273,12 @@ const R27SummaryView = ({
     Number.isFinite(elapsedMs) && elapsedMs >= 0
       ? `${Math.floor(elapsedMs / 60_000)} minutes`
       : 'Unavailable';
+  const formatSessionTime = (value: string) =>
+    `${new Date(value).toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'UTC',
+    })} UTC`;
 
   return (
     <div className="workbench-summary-grid">
@@ -282,7 +288,7 @@ const R27SummaryView = ({
           aria-labelledby="r27-summary-title"
         >
           <div>
-            <p className="section-kicker">Assigned reviewer · Read only</p>
+            <p className="section-kicker">Frozen submission</p>
             <h2 id="r27-summary-title">Submitted evidence</h2>
             <p>
               This view contains the frozen submission and authorized session
@@ -290,38 +296,41 @@ const R27SummaryView = ({
             </p>
             <dl className="evaluator-source-metadata">
               <div>
-                <dt>Session</dt>
-                <dd>
-                  <code>{evidence.sessionId}</code>
-                </dd>
-              </div>
-              <div>
                 <dt>Scenario</dt>
                 <dd>
                   {evidence.scenario.title} · v{evidence.scenario.version}
                 </dd>
               </div>
               <div>
-                <dt>Created from session record</dt>
+                <dt>Created</dt>
                 <dd>
-                  <time dateTime={evidence.createdAt}>
-                    {evidence.createdAt}
+                  <time
+                    dateTime={evidence.createdAt}
+                    title={evidence.createdAt}
+                  >
+                    {formatSessionTime(evidence.createdAt)}
                   </time>
                 </dd>
               </div>
               <div>
-                <dt>Activated</dt>
+                <dt>Started</dt>
                 <dd>
-                  <time dateTime={evidence.activatedAt}>
-                    {evidence.activatedAt}
+                  <time
+                    dateTime={evidence.activatedAt}
+                    title={evidence.activatedAt}
+                  >
+                    {formatSessionTime(evidence.activatedAt)}
                   </time>
                 </dd>
               </div>
               <div>
                 <dt>Submitted</dt>
                 <dd>
-                  <time dateTime={evidence.submittedAt}>
-                    {evidence.submittedAt}
+                  <time
+                    dateTime={evidence.submittedAt}
+                    title={evidence.submittedAt}
+                  >
+                    {formatSessionTime(evidence.submittedAt)}
                   </time>
                 </dd>
               </div>
@@ -337,14 +346,25 @@ const R27SummaryView = ({
                     : 'Timeout'}
                 </dd>
               </div>
-              <div>
-                <dt>Assignment</dt>
-                <dd>
-                  <code>{evidence.assignment.id}</code> · version{' '}
-                  <code>{evidence.assignment.version}</code>
-                </dd>
-              </div>
             </dl>
+            <details className="evaluator-source-details">
+              <summary>Session references</summary>
+              <dl className="evaluator-source-metadata">
+                <div>
+                  <dt>Session</dt>
+                  <dd>
+                    <code>{evidence.sessionId}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Assignment</dt>
+                  <dd>
+                    <code>{evidence.assignment.id}</code> · version{' '}
+                    <code>{evidence.assignment.version}</code>
+                  </dd>
+                </div>
+              </dl>
+            </details>
           </div>
         </section>
 
@@ -357,14 +377,10 @@ const R27SummaryView = ({
               <IconFile size={21} stroke={1.8} />
             </span>
             <div>
-              <p className="section-kicker">Versioned scenario snapshot</p>
+              <p className="section-kicker">Original assessment</p>
               <h2 id="r27-snapshot-title">Task context</h2>
             </div>
           </header>
-          <p style={{ overflowWrap: 'anywhere' }}>Scenario snapshot digest:</p>
-          <code className="evaluator-integrity-digest">
-            {evidence.scenario.snapshotDigest}
-          </code>
           <ScenarioBrief
             markdown={
               presentation.scenarioContext.brief ??
@@ -390,6 +406,10 @@ const R27SummaryView = ({
             style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
           >
             <summary>Open immutable scenario snapshot</summary>
+            <p>Scenario snapshot digest:</p>
+            <code className="evaluator-integrity-digest">
+              {evidence.scenario.snapshotDigest}
+            </code>
             <pre
               tabIndex={0}
               aria-label="Immutable versioned scenario snapshot"

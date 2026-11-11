@@ -167,9 +167,11 @@ async function runReservationMovesBrowserFlow(presenter) {
       'Authenticated assessment builder',
       true,
     );
-    await recruiter
-      .getByLabel('Assessment template')
-      .selectOption('reservation-moves-v3');
+    const approvedTemplate = recruiter.locator(
+      'input[type="radio"][name="assessment-template"][value="reservation-moves-v3"]',
+    );
+    await approvedTemplate.check();
+    assert.equal(await approvedTemplate.isChecked(), true);
     await recruiter
       .locator('[data-testid="save-draft-button"]')
       .waitFor({ state: 'visible' });

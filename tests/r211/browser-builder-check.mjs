@@ -120,9 +120,11 @@ export async function runR211BrowserBuilderChecks({
     // Step 4: Create assessment draft with task, instructions, starter files
     // -----------------------------------------------------------------------
     console.log('[R2.11 Browser] Step 4: Create assessment draft');
-    await recruiterPage
-      .getByLabel('Assessment template')
-      .selectOption('custom');
+    const customTemplate = recruiterPage.locator(
+      'input[type="radio"][name="assessment-template"][value="custom"]',
+    );
+    await customTemplate.check();
+    assert.equal(await customTemplate.isChecked(), true);
     const initialTitle = 'Booking Notification Retry Logic';
     const initialBrief =
       'Implement retry logic with exponential backoff for the notification dispatch service.';
@@ -180,7 +182,7 @@ export async function runR211BrowserBuilderChecks({
     // Step 7: Correct field, validate, produce immutable validated version 1
     // -----------------------------------------------------------------------
     console.log('[R2.11 Browser] Step 7: Correct field and validate version 1');
-    await recruiterPage.locator('button:has-text("Fix in Define")').click();
+    await recruiterPage.locator('button:has-text("Edit draft")').click();
     await recruiterPage
       .locator('[data-testid="assessment-title-input"]')
       .fill(initialTitle);
@@ -221,7 +223,7 @@ export async function runR211BrowserBuilderChecks({
     // -----------------------------------------------------------------------
     console.log('[R2.11 Browser] Step 8: Edit subsequent draft to v2');
     await recruiterPage
-      .locator('button[aria-label="Go to Define stage"]')
+      .locator('button[aria-label="Go to Draft stage"]')
       .click();
     await recruiterPage
       .locator('[data-testid="assessment-title-input"]')
@@ -241,7 +243,7 @@ export async function runR211BrowserBuilderChecks({
     // -----------------------------------------------------------------------
     console.log('[R2.11 Browser] Step 9: Issue validated version 1');
     await recruiterPage
-      .locator('button[aria-label="Go to Issue stage"]')
+      .locator('button[aria-label="Go to Invite stage"]')
       .click();
     await recruiterPage
       .locator('[data-testid="issue-assessment-button"]')
