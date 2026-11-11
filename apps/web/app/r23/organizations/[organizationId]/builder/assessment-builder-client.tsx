@@ -1229,6 +1229,13 @@ export function AssessmentBuilderClient({
     activeCandidatePath && appOrigin
       ? absoluteInvitationUrl(activeCandidatePath, appOrigin)
       : null;
+  const issuedReviewer = reviewers.find(
+    (reviewer) => reviewer.principalId === issuedSession?.reviewerPrincipalId,
+  );
+  const issuedReviewerLabel =
+    issuedReviewer?.displayName?.trim() ||
+    issuedReviewer?.email?.trim() ||
+    'Assigned evaluator';
   const renderCandidateInvitationControls = (recovered = false) => {
     const currentInvitation =
       invitation?.sessionId === currentSessionId ? invitation : null;
@@ -2883,121 +2890,87 @@ export function AssessmentBuilderClient({
                     </div>
                   )}
 
-                {/* Issued Session Success State */}
                 {issuedSession && (
-                  <div
+                  <section
                     data-testid="issuance-success"
-                    className="assessment-issuance-success"
-                    style={{
-                      padding: '24px',
-                      borderRadius: 'var(--software-radius-surface, 8px)',
-                      border: '1px solid #10b981',
-                      background: '#ecfdf5',
-                    }}
+                    className="assessment-share-card"
+                    aria-labelledby="assessment-issued-title"
                   >
-                    <h3
-                      style={{
-                        margin: '0 0 12px',
-                        color: '#064e3b',
-                        fontSize: '1.25rem',
-                      }}
-                    >
-                      Assessment issued
-                    </h3>
-                    <p
-                      style={{
-                        margin: '0 0 16px',
-                        color: '#065f46',
-                        fontSize: '0.9rem',
-                      }}
-                    >
-                      The candidate session has been created and bound to
-                      immutable validated version{' '}
-                      {validatedVersion?.versionNumber}.
-                    </p>
-
-                    <div
-                      style={{
-                        background: '#fff',
-                        padding: '16px',
-                        borderRadius: '6px',
-                        border: '1px solid #a7f3d0',
-                        marginBottom: '20px',
-                      }}
-                    >
-                      <dl
-                        className="assessment-snapshot-facts"
-                        style={{
-                          display: 'grid',
-                          gap: '8px',
-                          fontSize: '0.9rem',
-                          margin: 0,
-                        }}
+                    <div className="assessment-share-heading">
+                      <span
+                        className="assessment-share-mark"
+                        aria-hidden="true"
                       >
-                        <dt style={{ fontWeight: 600 }}>Session Reference:</dt>
+                        ✓
+                      </span>
+                      <div>
+                        <h3 id="assessment-issued-title">Assessment issued</h3>
+                        <p>
+                          Create a private link to share with your candidate.
+                        </p>
+                      </div>
+                    </div>
+                    {issuedSession.reviewerPrincipalId && (
+                      <p className="assessment-share-evaluator">
+                        <span>Evaluator</span>
+                        <strong>{issuedReviewerLabel}</strong>
+                      </p>
+                    )}
+                    <section
+                      className="assessment-share-invitation"
+                      data-testid="candidate-invitation-panel"
+                      aria-label="Candidate invitation"
+                    >
+                      {renderCandidateInvitationControls()}
+                      {issuedSession.candidatePath &&
+                        !candidateInvitationUrl && (
+                          <Link
+                            href={issuedSession.candidatePath}
+                            data-testid="candidate-workspace-link"
+                          >
+                            {issuedSession.candidatePath}
+                          </Link>
+                        )}
+                    </section>
+                    <div className="assessment-issuance-links">
+                      <Link
+                        href={`${organizationPath}/sessions/${encodeURIComponent(issuedSession.sessionId)}`}
+                        className="button button-secondary"
+                        data-testid="inspect-session-link"
+                      >
+                        View session
+                      </Link>
+                      <Link
+                        href={organizationPath}
+                        className="button button-secondary"
+                      >
+                        Back to assessments
+                      </Link>
+                    </div>
+                    <details className="assessment-reference-details">
+                      <summary>Session details</summary>
+                      <dl className="assessment-snapshot-facts">
+                        <dt>Session reference</dt>
                         <dd>
                           <code data-testid="issued-session-id">
                             {issuedSession.sessionId}
                           </code>
                         </dd>
-                        {issuedSession.reviewerPrincipalId ? (
+                        {issuedSession.reviewerPrincipalId && (
                           <>
-                            <dt style={{ fontWeight: 600 }}>
-                              Assigned Evaluator:
-                            </dt>
+                            <dt>Evaluator reference</dt>
                             <dd>
                               <code data-testid="issued-reviewer-principal-id">
                                 {issuedSession.reviewerPrincipalId}
                               </code>
                             </dd>
                           </>
-                        ) : null}
-                        <dt style={{ fontWeight: 600 }}>Candidate Link:</dt>
-                        <dd>
-                          <section
-                            className="assessment-feedback"
-                            data-testid="candidate-invitation-panel"
-                            aria-label="Candidate invitation"
-                          >
-                            <h4>Candidate invitation</h4>
-                            {renderCandidateInvitationControls()}
-                            {issuedSession.candidatePath &&
-                            !candidateInvitationUrl ? (
-                              <div style={{ marginTop: '8px' }}>
-                                <Link
-                                  href={issuedSession.candidatePath}
-                                  data-testid="candidate-workspace-link"
-                                  style={{
-                                    color: '#047857',
-                                    fontWeight: 600,
-                                    wordBreak: 'break-all',
-                                  }}
-                                >
-                                  {issuedSession.candidatePath}
-                                </Link>
-                              </div>
-                            ) : null}
-                          </section>
-                        </dd>
+                        )}
+                        <dt>Assessment version</dt>
+                        <dd>{validatedVersion?.versionNumber}</dd>
                       </dl>
-                    </div>
-
-                    <div className="assessment-issuance-links">
-                      <Link
-                        href={`/r23/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(issuedSession.sessionId)}`}
-                        className="button button-secondary"
-                        data-testid="inspect-session-link"
-                      >
-                        Inspect Session in Organization
-                      </Link>
-                      <Link
-                        href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
-                        className="button button-secondary"
-                      >
-                        Back to Session List
-                      </Link>
-                    </div>
-                  </div>
+                    </details>
+                  </section>
                 )}
               </div>
             )}

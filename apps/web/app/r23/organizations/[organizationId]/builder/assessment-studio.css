@@ -434,3 +434,77 @@
 .assessment-ai-regenerate[data-has-draft='false'] > summary {
   display: none;
 }
+
+.assessment-share-card {
+  padding: clamp(18px, 3vw, 30px);
+  border: 1px solid var(--software-border);
+  border-radius: 13px;
+  background: #f7faef;
+}
+
+.assessment-share-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.assessment-share-mark {
+  display: grid;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--software-mint);
+  color: var(--software-ink);
+  font-size: 23px;
+}
+
+.assessment-share-heading h3 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.assessment-share-heading p,
+.assessment-share-evaluator {
+  margin: 5px 0 0;
+  color: var(--software-muted);
+  font-size: 14px;
+}
+
+.assessment-share-evaluator {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 20px;
+}
+
+.assessment-share-evaluator strong {
+  color: var(--software-ink);
+  overflow-wrap: anywhere;
+}
+
+.assessment-share-invitation {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid var(--software-border);
+  border-radius: 10px;
+  background: var(--software-surface);
+}
+
+.assessment-reference-details {
+  margin-top: 22px;
+  color: var(--software-muted);
+  font-size: 12px;
+}
+
+.assessment-reference-details summary {
+  min-height: 34px;
+  padding-block: 8px;
+  cursor: pointer;
+}
+
+.assessment-reference-details dl {
+  padding-top: 12px;
+}
