@@ -38,7 +38,7 @@ export const SoftwareProductHeader = ({
   return (
     <header className="software-product-header">
       <Link
-        className="software-wordmark"
+        className="software-wordmark software-document-wordmark"
         href={
           sessionSummaryHref ??
           (tenantScope ? tenantScope.switchOrganizationHref : '/evaluator')
