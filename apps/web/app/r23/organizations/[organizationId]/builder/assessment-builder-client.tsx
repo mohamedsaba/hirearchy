@@ -1,5 +1,7 @@
 'use client';
 
+import { SoftwareMark } from '../../../../../src/ui/software-mark';
+
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -1433,10 +1435,9 @@ export function AssessmentBuilderClient({
           href={organizationPath}
           aria-label="Hirearchy Software home"
         >
-          <span className="software-brand-mark" aria-hidden="true" />
-          <span>
-            Hirearchy<span className="software-brand-period">.</span>
-          </span>
+          <SoftwareMark />
+          <span>Hirearchy</span>
+          <span className="software-document-product">Software</span>
         </a>
         <div
           className="software-workspace-switch"

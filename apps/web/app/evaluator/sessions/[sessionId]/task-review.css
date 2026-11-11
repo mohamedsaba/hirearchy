@@ -1955,7 +1955,7 @@
 }
 
 .evaluator-workbench-modes button[aria-selected='true'] {
-  border-bottom-color: #78944b;
+  border-bottom-color: var(--software-plum);
   border-radius: 7px 7px 0 0;
   background: var(--software-lilac);
   color: var(--software-plum);

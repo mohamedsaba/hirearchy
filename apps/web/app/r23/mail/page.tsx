@@ -1,3 +1,4 @@
+import { SoftwareMark } from '../../../src/ui/software-mark';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
@@ -25,10 +26,9 @@ export default async function FounderUatMailPage({
           href="/"
           aria-label="Hirearchy home"
         >
-          <span className="software-brand-mark" aria-hidden="true" />
-          <span>
-            Hirearchy<span className="software-brand-period">.</span>
-          </span>
+          <SoftwareMark />
+          <span>Hirearchy</span>
+          <span className="software-document-product">Software</span>
         </Link>
       </header>
       <div className="evaluator-product-content">

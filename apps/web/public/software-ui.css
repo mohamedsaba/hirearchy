@@ -13,19 +13,19 @@ body.software-document-body *::after {
 }
 
 .software-product {
-  --software-plum: #18332b;
-  --software-lilac: #e7eddb;
-  --software-mint: #dcf278;
-  --software-ink: #182c25;
-  --software-muted: #53635a;
-  --software-canvas: #f4f5ed;
+  --software-plum: #291e36;
+  --software-lilac: #ebe5f2;
+  --software-mint: #b0f0ce;
+  --software-ink: #251a35;
+  --software-muted: #625871;
+  --software-canvas: #f7f6f9;
   --software-surface: #fff;
-  --software-surface-subtle: #edf0e6;
-  --software-surface-note: #eaf0df;
-  --software-border: #dce2d7;
-  --software-border-subtle: #e9ede4;
-  --software-border-strong: #77897d;
-  --software-focus: #234c3c;
+  --software-surface-subtle: #f2f0f5;
+  --software-surface-note: #eee7f4;
+  --software-border: #e2dee8;
+  --software-border-subtle: #eeeaf2;
+  --software-border-strong: #8b7c99;
+  --software-focus: #291e36;
 
   --software-status-info: #334155;
   --software-status-info-surface: #f8fafc;
@@ -416,7 +416,7 @@ body.software-document-body *::after {
 
 .software-document-panel
   :where(button, input[type='submit']):hover:not(:disabled) {
-  background: #294a3d;
+  background: #473d54;
 }
 
 .software-document-panel nav {
@@ -446,7 +446,7 @@ body.software-document-body *::after {
 }
 
 .software-document-panel a.software-document-primary-link:hover {
-  background: #294a3d;
+  background: #473d54;
   color: #fff;
 }
 
@@ -517,42 +517,16 @@ body.software-document-body *::after {
   vertical-align: top;
 }
 
-/* The offset crossbar is the mark shared by the entry and work surfaces. */
 .software-brand-mark {
-  position: relative;
   display: inline-block;
   flex: none;
   width: 33px;
   height: 33px;
-  border-radius: 9px;
-  background: #18332b;
-  color: #dcf278;
-}
-
-.software-brand-mark::before,
-.software-brand-mark::after {
-  position: absolute;
-  width: 11px;
-  height: 15px;
-  border: solid currentColor;
-  border-width: 0 0 3px 3px;
-  border-radius: 1px;
-  content: '';
-}
-
-.software-brand-mark::before {
-  top: 7px;
-  left: 7px;
-}
-
-.software-brand-mark::after {
-  right: 7px;
-  bottom: 7px;
-  transform: rotate(180deg);
-}
-
-.software-brand-period {
-  color: #527223;
+  box-sizing: border-box;
+  padding: 5px;
+  border-radius: 8px;
+  background: var(--software-mint);
+  color: var(--software-plum);
 }
 
 .software-workspace-header {
@@ -561,7 +535,7 @@ body.software-document-body *::after {
   gap: clamp(12px, 2.5vw, 36px);
   min-height: 72px;
   padding-inline: clamp(16px, 4vw, 60px);
-  background: #fbfcf7;
+  background: var(--software-surface);
 }
 
 .software-workspace-switch {
@@ -655,7 +629,7 @@ body.software-document-body *::after {
   border: 1px solid var(--software-border);
   border-radius: 12px;
   background: var(--software-surface);
-  box-shadow: 0 10px 36px #18332b21;
+  box-shadow: 0 10px 36px rgb(41 30 54 / 13%);
   overflow-wrap: anywhere;
   animation: software-arrive 150ms ease-out both;
 }
@@ -714,7 +688,7 @@ body.software-document-body *::after {
 
 .software-workspace-tabs a:hover,
 .software-workspace-tabs a[aria-current='page'] {
-  border-color: #6e8b3c;
+  border-color: var(--software-plum);
   color: var(--software-ink);
 }
 
@@ -729,7 +703,7 @@ body.software-document-body *::after {
 
 .software-document-workspace .software-document-shell {
   display: block;
-  padding: clamp(28px, 5vw, 70px) clamp(24px, 5vw, 72px) 64px;
+  padding: 44px clamp(24px, 4vw, 64px) 64px;
 }
 
 .software-document-workspace .software-document-panel {
@@ -757,9 +731,9 @@ body.software-document-body *::after {
 }
 
 .software-document-panel .software-page-heading h1 {
-  font-size: clamp(38px, 5.2vw, 70px);
+  font-size: clamp(30px, 3.2vw, 40px);
   font-weight: 650;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.045em;
 }
 
 .software-document-panel .software-eyebrow {
@@ -1105,29 +1079,32 @@ body.software-document-body *::after {
   align-items: center;
   gap: 28px;
   padding: clamp(26px, 5vw, 72px);
-  border: 1px solid #365747;
+  border: 1px solid var(--software-border-strong);
   border-radius: 20px;
-  background-color: #16352b;
-  background-image: radial-gradient(#a7d0ae30 1px, transparent 1px);
+  background-color: var(--software-plum);
+  background-image: radial-gradient(
+    rgb(235 229 242 / 16%) 1px,
+    transparent 1px
+  );
   background-size: 20px 20px;
-  color: #f4f7e9;
+  color: #f7f6f9;
   text-align: left;
 }
 
 .software-document-panel .software-workspace-start h2 {
   max-width: 13ch;
   margin: 0;
-  color: #dcf278;
-  font-size: clamp(32px, 4.8vw, 64px);
+  color: var(--software-mint);
+  font-size: clamp(30px, 3.7vw, 46px);
   font-weight: 650;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.045em;
   line-height: 0.99;
 }
 
 .software-document-panel .software-workspace-start p {
   max-width: 36ch;
   margin: 16px 0 24px;
-  color: #edf5e6;
+  color: #f7f6f9;
   font-size: 16px;
 }
 
@@ -1158,9 +1135,9 @@ body.software-document-body *::after {
 .software-start-art i {
   position: absolute;
   inset: 12% 20%;
-  border: 1px solid #aac3a7;
+  border: 1px solid var(--software-lilac);
   border-radius: 12px;
-  background: #214638;
+  background: #473d54;
   transform: rotate(-16deg) translate(-17%, -5%);
   transition: transform 260ms ease;
 }
@@ -1174,15 +1151,15 @@ body.software-document-body *::after {
   align-content: center;
   gap: 9%;
   padding: 18%;
-  border-color: #dcf278;
-  background: #dcf278;
+  border-color: var(--software-mint);
+  background: var(--software-mint);
   transform: rotate(-3deg);
 }
 
 .software-start-art span {
   height: 5px;
   border-radius: 4px;
-  background: #466139;
+  background: var(--software-plum);
 }
 
 .software-start-art span:nth-child(2) {
@@ -1527,9 +1504,9 @@ body.software-document-body *::after {
 
 .software-signin .evaluator-signin-copy h1 {
   max-width: none;
-  font-size: clamp(34px, 3.7vw, 53px);
+  font-size: clamp(32px, 3.7vw, 44px);
   font-weight: 650;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.045em;
   line-height: 0.98;
 }
 
@@ -1565,10 +1542,13 @@ body.software-document-body *::after {
   grid-template-rows: 1fr auto;
   gap: clamp(20px, 4vw, 48px);
   padding: clamp(30px, 6vw, 88px);
-  background-color: #16352b;
-  background-image: radial-gradient(#a7d0ae35 1px, transparent 1px);
+  background-color: var(--software-plum);
+  background-image: radial-gradient(
+    rgb(235 229 242 / 16%) 1px,
+    transparent 1px
+  );
   background-size: 22px 22px;
-  color: #f4f7e9;
+  color: #f7f6f9;
 }
 
 .software-story-art {
@@ -1584,10 +1564,10 @@ body.software-document-body *::after {
   display: grid;
   aspect-ratio: 1;
   place-items: center;
-  border: 1px solid #94b598;
+  border: 1px solid var(--software-border-strong);
   border-radius: 25%;
-  background: #214638;
-  color: #dcf278;
+  background: #473d54;
+  color: var(--software-mint);
   animation: software-arrive 500ms ease-out both;
 }
 
@@ -1597,9 +1577,9 @@ body.software-document-body *::after {
 }
 
 .software-story-art span:nth-child(3) {
-  border-color: #dcf278;
-  background: #dcf278;
-  color: #18332b;
+  border-color: var(--software-mint);
+  background: var(--software-mint);
+  color: var(--software-plum);
   animation-delay: 220ms;
 }
 
@@ -1607,7 +1587,7 @@ body.software-document-body *::after {
   position: absolute;
   right: calc(-1 * clamp(7px, 2vw, 20px));
   width: clamp(7px, 2vw, 20px);
-  border-top: 1px dashed #94b598;
+  border-top: 1px dashed var(--software-border-strong);
   content: '';
 }
 
@@ -1625,10 +1605,10 @@ body.software-document-body *::after {
 
 .software-story-copy .software-story-title {
   margin-bottom: 19px;
-  color: #dcf278;
+  color: var(--software-mint);
   font-size: clamp(40px, 5.2vw, 76px);
   font-weight: 600;
-  letter-spacing: -0.09em;
+  letter-spacing: -0.055em;
   line-height: 0.94;
 }
 

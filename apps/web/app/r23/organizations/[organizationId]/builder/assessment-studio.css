@@ -14,8 +14,8 @@
 
 .assessment-builder-page .assessment-builder-hero h1 {
   margin: 10px 0 6px;
-  font-size: clamp(35px, 5.5vw, 70px);
-  letter-spacing: -0.075em;
+  font-size: clamp(30px, 4vw, 42px);
+  letter-spacing: -0.045em;
 }
 
 .assessment-breadcrumb {
@@ -56,7 +56,7 @@
 }
 
 .assessment-builder-page .assessment-stage-button[aria-current='step'] {
-  border-color: #b1bc9c;
+  border-color: var(--software-border-strong);
   background: var(--software-lilac);
 }
 
@@ -116,7 +116,7 @@
   padding: 15px;
   border: 1px solid var(--software-border);
   border-radius: 12px;
-  background: #f9faf5;
+  background: var(--software-canvas);
   cursor: pointer;
   transition:
     background var(--software-transition),
@@ -125,7 +125,7 @@
 
 .assessment-start-option:hover,
 .assessment-start-option:has(input:checked) {
-  border-color: #82936a;
+  border-color: var(--software-border-strong);
   background: var(--software-lilac);
 }
 
@@ -194,16 +194,19 @@
 }
 
 .assessment-builder-page .assessment-template-preview {
-  border: 1px solid #d0dcc3;
-  background: #eef4e4;
+  border: 1px solid var(--software-border);
+  background: var(--software-lilac);
 }
 
 .assessment-ai-composer {
   display: grid;
   gap: 12px;
   padding: clamp(16px, 3vw, 26px);
-  background-color: #17362c;
-  background-image: radial-gradient(#a7d0ae30 1px, transparent 1px);
+  background-color: var(--software-plum);
+  background-image: radial-gradient(
+    rgb(235 229 242 / 16%) 1px,
+    transparent 1px
+  );
   background-size: 20px 20px;
   color: #fff;
   animation: software-arrive 210ms ease-out both;
@@ -231,7 +234,7 @@
 .assessment-ai-composer p {
   max-width: 57ch;
   margin: 0;
-  color: #e0eadf;
+  color: var(--software-lilac);
   font-size: 13px;
 }
 
@@ -270,22 +273,22 @@
 }
 
 .assessment-ai-actions .button-primary {
-  border-color: #dcf278;
-  background: #dcf278;
-  color: #18332b;
+  border-color: var(--software-mint);
+  background: var(--software-mint);
+  color: var(--software-plum);
 }
 
 .assessment-ai-actions .button-primary:hover:not(:disabled) {
   border-color: #fff;
   background: #fff;
-  color: #18332b;
+  color: var(--software-plum);
 }
 
 .assessment-ai-composer .assessment-ai-error {
   padding: 10px 12px;
   border-radius: 6px;
-  background: #fce9e5;
-  color: #842b21;
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
 }
 
 .assessment-ai-spinner {
@@ -308,7 +311,7 @@
 .assessment-review-criteria {
   padding: clamp(14px, 2vw, 22px);
   border: 1px solid var(--software-border);
-  background: #fafbf7;
+  background: var(--software-canvas);
 }
 
 .assessment-ai-unavailable p {
@@ -439,7 +442,7 @@
   padding: clamp(18px, 3vw, 30px);
   border: 1px solid var(--software-border);
   border-radius: 13px;
-  background: #f7faef;
+  background: var(--software-surface-note);
 }
 
 .assessment-share-heading {

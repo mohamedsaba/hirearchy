@@ -1,5 +1,7 @@
 'use client';
 
+import { SoftwareMark } from '../../../../src/ui/software-mark';
+
 import {
   useCallback,
   useEffect,
@@ -1051,10 +1053,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     <main className="r26-candidate software-product">
       <header className="r26-header">
         <div className="r26-brand">
-          <span className="software-brand-mark" aria-hidden="true" />
-          <strong>
-            Hirearchy<span className="software-brand-period">.</span>
-          </strong>
+          <SoftwareMark />
+          <strong>Hirearchy</strong>
+          <span className="software-document-product">Software</span>
           <span className="r26-workspace-label">Candidate workspace</span>
         </div>
         <div className="r26-header-status">

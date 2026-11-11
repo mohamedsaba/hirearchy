@@ -37,8 +37,9 @@ export function renderSoftwareDocument(
   const organizationPath = workspace
     ? `/r23/organizations/${encodeURIComponent(workspace.organizationId)}`
     : '/r23/login';
-  const mark = '<span class="software-brand-mark" aria-hidden="true"></span>';
-  const brand = `<a class="software-document-wordmark" href="${organizationPath}" aria-label="Hirearchy Software home">${mark}<span>Hirearchy<span class="software-brand-period">.</span></span></a>`;
+  const mark =
+    '<svg class="software-brand-mark" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 8-7 8 7 8"/><path d="m22 8 7 8-7 8"/><path d="m18 5-4 22"/></svg>';
+  const brand = `<a class="software-document-wordmark" href="${organizationPath}" aria-label="Hirearchy Software home">${mark}<span>Hirearchy</span><span class="software-document-product">Software</span></a>`;
   const navigation = workspace
     ? `<div class="software-workspace-switch" role="region" aria-label="Active organization"><a href="/r23/organizations" aria-label="${escapeHtml(workspace.organizationName)}, switch workspace"><span class="software-org-monogram" aria-hidden="true">${escapeHtml(workspace.organizationName.trim().slice(0, 1).toUpperCase() || 'H')}</span><span class="software-org-name">${escapeHtml(workspace.organizationName)}</span><span aria-hidden="true" class="software-chevron"></span></a></div>
         <nav class="software-workspace-tabs" aria-label="Workspace navigation"><a href="${organizationPath}"${workspace.active === 'assessments' ? ' aria-current="page"' : ''}>${workspace.role === 'recruiter' ? 'Assessments' : 'Reviews'}</a><a data-testid="org-settings-link" href="${organizationPath}/settings"${workspace.active === 'settings' ? ' aria-current="page"' : ''}>Team &amp; settings</a></nav>

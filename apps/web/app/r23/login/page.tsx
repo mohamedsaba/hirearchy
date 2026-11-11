@@ -1,3 +1,4 @@
+import { SoftwareMark } from '../../../src/ui/software-mark';
 import {
   IconArrowRight,
   IconBraces,
@@ -48,10 +49,9 @@ export default async function R23LoginPage({
           prefetch={false}
           aria-label="Hirearchy Software home"
         >
-          <span className="software-brand-mark" aria-hidden="true" />
-          <span>
-            Hirearchy<span className="software-brand-period">.</span>
-          </span>
+          <SoftwareMark />
+          <span>Hirearchy</span>
+          <span className="software-document-product">Software</span>
         </Link>
       </header>
       <div className="software-signin-layout">
