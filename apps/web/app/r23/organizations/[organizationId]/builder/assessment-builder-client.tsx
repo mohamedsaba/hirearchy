@@ -1436,7 +1436,10 @@ export function AssessmentBuilderClient({
           role="region"
           aria-label="Active organization"
         >
-          <a href="/r23/organizations" aria-label="Switch workspace">
+          <a
+            href="/r23/organizations"
+            aria-label={`${organizationName ?? 'Workspace'}, switch workspace`}
+          >
             <span className="software-org-monogram" aria-hidden="true">
               {organizationName?.trim().slice(0, 1).toUpperCase() || 'H'}
             </span>
