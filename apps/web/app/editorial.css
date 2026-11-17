@@ -1,0 +1,257 @@
+@tailwind base;
+@tailwind utilities;
+
+.software-product {
+  color-scheme: dark;
+  --paper: var(--software-canvas);
+  --paper-subtle: var(--software-surface-subtle);
+  --code-background: #211426;
+  --code-surface: #2b1b32;
+  --code-border: var(--software-border);
+  --code-text: #f5efe6;
+  --code-muted: #c8bbcb;
+  --terminal-command-text: #8ee3b8;
+  --terminal-output-text: #f5efe6;
+  --terminal-error-text: #ef8782;
+  --diff-addition-background: #24342f;
+  --diff-addition-text: #8ee3b8;
+  --diff-deletion-background: #3b222f;
+  --diff-deletion-text: #ef8782;
+  scrollbar-color: #6a5370 #211426;
+  scrollbar-width: thin;
+  accent-color: #8ee3b8;
+}
+
+.software-product ::selection {
+  color: #211426;
+  background: #8ee3b8;
+}
+
+.software-product
+  :is(
+    .assessment-stage-panel,
+    .assessment-section,
+    .evaluator-review-card,
+    .evaluator-source-inspector,
+    .review-workflow-card,
+    .evaluator-signin-panel,
+    .assessment-template-preview
+  ) {
+  border-radius: 16px;
+  border-color: var(--software-border);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 10%);
+}
+.software-product
+  :is(
+    .assessment-builder-page,
+    .evaluator-product-shell,
+    .evaluator-review-layout
+  ) {
+  background:
+    radial-gradient(ellipse at 70% 0, rgb(142 227 184 / 3%), transparent 60%),
+    var(--software-canvas);
+}
+.software-product
+  :is(.software-product-capsule, .r26-product-tab, .r26-brand-mark) {
+  color: #211426;
+  background: #8ee3b8;
+  border-color: transparent;
+}
+.software-product .software-product-header {
+  border-bottom-color: var(--software-border-subtle);
+  background: #211426;
+}
+.software-product :is(button, a, input, select, textarea):focus-visible {
+  outline-color: #8ee3b8;
+}
+.software-product
+  :is(.evaluator-workbench-modes, .evaluator-evidence-filter-bar)
+  button {
+  position: relative;
+  isolation: isolate;
+}
+.editorial-active-tab {
+  position: absolute;
+  z-index: -1;
+  inset: 3px;
+  border-radius: 10px;
+  background: #3a2644;
+}
+.software-product .editorial-policy {
+  margin-block: 16px;
+}
+.software-product .editorial-policy input {
+  min-height: 0;
+  border: 0;
+}
+.software-product .editorial-pills input {
+  min-height: 0;
+}
+.software-product .editorial-pills {
+  margin-block: 14px;
+}
+.software-product .editorial-pills legend {
+  color: #c8bbcb;
+}
+.software-product .editorial-policy span {
+  text-transform: none;
+}
+.software-product .editorial-chronology {
+  margin: 0 0 20px;
+}
+.software-product
+  :is(
+    .r26-file-tree,
+    .r26-terminal-console,
+    .r26-editor-panel,
+    .r26-ai-panel,
+    .candidate-ai-panel,
+    .candidate-terminal-panel
+  ) {
+  border-color: var(--software-border);
+}
+.software-product :is(.r26-ai-heading, .candidate-workspace .workspace-header) {
+  color: #f5efe6;
+  background: #2b1b32;
+}
+.software-product :is(.r26-terminal-console, .candidate-terminal-panel) {
+  border-radius: 16px;
+}
+.software-product :is(.r26-file-tree, .candidate-file-tree) button {
+  border-radius: 8px;
+}
+.software-product .r26-workspace {
+  gap: 12px;
+  padding: 12px;
+}
+.software-product .r26-editor-panel {
+  border-radius: 16px;
+  overflow: hidden;
+}
+.software-product .r26-ai-panel {
+  border-radius: 16px;
+  overflow: hidden;
+}
+.software-product .candidate-workspace {
+  --candidate-paper: #211426;
+  --candidate-teal: #8ee3b8;
+}
+.software-product .candidate-workspace [data-theme='dark'] .cm-editor {
+  background: #211426;
+  color: #f5efe6;
+}
+.software-product .candidate-workspace [data-theme='dark'] .cm-gutters {
+  background: #211426;
+  color: #bba9c1;
+  border-color: var(--software-border);
+}
+.software-product .candidate-workspace [data-theme='dark'] .cm-activeLine {
+  background: rgb(245 239 230 / 4%);
+}
+.software-product
+  :is(.r26-exit-pill.exit-zero, .r26-execution-state-badge.state-completed) {
+  color: #8ee3b8;
+  background: #24342f;
+}
+.software-product .r26-exit-pill.exit-fail {
+  color: #ef8782;
+  background: #3b222f;
+}
+@media (max-width: 640px) {
+  .software-product .r26-workspace {
+    gap: 8px;
+    padding: 8px;
+  }
+  .software-product .editorial-policy {
+    padding: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .software-product *,
+  .software-product *::before,
+  .software-product *::after {
+    scroll-behavior: auto;
+    transition-duration: 0s;
+    animation-duration: 0s;
+  }
+}
+.software-product .assessment-stage-button {
+  position: relative;
+  isolation: isolate;
+}
+.software-product :is(.weft-ai-transparency, .r26-ai-transparency) {
+  margin: 8px 16px;
+  padding: 8px 12px;
+  border-radius: 99px;
+  background: rgb(142 227 184 / 8%);
+  color: #8ee3b8;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.software-product .weft-ai-transparency {
+  margin: 5px 0 0;
+}
+.software-product {
+  --software-surface-elevated: #2b1b32;
+  --software-error: #ef8782;
+}
+.software-product .editorial-context-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.software-product .editorial-context-pills > span {
+  padding: 5px 10px;
+  border-radius: 99px;
+  background: #3a2644;
+  color: #f5efe6;
+  font-size: 11px;
+}
+.software-product .r26-code-mirror .cm-editor {
+  background: #211426;
+  color: #f5efe6;
+}
+.software-product .r26-code-mirror .cm-gutters {
+  background: #211426;
+  color: #c8bbcb;
+}
+.software-product .assessment-field:has(.editorial-pills) {
+  grid-column: 1 / -1;
+}
+/* Explicit light editor preference stays local to the code buffer. */
+.software-product
+  .candidate-workspace
+  .candidate-editor-buffer[data-theme='light']
+  .cm-editor {
+  color: #211426;
+  background: #f5efe6;
+}
+.software-product
+  .candidate-workspace
+  .candidate-editor-buffer[data-theme='light']
+  .cm-gutters {
+  color: #6a586f;
+  background: #f5efe6;
+}
+.software-product .software-owner-badge {
+  color: #211426;
+}
+
+.software-product
+  :is(
+    .editorial-policy,
+    .editorial-pills,
+    .editorial-chronology,
+    .editorial-follow-up
+  ),
+.software-product
+  :is(
+    .editorial-policy,
+    .editorial-pills,
+    .editorial-chronology,
+    .editorial-follow-up
+  )
+  * {
+  border-width: 0;
+  border-style: solid;
+}

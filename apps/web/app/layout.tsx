@@ -5,6 +5,8 @@ import './styles.css';
 import '../public/software-ui.css';
 import './workspace.css';
 import './home.css';
+import './editorial.css';
+import { EditorialMotion } from './ui/editorial-motion';
 import { IntentPrefetch } from './home/intent-prefetch';
 const dmSans = localFont({
   src: '../public/fonts/dm-sans-latin.woff2',
@@ -23,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={dmSans.variable}>
-        {children}
+        <EditorialMotion>{children}</EditorialMotion>
         <IntentPrefetch />
       </body>
     </html>
