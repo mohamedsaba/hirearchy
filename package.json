@@ -36,6 +36,7 @@
     "@uiw/react-codemirror": "^4.25.12",
     "better-sqlite3": "13.0.3",
     "diff": "9.0.0",
+    "framer-motion": "12.42.2",
     "next": "16.4.3",
     "pg": "8.23.1",
     "react": "19.3.0",
@@ -53,6 +54,7 @@
     "playwright": "1.63.0",
     "prettier": "3.9.6",
     "typescript": "5.9.3",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "tailwindcss": "3.4.19"
   }
 }
