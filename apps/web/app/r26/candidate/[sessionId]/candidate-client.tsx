@@ -1558,6 +1558,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               data-readonly={editorLocked ? 'true' : 'false'}
             >
               <CodeMirror
+                theme="dark"
                 aria-label="Edit file"
                 basicSetup={{
                   lineNumbers: true,
@@ -2096,6 +2097,11 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               ) : null}
             </div>
 
+            {view.capabilities.ai && aiView?.enabled ? (
+              <p className="r26-ai-transparency">
+                AI usage is logged transparently for context.
+              </p>
+            ) : null}
             {!view.capabilities.ai ? (
               <div
                 className="r26-ai-disabled-body"
