@@ -97,7 +97,7 @@
 .assessment-template-preview {
   padding: 28px;
   border: 1px solid var(--software-border);
-  border-left: 3px solid var(--software-plum);
+  border-left: 3px solid var(--software-border-strong);
   border-radius: 0 8px 8px 0;
   background: var(--software-canvas);
 }
@@ -116,7 +116,7 @@
   padding: 4px 8px;
   border-radius: 4px;
   background: var(--software-mint);
-  color: var(--software-plum);
+  color: var(--software-on-action);
   font-size: 11px;
   font-weight: 600;
 }
@@ -161,7 +161,7 @@
 }
 
 .assessment-builder-capability-note strong {
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .assessment-stage-nav {
@@ -211,7 +211,7 @@
 }
 
 .assessment-stage-button[aria-current='step'] {
-  border-bottom-color: var(--software-plum);
+  border-bottom-color: var(--software-border-strong);
   background: transparent;
   box-shadow: none;
 }
@@ -232,7 +232,7 @@
 
 .assessment-stage-button[aria-current='step'] .assessment-stage-number {
   background: var(--software-mint);
-  color: var(--software-plum);
+  color: var(--software-on-action);
 }
 
 .assessment-stage-label {
@@ -274,7 +274,7 @@
 
 .assessment-stage-index {
   padding-top: 4px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   font-weight: 750;
@@ -403,7 +403,7 @@
 
 .assessment-runtime-note strong {
   flex: 0 0 auto;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-weight: 700;
 }
 
@@ -422,7 +422,7 @@
   border: 1px solid var(--software-border);
   border-radius: 999px;
   background: var(--software-surface-note);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1.25;
@@ -473,7 +473,7 @@
 }
 
 .assessment-duration-options label:has(input:checked) {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-mint);
 }
 
@@ -620,12 +620,12 @@
 }
 
 .assessment-tool-toggle input[type='checkbox']:checked {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-mint);
 }
 
 .assessment-tool-toggle input[type='checkbox']:checked::before {
-  background: var(--software-plum);
+  background: var(--software-action);
   transform: translateX(16px);
 }
 
@@ -684,7 +684,7 @@
 
 .assessment-back-link:hover,
 .assessment-lifecycle-link:hover {
-  color: var(--software-plum);
+  color: var(--software-ink);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -714,13 +714,13 @@
 }
 
 .assessment-primary-button {
-  border-color: var(--software-plum);
-  background: var(--software-plum);
-  color: var(--software-surface);
+  border-color: var(--software-border-strong);
+  background: var(--software-action);
+  color: var(--software-on-action);
 }
 
 .assessment-primary-button:hover:not(:disabled) {
-  background: #39284b;
+  background: var(--software-action);
   box-shadow: 0 4px 12px rgb(41 30 54 / 16%);
   transform: translateY(-1px);
 }
@@ -728,11 +728,11 @@
 .assessment-secondary-button {
   border-color: var(--software-border-strong);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .assessment-secondary-button:hover:not(:disabled) {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-surface-note);
 }
 
@@ -756,7 +756,7 @@
   padding: 0 2px;
   border: 0;
   background: transparent;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: inherit;
   font-size: 0.74rem;
   font-weight: 700;
@@ -868,7 +868,7 @@
   place-items: center;
   border: 1px solid var(--software-border-strong);
   border-radius: 50%;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 1.25rem;
   font-weight: 700;
   line-height: 1;
@@ -1054,7 +1054,7 @@
 
 .assessment-disclosure > summary {
   min-height: 42px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 0.73rem;
 }
 
@@ -1071,7 +1071,7 @@
 
 .assessment-disclosure li::marker,
 .assessment-candidate-full-brief li::marker {
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .assessment-capability-note,
@@ -1087,7 +1087,7 @@
 }
 
 .assessment-alternative-source > summary {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 0.75rem;
 }
 
@@ -1097,7 +1097,7 @@
 
 .assessment-intro-note {
   padding: 10px 12px;
-  border-left: 3px solid var(--software-plum);
+  border-left: 3px solid var(--software-border-strong);
   background: var(--software-surface-note);
 }
 
@@ -1117,7 +1117,7 @@
   border: 1px solid var(--software-border);
   border-radius: 50%;
   background: var(--software-surface-note);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
   font-weight: 750;
@@ -1180,7 +1180,7 @@
   padding: 4px 8px;
   border-radius: 999px;
   background: var(--software-surface-note);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 0.68rem;
   font-weight: 700;
   white-space: nowrap;
@@ -1264,7 +1264,7 @@
   padding: 5px 9px;
   border-radius: 999px;
   background: var(--software-surface-note);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
   font-weight: 700;

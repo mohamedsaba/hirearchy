@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { ChoicePills, PolicySwitch } from '../../../ui/editorial-controls';
 import {
   useEffect,
   useMemo,
@@ -1634,6 +1636,13 @@ export const AssessmentBuilder = () => {
                       <span className="assessment-stage-number">
                         0{index + 1}
                       </span>
+                      {stage === step.stage ? (
+                        <motion.span
+                          layoutId="builder-active-stage"
+                          className="editorial-active-tab"
+                          aria-hidden="true"
+                        />
+                      ) : null}
                       <span className="assessment-stage-label">
                         {step.label}
                       </span>
@@ -1735,15 +1744,12 @@ export const AssessmentBuilder = () => {
                       />
                     </div>
                     <div className="assessment-field">
-                      <label htmlFor="assessment-challenge">Challenge</label>
-                      <AssessmentChoice
-                        id="assessment-challenge"
-                        label="Challenge"
+                      <ChoicePills
+                        label="Scenario type"
                         disabled={Boolean(created) || busy}
                         options={assessmentWorkKinds}
                         value={draft.workKind}
                         onChange={(value) => update('workKind', value)}
-                        placeholder="Choose a challenge"
                       />
                     </div>
                     <div className="assessment-field">
@@ -1808,48 +1814,34 @@ export const AssessmentBuilder = () => {
                       ))}
                     </div>
                   </fieldset>
+                  <PolicySwitch
+                    checked={draft.integratedAi}
+                    disabled={Boolean(created) || busy}
+                    onChange={(checked) => update('integratedAi', checked)}
+                    label="Integrated AI"
+                  />
                   <details className="assessment-advanced-settings">
                     <summary>
-                      Advanced settings <span>Terminal and integrated AI</span>
+                      Workspace tools <span>Terminal availability</span>
                     </summary>
-                    <div className="assessment-tools-grid">
-                      <label className="assessment-tool-toggle">
-                        <span className="assessment-tool-copy">
-                          <strong>Terminal</strong>
-                          <small>
-                            Command execution and recorded checks in the
-                            candidate workspace.
-                          </small>
-                        </span>
-                        <input
-                          aria-label="Terminal"
-                          checked={draft.terminalEnabled}
-                          disabled={Boolean(created) || busy}
-                          onChange={(event) =>
-                            update('terminalEnabled', event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                      </label>
-                      <label className="assessment-tool-toggle">
-                        <span className="assessment-tool-copy">
-                          <strong>Integrated AI</strong>
-                          <small>
-                            Recorded interactions remain neutral evidence; they
-                            do not establish how submitted code was written.
-                          </small>
-                        </span>
-                        <input
-                          aria-label="Integrated AI"
-                          checked={draft.integratedAi}
-                          disabled={Boolean(created) || busy}
-                          onChange={(event) =>
-                            update('integratedAi', event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                      </label>
-                    </div>
+                    <label className="assessment-tool-toggle">
+                      <span className="assessment-tool-copy">
+                        <strong>Terminal</strong>
+                        <small>
+                          Command execution and recorded checks in the candidate
+                          workspace.
+                        </small>
+                      </span>
+                      <input
+                        aria-label="Terminal"
+                        checked={draft.terminalEnabled}
+                        disabled={Boolean(created) || busy}
+                        onChange={(event) =>
+                          update('terminalEnabled', event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                    </label>
                     <p className="assessment-tool-availability">
                       Reference documentation and a browser tool are not
                       available in this workspace.

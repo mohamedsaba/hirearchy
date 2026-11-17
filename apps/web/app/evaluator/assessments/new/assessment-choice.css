@@ -28,7 +28,7 @@
 
 .assessment-choice-trigger:hover,
 .assessment-choice-trigger[aria-expanded='true'] {
-  border-color: #9789a7;
+  border-color: var(--software-border);
 }
 
 .assessment-choice-trigger:disabled {
@@ -107,7 +107,7 @@
 }
 
 .assessment-choice-option[data-disabled='true'][data-active='true'] {
-  background: #f5f2f8;
+  background: var(--software-surface-subtle);
 }
 
 .assessment-choice-option[aria-selected='true'] > span:last-child {
@@ -121,7 +121,7 @@
   padding: 0.65rem 0.85rem 0.75rem;
   border-top: 1px solid var(--software-border);
   color: var(--software-muted);
-  background: #fcfafc;
+  background: var(--software-surface-subtle);
   font-size: 0.75rem;
   line-height: 1.45;
 }
