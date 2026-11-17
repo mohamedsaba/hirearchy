@@ -15,32 +15,41 @@ body.software-document-body *::after {
 .software-product {
   /* Common Thread foundation. Route styles may refine these values, but
      shared selectors should not need to invent a second token vocabulary. */
-  --software-plum: #291e36;
-  --software-lilac: #ebe5f2;
-  --software-mint: #b0f0ce;
-  --software-ink: #251a35;
-  --software-muted: #625871;
-  --software-canvas: #f7f6f9;
-  --software-surface: #fff;
-  --software-surface-subtle: #f2f0f5;
-  --software-surface-note: #eee7f4;
-  --software-border: #e2dee8;
-  --software-border-subtle: #eeeaf2;
-  --software-border-strong: #8b7c99;
-  --software-focus: #291e36;
+  color-scheme: dark;
+  scrollbar-color: #6a5370 #211426;
+  scrollbar-width: thin;
+  accent-color: #8ee3b8;
+  --software-brand: var(--software-plum);
+  --software-plum: #211426;
+  --software-lilac: #3a2644;
+  --software-mint: #8ee3b8;
+  --software-ink: #f5efe6;
+  --software-muted: #c8bbcb;
+  --software-canvas: #211426;
+  --software-surface: #2b1b32;
+  --software-surface-subtle: #2d1d35;
+  --software-surface-note: #3a2644;
+  --software-surface-elevated: #2b1b32;
+  --software-border: rgba(245, 239, 230, 0.12);
+  --software-border-subtle: rgba(245, 239, 230, 0.08);
+  --software-border-strong: rgba(245, 239, 230, 0.32);
+  --software-focus: #8ee3b8;
+  --software-action: #8ee3b8;
+  --software-on-action: #211426;
 
-  --software-status-info: #334155;
-  --software-status-info-surface: #f8fafc;
-  --software-status-info-border: #cbd5e1;
-  --software-status-success: #166534;
-  --software-status-success-surface: #ecfdf3;
-  --software-status-success-border: #bbf7d0;
-  --software-status-warning: #74520a;
-  --software-status-warning-surface: #fff7df;
-  --software-status-warning-border: #e2c66f;
-  --software-status-danger: #b42318;
-  --software-status-danger-surface: #fef2f2;
-  --software-status-danger-border: #fecaca;
+  --software-status-info: #c8bbcb;
+  --software-status-info-surface: #2d1d35;
+  --software-status-info-border: rgba(245, 239, 230, 0.12);
+  --software-status-success: #8ee3b8;
+  --software-status-success-surface: #24342f;
+  --software-status-success-border: rgba(142, 227, 184, 0.28);
+  --software-status-warning: #edcba3;
+  --software-status-warning-surface: #3b2b30;
+  --software-status-warning-border: rgba(237, 203, 163, 0.28);
+  --software-status-danger: #ef8782;
+  --software-status-danger-surface: #3b222f;
+  --software-status-danger-border: rgba(232, 93, 86, 0.35);
+  --software-coral: #e85d56;
 
   /* Legacy names used by route-local CSS. */
   --software-danger: var(--software-status-danger);
@@ -55,12 +64,14 @@ body.software-document-body *::after {
   --software-space-page: var(--layout-gutter, 2rem);
   --software-control-height: var(--control-height, 2.5rem);
   --software-touch-target: var(--touch-target, 2.75rem);
-  --software-radius-control: var(--radius-control, 0.5rem);
-  --software-radius-surface: var(--radius-surface, 0.75rem);
+  --software-radius-control: 0.75rem;
+  --software-radius-surface: 1rem;
   --software-transition: var(--motion-standard, 180ms ease);
 
   /* Compatibility aliases let the existing .button and status selectors
      adopt the Software foundation without a broad workspace rewrite. */
+  --paper: var(--software-canvas);
+  --paper-subtle: var(--software-surface-subtle);
   --ink: var(--software-ink);
   --ink-secondary: var(--software-ink);
   --muted: var(--software-muted);
@@ -70,9 +81,9 @@ body.software-document-body *::after {
   --line: var(--software-border);
   --line-subtle: var(--software-border-subtle);
   --line-strong: var(--software-border-strong);
-  --accent: var(--software-plum);
+  --accent: var(--software-mint);
   --accent-light: var(--software-lilac);
-  --accent-dark: var(--software-plum);
+  --accent-dark: var(--software-mint);
   --focus-ring: var(--software-focus);
   --status-success-bg: var(--software-status-success-surface);
   --status-success-text: var(--software-status-success);
@@ -141,9 +152,9 @@ body.software-document-body *::after {
 
 .software-product
   :where(.button-primary, .software-button-primary, .software-action-primary) {
-  border-color: var(--software-plum);
-  background: var(--software-plum);
-  color: var(--software-surface);
+  border-color: var(--software-border-strong);
+  background: var(--software-action);
+  color: var(--software-on-action);
 }
 
 .software-product
@@ -163,7 +174,7 @@ body.software-document-body *::after {
     .software-button-secondary,
     .software-action-secondary
   ):hover:not(:disabled) {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-surface-note);
 }
 
@@ -219,9 +230,9 @@ body.software-document-body *::after {
     .software-action,
     .software-nav-item
   )[data-selected='true'] {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-mint);
-  color: var(--software-ink);
+  color: var(--software-on-action);
 }
 
 .software-product .software-surface,
@@ -262,7 +273,7 @@ body.software-document-body *::after {
 }
 
 .software-product :where(a:not(.software-button):not(.button)) {
-  color: var(--software-plum);
+  color: var(--software-ink);
   text-underline-offset: 0.2em;
 }
 
@@ -284,7 +295,7 @@ body.software-document-body *::after {
   padding-inline: 28px;
   border-bottom: 1px solid var(--software-border);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .software-document-wordmark {
@@ -301,7 +312,7 @@ body.software-document-body *::after {
   padding: 5px 8px;
   border-radius: 5px;
   background: var(--software-mint);
-  color: var(--software-plum);
+  color: var(--software-on-action);
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -358,7 +369,7 @@ body.software-document-body *::after {
 
 .software-document-panel :where(h1, h2, h3) {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .software-document-panel h1 {
@@ -410,15 +421,15 @@ body.software-document-body *::after {
   padding: 0 18px;
   border: 0;
   border-radius: 7px;
-  background: var(--software-plum);
-  color: #fff;
+  background: var(--software-action);
+  color: var(--software-on-action);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
 }
 
 .software-document-panel
   :where(button, input[type='submit']):hover:not(:disabled) {
-  background: #3b2b4a;
+  background: var(--software-action);
 }
 
 .software-document-panel nav {
@@ -438,18 +449,18 @@ body.software-document-body *::after {
   align-items: center;
   justify-content: center;
   padding: 0 18px;
-  border: 1px solid var(--software-plum);
+  border: 1px solid var(--software-border-strong);
   border-radius: 9px;
-  background: var(--software-plum);
-  color: #fff;
+  background: var(--software-action);
+  color: var(--software-on-action);
   font-size: 14px;
   font-weight: 650;
   text-decoration: none;
 }
 
 .software-document-panel a.software-document-primary-link:hover {
-  background: #3b2b4a;
-  color: #fff;
+  background: var(--software-action);
+  color: var(--software-on-action);
 }
 
 .software-document-panel a.software-document-primary-link:focus-visible {
@@ -463,7 +474,7 @@ body.software-document-body *::after {
   justify-self: start;
   border: 1px solid var(--software-border-strong);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .software-document-panel
@@ -483,7 +494,7 @@ body.software-document-body *::after {
   min-width: 7rem;
   border: 1px solid var(--software-border-strong);
   background: transparent;
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .software-document-panel
@@ -539,9 +550,9 @@ body.software-document-body *::after {
   min-width: 0;
   height: calc(100vh - 64px);
   padding: 30px 20px 20px;
-  border-right: 1px solid var(--software-plum);
-  background: var(--software-plum);
-  color: #fff;
+  border-right: 1px solid var(--software-border-strong);
+  background: var(--software-action);
+  color: var(--software-on-action);
 }
 
 .software-workspace-identity {
@@ -559,7 +570,7 @@ body.software-document-body *::after {
 
 .software-workspace-identity .software-eyebrow {
   margin: 0 0 8px;
-  color: #c7bdd2;
+  color: var(--software-muted);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -568,7 +579,7 @@ body.software-document-body *::after {
 
 .software-workspace-identity > span:last-child,
 .software-workspace-sidebar-footer > span {
-  color: #c7bdd2;
+  color: var(--software-muted);
   font-size: 12px;
 }
 
@@ -578,7 +589,7 @@ body.software-document-body *::after {
 }
 
 .software-workspace-sidebar nav a {
-  color: #eee8f4;
+  color: var(--software-ink);
   padding: 11px 12px;
   border-left: 2px solid transparent;
   border-radius: 0 6px 6px 0;
@@ -594,7 +605,7 @@ body.software-document-body *::after {
 .software-workspace-sidebar nav a[aria-current='page'] {
   border-left-color: var(--software-mint);
   background: var(--software-mint);
-  color: var(--software-plum);
+  color: var(--software-on-action);
   font-weight: 650;
 }
 
@@ -616,13 +627,13 @@ body.software-document-body *::after {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #d8cfdf;
+  color: var(--software-ink);
   font: inherit;
   cursor: pointer;
 }
 
 .software-workspace-sidebar-footer > a {
-  color: #eee8f4;
+  color: var(--software-ink);
 }
 
 .software-workspace-sidebar :is(a, button):focus-visible {
@@ -809,13 +820,13 @@ body.software-document-body *::after {
   padding: 14px 16px;
   border: 1px solid var(--software-border);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 14px;
   text-align: left;
 }
 
 .software-document-panel .software-organization-picker button:hover {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-surface-subtle);
 }
 
@@ -903,7 +914,7 @@ body.software-document-body *::after {
 .software-document-panel .software-session-filters button {
   width: auto;
   background: var(--software-surface-subtle);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 12px;
 }
 
@@ -1044,7 +1055,7 @@ body.software-document-body *::after {
     border-right: 0;
     border-bottom: 1px solid var(--software-border);
     background: var(--software-surface);
-    color: var(--software-plum);
+    color: var(--software-ink);
   }
   .software-workspace-identity {
     display: none;
@@ -1061,9 +1072,9 @@ body.software-document-body *::after {
     color: var(--software-muted);
   }
   .software-workspace-sidebar nav a[aria-current='page'] {
-    border-bottom-color: var(--software-plum);
+    border-bottom-color: var(--software-border-strong);
     background: transparent;
-    color: var(--software-plum);
+    color: var(--software-ink);
   }
   .software-workspace-sidebar-footer {
     display: flex;
@@ -1253,7 +1264,7 @@ body.software-document-body *::after {
 
 .software-scenario-brief {
   margin: 0;
-  color: #51465d;
+  color: var(--software-ink);
   font-size: 14px;
   line-height: 1.65;
 }
@@ -1316,4 +1327,25 @@ body.software-document-body *::after {
   padding: 0;
   background: transparent;
   font-size: 0.9em;
+}
+
+body:has(.software-product) {
+  background: #211426;
+  color: #f5efe6;
+}
+.software-product *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.software-product *::-webkit-scrollbar-track {
+  background: #211426;
+}
+.software-product *::-webkit-scrollbar-thumb {
+  border: 2px solid var(--software-border);
+  border-radius: 99px;
+  background: var(--software-surface-subtle);
+}
+.software-document-panel {
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 10%);
 }
