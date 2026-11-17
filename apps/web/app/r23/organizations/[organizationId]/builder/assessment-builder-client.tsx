@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { PolicySwitch } from '../../../../ui/editorial-controls';
 import {
   useCallback,
   useEffect,
@@ -1546,7 +1547,11 @@ export function AssessmentBuilderClient({
                       <span className="assessment-template-tag">
                         Approved template
                       </span>
-                      <span>Python · State &amp; retries</span>
+                      <span className="editorial-context-pills">
+                        <span>Python</span>
+                        <span>Debug incident</span>
+                        <span>State &amp; retries</span>
+                      </span>
                     </div>
                     <h3>Reservation Moves</h3>
                     <p>
@@ -1684,7 +1689,7 @@ export function AssessmentBuilderClient({
                               padding: '4px 8px',
                               borderRadius: '4px',
                               border: '1px solid var(--software-border, #ccc)',
-                              background: '#fff',
+                              background: 'var(--software-surface-subtle)',
                             }}
                           >
                             Remove
@@ -1752,7 +1757,7 @@ export function AssessmentBuilderClient({
                               padding: '4px 8px',
                               borderRadius: '4px',
                               border: '1px solid var(--software-border, #ccc)',
-                              background: '#fff',
+                              background: 'var(--software-surface-subtle)',
                             }}
                           >
                             Remove
@@ -1869,7 +1874,7 @@ export function AssessmentBuilderClient({
                                 borderRadius: '4px',
                                 border:
                                   '1px solid var(--software-border, #ccc)',
-                                background: '#fff',
+                                background: 'var(--software-surface-subtle)',
                                 cursor:
                                   starterFiles.length <= 1
                                     ? 'not-allowed'
@@ -1986,28 +1991,19 @@ export function AssessmentBuilderClient({
                           : 'Terminal verification enabled (required)'}
                       </span>
                     </label>
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        id="integrated-ai"
-                        name="integratedAi"
-                        checked={integratedAi}
-                        disabled={isAuthenticatedStaging}
-                        onChange={(e) => setIntegratedAi(e.target.checked)}
-                      />
-                      <span>
-                        {isAuthenticatedStaging
-                          ? 'AI assistance is unavailable in local testing'
-                          : 'Integrated AI enabled (synthetic test lane)'}
-                      </span>
-                    </label>
+                    <PolicySwitch
+                      id="integrated-ai"
+                      name="integratedAi"
+                      label="Integrated AI"
+                      checked={integratedAi}
+                      disabled={isAuthenticatedStaging}
+                      onChange={setIntegratedAi}
+                      description={
+                        isAuthenticatedStaging
+                          ? 'Candidate-facing rule: AI assistance is disabled in local testing. This deployment does not enable the integrated assistant.'
+                          : 'Candidate-facing rule: when enabled, the synthetic assistant is available and its prompts, responses and supplied context are recorded. This test lane does not use a live AI provider.'
+                      }
+                    />
                     {getFieldIssue('terminalEnabled') && (
                       <p
                         style={{
@@ -2136,7 +2132,7 @@ export function AssessmentBuilderClient({
                               padding: '4px 8px',
                               borderRadius: '4px',
                               border: '1px solid var(--software-border, #ccc)',
-                              background: '#fff',
+                              background: 'var(--software-surface-subtle)',
                               cursor:
                                 rubric.length <= 1 ? 'not-allowed' : 'pointer',
                             }}
@@ -2300,7 +2296,7 @@ export function AssessmentBuilderClient({
                           style={{
                             fontWeight: 700,
                             fontSize: '1.1rem',
-                            color: '#064e3b',
+                            color: 'var(--software-success)',
                           }}
                         >
                           Version {validatedVersion.versionNumber} Validated
@@ -2312,8 +2308,8 @@ export function AssessmentBuilderClient({
                             fontSize: '0.85rem',
                             padding: '4px 8px',
                             borderRadius: '999px',
-                            background: '#047857',
-                            color: '#fff',
+                            background: 'var(--software-action)',
+                            color: 'var(--software-on-action)',
                             fontWeight: 600,
                           }}
                         >
@@ -2323,7 +2319,7 @@ export function AssessmentBuilderClient({
                       <p
                         style={{
                           margin: '0 0 8px',
-                          color: '#065f46',
+                          color: 'var(--software-success)',
                           fontSize: '0.9rem',
                         }}
                       >
@@ -2334,7 +2330,7 @@ export function AssessmentBuilderClient({
                         style={{
                           margin: 0,
                           fontSize: '0.82rem',
-                          color: '#047857',
+                          color: 'var(--software-success)',
                           fontStyle: 'italic',
                         }}
                       >
@@ -2696,14 +2692,14 @@ export function AssessmentBuilderClient({
                     style={{
                       padding: '24px',
                       borderRadius: 'var(--software-radius-surface, 8px)',
-                      border: '1px solid #10b981',
-                      background: '#ecfdf5',
+                      border: '1px solid var(--software-border)',
+                      background: 'var(--software-success-surface)',
                     }}
                   >
                     <h3
                       style={{
                         margin: '0 0 12px',
-                        color: '#064e3b',
+                        color: 'var(--software-success)',
                         fontSize: '1.25rem',
                       }}
                     >
@@ -2712,7 +2708,7 @@ export function AssessmentBuilderClient({
                     <p
                       style={{
                         margin: '0 0 16px',
-                        color: '#065f46',
+                        color: 'var(--software-success)',
                         fontSize: '0.9rem',
                       }}
                     >
@@ -2723,10 +2719,10 @@ export function AssessmentBuilderClient({
 
                     <div
                       style={{
-                        background: '#fff',
+                        background: 'var(--software-surface-subtle)',
                         padding: '16px',
                         borderRadius: '6px',
-                        border: '1px solid #a7f3d0',
+                        border: '1px solid var(--software-border)',
                         marginBottom: '20px',
                       }}
                     >
@@ -2773,7 +2769,7 @@ export function AssessmentBuilderClient({
                                   href={issuedSession.candidatePath}
                                   data-testid="candidate-workspace-link"
                                   style={{
-                                    color: '#047857',
+                                    color: 'var(--software-success)',
                                     fontWeight: 600,
                                     wordBreak: 'break-all',
                                   }}
