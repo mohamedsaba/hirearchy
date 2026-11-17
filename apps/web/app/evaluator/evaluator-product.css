@@ -11,14 +11,14 @@
   gap: 24px;
   border-bottom: 1px solid var(--software-border);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .software-wordmark {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 24px;
   font-weight: 750;
   text-decoration: none;
@@ -30,7 +30,7 @@
   border: 1px solid var(--software-mint);
   border-radius: 5px;
   background: var(--software-mint);
-  color: var(--software-plum);
+  color: var(--software-on-action);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.01em;
@@ -56,7 +56,7 @@
 }
 
 .software-product-header nav a[aria-current='page'] {
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .software-product-header nav a[aria-current='page']::after {
@@ -95,7 +95,7 @@
 .evaluator-page-intro h1,
 .evaluator-signin-copy h1 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-family: var(--software-sans);
   font-size: clamp(32px, 4vw, 44px);
   font-weight: 700;
@@ -126,8 +126,8 @@
 }
 
 .software-button-primary {
-  background: var(--software-plum);
-  color: white;
+  background: var(--software-action);
+  color: var(--software-on-action);
 }
 
 .evaluator-queue-panel {
@@ -140,7 +140,7 @@
 
 .evaluator-section-heading h2 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-family: var(--software-sans);
   font-size: 20px;
   font-weight: 700;
@@ -198,11 +198,11 @@
 }
 
 .evaluator-review-link:hover {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
 }
 
 .evaluator-review-title {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 15px;
   font-weight: 700;
 }
@@ -222,7 +222,7 @@
 }
 
 .evaluator-known-session summary {
-  color: var(--software-plum);
+  color: var(--software-ink);
   cursor: pointer;
   font-weight: 650;
 }
@@ -260,7 +260,7 @@
   margin-top: 24px;
   padding-left: 14px;
   border-left: 3px solid var(--software-mint);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 14px;
   font-weight: 600;
 }
@@ -294,8 +294,8 @@
   min-height: 44px;
   border: 0;
   border-radius: 7px;
-  background: var(--software-plum);
-  color: white;
+  background: var(--software-action);
+  color: var(--software-on-action);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -412,7 +412,7 @@
   border: 1px solid var(--software-border);
   border-radius: 6px;
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 12px;
 }
 
@@ -436,7 +436,7 @@
 }
 
 .software-mail-messages > ul > li > p:first-child {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 15px;
 }
 
@@ -486,7 +486,7 @@
 
 .evaluator-report-heading h1 {
   margin: 14px 0 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-family: var(--software-sans);
   font-size: clamp(26px, 2.8vw, 32px);
   font-weight: 650;
