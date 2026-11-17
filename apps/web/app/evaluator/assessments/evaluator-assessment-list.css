@@ -59,7 +59,7 @@
   border: 1px solid var(--software-border);
   border-radius: var(--software-radius-control);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: inherit;
   font-size: 13px;
   font-weight: 650;
@@ -67,7 +67,7 @@
 }
 
 .lifecycle-refresh-button:hover:not([aria-disabled='true']) {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-surface-note);
 }
 
@@ -181,7 +181,7 @@
 
 .lifecycle-row-assessment h3 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.35;
@@ -222,7 +222,7 @@
   border: 1px solid var(--software-border);
   border-radius: var(--radius-pill, 999px);
   background: var(--software-surface-note);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 11px;
   font-weight: 650;
   line-height: 1.3;
@@ -312,7 +312,7 @@
   border: 1px solid var(--software-border);
   border-radius: var(--software-radius-control);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 12px;
   font-weight: 650;
   list-style: none;
@@ -404,7 +404,7 @@
   border: 1px solid var(--software-border);
   border-radius: var(--software-radius-control);
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
@@ -416,13 +416,13 @@
 }
 
 .lifecycle-detail-link:hover {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-surface-note);
 }
 
 .lifecycle-details-panel .lifecycle-copy-feedback {
   margin: 8px 0 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 11px;
 }
 
@@ -451,7 +451,7 @@
 }
 
 .lifecycle-state-message h3 {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 15px;
 }
 
@@ -723,7 +723,7 @@
   border: 1px solid var(--software-border-subtle);
   border-radius: var(--software-radius-control);
   background: var(--software-canvas);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 13px;
   font-weight: 600;
 }
