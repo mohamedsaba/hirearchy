@@ -1,5 +1,7 @@
 'use client';
 
+import { LineFollowUp } from '../../../ui/line-follow-up';
+
 import { useEffect, useId, useState, type RefObject } from 'react';
 import type { EvaluatorAiConversation } from '../../../../src/evaluator/evaluator-ai-conversations';
 import type {
@@ -638,7 +640,11 @@ const R29ObservationPanel = ({
   filePath,
   fileVersion,
   evidenceDigest,
+  submittedCode,
+  submittedPath,
 }: Readonly<{
+  submittedCode?: string | null;
+  submittedPath?: string;
   organizationId: string;
   sessionId: string;
   evidenceSourceType: R29EvidenceSourceType;
@@ -657,6 +663,7 @@ const R29ObservationPanel = ({
     string | null
   >(null);
 
+  const [anchorLine, setAnchorLine] = useState<number | null>(null);
   const [newBody, setNewBody] = useState<string>('');
   const [creating, setCreating] = useState<boolean>(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -723,7 +730,11 @@ const R29ObservationPanel = ({
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validation = validateObservationBody(newBody);
+    const body =
+      anchorLine && submittedPath
+        ? `Follow-up question — ${submittedPath}:${anchorLine} (submitted version)\n${newBody}`
+        : newBody;
+    const validation = validateObservationBody(body);
     if (!validation.valid || !validation.value) {
       setCreateError(validation.error ?? 'Observation body is invalid.');
       return;
@@ -910,8 +921,8 @@ const R29ObservationPanel = ({
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
-              background: '#e0e7ff',
-              color: '#3730a3',
+              background: 'var(--software-surface-subtle)',
+              color: 'var(--software-ink)',
               padding: '3px 8px',
               borderRadius: '4px',
             }}
@@ -924,8 +935,8 @@ const R29ObservationPanel = ({
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
-              background: '#fef3c7',
-              color: '#92400e',
+              background: 'var(--software-warning-surface)',
+              color: 'var(--software-warning)',
               padding: '3px 8px',
               borderRadius: '4px',
             }}
@@ -964,7 +975,7 @@ const R29ObservationPanel = ({
             flexWrap: 'wrap',
             gap: '8px',
             fontSize: '12px',
-            color: '#4b5563',
+            color: 'var(--software-muted)',
             alignItems: 'center',
           }}
         >
@@ -985,23 +996,30 @@ const R29ObservationPanel = ({
             margin: '0 0 8px 0',
             fontSize: '13px',
             fontWeight: 600,
-            color: '#374151',
+            color: 'var(--software-ink)',
           }}
         >
           Evaluator Notes ({anchoredObservations.length})
         </h4>
 
         {loading ? (
-          <p style={{ fontSize: '13px', color: '#6b7280' }}>
+          <p style={{ fontSize: '13px', color: 'var(--software-muted)' }}>
             Loading observations…
           </p>
         ) : error ? (
-          <p role="alert" style={{ fontSize: '13px', color: '#dc2626' }}>
+          <p
+            role="alert"
+            style={{ fontSize: '13px', color: 'var(--software-status-danger)' }}
+          >
             Failed to load observations: {error}
           </p>
         ) : anchoredObservations.length === 0 ? (
           <p
-            style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic' }}
+            style={{
+              fontSize: '13px',
+              color: 'var(--software-muted)',
+              fontStyle: 'italic',
+            }}
           >
             No evaluator observations recorded for this evidence item yet.
           </p>
@@ -1047,8 +1065,8 @@ const R29ObservationPanel = ({
                       <span
                         style={{
                           fontWeight: 600,
-                          background: '#dbeafe',
-                          color: '#1e40af',
+                          background: 'var(--software-surface-subtle)',
+                          color: 'var(--software-ink)',
                           padding: '1px 6px',
                           borderRadius: '4px',
                         }}
@@ -1057,7 +1075,7 @@ const R29ObservationPanel = ({
                       </span>
                       <time
                         dateTime={obs.updatedAt}
-                        style={{ color: '#6b7280' }}
+                        style={{ color: 'var(--software-muted)' }}
                       >
                         Updated {formatObservationDisplayDate(obs.updatedAt)}
                       </time>
@@ -1070,8 +1088,8 @@ const R29ObservationPanel = ({
                           fontSize: '12px',
                           padding: '3px 8px',
                           borderRadius: '4px',
-                          border: '1px solid #d1d5db',
-                          background: '#fff',
+                          border: '1px solid var(--software-border)',
+                          background: 'var(--software-surface-subtle)',
                           cursor: 'pointer',
                         }}
                       >
@@ -1086,8 +1104,8 @@ const R29ObservationPanel = ({
                         <div
                           role="alert"
                           style={{
-                            background: '#fee2e2',
-                            color: '#991b1b',
+                            background: 'var(--software-danger-surface)',
+                            color: 'var(--software-status-danger)',
                             padding: '8px 12px',
                             borderRadius: '4px',
                             fontSize: '13px',
@@ -1102,8 +1120,8 @@ const R29ObservationPanel = ({
                         <div
                           role="alert"
                           style={{
-                            background: '#fee2e2',
-                            color: '#991b1b',
+                            background: 'var(--software-danger-surface)',
+                            color: 'var(--software-status-danger)',
                             padding: '8px 12px',
                             borderRadius: '4px',
                             fontSize: '13px',
@@ -1128,7 +1146,7 @@ const R29ObservationPanel = ({
                           fontSize: '14px',
                           fontFamily: 'inherit',
                           borderRadius: '4px',
-                          border: '1px solid #9ca3af',
+                          border: '1px solid var(--software-border)',
                         }}
                       />
                       <div
@@ -1141,7 +1159,12 @@ const R29ObservationPanel = ({
                           gap: '8px',
                         }}
                       >
-                        <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: 'var(--software-muted)',
+                          }}
+                        >
                           {editBody.length} / 10000 characters
                         </span>
                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -1153,8 +1176,8 @@ const R29ObservationPanel = ({
                               fontSize: '12px',
                               padding: '4px 10px',
                               borderRadius: '4px',
-                              border: '1px solid #d1d5db',
-                              background: '#fff',
+                              border: '1px solid var(--software-border)',
+                              background: 'var(--software-surface-subtle)',
                               cursor: 'pointer',
                             }}
                           >
@@ -1169,8 +1192,8 @@ const R29ObservationPanel = ({
                               padding: '4px 12px',
                               borderRadius: '4px',
                               border: 'none',
-                              background: '#2563eb',
-                              color: '#fff',
+                              background: 'var(--software-action)',
+                              color: 'var(--software-on-action)',
                               fontWeight: 600,
                               cursor:
                                 updating || !editBody.trim()
@@ -1211,7 +1234,7 @@ const R29ObservationPanel = ({
                       <summary
                         style={{
                           cursor: 'pointer',
-                          color: '#4b5563',
+                          color: 'var(--software-muted)',
                           fontWeight: 500,
                         }}
                       >
@@ -1231,7 +1254,10 @@ const R29ObservationPanel = ({
                         {obs.history.map((h) => (
                           <div
                             key={h.historyId}
-                            style={{ fontSize: '11px', color: '#4b5563' }}
+                            style={{
+                              fontSize: '11px',
+                              color: 'var(--software-muted)',
+                            }}
                           >
                             <div style={{ fontWeight: 600 }}>
                               v{h.version} (
@@ -1277,7 +1303,7 @@ const R29ObservationPanel = ({
               margin: '0 0 6px 0',
               fontSize: '13px',
               fontWeight: 600,
-              color: '#374151',
+              color: 'var(--software-ink)',
             }}
           >
             Record Observation
@@ -1287,8 +1313,8 @@ const R29ObservationPanel = ({
             <div
               role="alert"
               style={{
-                background: '#fee2e2',
-                color: '#991b1b',
+                background: 'var(--software-danger-surface)',
+                color: 'var(--software-status-danger)',
                 padding: '8px 12px',
                 borderRadius: '4px',
                 fontSize: '13px',
@@ -1303,18 +1329,28 @@ const R29ObservationPanel = ({
             <div
               role="status"
               style={{
-                background: '#dcfce7',
-                color: '#15803d',
+                background: 'var(--software-success-surface)',
+                color: 'var(--software-success)',
                 padding: '8px 12px',
                 borderRadius: '4px',
                 fontSize: '13px',
                 marginBottom: '8px',
               }}
             >
-              Observation saved.
+              {anchorLine
+                ? 'Follow-up question saved in your private review.'
+                : 'Observation saved.'}
             </div>
           ) : null}
 
+          {submittedCode != null && submittedPath ? (
+            <LineFollowUp
+              content={submittedCode}
+              filePath={submittedPath}
+              line={anchorLine}
+              onLineChange={setAnchorLine}
+            />
+          ) : null}
           <textarea
             aria-label="Observation note"
             placeholder="Record human evaluator note anchored to this evidence…"
@@ -1334,7 +1370,7 @@ const R29ObservationPanel = ({
               fontSize: '14px',
               fontFamily: 'inherit',
               borderRadius: '6px',
-              border: '1px solid #d1d5db',
+              border: '1px solid var(--software-border)',
             }}
           />
 
@@ -1348,7 +1384,7 @@ const R29ObservationPanel = ({
               gap: '8px',
             }}
           >
-            <span style={{ fontSize: '11px', color: '#6b7280' }}>
+            <span style={{ fontSize: '11px', color: 'var(--software-muted)' }}>
               {newBody.length} / 10000 characters
             </span>
             <button
@@ -1359,14 +1395,18 @@ const R29ObservationPanel = ({
                 padding: '6px 14px',
                 borderRadius: '6px',
                 border: 'none',
-                background: '#2563eb',
-                color: '#ffffff',
+                background: 'var(--software-action)',
+                color: 'var(--software-on-action)',
                 fontWeight: 600,
                 cursor: creating || !newBody.trim() ? 'not-allowed' : 'pointer',
                 opacity: creating || !newBody.trim() ? 0.6 : 1,
               }}
             >
-              {creating ? 'Saving…' : 'Save observation'}
+              {creating
+                ? 'Saving…'
+                : anchorLine
+                  ? 'Save follow-up question'
+                  : 'Save observation'}
             </button>
           </div>
         </form>
@@ -1378,7 +1418,7 @@ const R29ObservationPanel = ({
             borderTop: '1px solid var(--software-border, #e5e7eb)',
             paddingTop: '12px',
             fontSize: '13px',
-            color: '#92400e',
+            color: 'var(--software-warning)',
           }}
         >
           <strong>Read-Only Staging Slice:</strong>{' '}
@@ -2125,20 +2165,20 @@ const R27EvidenceSourceInspector = ({
                   ? {
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      color: '#0984e3',
-                      background: '#e8f4fd',
+                      color: 'var(--software-ink)',
+                      background: 'var(--software-surface-subtle)',
                       padding: '0.2rem 0.5rem',
                       borderRadius: '4px',
-                      border: '1px solid #74b9ff',
+                      border: '1px solid var(--software-border)',
                     }
                   : {
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      color: '#6c5ce7',
-                      background: '#f0eeff',
+                      color: 'var(--software-ink)',
+                      background: 'var(--software-surface-subtle)',
                       padding: '0.2rem 0.5rem',
                       borderRadius: '4px',
-                      border: '1px solid #dcd6ff',
+                      border: '1px solid var(--software-border)',
                     }
               }
             >
@@ -2153,8 +2193,8 @@ const R27EvidenceSourceInspector = ({
                 style={{
                   fontSize: '0.75rem',
                   fontWeight: 700,
-                  color: '#d63031',
-                  background: '#ffeaa7',
+                  color: 'var(--software-status-danger)',
+                  background: 'var(--software-warning-surface)',
                   padding: '0.2rem 0.5rem',
                   borderRadius: '4px',
                 }}
@@ -2172,11 +2212,11 @@ const R27EvidenceSourceInspector = ({
           style={{
             margin: '0.75rem 0',
             padding: '0.6rem 0.85rem',
-            background: '#f8f9fa',
-            border: '1px solid #dfe6e9',
+            background: 'var(--software-surface-subtle)',
+            border: '1px solid var(--software-border)',
             borderRadius: '4px',
             fontSize: '0.8rem',
-            color: '#636e72',
+            color: 'var(--software-muted)',
           }}
         >
           <strong>Evaluator Notice:</strong> Factual execution record only. No
@@ -2367,7 +2407,10 @@ const R27EvidenceSourceInspector = ({
                 </strong>
                 {execution.truncatedStdout ? (
                   <span
-                    style={{ fontSize: '0.75rem', color: '#e17055' }}
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--software-warning)',
+                    }}
                     data-testid="stdout-truncated-notice"
                   >
                     [Output truncated at limit]
@@ -2377,8 +2420,8 @@ const R27EvidenceSourceInspector = ({
               <pre
                 data-testid="evaluator-execution-stdout"
                 style={{
-                  background: '#181622',
-                  color: '#a6e3a1',
+                  background: 'var(--software-success-surface)',
+                  color: 'var(--software-success)',
                   padding: '0.75rem',
                   borderRadius: '6px',
                   fontFamily: 'monospace',
@@ -2408,7 +2451,10 @@ const R27EvidenceSourceInspector = ({
                   </strong>
                   {execution.truncatedStderr ? (
                     <span
-                      style={{ fontSize: '0.75rem', color: '#e17055' }}
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--software-warning)',
+                      }}
                       data-testid="stderr-truncated-notice"
                     >
                       [Output truncated at limit]
@@ -2418,8 +2464,8 @@ const R27EvidenceSourceInspector = ({
                 <pre
                   data-testid="execution-inspector-stderr"
                   style={{
-                    background: '#221618',
-                    color: '#ff7675',
+                    background: 'var(--software-danger-surface)',
+                    color: 'var(--software-status-danger)',
                     padding: '0.75rem',
                     borderRadius: '6px',
                     fontFamily: 'monospace',
@@ -2847,6 +2893,8 @@ const R27EvidenceSourceInspector = ({
         filePath={matchingEvent ? file.path : null}
         fileVersion={matchingEvent ? fileVersion : null}
         evidenceDigest={evidenceDigest}
+        submittedCode={file.submittedContent}
+        submittedPath={file.path}
       />
     </section>
   );
@@ -3589,7 +3637,7 @@ export const R210ReviewPacketPanel = ({
         aria-label="Review packet error"
         style={{ padding: '24px' }}
       >
-        <p role="alert" style={{ color: '#dc2626' }}>
+        <p role="alert" style={{ color: 'var(--software-status-danger)' }}>
           {loadError}
         </p>
         <button
@@ -3679,8 +3727,12 @@ export const R210ReviewPacketPanel = ({
               fontWeight: 700,
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              backgroundColor: isFinalized ? '#dcfce7' : '#fef3c7',
-              color: isFinalized ? '#166534' : '#92400e',
+              backgroundColor: isFinalized
+                ? 'var(--software-success-surface)'
+                : 'var(--software-warning-surface)',
+              color: isFinalized
+                ? 'var(--software-success)'
+                : 'var(--software-warning)',
               border: isFinalized ? '1px solid #86efac' : '1px solid #fde68a',
             }}
           >
@@ -3697,9 +3749,9 @@ export const R210ReviewPacketPanel = ({
                 borderRadius: '9999px',
                 fontSize: '11px',
                 fontWeight: 600,
-                backgroundColor: '#fee2e2',
-                color: '#991b1b',
-                border: '1px solid #fca5a5',
+                backgroundColor: 'var(--software-danger-surface)',
+                color: 'var(--software-status-danger)',
+                border: '1px solid var(--software-border)',
               }}
             >
               Unsaved changes
@@ -3727,9 +3779,9 @@ export const R210ReviewPacketPanel = ({
                 fontSize: '11px',
                 padding: '3px 8px',
                 borderRadius: '6px',
-                backgroundColor: '#f3f4f6',
-                color: '#374151',
-                border: '1px solid #d1d5db',
+                backgroundColor: 'var(--software-surface-subtle)',
+                color: 'var(--software-ink)',
+                border: '1px solid var(--software-border)',
               }}
             >
               {formatR210DigestBadge(packet.finalDigest)}
@@ -3762,8 +3814,8 @@ export const R210ReviewPacketPanel = ({
             letterSpacing: '0.05em',
             padding: '2px 6px',
             borderRadius: '4px',
-            backgroundColor: '#e0e7ff',
-            color: '#3730a3',
+            backgroundColor: 'var(--software-surface-note)',
+            color: 'var(--software-ink)',
           }}
         >
           {R210_OBJECTIVE_LABEL}
@@ -3776,8 +3828,8 @@ export const R210ReviewPacketPanel = ({
             letterSpacing: '0.05em',
             padding: '2px 6px',
             borderRadius: '4px',
-            backgroundColor: '#fef3c7',
-            color: '#92400e',
+            backgroundColor: 'var(--software-warning-surface)',
+            color: 'var(--software-warning)',
           }}
         >
           {R210_HUMAN_LABEL}
@@ -3796,9 +3848,9 @@ export const R210ReviewPacketPanel = ({
             padding: '12px 16px',
             marginBottom: '16px',
             borderRadius: '8px',
-            backgroundColor: '#fef2f2',
-            border: '1px solid #f87171',
-            color: '#991b1b',
+            backgroundColor: 'var(--software-danger-surface)',
+            border: '1px solid var(--software-border)',
+            color: 'var(--software-status-danger)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -3815,8 +3867,8 @@ export const R210ReviewPacketPanel = ({
             style={{
               padding: '6px 14px',
               borderRadius: '6px',
-              backgroundColor: '#dc2626',
-              color: '#ffffff',
+              backgroundColor: 'var(--software-coral)',
+              color: 'var(--software-on-action)',
               border: 'none',
               cursor: 'pointer',
               fontWeight: 600,
@@ -3837,9 +3889,9 @@ export const R210ReviewPacketPanel = ({
             padding: '12px 16px',
             marginBottom: '20px',
             borderRadius: '8px',
-            backgroundColor: '#f0fdf4',
-            border: '1px solid #86efac',
-            color: '#166534',
+            backgroundColor: 'var(--software-success-surface)',
+            border: '1px solid var(--software-border)',
+            color: 'var(--software-success)',
             fontSize: '13px',
             fontWeight: 500,
           }}
@@ -3857,9 +3909,9 @@ export const R210ReviewPacketPanel = ({
             padding: '12px 16px',
             marginBottom: '20px',
             borderRadius: '8px',
-            backgroundColor: '#fffbeb',
-            border: '1px solid #f59e0b',
-            color: '#92400e',
+            backgroundColor: 'var(--software-warning-surface)',
+            border: '1px solid var(--software-border)',
+            color: 'var(--software-warning)',
             fontSize: '13px',
             fontWeight: 500,
           }}
@@ -3975,7 +4027,7 @@ export const R210ReviewPacketPanel = ({
                   fontSize: '15px',
                   fontWeight: 700,
                   margin: '0 0 8px 0',
-                  color: '#15803d',
+                  color: 'var(--software-success)',
                 }}
               >
                 Key Strengths
@@ -4006,7 +4058,7 @@ export const R210ReviewPacketPanel = ({
                   fontSize: '15px',
                   fontWeight: 700,
                   margin: '0 0 8px 0',
-                  color: '#b45309',
+                  color: 'var(--software-warning)',
                 }}
               >
                 Concerns & Risks
@@ -4104,8 +4156,8 @@ export const R210ReviewPacketPanel = ({
                       style={{
                         padding: '10px 14px',
                         borderRadius: '6px',
-                        backgroundColor: '#fffbeb',
-                        border: '1px solid #fde68a',
+                        backgroundColor: 'var(--software-warning-surface)',
+                        border: '1px solid var(--software-border)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
@@ -4170,8 +4222,8 @@ export const R210ReviewPacketPanel = ({
                     style={{
                       padding: '10px 14px',
                       borderRadius: '6px',
-                      backgroundColor: '#eff6ff',
-                      border: '1px solid #bfdbfe',
+                      backgroundColor: 'var(--software-surface-note)',
+                      border: '1px solid var(--software-border)',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
@@ -4188,7 +4240,7 @@ export const R210ReviewPacketPanel = ({
                           marginLeft: '8px',
                           fontFamily: 'monospace',
                           fontSize: '11px',
-                          color: '#4b5563',
+                          color: 'var(--software-muted)',
                         }}
                       >
                         {formatR210DigestBadge(ev.evidenceDigest)}
@@ -4290,7 +4342,7 @@ export const R210ReviewPacketPanel = ({
                 fontWeight: 700,
                 fontSize: '14px',
                 marginBottom: '6px',
-                color: '#15803d',
+                color: 'var(--software-success)',
               }}
             >
               Strengths{' '}
@@ -4334,7 +4386,7 @@ export const R210ReviewPacketPanel = ({
                 fontWeight: 700,
                 fontSize: '14px',
                 marginBottom: '6px',
-                color: '#b45309',
+                color: 'var(--software-warning)',
               }}
             >
               Concerns{' '}
@@ -4433,7 +4485,11 @@ export const R210ReviewPacketPanel = ({
             >
               Citations & Grounded Evidence{' '}
               <span
-                style={{ fontWeight: 400, fontSize: '12px', color: '#6b7280' }}
+                style={{
+                  fontWeight: 400,
+                  fontSize: '12px',
+                  color: 'var(--software-muted)',
+                }}
               >
                 (At least 1 citation required for finalization)
               </span>
@@ -4516,7 +4572,12 @@ export const R210ReviewPacketPanel = ({
                           {obs.body.length > 80
                             ? `${obs.body.slice(0, 80)}…`
                             : obs.body}{' '}
-                          <span style={{ color: '#6b7280', fontSize: '11px' }}>
+                          <span
+                            style={{
+                              color: 'var(--software-muted)',
+                              fontSize: '11px',
+                            }}
+                          >
                             (v{obs.version})
                           </span>
                         </span>
@@ -4595,7 +4656,12 @@ export const R210ReviewPacketPanel = ({
                         <span>
                           <strong>File:</strong> <code>{rev.path}</code> (v
                           {rev.version}) ·{' '}
-                          <span style={{ color: '#6b7280', fontSize: '11px' }}>
+                          <span
+                            style={{
+                              color: 'var(--software-muted)',
+                              fontSize: '11px',
+                            }}
+                          >
                             {formatR210DigestBadge(rev.digest)}
                           </span>
                         </span>
@@ -4653,13 +4719,25 @@ export const R210ReviewPacketPanel = ({
 
           {/* Feedback messages */}
           {saveError ? (
-            <div role="alert" style={{ color: '#dc2626', fontSize: '13px' }}>
+            <div
+              role="alert"
+              style={{
+                color: 'var(--software-status-danger)',
+                fontSize: '13px',
+              }}
+            >
               {saveError}
             </div>
           ) : null}
 
           {finalizeError ? (
-            <div role="alert" style={{ color: '#dc2626', fontSize: '13px' }}>
+            <div
+              role="alert"
+              style={{
+                color: 'var(--software-status-danger)',
+                fontSize: '13px',
+              }}
+            >
               {finalizeError}
             </div>
           ) : null}
@@ -4667,7 +4745,11 @@ export const R210ReviewPacketPanel = ({
           {lastSavedMessage ? (
             <div
               role="status"
-              style={{ color: '#166534', fontSize: '13px', fontWeight: 500 }}
+              style={{
+                color: 'var(--software-success)',
+                fontSize: '13px',
+                fontWeight: 500,
+              }}
             >
               {lastSavedMessage}
             </div>
@@ -4689,8 +4771,8 @@ export const R210ReviewPacketPanel = ({
               style={{
                 padding: '8px 18px',
                 borderRadius: '8px',
-                backgroundColor: 'var(--software-plum, #6b21a8)',
-                color: '#ffffff',
+                backgroundColor: 'var(--software-action)',
+                color: 'var(--software-on-action)',
                 border: 'none',
                 fontWeight: 600,
                 fontSize: '13px',
@@ -4708,8 +4790,8 @@ export const R210ReviewPacketPanel = ({
               style={{
                 padding: '8px 18px',
                 borderRadius: '8px',
-                backgroundColor: '#15803d',
-                color: '#ffffff',
+                backgroundColor: 'var(--software-action)',
+                color: 'var(--software-on-action)',
                 border: 'none',
                 fontWeight: 600,
                 fontSize: '13px',
@@ -4741,7 +4823,7 @@ export const R210ReviewPacketPanel = ({
         >
           <div
             style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--software-surface)',
               borderRadius: '12px',
               padding: '24px',
               maxWidth: '480px',
@@ -4754,7 +4836,7 @@ export const R210ReviewPacketPanel = ({
                 margin: '0 0 12px 0',
                 fontSize: '18px',
                 fontWeight: 700,
-                color: '#111827',
+                color: 'var(--software-ink)',
               }}
             >
               Finalize Review Packet?
@@ -4764,7 +4846,7 @@ export const R210ReviewPacketPanel = ({
                 margin: '0 0 20px 0',
                 fontSize: '14px',
                 lineHeight: 1.5,
-                color: '#4b5563',
+                color: 'var(--software-muted)',
               }}
             >
               This action is permanent and creates an immutable audit record.
@@ -4786,9 +4868,9 @@ export const R210ReviewPacketPanel = ({
                 style={{
                   padding: '8px 16px',
                   borderRadius: '6px',
-                  border: '1px solid #d1d5db',
-                  backgroundColor: '#ffffff',
-                  color: '#374151',
+                  border: '1px solid var(--software-border)',
+                  backgroundColor: 'var(--software-surface)',
+                  color: 'var(--software-ink)',
                   fontWeight: 600,
                   fontSize: '13px',
                   cursor: 'pointer',
@@ -4804,8 +4886,8 @@ export const R210ReviewPacketPanel = ({
                   padding: '8px 16px',
                   borderRadius: '6px',
                   border: 'none',
-                  backgroundColor: '#15803d',
-                  color: '#ffffff',
+                  backgroundColor: 'var(--software-action)',
+                  color: 'var(--software-on-action)',
                   fontWeight: 600,
                   fontSize: '13px',
                   cursor: finalizing ? 'wait' : 'pointer',

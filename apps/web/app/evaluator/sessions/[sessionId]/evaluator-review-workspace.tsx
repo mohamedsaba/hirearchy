@@ -1,5 +1,8 @@
 'use client';
 
+import { motion } from 'framer-motion';
+import { ChronologyScrubber } from '../../../ui/chronology-scrubber';
+
 import {
   useEffect,
   useMemo,
@@ -960,6 +963,14 @@ const EvidenceView = ({
 
   return (
     <div className="evaluator-evidence-workbench">
+      <ChronologyScrubber
+        sources={sources}
+        selectedKey={selectedSourceKey}
+        onSelect={(source) => {
+          onFilterChange('Chronology');
+          onSelectSource(source);
+        }}
+      />
       {filter === 'AI conversations' && projection ? (
         <CompactAiSummary
           summary={projection.briefing.aiSummary}
@@ -1530,6 +1541,13 @@ export const EvaluatorReviewWorkspace = (
                 }}
                 onKeyDown={(event) => onModeKeyDown(event, index)}
               >
+                {mode === item ? (
+                  <motion.span
+                    layoutId="review-active-mode"
+                    className="editorial-active-tab"
+                    aria-hidden="true"
+                  />
+                ) : null}
                 {item}
               </button>
             ))}

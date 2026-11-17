@@ -15,7 +15,7 @@
 
 .task-assessment-report .task-assessment-heading h2 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 clamp(36px, 3.2vw, 48px) / 1.06 var(--software-sans);
   letter-spacing: -0.04em;
   text-transform: none;
@@ -36,7 +36,7 @@
   margin: 0;
   padding: 12px 16px;
   border: 1px solid var(--software-border);
-  border-left: 3px solid var(--software-plum);
+  border-left: 3px solid var(--software-border-strong);
   border-radius: 8px;
   background: var(--software-surface);
   color: var(--software-ink);
@@ -103,7 +103,7 @@
 .task-assessment-report .task-report-results-heading h3,
 .task-assessment-report .task-evidence-inspector-heading h3 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 20px / 1.3 var(--software-sans);
   letter-spacing: -0.025em;
   text-transform: none;
@@ -115,7 +115,7 @@
   gap: 14px;
   width: 100%;
   padding: 12px 18px;
-  border: 1px solid #e1d8ec;
+  border: 1px solid var(--software-border);
   border-radius: 10px;
   background: var(--software-lilac);
   text-align: left;
@@ -128,7 +128,7 @@
 
 .task-assessment-report .task-total strong {
   margin: 0 0 0 auto;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 46px;
   line-height: 1;
 }
@@ -169,7 +169,7 @@
 
 .task-assessment-report .task-criterion-description h4 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 16px / 1.35 var(--software-sans);
 }
 
@@ -187,7 +187,7 @@
 }
 
 .task-assessment-report .task-criterion-rating strong {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 25px;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
@@ -224,13 +224,13 @@
 .task-assessment-report .task-evidence-link {
   min-height: 38px;
   padding: 7px 12px;
-  border: 1px solid #8ad7bd;
+  border: 1px solid var(--software-border);
   border-radius: 7px;
   white-space: nowrap;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 13px;
   font-weight: 650;
-  background: #fff;
+  background: var(--software-surface);
   transition:
     color 140ms ease,
     background-color 140ms ease,
@@ -239,20 +239,20 @@
 
 .task-assessment-report .task-evidence-link:hover,
 .task-assessment-report .task-evidence-link[aria-pressed='true'] {
-  border-color: #63c9a7;
-  background: #e9faf4;
+  border-color: var(--software-border);
+  background: var(--software-success-surface);
 }
 
 .task-assessment-report .task-criterion-source-selected {
-  border-top-color: #87d8bb;
-  border-bottom: 1px solid #87d8bb;
-  background: #f2fbf7;
+  border-top-color: var(--software-border);
+  border-bottom: 1px solid var(--software-border);
+  background: var(--software-success-surface);
 }
 
 .task-assessment-report .task-evidence-inspector {
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--software-surface);
 }
 
 .task-assessment-report .task-evidence-inspector[hidden] {
@@ -302,7 +302,7 @@
   min-height: 180px;
   place-items: center;
   padding: 20px;
-  border: 1px dashed #a49aae;
+  border: 1px dashed var(--software-border);
   border-radius: 8px;
   text-align: center;
 }
@@ -330,7 +330,7 @@
   padding: 14px;
   border: 1px solid var(--software-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--software-surface);
   color: var(--software-ink);
   font: 13px / 1.5 var(--software-mono);
   white-space: pre-wrap;
@@ -378,7 +378,7 @@
 .task-assessment-report .task-submitted-context summary {
   min-height: 44px;
   padding: 12px 14px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   cursor: pointer;
   font-weight: 650;
 }
@@ -421,7 +421,7 @@
 
 .reviewer-workflow-panel > h2 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 20px / 1.25 var(--software-sans);
 }
 
@@ -432,7 +432,7 @@
 
 .reviewer-workflow-panel .review-section-heading h2 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 20px / 1.3 var(--software-sans);
   text-transform: none;
 }
@@ -461,7 +461,7 @@
   padding: 14px;
   border: 1px solid var(--software-border);
   border-radius: 9px;
-  background: #fff;
+  background: var(--software-surface);
 }
 
 .reviewer-workflow-panel
@@ -471,7 +471,7 @@
 
 .reviewer-workflow-panel .review-workflow-card h3 {
   margin: 0 0 8px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 15px / 1.35 var(--software-sans);
 }
 
@@ -488,9 +488,9 @@
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid #9b91a7;
+  border: 1px solid var(--software-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--software-surface);
   color: var(--software-ink);
   font: 14px / 1.45 var(--software-sans);
   resize: vertical;
@@ -504,10 +504,10 @@
 .reviewer-workflow-panel .review-workflow-card button {
   min-height: 44px;
   padding: 8px 14px;
-  border: 1px solid var(--software-plum);
+  border: 1px solid var(--software-border-strong);
   border-radius: 8px;
-  background: var(--software-plum);
-  color: #fff;
+  background: var(--software-action);
+  color: var(--software-on-action);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
   transition:
@@ -567,7 +567,7 @@
   gap: 10px;
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid #9b91a7;
+  border: 1px solid var(--software-border);
   border-radius: 8px;
   background: var(--software-lilac);
 }
@@ -584,8 +584,8 @@
   overflow: auto;
   margin: 0;
   padding: 10px;
-  border-left: 2px solid #766b82;
-  background: #fff;
+  border-left: 2px solid var(--software-border);
+  background: var(--software-surface);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -606,7 +606,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 12px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   cursor: pointer;
   font-size: 14px;
   font-weight: 650;
@@ -628,7 +628,7 @@
 }
 
 .task-assessment-report .task-criterion:focus-within {
-  background-color: #faf8fc;
+  background-color: var(--software-surface-subtle);
 }
 
 .task-assessment-report .task-criterion {
@@ -673,7 +673,7 @@
 
   .task-assessment-report .task-total {
     width: 100%;
-    border: 1px solid #e1d8ec;
+    border: 1px solid var(--software-border);
     padding: 10px 12px;
     text-align: left;
   }
@@ -741,8 +741,8 @@
 }
 
 .evaluator-review-tabs button[aria-selected='true'] {
-  border-bottom-color: var(--software-plum);
-  color: var(--software-plum);
+  border-bottom-color: var(--software-border-strong);
+  color: var(--software-ink);
 }
 
 .evaluator-review-tabs button:focus-visible,
@@ -832,7 +832,7 @@
 }
 
 .evaluator-overview .scenario-purpose-full-disclosure {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 13px;
 }
 
@@ -854,7 +854,7 @@
 }
 
 .evaluator-back-link {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 13px;
   text-decoration: none;
 }
@@ -882,7 +882,7 @@
 
 .evaluator-review-section-heading h2 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 20px / 1.3 var(--software-sans);
   letter-spacing: -0.02em;
 }
@@ -961,7 +961,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--software-lilac);
-  color: var(--software-plum);
+  color: var(--software-ink);
   content: counter(observation);
   font-size: 11px;
   font-weight: 700;
@@ -981,7 +981,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 650 12px / 1.4 var(--software-sans);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -1004,7 +1004,7 @@
   padding: 14px;
   border: 1px solid var(--software-border);
   border-radius: 9px;
-  background: #fff;
+  background: var(--software-surface);
 }
 
 .evaluator-event-card > header {
@@ -1016,7 +1016,7 @@
 
 .evaluator-event-card h3 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 650 15px / 1.4 var(--software-sans);
   overflow-wrap: anywhere;
 }
@@ -1043,7 +1043,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
@@ -1072,7 +1072,7 @@
   min-width: 0;
   border: 1px solid var(--software-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--software-surface);
 }
 
 .evaluator-ai-conversation-list details > summary {
@@ -1089,11 +1089,11 @@
   min-width: 0;
   padding: 12px 14px;
   border-radius: 9px;
-  background: #f5f1fb;
+  background: var(--software-surface-subtle);
 }
 
 .evaluator-ai-message:nth-child(2) {
-  background: #eff9f5;
+  background: var(--software-success-surface);
 }
 
 .evaluator-ai-message > header {
@@ -1101,7 +1101,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 13px;
 }
 
@@ -1141,7 +1141,7 @@
   padding: 4px 8px;
   border-radius: 99px;
   background: var(--software-lilac);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 11px;
   text-transform: capitalize;
 }
@@ -1335,7 +1335,7 @@
 
 .evaluator-submitted-work-heading h2 {
   margin: 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 18px / 1.3 var(--software-sans);
 }
 
@@ -1364,7 +1364,7 @@
   border: 1px solid var(--software-border);
   border-radius: 8px;
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 650 13px / 1.2 var(--software-sans);
   cursor: pointer;
 }
@@ -1494,7 +1494,7 @@
   place-items: center;
   border-radius: 10px;
   background: var(--software-lilac);
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .evaluator-review-main .submitted-changes-section > .review-section-heading {
@@ -1515,7 +1515,7 @@
 .evaluator-review-main .activity-section > .review-section-heading h2,
 .evaluator-review-main .engineer-inspection-heading h2 {
   margin: 0 0 6px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 20px / 1.3 var(--software-sans);
   text-transform: none;
 }
@@ -1536,7 +1536,7 @@
 
 .evaluator-review-main .submitted-changes-section > .review-section-heading h2 {
   margin: 0 0 6px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 20px / 1.3 var(--software-sans);
   text-transform: none;
 }
@@ -1588,7 +1588,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--software-lilac);
-  color: var(--software-plum);
+  color: var(--software-ink);
 }
 
 .evaluator-evidence-stat-copy {
@@ -1714,16 +1714,16 @@
   width: 100%;
   text-align: left;
   padding: 14px;
-  border: 1px solid #dcd5e7;
+  border: 1px solid var(--software-border);
   border-radius: 8px;
   background: white;
-  color: #291e36;
+  color: var(--software-ink);
   cursor: pointer;
   overflow-wrap: anywhere;
 }
 .evaluator-source-list button[aria-pressed='true'] {
-  background: #eee8f4;
-  border-color: #756185;
+  background: var(--software-surface-subtle);
+  border-color: var(--software-border);
 }
 .evaluator-source-list button span {
   display: block;
@@ -1754,8 +1754,8 @@
   font-size: 14px;
 }
 .evaluator-review-main .engineer-inspection-panel {
-  background: #faf8fc;
-  border: 1px solid #dfd8e8;
+  background: var(--software-surface-subtle);
+  border: 1px solid var(--software-border);
   border-radius: 10px;
   padding: 20px;
 }
@@ -1815,7 +1815,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 14px;
 }
 
@@ -1848,7 +1848,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 14px;
-  color: var(--software-plum);
+  color: var(--software-ink);
   cursor: pointer;
   font-size: 14px;
   font-weight: 650;
@@ -1871,14 +1871,14 @@
   border: 1px solid var(--software-border);
   border-radius: 7px;
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
 }
 
 .evaluator-return-to-chronology:hover,
 .evaluator-return-to-chronology:focus-visible {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-lilac);
 }
 
@@ -1948,8 +1948,8 @@
 }
 
 .evaluator-workbench-modes button[aria-selected='true'] {
-  border-bottom-color: var(--software-plum);
-  color: var(--software-plum);
+  border-bottom-color: var(--software-border-strong);
+  color: var(--software-ink);
 }
 
 .evaluator-workbench-modes button:focus-visible,
@@ -1969,14 +1969,14 @@
   border: 1px solid var(--software-border);
   border-radius: 7px;
   background: var(--software-surface);
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 650 13px / 1.2 var(--software-sans);
   cursor: pointer;
 }
 
 .evaluator-quick-note-trigger:hover,
 .evaluator-mobile-inspector button:hover:not(:disabled) {
-  border-color: var(--software-plum);
+  border-color: var(--software-border-strong);
   background: var(--software-lilac);
 }
 
@@ -2211,7 +2211,7 @@
 }
 
 .workbench-verification-list li > div span {
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-weight: 700;
 }
 
@@ -2246,7 +2246,7 @@
 
 .workbench-coverage-grid dd {
   margin: 4px 0 0;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font: 700 21px / 1 var(--software-sans);
 }
 
@@ -2317,8 +2317,8 @@
 }
 
 .evaluator-evidence-filter-bar button[aria-selected='true'] {
-  border-bottom-color: var(--software-plum);
-  color: var(--software-plum);
+  border-bottom-color: var(--software-border-strong);
+  color: var(--software-ink);
 }
 
 .evaluator-evidence-browser {
@@ -2389,7 +2389,7 @@
 }
 
 .evaluator-source-row[aria-pressed='true'] {
-  border-left-color: var(--software-plum) !important;
+  border-left-color: var(--software-border-strong) !important;
   background: var(--software-surface-subtle) !important;
 }
 
@@ -2398,7 +2398,7 @@
   height: 8px;
   margin-top: 5px;
   border-radius: 50%;
-  background: var(--software-plum);
+  background: var(--software-action);
 }
 
 .evaluator-source-row-copy {
@@ -2433,7 +2433,7 @@
 
 .evaluator-source-row-current {
   margin: 0 !important;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 10px !important;
   font-weight: 700;
   text-decoration: none !important;
@@ -2582,7 +2582,7 @@
   padding: 12px;
   overflow: auto;
   border-radius: 7px;
-  background: #fff;
+  background: var(--software-surface);
   color: var(--software-ink);
   font:
     12px / 1.55 ui-monospace,
@@ -2609,7 +2609,7 @@
   min-height: 44px;
   display: flex;
   align-items: center;
-  color: var(--software-plum);
+  color: var(--software-ink);
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
@@ -2636,14 +2636,14 @@
 
 .review-note-state[data-note-state='draft'],
 .review-note-state[data-note-state='saving'] {
-  border-color: var(--software-plum);
-  color: var(--software-plum);
+  border-color: var(--software-border-strong);
+  color: var(--software-ink);
 }
 
 .review-note-state[data-note-state='error'],
 .review-note-state[data-note-state='conflict'] {
-  border-color: #9d3c3c;
-  color: #8b2c2c;
+  border-color: var(--software-border);
+  color: var(--software-danger);
 }
 
 .evaluator-mobile-inspector {
@@ -3126,7 +3126,7 @@
   padding: 0 0 10px 12px;
   border: 0;
   border-bottom: 1px solid var(--software-border);
-  border-left: 3px solid var(--software-plum);
+  border-left: 3px solid var(--software-border-strong);
   border-radius: 0;
   background: transparent;
 }
@@ -3163,7 +3163,7 @@
   }
 
   .evaluator-evidence-filter-bar button[aria-selected='true'] {
-    border-color: var(--software-plum);
+    border-color: var(--software-border-strong);
     background: var(--software-lilac);
   }
 }
