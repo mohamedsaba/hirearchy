@@ -8,6 +8,8 @@ import {
   EXECUTION_VALIDATION_NOTICE,
   MAX_FILE_BYTES,
   MAX_TOTAL_BYTES,
+} from '../../apps/web/src/r211-builder/validation';
+import {
   formatDigestBadge,
   formatFullDigest,
   groupValidationIssues,
