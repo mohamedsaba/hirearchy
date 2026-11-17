@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { EXECUTION_VALIDATION_NOTICE } from './contract';
 import type {
   R211AssessmentDraftInput,
   R211ValidationIssue,
@@ -15,8 +16,7 @@ export const SAFE_PATH_PATTERN =
 
 export const ALLOWED_DURATIONS = [30, 45, 60, 90] as const;
 
-export const EXECUTION_VALIDATION_NOTICE =
-  'Static scenario structure validated. Live code execution and sandbox container test verification are unavailable in this lane.';
+export { EXECUTION_VALIDATION_NOTICE } from './contract';
 
 export function validateAssessmentDraft(
   draft: R211AssessmentDraftInput,

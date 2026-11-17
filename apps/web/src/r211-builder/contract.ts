@@ -87,3 +87,6 @@ export interface R211ValidatedVersion {
   };
   readonly createdAt: string;
 }
+
+export const EXECUTION_VALIDATION_NOTICE =
+  'Static scenario structure validated. Live code execution and sandbox container test verification are unavailable in this lane.';
