@@ -21,7 +21,7 @@
   height: 30px;
   padding: 5px;
   border-radius: 9px;
-  background: #ddf8ed;
+  background: var(--software-success-surface);
 }
 .weft-ai .weft-ai-header h2 {
   margin: 0;
@@ -95,7 +95,7 @@
   padding: 12px;
   border: 1px solid var(--candidate-line);
   border-radius: 8px;
-  background: #f7f5fa;
+  background: var(--software-surface-subtle);
   overflow-x: auto;
   white-space: pre;
   font-size: 12px;
@@ -119,7 +119,7 @@
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #198b73;
+  background: var(--software-surface-subtle);
   animation: weft-pulse 1.5s ease-in-out infinite;
 }
 @keyframes weft-pulse {
@@ -156,7 +156,7 @@
   padding: 12px;
   border: 1px solid var(--candidate-line);
   border-radius: 14px;
-  background: #fcfafc;
+  background: var(--software-surface-subtle);
 }
 .weft-ai .weft-ai-chips {
   display: flex;
@@ -278,9 +278,9 @@
 }
 .weft-ai .weft-ai-toolbar .weft-ai-send {
   margin-left: auto;
-  border-color: var(--candidate-plum);
-  color: white;
-  background: var(--candidate-plum);
+  border-color: var(--software-border-strong);
+  color: var(--software-on-action);
+  background: var(--software-action);
 }
 .weft-ai .weft-ai-toolbar button:disabled {
   opacity: 0.5;
@@ -362,7 +362,7 @@
 .weft-ai .weft-ai-body p > code {
   padding: 1px 4px;
   border-radius: 4px;
-  background: #f0edf5;
+  background: var(--software-surface-subtle);
   font-family: var(--software-mono);
   font-size: 0.9em;
 }

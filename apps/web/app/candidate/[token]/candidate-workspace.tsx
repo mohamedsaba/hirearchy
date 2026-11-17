@@ -64,7 +64,7 @@ type EditorPreferences = Readonly<{
 const editorPreferencesKey = 'hirearchy:candidate-editor-preferences:v1';
 const defaultEditorPreferences: EditorPreferences = {
   fontSize: 14,
-  theme: 'system',
+  theme: 'dark',
   wordWrap: true,
 };
 const editorPreferencesChangedEvent =

@@ -224,6 +224,9 @@ export const CandidateAiPanel = ({
         <div>
           <h2 id="ai-panel-title">Weft</h2>
           <p className="weft-ai-lede">Your engineering assistant</p>
+          <p className="weft-ai-transparency">
+            AI usage is logged transparently for context.
+          </p>
         </div>
       </div>
       {state.conversation.length === 0 && showComposer ? (
