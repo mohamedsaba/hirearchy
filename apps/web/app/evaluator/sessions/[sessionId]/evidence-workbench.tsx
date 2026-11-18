@@ -1693,6 +1693,13 @@ const R28WorkspaceRevisionView = ({
         </div>
       ) : null}
 
+      <p
+        className="evaluator-muted-copy"
+        style={{ fontSize: '11px', margin: '2px 0 0' }}
+      >
+        Provenance: <code>{revision?.provenance ?? event.provenance}</code>
+      </p>
+
       <details
         className="evaluator-source-details"
         style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}

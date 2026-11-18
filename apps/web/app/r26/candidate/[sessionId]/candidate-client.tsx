@@ -1319,7 +1319,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
             <div
               className={`r26-timer ${timerLow ? 'is-low' : ''}`}
-              aria-label="Workspace access time remaining"
+              aria-label="Assessment timer"
               title={`Access ends no later than ${formatDateTime(activeAccessEndsAtMs)}`}
             >
               <div className="r26-timer-row">
@@ -1635,24 +1635,6 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           <div className="r26-editor-tabbar">
             {view && view.files.length > 0 ? (
               <>
-                <label className="sr-only">
-                  Workspace file
-                  <select
-                    aria-label="Workspace file"
-                    aria-describedby="candidate-file-save-hint"
-                    disabled={!canSwitchFile}
-                    onChange={(event) =>
-                      selectWorkspaceFile(event.target.value)
-                    }
-                    value={selectedPath}
-                  >
-                    {view.files.map((file) => (
-                      <option key={file.path} value={file.path}>
-                        {file.path}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <span id="candidate-file-save-hint" className="sr-only">
                   {saveConflict
                     ? 'Resolve the saved-version conflict before switching files.'
@@ -1662,7 +1644,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                         ? 'Wait for the current file to save before switching files.'
                         : 'Changes save automatically after you pause editing.'}
                 </span>
-                <nav className="r26-editor-tabs" aria-label="Workspace files">
+                <nav className="r26-editor-tabs" aria-label="Open file tabs">
                   {view.files.map((file) => {
                     const isSelected = file.path === selectedPath;
                     return (
@@ -1702,6 +1684,27 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               </span>
             )}
             <div className="r26-editor-tabbar-actions">
+              {view && view.files.length > 0 ? (
+                <label className="r26-file-switcher-label">
+                  <span className="sr-only">Workspace file</span>
+                  <select
+                    className="r26-file-switcher"
+                    aria-label="Workspace file"
+                    aria-describedby="candidate-file-save-hint"
+                    disabled={!canSwitchFile}
+                    onChange={(event) =>
+                      selectWorkspaceFile(event.target.value)
+                    }
+                    value={selectedPath}
+                  >
+                    {view.files.map((file) => (
+                      <option key={file.path} value={file.path}>
+                        {file.path}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               {canEdit && !pendingSubmit && activeFile ? (
                 <button
                   className={`r26-button ${isDirty || pendingSave ? 'r26-button-primary' : 'r26-button-secondary'} r26-save-button`}

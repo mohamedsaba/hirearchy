@@ -500,6 +500,11 @@
   color: var(--software-muted);
 }
 
+.evaluator-workbench h2,
+.evaluator-workbench h3 {
+  text-transform: none;
+}
+
 @media (max-width: 760px) {
   .software-product-header {
     min-height: 64px;

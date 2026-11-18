@@ -53,6 +53,7 @@ import { ReviewGuidance } from './review-guidance';
 import { ReviewWorkflowPanel } from './review-workflow-panel';
 import { TaskAssessmentReport } from './task-assessment-report';
 import { TaskBrief } from './task-brief';
+import './task-review.css';
 
 const modes = ['Summary', 'Evidence', 'Review'] as const;
 type WorkbenchMode = (typeof modes)[number];
@@ -285,9 +286,13 @@ const R27SummaryView = ({
   );
   const elapsedMs =
     Date.parse(evidence.submittedAt) - Date.parse(evidence.activatedAt);
-  const duration =
+  const elapsedMinutes =
     Number.isFinite(elapsedMs) && elapsedMs >= 0
-      ? `${Math.max(1, Math.round(elapsedMs / 60_000))} minutes`
+      ? Math.max(1, Math.round(elapsedMs / 60_000))
+      : null;
+  const duration =
+    elapsedMinutes !== null
+      ? `${elapsedMinutes} ${elapsedMinutes === 1 ? 'minute' : 'minutes'}`
       : 'Unavailable';
 
   return (
@@ -385,31 +390,31 @@ const R27SummaryView = ({
                 Acceptance criteria unavailable in this snapshot.
               </p>
             )}
-            <details
-              className="evaluator-source-details"
-              style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
+          </details>
+          <details
+            className="evaluator-source-details"
+            style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
+          >
+            <summary>Open immutable scenario snapshot</summary>
+            <p style={{ overflowWrap: 'anywhere' }}>
+              Scenario snapshot digest:
+            </p>
+            <code className="evaluator-integrity-digest">
+              {evidence.scenario.snapshotDigest}
+            </code>
+            <pre
+              tabIndex={0}
+              aria-label="Immutable versioned scenario snapshot"
+              style={{
+                minWidth: 0,
+                width: '100%',
+                maxWidth: '100%',
+                overflowX: 'auto',
+                whiteSpace: 'pre',
+              }}
             >
-              <summary>Open immutable scenario snapshot</summary>
-              <p style={{ overflowWrap: 'anywhere' }}>
-                Scenario snapshot digest:
-              </p>
-              <code className="evaluator-integrity-digest">
-                {evidence.scenario.snapshotDigest}
-              </code>
-              <pre
-                tabIndex={0}
-                aria-label="Immutable versioned scenario snapshot"
-                style={{
-                  minWidth: 0,
-                  width: '100%',
-                  maxWidth: '100%',
-                  overflowX: 'auto',
-                  whiteSpace: 'pre',
-                }}
-              >
-                {evidence.scenario.snapshotText}
-              </pre>
-            </details>
+              {evidence.scenario.snapshotText}
+            </pre>
           </details>
         </section>
 

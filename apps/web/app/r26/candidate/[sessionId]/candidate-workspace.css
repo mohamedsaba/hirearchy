@@ -662,6 +662,30 @@
   padding: 5px 0;
 }
 
+.r26-file-switcher-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.r26-file-switcher {
+  min-height: 2rem;
+  max-width: 170px;
+  padding: 0 22px 0 9px;
+  border: 1px solid var(--r26-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--r26-muted);
+  font-family: var(--software-mono);
+  font-size: 0.74rem;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.r26-file-switcher:focus-visible {
+  outline: 2px solid var(--r26-plum);
+  outline-offset: 2px;
+}
+
 .r26-save-button {
   min-height: 2rem !important;
   padding: 0.3rem 0.75rem !important;
