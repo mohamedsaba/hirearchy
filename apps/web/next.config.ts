@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
   experimental: {
+    agentUpgrade: 'security',
     useTypeScriptCli: false,
   },
   poweredByHeader: false,
