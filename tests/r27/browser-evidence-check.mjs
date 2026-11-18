@@ -501,9 +501,15 @@ export async function runR27BrowserEvidenceChecks({
       await reviewerPage
         .locator('.software-product-header')
         .evaluate((element) => getComputedStyle(element).backgroundColor),
-      'rgb(41, 30, 54)',
+      'rgb(255, 255, 255)',
       'Workbench retains the existing product design tokens',
     );
+    const briefDisclosure = reviewerPage
+      .locator('details.evaluator-source-details')
+      .filter({ hasText: 'Read task brief and acceptance criteria' });
+    if ((await briefDisclosure.getAttribute('open')) === null) {
+      await briefDisclosure.locator('summary').click();
+    }
     const expectedBrief = JSON.parse(firstPage.scenario.snapshotText).scenario
       .brief;
     assert.equal(
@@ -513,6 +519,12 @@ export async function runR27BrowserEvidenceChecks({
       true,
       'Workbench displays the actual issued scenario brief',
     );
+    const digestsDisclosure = reviewerPage
+      .locator('details.evaluator-source-details')
+      .filter({ hasText: 'Show workspace and manifest digests' });
+    if ((await digestsDisclosure.getAttribute('open')) === null) {
+      await digestsDisclosure.locator('summary').click();
+    }
     assert.match(
       await reviewerPage.locator('body').innerText(),
       /Manifest digest/,
@@ -690,6 +702,12 @@ export async function runR27BrowserEvidenceChecks({
       await reviewerPage.locator('body').innerText(),
       /Submitted evidence/,
     );
+    const restartDigestsDisclosure = reviewerPage
+      .locator('details.evaluator-source-details')
+      .filter({ hasText: 'Show workspace and manifest digests' });
+    if ((await restartDigestsDisclosure.getAttribute('open')) === null) {
+      await restartDigestsDisclosure.locator('summary').click();
+    }
     assert.match(
       await reviewerPage.locator('body').innerText(),
       /Manifest digest/,

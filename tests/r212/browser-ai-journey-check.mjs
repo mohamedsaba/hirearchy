@@ -228,6 +228,9 @@ export async function runR212BrowserAiJourneyChecks({
     // Verify AI capability is displayed in workspace capabilities
     const capabilitiesSection = candidatePage.locator('.r26-availability');
     await capabilitiesSection.waitFor();
+    if ((await capabilitiesSection.getAttribute('open')) === null) {
+      await capabilitiesSection.locator('summary').click();
+    }
     const capText = await capabilitiesSection.innerText();
     assert.match(capText, /AI assistance/i);
     assert.match(capText, /Available \(Synthetic Test Lane\)/i);

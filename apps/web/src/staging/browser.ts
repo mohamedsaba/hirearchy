@@ -62,6 +62,7 @@ import {
   refreshGrant,
   revokeAuthSession,
   R23AuthenticationDenied,
+  R23EmailConfirmationRequired,
   R23AuthUnavailable,
   verifyR23AccessToken,
   type R23CredentialPair,
@@ -550,7 +551,14 @@ function htmlResponse(
 }
 
 function loginForm(message = ''): string {
-  return `${message ? `<p role="alert">${safeHtml(message)}</p>` : ''}<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options"><p><a href="/r23/signup">Create an account (Sign up)</a></p><p><a href="/r23/recover">Forgot password?</a></p><p><a href="/r23/verify-email">Verify email address</a></p>${isFounderUatEnabled() ? '<p><a href="/r23/mail">Open local inbox</a></p>' : ''}</nav>`;
+  return `${
+    message ? `<p role="alert">${safeHtml(message)}</p>` : ''
+  }<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options">${
+    isFounderUatEnabled() ||
+    process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true'
+      ? '<p><a href="/r23/signup">Create an account</a></p>'
+      : ''
+  }<p><a href="/r23/recover">Forgot password?</a></p></nav>`;
 }
 
 function redirect(
@@ -1179,7 +1187,21 @@ export async function stagingLoginPost(request: Request): Promise<Response> {
     const email = requiredText(body, 'email', 320);
     const password = requiredText(body, 'password', 1024);
 
-    const pair = await passwordGrant(config.auth, email, password);
+    let pair: R23TokenGrant;
+    try {
+      pair = await passwordGrant(config.auth, email, password);
+    } catch (error) {
+      if (
+        error instanceof R23EmailConfirmationRequired &&
+        !isJsonRequest(request)
+      ) {
+        return redirect(
+          origin,
+          '/r23/verify-email?email=' + encodeURIComponent(email),
+        );
+      }
+      throw error;
+    }
     const identity = assertR23StagingEligibleIdentity(
       await verifyR23AccessToken(config.auth, pair.accessToken, pair),
     );
@@ -1641,16 +1663,32 @@ export async function stagingOrganizationGet(
 
     let sessionsHtml = '';
     if (result.sessions.length === 0) {
-      const emptyExplanation =
-        membership.role === 'recruiter'
-          ? 'No assessment sessions issued by your recruiter account were found in this organization.'
-          : 'No assessment sessions are currently assigned to your reviewer account in this organization.';
+      const filtered = Boolean(
+        search ||
+        (lifecycleFilter && lifecycleFilter !== 'all') ||
+        (reviewStatusFilter && reviewStatusFilter !== 'all') ||
+        cursor,
+      );
+      const emptyTitle = filtered
+        ? 'No matching assessments'
+        : membership.role === 'recruiter'
+          ? 'Create your first assessment'
+          : 'No assigned reviews yet';
+      const emptyExplanation = filtered
+        ? 'Try a different search or clear the filters.'
+        : membership.role === 'recruiter'
+          ? 'Choose a scenario, review the candidate brief and assign an evaluator.'
+          : 'When your team assigns a session to you, it will appear here.';
 
       sessionsHtml = `
         <section class="software-empty-state" aria-labelledby="empty-sessions-title">
-          <span class="software-empty-marker" aria-hidden="true">01</span>
-          <h3 id="empty-sessions-title">${membership.role === 'recruiter' ? 'Your first assessment starts here' : 'Your review queue is clear'}</h3>
-          <p>${safeHtml(emptyExplanation)}</p>
+          <h2 id="empty-sessions-title">${emptyTitle}</h2>
+          <p>${emptyExplanation}</p>
+          ${
+            filtered
+              ? `<p><a href="/r23/organizations/${safeOrgId}">Clear filters</a></p>`
+              : ''
+          }
         </section>
       `;
     } else {
@@ -1697,7 +1735,7 @@ export async function stagingOrganizationGet(
             <li class="software-session-row" data-session-id="${safeHtml(s.sessionId)}">
               <div class="software-session-identity">
                 <h3>${safeHtml(s.scenarioTitle)}</h3>
-                <p><code>${safeHtml(s.sessionId.slice(0, 8))}</code> <span>· ${safeHtml(budgetStr)}</span></p>
+                <p>${safeHtml(budgetStr)}</p>
               </div>
               <div class="software-session-state">
                 <span class="software-state-badge" data-state="${safeHtml(s.status.toLowerCase())}">${safeHtml(lifecycleLabel)}</span>
@@ -1714,11 +1752,16 @@ export async function stagingOrganizationGet(
                   <summary aria-label="Session details for ${safeHtml(s.scenarioTitle)}">Details</summary>
                   <div>
                     <dl>
-                      <dt>Full session reference</dt><dd><code>${safeHtml(s.sessionId)}</code></dd>
-                      <dt>Scenario</dt><dd><code>${safeHtml(s.scenarioId)}</code> (v${safeHtml(s.scenarioVersion)})</dd>
-                      <dt>Issued</dt><dd><time datetime="${safeHtml(s.createdAt)}">${safeHtml(s.createdAt)}</time></dd>
+                      <dt>Full session reference</dt><dd><code>${safeHtml(
+                        s.sessionId,
+                      )}</code></dd>
+                      <dt>Scenario</dt><dd><code>${safeHtml(
+                        s.scenarioId,
+                      )}</code> (v${safeHtml(s.scenarioVersion)})</dd>
+                      <dt>Issued</dt><dd><time datetime="${safeHtml(
+                        s.createdAt,
+                      )}">${safeHtml(s.createdAt)}</time></dd>
                     </dl>
-                    <p><a href="${safeHtml(inspectUrl)}">Inspect authorized session summary</a></p>
                   </div>
                 </details>
               </div>
@@ -2007,21 +2050,11 @@ export async function stagingOrganizationSessionPageGet(
       </header>
 
       <section class="software-settings-section software-session-overview" aria-labelledby="session-summary-title">
-        <dl class="software-session-facts">
-          <dt><strong>Scenario ID:</strong></dt><dd><code>${safeHtml(s.scenarioId)}</code> (v${safeHtml(s.scenarioVersion)})</dd>
-          <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(lifecycleLabel)} (${safeHtml(s.status)})</span> ${isTimedOut ? '<span>(Timed out)</span>' : ''}</dd>
-          <dt><strong>Review progress:</strong></dt><dd>${safeHtml(reviewLabel)}</dd>
-          <dt><strong>Time budget:</strong></dt><dd>${safeHtml(budgetStr)}</dd>
-          <dt><strong>Issued:</strong></dt><dd><time datetime="${safeHtml(s.createdAt)}">${safeHtml(new Date(s.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time></dd>
-          <dt><strong>Started:</strong></dt><dd>${s.activatedAt ? `<time datetime="${safeHtml(s.activatedAt)}">${safeHtml(new Date(s.activatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time>` : 'Not recorded'}</dd>
-          <dt><strong>Submitted:</strong></dt><dd>${s.submittedAt ? `<time datetime="${safeHtml(s.submittedAt)}">${safeHtml(new Date(s.submittedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }))} UTC</time>` : 'Not submitted'}</dd>
-          
-        </dl>
-        <details class="software-session-reference"><summary>Session reference</summary><p><code>${safeHtml(s.sessionId)}</code></p><p>Visibility: ${safeHtml(s.visibilityScope ?? 'authorized_scope')}</p></details>
-
         ${
           isSubmittedReviewerSession
-            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(s.sessionId)}" class="software-document-primary-link" data-testid="open-submitted-evidence-workbench-link">Open submitted evidence and review workbench</a></p>`
+            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(
+                s.sessionId,
+              )}" class="software-document-primary-link" data-testid="open-submitted-evidence-workbench-link">Review submitted work</a></p>`
             : isSubmittedSession
               ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
                   <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>
@@ -2037,6 +2070,58 @@ export async function stagingOrganizationSessionPageGet(
                 }
               </section>`
         }
+
+        <dl class="software-session-facts">
+          <dt><strong>Scenario ID:</strong></dt><dd><code>${safeHtml(
+            s.scenarioId,
+          )}</code> (v${safeHtml(s.scenarioVersion)})</dd>
+          <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(
+            lifecycleLabel,
+          )} (${safeHtml(s.status)})</span> ${
+            isTimedOut ? '<span>(Timed out)</span>' : ''
+          }</dd>
+          <dt><strong>Review progress:</strong></dt><dd>${safeHtml(
+            reviewLabel,
+          )}</dd>
+          <dt><strong>Time budget:</strong></dt><dd>${safeHtml(budgetStr)}</dd>
+          <dt><strong>Issued:</strong></dt><dd><time datetime="${safeHtml(
+            s.createdAt,
+          )}">${safeHtml(
+            new Date(s.createdAt).toLocaleString('en-GB', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              timeZone: 'UTC',
+            }),
+          )} UTC</time></dd>
+          <dt><strong>Started:</strong></dt><dd>${
+            s.activatedAt
+              ? `<time datetime="${safeHtml(s.activatedAt)}">${safeHtml(
+                  new Date(s.activatedAt).toLocaleString('en-GB', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                    timeZone: 'UTC',
+                  }),
+                )} UTC</time>`
+              : 'Not recorded'
+          }</dd>
+          <dt><strong>Submitted:</strong></dt><dd>${
+            s.submittedAt
+              ? `<time datetime="${safeHtml(s.submittedAt)}">${safeHtml(
+                  new Date(s.submittedAt).toLocaleString('en-GB', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                    timeZone: 'UTC',
+                  }),
+                )} UTC</time>`
+              : 'Not submitted'
+          }</dd>
+          
+        </dl>
+        <details class="software-session-reference"><summary>Session reference</summary><p><code>${safeHtml(
+          s.sessionId,
+        )}</code></p><p>Visibility: ${safeHtml(
+          s.visibilityScope ?? 'authorized_scope',
+        )}</p></details>
 
         <section aria-labelledby="reviewer-assignments-title">
           <h3 id="reviewer-assignments-title">Reviewer assignments</h3>
@@ -2066,7 +2151,6 @@ export async function stagingOrganizationSessionPageGet(
               : `<p role="status">Candidate invitation links are managed by the issuing recruiter. Contact them for access or a replacement link.</p>`
           }
         </section>
-        <p><a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a></p>
       </section>
     `;
 
@@ -4696,16 +4780,15 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
       : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p></div><p>Please proceed to verify your email address before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
 
     return htmlResponse(
-      'Account registration initiated',
+      'Confirm your email',
       `
         <section aria-labelledby="registered-heading">
-          <h1 id="registered-heading">Account registration initiated</h1>
-          <p>An account for <strong>${safeHtml(email)}</strong> was successfully registered.</p>
-          <section aria-labelledby="verification-instructions-heading">
-            <h2 id="verification-instructions-heading">Verify your email</h2>
+          <h1 id="registered-heading">Confirm your email</h1>
+          <p>Continue setup for <strong>${safeHtml(email)}</strong>.</p>
+          <div>
             ${confirmation}
-            <p><a href="/r23/login">Sign in</a></p>
-          </section>
+            <p><a href="/r23/login">Already confirmed? Sign in</a></p>
+          </div>
         </section>
       `,
     );

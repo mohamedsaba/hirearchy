@@ -3194,3 +3194,51 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.evaluator-pending-review {
+  width: min(100% - 32px, 760px);
+  margin: clamp(24px, 8vh, 80px) auto;
+  padding: clamp(24px, 5vw, 52px);
+  border-radius: 20px;
+  background: var(--software-canvas);
+}
+
+.evaluator-pending-review h1 {
+  margin: 12px 0;
+  font-size: clamp(30px, 4vw, 46px);
+  letter-spacing: -0.045em;
+}
+
+.evaluator-pending-review details {
+  margin-block: 24px;
+}
+
+.workbench-session-timeline.evaluator-review-card {
+  border: 0;
+  border-radius: 16px;
+  background: var(--software-surface);
+  padding: clamp(20px, 3vw, 36px);
+}
+
+.workbench-session-timeline .evaluator-review-section-heading {
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--software-mint);
+}
+
+.workbench-session-timeline .workbench-progression-list {
+  margin-top: 18px;
+}
+
+.workbench-session-timeline .workbench-progression-list time {
+  color: var(--software-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.workbench-session-timeline .workbench-progression-list li > div {
+  border-inline-start: 2px solid var(--software-mint);
+  padding-inline-start: 16px;
+}
+
+.workbench-session-timeline .evaluator-text-link {
+  min-height: 36px;
+}

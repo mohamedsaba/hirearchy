@@ -45,67 +45,53 @@ export default async function R27EvidencePage({
       const s = pageState.session;
       return (
         <main
-          className="software-product evaluator-review-shell"
+          className="software-product evaluator-pending-review"
           data-testid="unsubmitted-evidence-unavailable"
-          style={{
-            maxWidth: '880px',
-            margin: '32px auto',
-            padding: '24px',
-            borderRadius: '12px',
-            border: '1px solid #d1d5db',
-            backgroundColor: '#ffffff',
-          }}
         >
-          <h1>Submitted Evidence Unavailable (Session Not Submitted)</h1>
+          <p className="software-eyebrow">Assigned assessment</p>
+          <h1>{s.scenarioTitle}</h1>
           <p role="status">
-            Unsubmitted candidate evidence is unavailable in the R2.15
-            authenticated staging slice. Candidate workspace execution and live
-            AI-provider operations are disabled; chronological evidence
-            reconstruction opens only after a session is in{' '}
-            <code>SUBMITTED</code> status.
+            {s.status === 'CREATED'
+              ? 'Waiting for the candidate to start.'
+              : 'Waiting for the candidate to submit.'}{' '}
+            The review opens when the session is submitted.
           </p>
-          <section aria-labelledby="unsubmitted-metadata-title">
-            <h2 id="unsubmitted-metadata-title">
-              Permitted Assessment Metadata
-            </h2>
-            <dl>
-              <dt>
-                <strong>Assessment Title:</strong>
-              </dt>
-              <dd>{s.scenarioTitle}</dd>
-              <dt>
-                <strong>Session ID:</strong>
-              </dt>
-              <dd>
-                <code>{s.sessionId}</code>
-              </dd>
-              <dt>
-                <strong>Scenario:</strong>
-              </dt>
-              <dd>
-                <code>{s.scenarioId}</code> (v{s.scenarioVersion})
-              </dd>
-              <dt>
-                <strong>Lifecycle Status:</strong>
-              </dt>
-              <dd>
-                <code>{s.status}</code>
-              </dd>
-              <dt>
-                <strong>Time Budget:</strong>
-              </dt>
-              <dd>
-                {s.durationSeconds
-                  ? `${Math.round(s.durationSeconds / 60)} min`
-                  : 'Untimed'}
-              </dd>
+          <details className="evaluator-source-details">
+            <summary>Assessment details</summary>
+            <dl className="evaluator-source-metadata">
+              <div>
+                <dt>Session</dt>
+                <dd>
+                  <code>{s.sessionId}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Scenario version</dt>
+                <dd>
+                  {s.scenarioId} · v{s.scenarioVersion}
+                </dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{s.status}</dd>
+              </div>
+              <div>
+                <dt>Time limit</dt>
+                <dd>
+                  {s.durationSeconds
+                    ? `${Math.round(s.durationSeconds / 60)} min`
+                    : 'Untimed'}
+                </dd>
+              </div>
             </dl>
-          </section>
+          </details>
           <p>
             <Link
-              href={`/r23/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(sessionId)}`}
+              href={`/r23/organizations/${encodeURIComponent(
+                organizationId.toLowerCase(),
+              )}/sessions/${encodeURIComponent(sessionId)}`}
             >
-              ← Back to authorized session summary
+              ← Back to session
             </Link>
           </p>
         </main>

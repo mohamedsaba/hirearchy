@@ -1029,6 +1029,13 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     }
   };
 
+  const showEditor = Boolean(
+    view && (view.status !== 'CREATED' || view.files.length > 0),
+  );
+  const openSectionDisclosure = (targetId: string) => {
+    const details = document.getElementById(targetId)?.closest('details');
+    if (details) details.open = true;
+  };
   const renderedEvents = (view?.events ?? []).map((event) => (
     <li className="r26-event" key={event.sequence}>
       <span className="r26-event-marker" aria-hidden="true" />
@@ -1085,9 +1092,19 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
 
       {view ? (
         <nav className="r26-mobile-navigation" aria-label="Workspace sections">
-          <a href="#candidate-code-editor">Workspace</a>
-          <a href="#candidate-task-brief">Task brief</a>
-          <a href="#candidate-activity">Recorded activity</a>
+          {showEditor ? <a href="#candidate-code-editor">Workspace</a> : null}
+          <a
+            href="#candidate-brief-content"
+            onClick={() => openSectionDisclosure('candidate-brief-content')}
+          >
+            Task brief
+          </a>
+          <a
+            href="#candidate-activity"
+            onClick={() => openSectionDisclosure('candidate-activity')}
+          >
+            Recorded activity
+          </a>
         </nav>
       ) : null}
 
@@ -1150,95 +1167,112 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               ) : null}
               <p className="r26-eyebrow">Engineering assessment</p>
               <h1>{scenarioTitle}</h1>
-              {brief ? (
-                <ScenarioBrief markdown={brief} />
-              ) : (
-                <p className="r26-brief">
-                  The issued task details are not available in this snapshot.
-                </p>
-              )}
+              <details
+                key={view.status}
+                className="r26-disclosure r26-task-reading"
+                open={view.status === 'CREATED'}
+              >
+                <summary>Task brief</summary>
+                <div id="candidate-brief-content">
+                  {brief ? (
+                    <ScenarioBrief markdown={brief} />
+                  ) : (
+                    <p className="r26-brief">
+                      The issued task details are not available in this
+                      snapshot.
+                    </p>
+                  )}
+                </div>
+              </details>
               {criteria.length > 0 ? (
-                <section
-                  className="r26-criteria"
-                  aria-labelledby="r26-criteria-title"
-                >
-                  <h2 id="r26-criteria-title">Acceptance criteria</h2>
+                <details className="r26-disclosure r26-criteria">
+                  <summary>
+                    Acceptance criteria <span>{criteria.length}</span>
+                  </summary>
                   <ul>
                     {criteria.map((criterion, index) => (
                       <li key={`${index}-${criterion}`}>{criterion}</li>
                     ))}
                   </ul>
-                </section>
+                </details>
               ) : null}
-              {view.dataNotice ? (
-                <section
-                  className="r26-notice"
-                  aria-labelledby="candidate-data-use-title"
-                  data-testid="candidate-data-use-notice"
-                >
-                  <strong id="candidate-data-use-title">
-                    Data use and consent
-                  </strong>
-                  <p>{view.dataNotice.text}</p>
-                  <p>
-                    The task uses sample data. Saved changes and submissions
-                    record the work performed in this workspace.
-                  </p>
-                  {view.status === 'CREATED' ? (
-                    <label>
-                      <input
-                        checked={consentAccepted}
-                        onChange={(event) => {
-                          const dataNotice = view.dataNotice;
-                          setAcceptedConsent(
-                            event.target.checked && dataNotice
-                              ? {
-                                  sessionId,
-                                  digest: dataNotice.digest,
-                                }
-                              : null,
-                          );
-                        }}
-                        type="checkbox"
-                      />{' '}
-                      I acknowledge and agree to this data-use notice.
-                    </label>
+              {view.dataNotice || view.status === 'CREATED' ? (
+                <div className="r26-entry-actions">
+                  {view.dataNotice ? (
+                    <section
+                      className="r26-notice"
+                      aria-labelledby="candidate-data-use-title"
+                      data-testid="candidate-data-use-notice"
+                    >
+                      <strong id="candidate-data-use-title">
+                        Data use and consent
+                      </strong>
+                      {view.status === 'CREATED' ? (
+                        <p>{view.dataNotice.text}</p>
+                      ) : (
+                        <details className="r26-disclosure">
+                          <summary>Read the data-use notice</summary>
+                          <p>{view.dataNotice.text}</p>
+                        </details>
+                      )}
+                      {view.status === 'CREATED' ? (
+                        <label>
+                          <input
+                            checked={consentAccepted}
+                            onChange={(event) => {
+                              const dataNotice = view.dataNotice;
+                              setAcceptedConsent(
+                                event.target.checked && dataNotice
+                                  ? {
+                                      sessionId,
+                                      digest: dataNotice.digest,
+                                    }
+                                  : null,
+                              );
+                            }}
+                            type="checkbox"
+                          />{' '}
+                          I acknowledge and agree to this data-use notice.
+                        </label>
+                      ) : null}
+                    </section>
                   ) : null}
-                </section>
-              ) : null}
-              {view.status === 'CREATED' ? (
-                <div className="r26-prestart">
-                  <p>
-                    Your assessment timer starts when you activate this
-                    workspace.
-                    {view.invitationExpiresAt ? (
-                      <>
-                        {' '}
-                        This invitation expires at{' '}
-                        <time dateTime={view.invitationExpiresAt}>
-                          {formatDateTime(invitationExpiryMs)}
-                        </time>
-                        .
-                      </>
-                    ) : null}
-                  </p>
-                  <button
-                    className="r26-button r26-button-primary"
-                    disabled={
-                      busy ||
-                      accessUnavailable ||
-                      invitationExpired ||
-                      Boolean(view.dataNotice && !consentAccepted)
-                    }
-                    onClick={() => void activate()}
-                    type="button"
-                  >
-                    {busy ? 'Activating…' : 'Activate assessment'}
-                  </button>
-                  {view.dataNotice && !consentAccepted ? (
-                    <p role="status">
-                      Confirm the data-use notice to activate your assessment.
-                    </p>
+                  {view.status === 'CREATED' ? (
+                    <div className="r26-prestart">
+                      <p>
+                        Your assessment timer starts when you activate this
+                        workspace.
+                        {view.invitationExpiresAt ? (
+                          <>
+                            {' '}
+                            This invitation expires at{' '}
+                            <time dateTime={view.invitationExpiresAt}>
+                              {formatDateTime(invitationExpiryMs)}
+                            </time>
+                            .
+                          </>
+                        ) : null}
+                      </p>
+                      <button
+                        className="r26-button r26-button-primary"
+                        disabled={
+                          busy ||
+                          accessUnavailable ||
+                          invitationExpired ||
+                          Boolean(view.dataNotice && !consentAccepted)
+                        }
+                        onClick={() => void activate()}
+                        type="button"
+                      >
+                        {busy ? 'Activating…' : 'Activate assessment'}
+                      </button>
+                      {view.dataNotice && !consentAccepted ? (
+                        <p role="status">
+                          Confirm the data-use notice to activate your
+                          assessment.
+                        </p>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
@@ -1251,18 +1285,18 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                       : 'Your saved work has been submitted and is read-only.'}
                   </p>
                   {view.submission ? (
-                    <p>
-                      Workspace digest{' '}
-                      <code>{view.submission.workspaceDigest}</code>
-                    </p>
+                    <details className="r26-disclosure">
+                      <summary>Submission receipt</summary>
+                      <p>
+                        Workspace digest{' '}
+                        <code>{view.submission.workspaceDigest}</code>
+                      </p>
+                    </details>
                   ) : null}
                 </div>
               ) : null}
-              <section
-                className="r26-availability"
-                aria-labelledby="r26-availability-title"
-              >
-                <h2 id="r26-availability-title">Workspace capabilities</h2>
+              <details className="r26-disclosure r26-availability">
+                <summary>Workspace capabilities</summary>
                 <ul>
                   <li>
                     <span>Code editing</span>
@@ -1338,17 +1372,13 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   This workspace records saved code changes, task activity, and
                   submission for the assigned hiring team’s review.
                 </p>
-              </section>
-              <section
-                id="candidate-activity"
-                className="r26-activity"
-                aria-labelledby="r26-activity-title"
-              >
+              </details>
+              <details className="r26-disclosure r26-activity">
+                <summary>
+                  Recorded activity <span>{renderedEvents.length}</span>
+                </summary>
                 <div className="r26-section-heading">
-                  <div>
-                    <p className="r26-eyebrow">Recorded activity</p>
-                    <h2 id="r26-activity-title">Workspace events</h2>
-                  </div>
+                  <h2 id="candidate-activity">Workspace events</h2>
                   <button
                     className="r26-link-button"
                     onClick={() => void refresh()}
@@ -1365,12 +1395,13 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                     is saved.
                   </p>
                 )}
-              </section>
+              </details>
             </>
           ) : null}
         </aside>
 
         <section
+          hidden={!showEditor}
           id="candidate-code-editor"
           tabIndex={-1}
           className="r26-editor-panel"

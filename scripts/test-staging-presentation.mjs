@@ -369,7 +369,7 @@ async function runReservationMovesBrowserFlow(presenter) {
       'Submitted (SUBMITTED)',
     );
     const workbenchLink = evaluator.getByRole('link', {
-      name: 'Open submitted evidence and review workbench',
+      name: 'Review submitted work',
     });
     await workbenchLink.waitFor({ state: 'visible' });
     const [workbenchResponse] = await Promise.all([

@@ -278,6 +278,63 @@ const R27SummaryView = ({
     <div className="workbench-summary-grid">
       <div className="workbench-summary-content">
         <section
+          className="evaluator-review-card workbench-session-timeline"
+          aria-labelledby="r27-timeline-title"
+        >
+          <header className="evaluator-review-section-heading">
+            <span className="evaluator-review-title-icon" aria-hidden="true">
+              <IconListDetails size={21} stroke={1.8} />
+            </span>
+            <div>
+              <p className="section-kicker">Session chronology</p>
+              <h2 id="r27-timeline-title">Recorded timeline</h2>
+            </div>
+            <span>{eventSources.length} events available</span>
+          </header>
+          {eventSources.length ? (
+            <ol className="workbench-progression-list">
+              {eventSources.map((source) => {
+                const event =
+                  source.r27?.kind === 'event' ? source.r27.event : null;
+                if (!event) return null;
+                return (
+                  <li key={source.key}>
+                    <time dateTime={event.timestamp} title={event.timestamp}>
+                      {formatEvidenceTime(source, evidence.activatedAt)}
+                    </time>
+                    <div>
+                      <p>
+                        <code>{event.sequence}</code> · {source.title}
+                      </p>
+                      <small>
+                        Source: <code>{event.provenance}</code>
+                      </small>
+                      <button
+                        type="button"
+                        className="evaluator-text-link"
+                        onClick={() => onOpenEvidence('Chronology', source)}
+                      >
+                        Inspect event metadata →
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="evaluator-muted-copy">
+              No candidate event is present on this evidence page.
+            </p>
+          )}
+          {pageError ? <p role="alert">{pageError}</p> : null}
+          {evidence.pagination.nextAfterSequence !== null ? (
+            <button type="button" onClick={onLoadMore} disabled={loadingMore}>
+              {loadingMore ? 'Loading events…' : 'Load more recorded events'}
+            </button>
+          ) : null}
+        </section>
+
+        <section
           className="evaluator-review-card"
           aria-labelledby="r27-summary-title"
         >
@@ -285,66 +342,69 @@ const R27SummaryView = ({
             <p className="section-kicker">Assigned reviewer · Read only</p>
             <h2 id="r27-summary-title">Submitted evidence</h2>
             <p>
-              This view contains the frozen submission and authorized session
-              records. It does not provide a score or decision.
+              The saved submission and session record are available for
+              inspection.
             </p>
-            <dl className="evaluator-source-metadata">
-              <div>
-                <dt>Session</dt>
-                <dd>
-                  <code>{evidence.sessionId}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Scenario</dt>
-                <dd>
-                  {evidence.scenario.title} · v{evidence.scenario.version}
-                </dd>
-              </div>
-              <div>
-                <dt>Created from session record</dt>
-                <dd>
-                  <time dateTime={evidence.createdAt}>
-                    {evidence.createdAt}
-                  </time>
-                </dd>
-              </div>
-              <div>
-                <dt>Activated</dt>
-                <dd>
-                  <time dateTime={evidence.activatedAt}>
-                    {evidence.activatedAt}
-                  </time>
-                </dd>
-              </div>
-              <div>
-                <dt>Submitted</dt>
-                <dd>
-                  <time dateTime={evidence.submittedAt}>
-                    {evidence.submittedAt}
-                  </time>
-                </dd>
-              </div>
-              <div>
-                <dt>Elapsed time</dt>
-                <dd>{duration}</dd>
-              </div>
-              <div>
-                <dt>Closure</dt>
-                <dd>
-                  {evidence.closureReason === 'candidate_submission'
-                    ? 'Candidate submission'
-                    : 'Timeout'}
-                </dd>
-              </div>
-              <div>
-                <dt>Assignment</dt>
-                <dd>
-                  <code>{evidence.assignment.id}</code> · version{' '}
-                  <code>{evidence.assignment.version}</code>
-                </dd>
-              </div>
-            </dl>
+            <details className="evaluator-source-details">
+              <summary>Session details</summary>
+              <dl className="evaluator-source-metadata">
+                <div>
+                  <dt>Session</dt>
+                  <dd>
+                    <code>{evidence.sessionId}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Scenario</dt>
+                  <dd>
+                    {evidence.scenario.title} · v{evidence.scenario.version}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Created from session record</dt>
+                  <dd>
+                    <time dateTime={evidence.createdAt}>
+                      {evidence.createdAt}
+                    </time>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Activated</dt>
+                  <dd>
+                    <time dateTime={evidence.activatedAt}>
+                      {evidence.activatedAt}
+                    </time>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Submitted</dt>
+                  <dd>
+                    <time dateTime={evidence.submittedAt}>
+                      {evidence.submittedAt}
+                    </time>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Elapsed time</dt>
+                  <dd>{duration}</dd>
+                </div>
+                <div>
+                  <dt>Closure</dt>
+                  <dd>
+                    {evidence.closureReason === 'candidate_submission'
+                      ? 'Candidate submission'
+                      : 'Timeout'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Assignment</dt>
+                  <dd>
+                    <code>{evidence.assignment.id}</code> · version{' '}
+                    <code>{evidence.assignment.version}</code>
+                  </dd>
+                </div>
+              </dl>
+            </details>
           </div>
         </section>
 
@@ -361,48 +421,53 @@ const R27SummaryView = ({
               <h2 id="r27-snapshot-title">Task context</h2>
             </div>
           </header>
-          <p style={{ overflowWrap: 'anywhere' }}>Scenario snapshot digest:</p>
-          <code className="evaluator-integrity-digest">
-            {evidence.scenario.snapshotDigest}
-          </code>
-          <ScenarioBrief
-            markdown={
-              presentation.scenarioContext.brief ??
-              'Scenario brief unavailable in this snapshot.'
-            }
-          />
-          <h3>Acceptance criteria</h3>
-          {presentation.scenarioContext.acceptanceCriteria.length ? (
-            <ul>
-              {presentation.scenarioContext.acceptanceCriteria.map(
-                (criterion, index) => (
-                  <li key={`${index}:${criterion}`}>{criterion}</li>
-                ),
-              )}
-            </ul>
-          ) : (
-            <p className="evaluator-muted-copy">
-              Acceptance criteria unavailable in this snapshot.
-            </p>
-          )}
-          <details
-            className="evaluator-source-details"
-            style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
-          >
-            <summary>Open immutable scenario snapshot</summary>
-            <pre
-              tabIndex={0}
-              aria-label="Immutable versioned scenario snapshot"
-              style={{
-                minWidth: 0,
-                width: '100%',
-                maxWidth: '100%',
-                overflowX: 'auto',
-                whiteSpace: 'pre',
-              }}
+          <details className="evaluator-source-details">
+            <summary>Read task brief and acceptance criteria</summary>
+            <ScenarioBrief
+              markdown={
+                presentation.scenarioContext.brief ??
+                'Scenario brief unavailable in this snapshot.'
+              }
+            />
+            <h3>Acceptance criteria</h3>
+            {presentation.scenarioContext.acceptanceCriteria.length ? (
+              <ul>
+                {presentation.scenarioContext.acceptanceCriteria.map(
+                  (criterion, index) => (
+                    <li key={`${index}:${criterion}`}>{criterion}</li>
+                  ),
+                )}
+              </ul>
+            ) : (
+              <p className="evaluator-muted-copy">
+                Acceptance criteria unavailable in this snapshot.
+              </p>
+            )}
+            <details
+              className="evaluator-source-details"
+              style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
             >
-              {evidence.scenario.snapshotText}
-            </pre>
+              <summary>Open immutable scenario snapshot</summary>
+              <p style={{ overflowWrap: 'anywhere' }}>
+                Scenario snapshot digest:
+              </p>
+              <code className="evaluator-integrity-digest">
+                {evidence.scenario.snapshotDigest}
+              </code>
+              <pre
+                tabIndex={0}
+                aria-label="Immutable versioned scenario snapshot"
+                style={{
+                  minWidth: 0,
+                  width: '100%',
+                  maxWidth: '100%',
+                  overflowX: 'auto',
+                  whiteSpace: 'pre',
+                }}
+              >
+                {evidence.scenario.snapshotText}
+              </pre>
+            </details>
           </details>
         </section>
 
@@ -464,61 +529,6 @@ const R27SummaryView = ({
                 ))}
               </ul>
             </details>
-          ) : null}
-        </section>
-
-        <section
-          className="evaluator-review-card"
-          aria-labelledby="r27-timeline-title"
-        >
-          <header className="evaluator-review-section-heading">
-            <span className="evaluator-review-title-icon" aria-hidden="true">
-              <IconListDetails size={21} stroke={1.8} />
-            </span>
-            <div>
-              <p className="section-kicker">Candidate event sequence</p>
-              <h2 id="r27-timeline-title">Recorded timeline</h2>
-            </div>
-            <span>{eventSources.length} events available</span>
-          </header>
-          {eventSources.length ? (
-            <ol className="workbench-progression-list">
-              {eventSources.map((source) => {
-                const event =
-                  source.r27?.kind === 'event' ? source.r27.event : null;
-                if (!event) return null;
-                return (
-                  <li key={source.key}>
-                    <time dateTime={event.timestamp}>{event.timestamp}</time>
-                    <div>
-                      <p>
-                        <code>{event.sequence}</code> · {source.title}
-                      </p>
-                      <small>
-                        Provenance: <code>{event.provenance}</code>
-                      </small>
-                      <button
-                        type="button"
-                        className="evaluator-text-link"
-                        onClick={() => onOpenEvidence('Chronology', source)}
-                      >
-                        Inspect event metadata →
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            <p className="evaluator-muted-copy">
-              No candidate event is present on this evidence page.
-            </p>
-          )}
-          {pageError ? <p role="alert">{pageError}</p> : null}
-          {evidence.pagination.nextAfterSequence !== null ? (
-            <button type="button" onClick={onLoadMore} disabled={loadingMore}>
-              {loadingMore ? 'Loading events…' : 'Load more recorded events'}
-            </button>
           ) : null}
         </section>
 
@@ -613,24 +623,27 @@ const R27SummaryView = ({
             Submitted workspace integrity metadata
           </p>
           <h2 id="r27-digests-title">Submission digests</h2>
-          <dl className="evaluator-source-metadata">
-            <div>
-              <dt>Workspace digest</dt>
-              <dd>
-                <code className="evaluator-integrity-digest">
-                  {evidence.submission.workspaceDigest}
-                </code>
-              </dd>
-            </div>
-            <div>
-              <dt>Manifest digest</dt>
-              <dd>
-                <code className="evaluator-integrity-digest">
-                  {evidence.submission.manifestDigest}
-                </code>
-              </dd>
-            </div>
-          </dl>
+          <details className="evaluator-source-details">
+            <summary>Show workspace and manifest digests</summary>
+            <dl className="evaluator-source-metadata">
+              <div>
+                <dt>Workspace digest</dt>
+                <dd>
+                  <code className="evaluator-integrity-digest">
+                    {evidence.submission.workspaceDigest}
+                  </code>
+                </dd>
+              </div>
+              <div>
+                <dt>Manifest digest</dt>
+                <dd>
+                  <code className="evaluator-integrity-digest">
+                    {evidence.submission.manifestDigest}
+                  </code>
+                </dd>
+              </div>
+            </dl>
+          </details>
         </section>
       </div>
 

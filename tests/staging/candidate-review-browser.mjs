@@ -468,9 +468,10 @@ export async function checkCandidateReviewBrowserAcceptance({
       0,
       'Execution UI stays unavailable when the server disables execution',
     );
-    const capabilities = candidatePage.getByRole('region', {
-      name: 'Workspace capabilities',
-    });
+    const capabilities = candidatePage.locator('details.r26-availability');
+    await capabilities
+      .getByText('Workspace capabilities', { exact: true })
+      .click();
     assert.ok(
       await capabilities
         .getByText('AI assistance is unavailable in this demo.', {
