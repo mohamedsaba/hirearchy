@@ -2052,9 +2052,9 @@ export async function stagingOrganizationSessionPageGet(
       <section class="software-settings-section software-session-overview" aria-labelledby="session-summary-title">
         ${
           isSubmittedReviewerSession
-            ? `<p><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(
+            ? `<div class="software-session-action-bar"><a href="/r27/organizations/${safeOrgId}/sessions/${safeHtml(
                 s.sessionId,
-              )}" class="software-document-primary-link" data-testid="open-submitted-evidence-workbench-link">Review submitted work</a></p>`
+              )}" class="software-document-primary-link" data-testid="open-submitted-evidence-workbench-link">Review submitted work</a></div>`
             : isSubmittedSession
               ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
                   <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>
@@ -2074,7 +2074,7 @@ export async function stagingOrganizationSessionPageGet(
         <dl class="software-session-facts">
           <dt><strong>Scenario ID:</strong></dt><dd><code>${safeHtml(
             s.scenarioId,
-          )}</code> (v${safeHtml(s.scenarioVersion)})</dd>
+          )}</code> (v${safeHtml(s.scenarioVersion.replace(/^v/i, ''))})</dd>
           <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(
             lifecycleLabel,
           )} (${safeHtml(s.status)})</span> ${
@@ -2129,12 +2129,12 @@ export async function stagingOrganizationSessionPageGet(
           <h4>Assigned reviewers</h4>
           ${
             context.assignments && context.assignments.length > 0
-              ? `<ul data-testid="assigned-reviewers-list">${context.assignments
+              ? `<ul class="software-reviewer-list" data-testid="assigned-reviewers-list">${context.assignments
                   .map(
                     (a) => `
                 <li>
-                  <span>Reviewer: <code>${safeHtml(a.reviewerPrincipalId)}</code></span>
-                  <span>Status: ${a.revokedAt ? 'Revoked' : 'Active'}</span>
+                  <span>Reviewer <code>${safeHtml(a.reviewerPrincipalId)}</code></span>
+                  <span class="software-reviewer-status ${a.revokedAt ? 'is-revoked' : 'is-active'}">${a.revokedAt ? 'Revoked' : 'Active'}</span>
                 </li>`,
                   )
                   .join('')}</ul>`

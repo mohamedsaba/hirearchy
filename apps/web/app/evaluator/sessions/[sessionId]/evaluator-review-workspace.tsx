@@ -30,6 +30,7 @@ import {
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { computeDiffStats } from './code-diff-viewer';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
 import {
@@ -120,7 +121,9 @@ const SourceRow = ({
     >
       <span className="evaluator-source-row-mark" aria-hidden="true" />
       <span className="evaluator-source-row-copy">
-        <strong>{source.title}</strong>
+        <strong>
+          {source.r27?.kind === 'file' ? source.r27.file.path : source.title}
+        </strong>
         <span>{source.summary}</span>
         <small>
           {sourceLabel(source)} · {sourceTime(source, activatedAt)}
@@ -258,7 +261,20 @@ const R27SummaryView = ({
   loadingMore: boolean;
   pageError: string | null;
 }>) => {
-  const fileSources = sources.filter((source) => source.r27?.kind === 'file');
+  const fileSources = [...sources]
+    .filter((source) => source.r27?.kind === 'file')
+    .sort((left, right) => {
+      const leftFile = left.r27?.kind === 'file' ? left.r27.file : null;
+      const rightFile = right.r27?.kind === 'file' ? right.r27.file : null;
+      const leftModified =
+        leftFile !== null &&
+        leftFile.starterContent !== leftFile.submittedContent;
+      const rightModified =
+        rightFile !== null &&
+        rightFile.starterContent !== rightFile.submittedContent;
+      if (leftModified !== rightModified) return leftModified ? -1 : 1;
+      return left.title.localeCompare(right.title);
+    });
   const eventSources = sources.filter((source) => source.r27?.kind === 'event');
   const conversationSources = sources.filter(
     (source) =>
@@ -271,7 +287,7 @@ const R27SummaryView = ({
     Date.parse(evidence.submittedAt) - Date.parse(evidence.activatedAt);
   const duration =
     Number.isFinite(elapsedMs) && elapsedMs >= 0
-      ? `${Math.floor(elapsedMs / 60_000)} minutes`
+      ? `${Math.max(1, Math.round(elapsedMs / 60_000))} minutes`
       : 'Unavailable';
 
   return (
@@ -303,11 +319,11 @@ const R27SummaryView = ({
                       {formatEvidenceTime(source, evidence.activatedAt)}
                     </time>
                     <div>
-                      <p>
-                        <code>{event.sequence}</code> · {source.title}
+                      <p className="workbench-timeline-title">
+                        <code>#{event.sequence}</code> {source.title}
                       </p>
-                      <small>
-                        Source: <code>{event.provenance}</code>
+                      <small className="workbench-timeline-subtitle">
+                        {source.summary}
                       </small>
                       <button
                         type="button"
@@ -332,80 +348,6 @@ const R27SummaryView = ({
               {loadingMore ? 'Loading events…' : 'Load more recorded events'}
             </button>
           ) : null}
-        </section>
-
-        <section
-          className="evaluator-review-card"
-          aria-labelledby="r27-summary-title"
-        >
-          <div>
-            <p className="section-kicker">Assigned reviewer · Read only</p>
-            <h2 id="r27-summary-title">Submitted evidence</h2>
-            <p>
-              The saved submission and session record are available for
-              inspection.
-            </p>
-            <details className="evaluator-source-details">
-              <summary>Session details</summary>
-              <dl className="evaluator-source-metadata">
-                <div>
-                  <dt>Session</dt>
-                  <dd>
-                    <code>{evidence.sessionId}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Scenario</dt>
-                  <dd>
-                    {evidence.scenario.title} · v{evidence.scenario.version}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Created from session record</dt>
-                  <dd>
-                    <time dateTime={evidence.createdAt}>
-                      {evidence.createdAt}
-                    </time>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Activated</dt>
-                  <dd>
-                    <time dateTime={evidence.activatedAt}>
-                      {evidence.activatedAt}
-                    </time>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Submitted</dt>
-                  <dd>
-                    <time dateTime={evidence.submittedAt}>
-                      {evidence.submittedAt}
-                    </time>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Elapsed time</dt>
-                  <dd>{duration}</dd>
-                </div>
-                <div>
-                  <dt>Closure</dt>
-                  <dd>
-                    {evidence.closureReason === 'candidate_submission'
-                      ? 'Candidate submission'
-                      : 'Timeout'}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Assignment</dt>
-                  <dd>
-                    <code>{evidence.assignment.id}</code> · version{' '}
-                    <code>{evidence.assignment.version}</code>
-                  </dd>
-                </div>
-              </dl>
-            </details>
-          </div>
         </section>
 
         <section
@@ -487,22 +429,57 @@ const R27SummaryView = ({
           </header>
           {fileSources.length ? (
             <ul className="evaluator-submitted-file-list">
-              {fileSources.map((source) => (
-                <li key={source.key}>
-                  <code>
-                    {source.r27?.kind === 'file'
-                      ? source.r27.file.path
-                      : source.key}
-                  </code>{' '}
-                  <button
-                    type="button"
-                    className="evaluator-text-link"
-                    onClick={() => onOpenEvidence('Code changes', source)}
-                  >
-                    Open contents and derived diff →
-                  </button>
-                </li>
-              ))}
+              {fileSources.map((source) => {
+                const file =
+                  source.r27?.kind === 'file' ? source.r27.file : null;
+                const stats = file
+                  ? computeDiffStats(file.diff)
+                  : { additions: 0, deletions: 0 };
+                const changed =
+                  file !== null &&
+                  (file.starterContent !== file.submittedContent ||
+                    stats.additions > 0 ||
+                    stats.deletions > 0);
+                return (
+                  <li key={source.key}>
+                    <div className="evaluator-submitted-file-meta">
+                      <code>{file ? file.path : source.key}</code>
+                      {file ? (
+                        changed ? (
+                          <span className="evaluator-file-diff-stats">
+                            {stats.additions > 0 ? (
+                              <span className="code-diff-stat-add">
+                                +{stats.additions}
+                              </span>
+                            ) : null}
+                            {stats.deletions > 0 ? (
+                              <span className="code-diff-stat-del">
+                                -{stats.deletions}
+                              </span>
+                            ) : null}
+                            {stats.additions === 0 && stats.deletions === 0 ? (
+                              <span className="code-diff-stat-neutral">
+                                Modified
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="code-diff-stat-neutral">
+                            Unchanged
+                          </span>
+                        )
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="evaluator-text-link"
+                      onClick={() => onOpenEvidence('Code changes', source)}
+                    >
+                      Open contents and derived diff →
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="evaluator-muted-copy">
@@ -651,6 +628,77 @@ const R27SummaryView = ({
         className="workbench-summary-sidebar"
         aria-label="Evidence availability"
       >
+        <section
+          className="evaluator-review-card"
+          aria-labelledby="r27-summary-title"
+        >
+          <p className="section-kicker">Assigned reviewer · Read only</p>
+          <h2 id="r27-summary-title">Submitted evidence</h2>
+          <dl className="evaluator-source-metadata">
+            <div>
+              <dt>Scenario</dt>
+              <dd>
+                {evidence.scenario.title} · v
+                {evidence.scenario.version.replace(/^v/i, '')}
+              </dd>
+            </div>
+            <div>
+              <dt>Elapsed time</dt>
+              <dd>{duration}</dd>
+            </div>
+            <div>
+              <dt>Closure</dt>
+              <dd>
+                {evidence.closureReason === 'candidate_submission'
+                  ? 'Candidate submission'
+                  : 'Timeout'}
+              </dd>
+            </div>
+          </dl>
+          <details className="evaluator-source-details">
+            <summary>Session details</summary>
+            <dl className="evaluator-source-metadata">
+              <div>
+                <dt>Session</dt>
+                <dd>
+                  <code>{evidence.sessionId}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Created from session record</dt>
+                <dd>
+                  <time dateTime={evidence.createdAt}>
+                    {evidence.createdAt}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Activated</dt>
+                <dd>
+                  <time dateTime={evidence.activatedAt}>
+                    {evidence.activatedAt}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Submitted</dt>
+                <dd>
+                  <time dateTime={evidence.submittedAt}>
+                    {evidence.submittedAt}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Assignment</dt>
+                <dd>
+                  <code>{evidence.assignment.id}</code> · version{' '}
+                  <code>{evidence.assignment.version}</code>
+                </dd>
+              </div>
+            </dl>
+          </details>
+        </section>
+
         <section className="evaluator-review-card">
           <p className="section-kicker">Source availability</p>
           <h2>Evidence limits</h2>
@@ -1423,6 +1471,21 @@ export const EvaluatorReviewWorkspace = (
       setMobileInspectorOpen(true);
   };
 
+  const handleFilterChange = (nextFilter: EvidenceFilter) => {
+    setFilter(nextFilter);
+    const nextVisible = sourcesForFilter(
+      sources,
+      nextFilter,
+      projection?.briefing.recordedVerification.runs ?? [],
+    );
+    if (
+      nextVisible.length > 0 &&
+      !nextVisible.some((source) => source.key === effectiveSelectedSourceKey)
+    ) {
+      setSelectedSourceKey(nextVisible[0].key);
+    }
+  };
+
   const openEvidence = (
     nextFilter?: EvidenceFilter,
     source?: EvidenceSource,
@@ -1605,7 +1668,7 @@ export const EvaluatorReviewWorkspace = (
                 filter={filter}
                 selectedSource={selectedSource}
                 selectedSourceKey={effectiveSelectedSourceKey}
-                onFilterChange={setFilter}
+                onFilterChange={handleFilterChange}
                 onSelectSource={selectSource}
                 registerRow={(key, element) => {
                   if (element) sourceRows.current.set(key, element);

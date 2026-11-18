@@ -31,9 +31,6 @@ export const SoftwareProductHeader = ({
   const sessionSummaryHref = stagingReview
     ? `/r23/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
     : null;
-  const reviewHref = stagingReview
-    ? `/r27/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
-    : null;
 
   return (
     <header className="software-product-header">
@@ -67,17 +64,17 @@ export const SoftwareProductHeader = ({
         </div>
       ) : null}
       <nav aria-label="Evaluator workspace">
-        {stagingReview && reviewHref && sessionSummaryHref ? (
+        {stagingReview && sessionSummaryHref ? (
           <>
-            <Link
-              className="software-nav-link"
-              href={reviewHref}
-              aria-current={active === 'reviews' ? 'page' : undefined}
-            >
-              Review
-            </Link>
             <Link className="software-nav-link" href={sessionSummaryHref}>
               Session summary
+            </Link>
+            <Link
+              className="software-nav-link"
+              href={`/r27/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`}
+              aria-current={active === 'reviews' ? 'page' : undefined}
+            >
+              Evidence review
             </Link>
           </>
         ) : (

@@ -1213,6 +1213,12 @@ body.software-document-body *::after {
   max-width: 900px;
 }
 
+.software-session-action-bar {
+  margin: 0 0 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--software-border-subtle);
+}
+
 .software-document-panel .software-session-facts {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
@@ -1239,6 +1245,46 @@ body.software-document-body *::after {
   margin: 24px 0;
   color: var(--software-muted);
   font-size: 13px;
+}
+
+.software-reviewer-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.software-reviewer-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--software-border);
+  border-radius: 8px;
+  background: var(--software-surface);
+  font-size: 13px;
+}
+
+.software-reviewer-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.software-reviewer-status.is-active {
+  background: #e9f6ee;
+  color: #166534;
+}
+
+.software-reviewer-status.is-revoked {
+  background: #fef2f2;
+  color: #b42318;
 }
 
 @media (max-width: 600px) {

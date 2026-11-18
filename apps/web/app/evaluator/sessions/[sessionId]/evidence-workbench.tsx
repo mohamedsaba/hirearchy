@@ -53,6 +53,11 @@ import {
   type R210ReviewPacket,
   type R210ReferencedEvidence,
 } from '../../../../src/r210-review-packets/presentation';
+import {
+  CodeDiffViewer,
+  CodeFileViewer,
+  computeDiffStats,
+} from './code-diff-viewer';
 import { EvidenceItemCard } from './evidence-item-card';
 import { SubmittedWork } from './submitted-work';
 import { TechnicalRecord } from './technical-record';
@@ -252,11 +257,20 @@ export const buildR27EvidenceSources = (
         const event = source.event;
         const reference = `r27:${evidence.organizationId}:session:${evidence.sessionId}:event:${event.sequence}`;
         const payload = event.payload as Record<string, unknown> | undefined;
+        const savedPath =
+          typeof payload?.path === 'string' ? payload.path : null;
+        const savedVersion =
+          typeof payload?.version === 'string' ||
+          typeof payload?.version === 'number'
+            ? String(payload.version)
+            : null;
         const title =
           event.type === 'SESSION_ACTIVATED'
             ? 'Session activated'
             : event.type === 'WORKSPACE_CHANGED'
-              ? 'Workspace save recorded'
+              ? savedPath
+                ? `Saved ${savedPath}`
+                : 'Workspace save recorded'
               : event.type === 'AI_REQUEST_STARTED'
                 ? 'AI request recorded'
                 : event.type === 'AI_RESPONSE_COMPLETED'
@@ -272,13 +286,15 @@ export const buildR27EvidenceSources = (
                           : 'Session submitted';
         const summary =
           event.type === 'WORKSPACE_CHANGED'
-            ? 'Save sequence and digest metadata are available; intermediate file content is unavailable.'
+            ? savedVersion
+              ? `Workspace save recorded · v${savedVersion}`
+              : 'Workspace save recorded'
             : event.type === 'SESSION_ACTIVATED'
-              ? 'Candidate workspace activation event'
+              ? 'Session activated by candidate'
               : event.type === 'AI_REQUEST_STARTED'
-                ? `Candidate submitted prompt (${typeof payload?.promptChars === 'number' ? payload.promptChars : 0} chars)`
+                ? `Submitted prompt (${typeof payload?.promptChars === 'number' ? payload.promptChars : 0} chars)`
                 : event.type === 'AI_RESPONSE_COMPLETED'
-                  ? `Assistant response generated (${typeof payload?.durationMs === 'number' ? payload.durationMs : 0}ms)`
+                  ? `Assistant response (${typeof payload?.durationMs === 'number' ? payload.durationMs : 0}ms)`
                   : event.type === 'AI_REQUEST_FAILED'
                     ? typeof payload?.errorMessage === 'string'
                       ? payload.errorMessage
@@ -286,14 +302,16 @@ export const buildR27EvidenceSources = (
                         ? payload.failureReason
                         : 'AI request failed'
                     : event.type === 'EXECUTION_REQUESTED'
-                      ? `Candidate requested run checks for recipe ${typeof payload?.recipeId === 'string' ? payload.recipeId : ''}`
+                      ? `Run checks (${typeof payload?.recipeId === 'string' ? payload.recipeId : 'recipe'})`
                       : event.type === 'EXECUTION_COMPLETED'
-                        ? `Execution run completed (exit ${payload?.exitCode ?? 0})`
+                        ? `Completed (exit ${payload?.exitCode ?? 0})`
                         : event.type === 'EXECUTION_FAILED'
                           ? typeof payload?.errorMessage === 'string'
                             ? payload.errorMessage
                             : 'Execution run failed'
-                          : 'Recorded session closure event';
+                          : payload?.closureReason === 'timeout'
+                            ? 'Closed when time limit ended'
+                            : 'Submitted by candidate';
         return {
           key: reference,
           evidenceRef: reference,
@@ -404,6 +422,8 @@ export const buildR27EvidenceSources = (
 
       const file = source.file;
       const reference = `r27:${evidence.organizationId}:session:${evidence.sessionId}:file:${encodeURIComponent(file.path)}`;
+      const diffStats = computeDiffStats(file.diff);
+      const hasDiffStats = diffStats.additions > 0 || diffStats.deletions > 0;
       return {
         key: reference,
         evidenceRef: reference,
@@ -414,10 +434,12 @@ export const buildR27EvidenceSources = (
         title: `Submitted file · ${file.path}`,
         summary:
           file.diff === null
-            ? 'The starter content is unavailable; a derived comparison is not shown.'
+            ? 'Starter content unavailable; submitted state shown.'
             : file.starterContent === file.submittedContent
-              ? 'No net content change from starter to submitted state.'
-              : 'Derived from the authorized starter and submitted contents.',
+              ? 'Unchanged from starter baseline'
+              : hasDiffStats
+                ? `+${diffStats.additions} / -${diffStats.deletions} lines modified`
+                : 'Modified from starter baseline',
         timestamp: evidence.submittedAt,
         chronologyOrder: index,
         verificationRun: null,
@@ -437,8 +459,20 @@ export const sourcesForFilter = (
   if (sources.some((source) => source.r27)) {
     if (filter === 'Chronology')
       return sources.filter((source) => source.r27?.kind === 'event');
-    if (filter === 'Code changes')
-      return sources.filter((source) => source.r27?.kind === 'file');
+    if (filter === 'Code changes') {
+      return sources
+        .filter((source) => source.r27?.kind === 'file')
+        .sort((a, b) => {
+          const aFile = a.r27?.kind === 'file' ? a.r27.file : null;
+          const bFile = b.r27?.kind === 'file' ? b.r27.file : null;
+          const aChanged =
+            aFile !== null && aFile.starterContent !== aFile.submittedContent;
+          const bChanged =
+            bFile !== null && bFile.starterContent !== bFile.submittedContent;
+          if (aChanged !== bChanged) return aChanged ? -1 : 1;
+          return (aFile?.path ?? '').localeCompare(bFile?.path ?? '');
+        });
+    }
     if (filter === 'AI conversations')
       return sources.filter(
         (source) =>
@@ -502,15 +536,31 @@ export const sourcesForFilter = (
   return sources.filter((source) => source.kind === 'conversation');
 };
 
-export const preferredEvidenceSource = (sources: readonly EvidenceSource[]) =>
-  sources.find((source) => source.r27?.kind === 'file') ??
-  sources.find((source) => source.r27?.kind === 'execution') ??
-  sources.find((source) => source.verificationRun) ??
-  sources.find(
-    (source) => source.item && source.entry?.kind !== 'activation',
-  ) ??
-  sources[0] ??
-  null;
+export const preferredEvidenceSource = (sources: readonly EvidenceSource[]) => {
+  if (sources.some((source) => source.r27)) {
+    return (
+      sources.find(
+        (source) =>
+          source.r27?.kind === 'event' &&
+          source.r27.event.type !== 'SESSION_ACTIVATED' &&
+          source.r27.event.type !== 'SESSION_SUBMITTED',
+      ) ??
+      sources.find((source) => source.r27?.kind === 'event') ??
+      sources.find((source) => source.r27?.kind === 'file') ??
+      sources[0] ??
+      null
+    );
+  }
+  return (
+    sources.find((source) => source.r27?.kind === 'execution') ??
+    sources.find((source) => source.verificationRun) ??
+    sources.find(
+      (source) => source.item && source.entry?.kind !== 'activation',
+    ) ??
+    sources[0] ??
+    null
+  );
+};
 
 export const formatEvidenceTime = (
   source: EvidenceSource,
@@ -910,8 +960,8 @@ const R29ObservationPanel = ({
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
-              background: '#e0e7ff',
-              color: '#3730a3',
+              background: '#efe7f5',
+              color: '#211426',
               padding: '3px 8px',
               borderRadius: '4px',
             }}
@@ -924,8 +974,8 @@ const R29ObservationPanel = ({
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
-              background: '#fef3c7',
-              color: '#92400e',
+              background: '#f7ecd8',
+              color: '#6b4407',
               padding: '3px 8px',
               borderRadius: '4px',
             }}
@@ -1047,8 +1097,8 @@ const R29ObservationPanel = ({
                       <span
                         style={{
                           fontWeight: 600,
-                          background: '#dbeafe',
-                          color: '#1e40af',
+                          background: '#efe7f5',
+                          color: '#211426',
                           padding: '1px 6px',
                           borderRadius: '4px',
                         }}
@@ -1166,10 +1216,10 @@ const R29ObservationPanel = ({
                             disabled={updating || !editBody.trim()}
                             style={{
                               fontSize: '12px',
-                              padding: '4px 12px',
-                              borderRadius: '4px',
+                              padding: '5px 12px',
+                              borderRadius: '6px',
                               border: 'none',
-                              background: '#2563eb',
+                              background: '#211426',
                               color: '#fff',
                               fontWeight: 600,
                               cursor:
@@ -1318,7 +1368,7 @@ const R29ObservationPanel = ({
           <textarea
             aria-label="Observation note"
             placeholder="Record human evaluator note anchored to this evidence…"
-            rows={3}
+            rows={2}
             maxLength={10000}
             value={newBody}
             onChange={(e) => {
@@ -1359,7 +1409,7 @@ const R29ObservationPanel = ({
                 padding: '6px 14px',
                 borderRadius: '6px',
                 border: 'none',
-                background: '#2563eb',
+                background: '#211426',
                 color: '#ffffff',
                 fontWeight: 600,
                 cursor: creating || !newBody.trim() ? 'not-allowed' : 'pointer',
@@ -1488,6 +1538,7 @@ const R28WorkspaceRevisionView = ({
   const presentation = revision ? buildR28RevisionPresentation(revision) : null;
   const isAvailable =
     revision?.availability === 'available' && presentation?.content !== null;
+  const elapsedLabel = formatEvidenceTime(source, r27Evidence.activatedAt);
 
   return (
     <section
@@ -1499,13 +1550,19 @@ const R28WorkspaceRevisionView = ({
     >
       <header className="evaluator-source-inspector-heading">
         <div>
-          <p className="section-kicker">Session chronology · Selected event</p>
+          <p className="section-kicker">
+            Session chronology · Sequence #{event.sequence}
+          </p>
           <h2 id={headingId} ref={headingRef} tabIndex={-1}>
             {source.title}
           </h2>
           <p className="evaluator-source-summary">{source.summary}</p>
         </div>
-        <span className="evaluator-source-status">
+        <span
+          className="evaluator-source-status"
+          title={revision?.acceptedAt ?? event.timestamp}
+        >
+          {elapsedLabel} ·{' '}
           {presentation ? presentation.statusBadge : 'Recorded event metadata'}
         </span>
       </header>
@@ -1531,81 +1588,6 @@ const R28WorkspaceRevisionView = ({
         </div>
       ) : null}
 
-      <dl className="evaluator-source-metadata">
-        <div>
-          <dt>Sequence</dt>
-          <dd>
-            <code>{event.sequence}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Event type</dt>
-          <dd>
-            <code>{event.type}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Timestamp</dt>
-          <dd>
-            <time dateTime={revision?.acceptedAt ?? event.timestamp}>
-              {revision?.acceptedAt ?? event.timestamp}
-            </time>
-          </dd>
-        </div>
-        <div>
-          <dt>Provenance</dt>
-          <dd>
-            <code>{revision?.provenance ?? event.provenance}</code>
-          </dd>
-        </div>
-        {isAvailable && revision ? (
-          <>
-            <div>
-              <dt>File path</dt>
-              <dd>
-                <code>{revision.filePath}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Version</dt>
-              <dd>
-                <code>v{revision.version}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Content digest</dt>
-              <dd>
-                <code
-                  style={{
-                    display: 'block',
-                    maxWidth: '100%',
-                    wordBreak: 'break-all',
-                    overflowWrap: 'anywhere',
-                  }}
-                >
-                  {revision.contentDigest}
-                </code>
-              </dd>
-            </div>
-            <div>
-              <dt>Request ID</dt>
-              <dd>
-                <code
-                  style={{
-                    display: 'block',
-                    maxWidth: '100%',
-                    wordBreak: 'break-all',
-                    overflowWrap: 'anywhere',
-                  }}
-                >
-                  {revision.requestId}
-                </code>
-              </dd>
-            </div>
-          </>
-        ) : null}
-      </dl>
-
       {!loading && !isAvailable ? (
         <p className="evaluator-evidence-notice">
           This save is retained as sequence and digest metadata. Intermediate
@@ -1622,31 +1604,12 @@ const R28WorkspaceRevisionView = ({
             className="evaluator-revision-mode-selector"
             role="group"
             aria-label="Comparison mode"
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '8px',
-              margin: '12px 0',
-            }}
           >
             <button
               type="button"
               aria-pressed={mode === 'content'}
               onClick={() => setMode('content')}
-              className={`evaluator-mode-button ${mode === 'content' ? 'is-active' : ''}`}
-              style={{
-                padding: '6px 12px',
-                fontSize: '12px',
-                fontWeight: mode === 'content' ? 600 : 400,
-                borderRadius: '6px',
-                border: '1px solid var(--software-border)',
-                background:
-                  mode === 'content'
-                    ? 'var(--software-lilac, #ede7f6)'
-                    : 'var(--software-surface, #fff)',
-                color: 'var(--software-ink)',
-                cursor: 'pointer',
-              }}
+              className={`evaluator-mode-button${mode === 'content' ? ' is-active' : ''}`}
             >
               View file content at this revision
             </button>
@@ -1655,20 +1618,7 @@ const R28WorkspaceRevisionView = ({
                 type="button"
                 aria-pressed={mode === 'previous'}
                 onClick={() => setMode('previous')}
-                className={`evaluator-mode-button ${mode === 'previous' ? 'is-active' : ''}`}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: mode === 'previous' ? 600 : 400,
-                  borderRadius: '6px',
-                  border: '1px solid var(--software-border)',
-                  background:
-                    mode === 'previous'
-                      ? 'var(--software-lilac, #ede7f6)'
-                      : 'var(--software-surface, #fff)',
-                  color: 'var(--software-ink)',
-                  cursor: 'pointer',
-                }}
+                className={`evaluator-mode-button${mode === 'previous' ? ' is-active' : ''}`}
               >
                 Diff with previous revision
               </button>
@@ -1678,20 +1628,7 @@ const R28WorkspaceRevisionView = ({
                 type="button"
                 aria-pressed={mode === 'starter'}
                 onClick={() => setMode('starter')}
-                className={`evaluator-mode-button ${mode === 'starter' ? 'is-active' : ''}`}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: mode === 'starter' ? 600 : 400,
-                  borderRadius: '6px',
-                  border: '1px solid var(--software-border)',
-                  background:
-                    mode === 'starter'
-                      ? 'var(--software-lilac, #ede7f6)'
-                      : 'var(--software-surface, #fff)',
-                  color: 'var(--software-ink)',
-                  cursor: 'pointer',
-                }}
+                className={`evaluator-mode-button${mode === 'starter' ? ' is-active' : ''}`}
               >
                 Diff with starter baseline
               </button>
@@ -1701,20 +1638,7 @@ const R28WorkspaceRevisionView = ({
                 type="button"
                 aria-pressed={mode === 'submitted'}
                 onClick={() => setMode('submitted')}
-                className={`evaluator-mode-button ${mode === 'submitted' ? 'is-active' : ''}`}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: mode === 'submitted' ? 600 : 400,
-                  borderRadius: '6px',
-                  border: '1px solid var(--software-border)',
-                  background:
-                    mode === 'submitted'
-                      ? 'var(--software-lilac, #ede7f6)'
-                      : 'var(--software-surface, #fff)',
-                  color: 'var(--software-ink)',
-                  cursor: 'pointer',
-                }}
+                className={`evaluator-mode-button${mode === 'submitted' ? ' is-active' : ''}`}
               >
                 Diff with submitted code
               </button>
@@ -1728,76 +1652,41 @@ const R28WorkspaceRevisionView = ({
             {mode === 'content' ? (
               <>
                 <h3>File content at this revision</h3>
-                <pre
-                  tabIndex={0}
-                  aria-label={`File content for ${revision.filePath} at version ${revision.version}`}
-                  style={{
-                    minWidth: 0,
-                    width: '100%',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'pre',
-                  }}
-                >
-                  <code>{presentation.content ?? ''}</code>
-                </pre>
+                <CodeFileViewer
+                  content={presentation.content}
+                  ariaLabel={`File content for ${revision.filePath} at version ${revision.version}`}
+                  emptyMessage="No file content available for this revision."
+                />
               </>
             ) : mode === 'previous' ? (
               <>
                 <h3>Diff with previous revision</h3>
-                <pre
-                  tabIndex={0}
-                  aria-label={`Diff with previous revision for ${revision.filePath}`}
-                  style={{
-                    minWidth: 0,
-                    width: '100%',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'pre',
-                  }}
-                >
-                  <code>
-                    {presentation.diffWithPrevious || 'No net content change.'}
-                  </code>
-                </pre>
+                <CodeDiffViewer
+                  diff={presentation.diffWithPrevious}
+                  filePath={revision.filePath}
+                  ariaLabel={`Diff with previous revision for ${revision.filePath}`}
+                  emptyMessage="No net content change."
+                />
               </>
             ) : mode === 'starter' ? (
               <>
                 <h3>Diff with starter baseline</h3>
-                <pre
-                  tabIndex={0}
-                  aria-label={`Diff with starter baseline for ${revision.filePath}`}
-                  style={{
-                    minWidth: 0,
-                    width: '100%',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'pre',
-                  }}
-                >
-                  <code>
-                    {presentation.diffWithStarter || 'No net content change.'}
-                  </code>
-                </pre>
+                <CodeDiffViewer
+                  diff={presentation.diffWithStarter}
+                  filePath={revision.filePath}
+                  ariaLabel={`Diff with starter baseline for ${revision.filePath}`}
+                  emptyMessage="No net content change."
+                />
               </>
             ) : (
               <>
                 <h3>Diff with submitted code</h3>
-                <pre
-                  tabIndex={0}
-                  aria-label={`Diff with submitted code for ${revision.filePath}`}
-                  style={{
-                    minWidth: 0,
-                    width: '100%',
-                    maxWidth: '100%',
-                    overflowX: 'auto',
-                    whiteSpace: 'pre',
-                  }}
-                >
-                  <code>
-                    {presentation.diffWithSubmitted || 'No net content change.'}
-                  </code>
-                </pre>
+                <CodeDiffViewer
+                  diff={presentation.diffWithSubmitted}
+                  filePath={revision.filePath}
+                  ariaLabel={`Diff with submitted code for ${revision.filePath}`}
+                  emptyMessage="No net content change."
+                />
               </>
             )}
           </div>
@@ -1808,7 +1697,81 @@ const R28WorkspaceRevisionView = ({
         className="evaluator-source-details"
         style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
       >
-        <summary>Recorded event payload</summary>
+        <summary>Technical metadata &amp; provenance</summary>
+        <dl className="evaluator-source-metadata">
+          <div>
+            <dt>Sequence</dt>
+            <dd>
+              <code>{event.sequence}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>Event type</dt>
+            <dd>
+              <code>{event.type}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>Timestamp</dt>
+            <dd>
+              <time dateTime={revision?.acceptedAt ?? event.timestamp}>
+                {revision?.acceptedAt ?? event.timestamp}
+              </time>
+            </dd>
+          </div>
+          <div>
+            <dt>Provenance</dt>
+            <dd>
+              <code>{revision?.provenance ?? event.provenance}</code>
+            </dd>
+          </div>
+          {isAvailable && revision ? (
+            <>
+              <div>
+                <dt>File path</dt>
+                <dd>
+                  <code>{revision.filePath}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Version</dt>
+                <dd>
+                  <code>v{revision.version}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Content digest</dt>
+                <dd>
+                  <code
+                    style={{
+                      display: 'block',
+                      maxWidth: '100%',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {revision.contentDigest}
+                  </code>
+                </dd>
+              </div>
+              <div>
+                <dt>Request ID</dt>
+                <dd>
+                  <code
+                    style={{
+                      display: 'block',
+                      maxWidth: '100%',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {revision.requestId}
+                  </code>
+                </dd>
+              </div>
+            </>
+          ) : null}
+        </dl>
         <pre
           tabIndex={0}
           style={{
@@ -1817,6 +1780,7 @@ const R28WorkspaceRevisionView = ({
             maxWidth: '100%',
             overflowX: 'auto',
             whiteSpace: 'pre',
+            marginTop: '10px',
           }}
         >
           {JSON.stringify(event.payload, null, 2)}
@@ -1874,6 +1838,307 @@ const R28WorkspaceRevisionView = ({
           (event.payload?.contentDigest as string | undefined) ??
           'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
         }
+      />
+    </section>
+  );
+};
+
+const R27FileInspector = ({
+  file,
+  source,
+  r27Evidence,
+  headingId,
+  headingRef,
+  sourceReference,
+  copySourceReference,
+  copyStatus,
+}: Readonly<{
+  file: Extract<R27PresentationSource, { kind: 'file' }>['file'];
+  source: EvidenceSource;
+  r27Evidence: R27Evidence;
+  headingId: string;
+  headingRef?: RefObject<HTMLHeadingElement | null>;
+  sourceReference: string | null | undefined;
+  copySourceReference: (reference: string) => Promise<void>;
+  copyStatus: string | null;
+}>) => {
+  const diffStats = computeDiffStats(file.diff);
+  const hasNetChanges =
+    diffStats.additions > 0 ||
+    diffStats.deletions > 0 ||
+    file.starterContent !== file.submittedContent;
+  const [viewMode, setViewMode] = useState<'diff' | 'submitted' | 'starter'>(
+    () => (file.diff !== null ? 'diff' : 'submitted'),
+  );
+
+  const matchingEvent = [...r27Evidence.events]
+    .reverse()
+    .find(
+      (ev) =>
+        ev.type === 'WORKSPACE_CHANGED' &&
+        (ev.payload as Record<string, unknown> | undefined)?.path === file.path,
+    );
+  const eventSequence =
+    matchingEvent?.sequence ??
+    [...r27Evidence.events]
+      .reverse()
+      .find((ev) => ev.type === 'SESSION_SUBMITTED')?.sequence ??
+    r27Evidence.events[0]?.sequence ??
+    '1';
+  const fileVersion =
+    (matchingEvent?.payload as Record<string, unknown> | undefined)?.version !=
+    null
+      ? String(
+          (matchingEvent?.payload as Record<string, unknown> | undefined)
+            ?.version,
+        )
+      : (file.submittedVersion ?? '1');
+  const rawDigest =
+    ((matchingEvent?.payload as Record<string, unknown> | undefined)?.digest as
+      string | undefined) ??
+    file.submittedDigest ??
+    r27Evidence.submission.workspaceDigest;
+  const evidenceDigest = rawDigest.replace(/^sha256:/i, '').toLowerCase();
+
+  return (
+    <section
+      className="evaluator-source-inspector"
+      aria-labelledby={headingId}
+      data-source-inspector="true"
+      data-source-ref={source.key}
+      style={{ minWidth: 0, maxWidth: '100%' }}
+    >
+      <header className="evaluator-source-inspector-heading">
+        <div>
+          <p className="section-kicker">Submitted file · Selected source</p>
+          <h2 id={headingId} ref={headingRef} tabIndex={-1}>
+            {file.path}
+          </h2>
+          <p className="evaluator-source-summary">{source.summary}</p>
+        </div>
+        <div className="evaluator-source-status-group">
+          {hasNetChanges ? (
+            <>
+              {diffStats.additions > 0 ? (
+                <span className="code-diff-stat-add">
+                  +{diffStats.additions}
+                </span>
+              ) : null}
+              {diffStats.deletions > 0 ? (
+                <span className="code-diff-stat-del">
+                  -{diffStats.deletions}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <span className="code-diff-stat-neutral">Unchanged</span>
+          )}
+          <span className="evaluator-source-status">
+            {captureStatus(source)}
+          </span>
+        </div>
+      </header>
+
+      <div
+        className="evaluator-revision-mode-selector"
+        role="group"
+        aria-label="File view mode"
+      >
+        <button
+          type="button"
+          aria-pressed={viewMode === 'diff'}
+          onClick={() => setViewMode('diff')}
+          className={`evaluator-mode-button${viewMode === 'diff' ? ' is-active' : ''}`}
+        >
+          Diff
+        </button>
+        <button
+          type="button"
+          aria-pressed={viewMode === 'submitted'}
+          onClick={() => setViewMode('submitted')}
+          className={`evaluator-mode-button${viewMode === 'submitted' ? ' is-active' : ''}`}
+        >
+          Submitted
+        </button>
+        <button
+          type="button"
+          aria-pressed={viewMode === 'starter'}
+          onClick={() => setViewMode('starter')}
+          className={`evaluator-mode-button${viewMode === 'starter' ? ' is-active' : ''}`}
+        >
+          Starter
+        </button>
+      </div>
+
+      <div
+        className="evaluator-source-inspector-output"
+        style={{ minWidth: 0, maxWidth: '100%' }}
+      >
+        {viewMode === 'diff' ? (
+          <>
+            <h3>Derived starter-to-submission diff</h3>
+            {file.diff === null ? (
+              <p className="evaluator-muted-copy">
+                The starter baseline is unavailable, so a diff is not derived.
+              </p>
+            ) : (
+              <CodeDiffViewer
+                diff={file.diff}
+                filePath={file.path}
+                ariaLabel={`Derived diff for ${file.path}`}
+                emptyMessage="No net content change compared to starter baseline."
+              />
+            )}
+          </>
+        ) : viewMode === 'submitted' ? (
+          <>
+            <h3>Submitted content</h3>
+            <CodeFileViewer
+              content={file.submittedContent}
+              ariaLabel={`Submitted content for ${file.path}`}
+              emptyMessage="This path is absent from the frozen submitted workspace."
+            />
+          </>
+        ) : (
+          <>
+            <h3>Starter content</h3>
+            <CodeFileViewer
+              content={file.starterContent}
+              ariaLabel={`Starter content for ${file.path}`}
+              emptyMessage="Starter content was not available in the authorized snapshot."
+            />
+          </>
+        )}
+      </div>
+
+      <details
+        className="evaluator-source-details"
+        style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
+      >
+        <summary>File version and digest metadata</summary>
+        <dl className="evaluator-source-metadata">
+          <div>
+            <dt>Starter version</dt>
+            <dd>
+              <code
+                style={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {file.starterVersion ?? 'Unavailable'}
+              </code>
+            </dd>
+          </div>
+          <div>
+            <dt>Starter digest</dt>
+            <dd>
+              <code
+                style={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {file.starterDigest ?? 'Unavailable'}
+              </code>
+            </dd>
+          </div>
+          <div>
+            <dt>Submitted version</dt>
+            <dd>
+              <code
+                style={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {file.submittedVersion ?? 'Unavailable'}
+              </code>
+            </dd>
+          </div>
+          <div>
+            <dt>Submitted digest</dt>
+            <dd>
+              <code
+                style={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  wordBreak: 'break-all',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {file.submittedDigest ?? 'Unavailable'}
+              </code>
+            </dd>
+          </div>
+        </dl>
+        <p
+          className="evaluator-muted-copy"
+          style={{
+            minWidth: 0,
+            maxWidth: '100%',
+            overflowWrap: 'anywhere',
+            marginTop: '10px',
+          }}
+        >
+          Session {r27Evidence.sessionId}; submission digest{' '}
+          <code
+            style={{
+              display: 'inline-block',
+              maxWidth: '100%',
+              wordBreak: 'break-all',
+              overflowWrap: 'anywhere',
+              verticalAlign: 'bottom',
+            }}
+          >
+            {r27Evidence.submission.workspaceDigest}
+          </code>
+          .
+        </p>
+      </details>
+
+      {sourceReference ? (
+        <details
+          className="evaluator-source-details"
+          style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
+        >
+          <summary>Stable source reference</summary>
+          <p>
+            <code
+              style={{
+                display: 'block',
+                maxWidth: '100%',
+                wordBreak: 'break-all',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {sourceReference}
+            </code>
+          </p>
+          <button
+            type="button"
+            onClick={() => void copySourceReference(sourceReference)}
+          >
+            Copy source reference
+          </button>
+          {copyStatus ? <span role="status">{copyStatus}</span> : null}
+        </details>
+      ) : null}
+
+      <R29ObservationPanel
+        organizationId={r27Evidence.organizationId}
+        sessionId={r27Evidence.sessionId}
+        evidenceSourceType={matchingEvent ? 'file_revision' : 'timeline_event'}
+        eventSequence={eventSequence}
+        filePath={matchingEvent ? file.path : null}
+        fileVersion={matchingEvent ? fileVersion : null}
+        evidenceDigest={evidenceDigest}
       />
     </section>
   );
@@ -2506,48 +2771,49 @@ const R27EvidenceSourceInspector = ({
         <header className="evaluator-source-inspector-heading">
           <div>
             <p className="section-kicker">
-              Session chronology · Selected event
+              Session chronology · Sequence #{event.sequence}
             </p>
             <h2 id={headingId} ref={headingRef} tabIndex={-1}>
               {source.title}
             </h2>
             <p className="evaluator-source-summary">{source.summary}</p>
           </div>
-          <span className="evaluator-source-status">
-            Recorded event metadata
+          <span className="evaluator-source-status" title={event.timestamp}>
+            {formatEvidenceTime(source, r27Evidence.activatedAt)} · Recorded
+            event metadata
           </span>
         </header>
-        <dl className="evaluator-source-metadata">
-          <div>
-            <dt>Sequence</dt>
-            <dd>
-              <code>{event.sequence}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Event type</dt>
-            <dd>
-              <code>{event.type}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>Timestamp</dt>
-            <dd>
-              <time dateTime={event.timestamp}>{event.timestamp}</time>
-            </dd>
-          </div>
-          <div>
-            <dt>Provenance</dt>
-            <dd>
-              <code>{event.provenance}</code>
-            </dd>
-          </div>
-        </dl>
         <details
           className="evaluator-source-details"
           style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
         >
-          <summary>Recorded event payload</summary>
+          <summary>Technical metadata &amp; provenance</summary>
+          <dl className="evaluator-source-metadata">
+            <div>
+              <dt>Sequence</dt>
+              <dd>
+                <code>{event.sequence}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Event type</dt>
+              <dd>
+                <code>{event.type}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Timestamp</dt>
+              <dd>
+                <time dateTime={event.timestamp}>{event.timestamp}</time>
+              </dd>
+            </div>
+            <div>
+              <dt>Provenance</dt>
+              <dd>
+                <code>{event.provenance}</code>
+              </dd>
+            </div>
+          </dl>
           <pre
             tabIndex={0}
             style={{
@@ -2556,6 +2822,7 @@ const R27EvidenceSourceInspector = ({
               maxWidth: '100%',
               overflowX: 'auto',
               whiteSpace: 'pre',
+              marginTop: '10px',
             }}
           >
             {JSON.stringify(event.payload, null, 2)}
@@ -2605,250 +2872,18 @@ const R27EvidenceSourceInspector = ({
     );
   }
 
-  const { file } = source.r27;
-  const matchingEvent = [...r27Evidence.events]
-    .reverse()
-    .find(
-      (ev) =>
-        ev.type === 'WORKSPACE_CHANGED' &&
-        (ev.payload as Record<string, unknown> | undefined)?.path === file.path,
-    );
-  const eventSequence =
-    matchingEvent?.sequence ??
-    [...r27Evidence.events]
-      .reverse()
-      .find((ev) => ev.type === 'SESSION_SUBMITTED')?.sequence ??
-    r27Evidence.events[0]?.sequence ??
-    '1';
-  const fileVersion =
-    (matchingEvent?.payload as Record<string, unknown> | undefined)?.version !=
-    null
-      ? String(
-          (matchingEvent?.payload as Record<string, unknown> | undefined)
-            ?.version,
-        )
-      : (file.submittedVersion ?? '1');
-  const rawDigest =
-    ((matchingEvent?.payload as Record<string, unknown> | undefined)?.digest as
-      string | undefined) ??
-    file.submittedDigest ??
-    r27Evidence.submission.workspaceDigest;
-  const evidenceDigest = rawDigest.replace(/^sha256:/i, '').toLowerCase();
   return (
-    <section
-      className="evaluator-source-inspector"
-      aria-labelledby={headingId}
-      data-source-inspector="true"
-      data-source-ref={source.key}
-      style={{ minWidth: 0, maxWidth: '100%' }}
-    >
-      <header className="evaluator-source-inspector-heading">
-        <div>
-          <p className="section-kicker">Submitted file · Selected source</p>
-          <h2 id={headingId} ref={headingRef} tabIndex={-1}>
-            {file.path}
-          </h2>
-          <p className="evaluator-source-summary">{source.summary}</p>
-        </div>
-        <span className="evaluator-source-status">{captureStatus(source)}</span>
-      </header>
-      <div
-        className="evaluator-source-inspector-output"
-        style={{ minWidth: 0, maxWidth: '100%' }}
-      >
-        <p className="evaluator-code-scroll-hint">
-          Long lines scroll horizontally. Focus a code block to use the arrow
-          keys.
-        </p>
-        <h3>Starter content</h3>
-        {file.starterContent === null ? (
-          <p className="evaluator-muted-copy">
-            Starter content was not available in the authorized snapshot.
-          </p>
-        ) : (
-          <pre
-            tabIndex={0}
-            aria-label={`Starter content for ${file.path}`}
-            style={{
-              minWidth: 0,
-              width: '100%',
-              maxWidth: '100%',
-              overflowX: 'auto',
-              whiteSpace: 'pre',
-            }}
-          >
-            {file.starterContent}
-          </pre>
-        )}
-        <h3>Submitted content</h3>
-        {file.submittedContent === null ? (
-          <p className="evaluator-muted-copy">
-            This path is absent from the frozen submitted workspace.
-          </p>
-        ) : (
-          <pre
-            tabIndex={0}
-            aria-label={`Submitted content for ${file.path}`}
-            style={{
-              minWidth: 0,
-              width: '100%',
-              maxWidth: '100%',
-              overflowX: 'auto',
-              whiteSpace: 'pre',
-            }}
-          >
-            {file.submittedContent}
-          </pre>
-        )}
-        <h3>Derived starter-to-submission diff</h3>
-        {file.diff === null ? (
-          <p className="evaluator-muted-copy">
-            The starter baseline is unavailable, so a diff is not derived.
-          </p>
-        ) : (
-          <pre
-            tabIndex={0}
-            aria-label={`Derived diff for ${file.path}`}
-            style={{
-              minWidth: 0,
-              width: '100%',
-              maxWidth: '100%',
-              overflowX: 'auto',
-              whiteSpace: 'pre',
-            }}
-          >
-            {file.diff || 'No net content change.'}
-          </pre>
-        )}
-      </div>
-      <details
-        className="evaluator-source-details"
-        style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
-      >
-        <summary>File version and digest metadata</summary>
-        <dl className="evaluator-source-metadata">
-          <div>
-            <dt>Starter version</dt>
-            <dd>
-              <code
-                style={{
-                  display: 'block',
-                  maxWidth: '100%',
-                  wordBreak: 'break-all',
-                  overflowWrap: 'anywhere',
-                }}
-              >
-                {file.starterVersion ?? 'Unavailable'}
-              </code>
-            </dd>
-          </div>
-          <div>
-            <dt>Starter digest</dt>
-            <dd>
-              <code
-                style={{
-                  display: 'block',
-                  maxWidth: '100%',
-                  wordBreak: 'break-all',
-                  overflowWrap: 'anywhere',
-                }}
-              >
-                {file.starterDigest ?? 'Unavailable'}
-              </code>
-            </dd>
-          </div>
-          <div>
-            <dt>Submitted version</dt>
-            <dd>
-              <code
-                style={{
-                  display: 'block',
-                  maxWidth: '100%',
-                  wordBreak: 'break-all',
-                  overflowWrap: 'anywhere',
-                }}
-              >
-                {file.submittedVersion ?? 'Unavailable'}
-              </code>
-            </dd>
-          </div>
-          <div>
-            <dt>Submitted digest</dt>
-            <dd>
-              <code
-                style={{
-                  display: 'block',
-                  maxWidth: '100%',
-                  wordBreak: 'break-all',
-                  overflowWrap: 'anywhere',
-                }}
-              >
-                {file.submittedDigest ?? 'Unavailable'}
-              </code>
-            </dd>
-          </div>
-        </dl>
-      </details>
-      <p
-        className="evaluator-muted-copy"
-        style={{
-          minWidth: 0,
-          maxWidth: '100%',
-          overflowWrap: 'anywhere',
-        }}
-      >
-        Session {r27Evidence.sessionId}; submission digest{' '}
-        <code
-          style={{
-            display: 'inline-block',
-            maxWidth: '100%',
-            wordBreak: 'break-all',
-            overflowWrap: 'anywhere',
-            verticalAlign: 'bottom',
-          }}
-        >
-          {r27Evidence.submission.workspaceDigest}
-        </code>
-        .
-      </p>
-      {sourceReference ? (
-        <details
-          className="evaluator-source-details"
-          style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
-        >
-          <summary>Stable source reference</summary>
-          <p>
-            <code
-              style={{
-                display: 'block',
-                maxWidth: '100%',
-                wordBreak: 'break-all',
-                overflowWrap: 'anywhere',
-              }}
-            >
-              {sourceReference}
-            </code>
-          </p>
-          <button
-            type="button"
-            onClick={() => void copySourceReference(sourceReference)}
-          >
-            Copy source reference
-          </button>
-          {copyStatus ? <span role="status">{copyStatus}</span> : null}
-        </details>
-      ) : null}
-
-      <R29ObservationPanel
-        organizationId={r27Evidence.organizationId}
-        sessionId={r27Evidence.sessionId}
-        evidenceSourceType={matchingEvent ? 'file_revision' : 'timeline_event'}
-        eventSequence={eventSequence}
-        filePath={matchingEvent ? file.path : null}
-        fileVersion={matchingEvent ? fileVersion : null}
-        evidenceDigest={evidenceDigest}
-      />
-    </section>
+    <R27FileInspector
+      key={source.key}
+      file={source.r27.file}
+      source={source}
+      r27Evidence={r27Evidence}
+      headingId={headingId}
+      headingRef={headingRef}
+      sourceReference={sourceReference}
+      copySourceReference={copySourceReference}
+      copyStatus={copyStatus}
+    />
   );
 };
 
@@ -3637,6 +3672,7 @@ export const R210ReviewPacketPanel = ({
         <div>
           <p
             className="section-kicker"
+            title={`Reviewer: ${reviewer.principalId}`}
             style={{
               margin: '0 0 4px 0',
               fontSize: '11px',
@@ -3646,7 +3682,7 @@ export const R210ReviewPacketPanel = ({
               color: 'var(--software-muted, #6b7280)',
             }}
           >
-            Reviewer · {reviewer.principalId}
+            Assigned evaluator
           </p>
           <h2
             style={{
@@ -3679,9 +3715,9 @@ export const R210ReviewPacketPanel = ({
               fontWeight: 700,
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              backgroundColor: isFinalized ? '#dcfce7' : '#fef3c7',
-              color: isFinalized ? '#166534' : '#92400e',
-              border: isFinalized ? '1px solid #86efac' : '1px solid #fde68a',
+              backgroundColor: isFinalized ? '#dcfce7' : '#f7ecd8',
+              color: isFinalized ? '#166534' : '#6b4407',
+              border: isFinalized ? '1px solid #86efac' : '1px solid #ead8b8',
             }}
           >
             {isFinalized ? 'FINALIZED' : 'DRAFT'}
@@ -3762,8 +3798,8 @@ export const R210ReviewPacketPanel = ({
             letterSpacing: '0.05em',
             padding: '2px 6px',
             borderRadius: '4px',
-            backgroundColor: '#e0e7ff',
-            color: '#3730a3',
+            backgroundColor: '#efe7f5',
+            color: '#211426',
           }}
         >
           {R210_OBJECTIVE_LABEL}
@@ -3776,8 +3812,8 @@ export const R210ReviewPacketPanel = ({
             letterSpacing: '0.05em',
             padding: '2px 6px',
             borderRadius: '4px',
-            backgroundColor: '#fef3c7',
-            color: '#92400e',
+            backgroundColor: '#f7ecd8',
+            color: '#6b4407',
           }}
         >
           {R210_HUMAN_LABEL}
@@ -4170,8 +4206,8 @@ export const R210ReviewPacketPanel = ({
                     style={{
                       padding: '10px 14px',
                       borderRadius: '6px',
-                      backgroundColor: '#eff6ff',
-                      border: '1px solid #bfdbfe',
+                      backgroundColor: '#f7f4ee',
+                      border: '1px solid var(--software-border, #e5e7eb)',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
@@ -4263,7 +4299,7 @@ export const R210ReviewPacketPanel = ({
             <textarea
               id="review-packet-summary"
               aria-label="Review summary"
-              rows={5}
+              rows={4}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Author objective evaluation narrative grounded in observed candidate behavior and execution..."
@@ -4281,92 +4317,94 @@ export const R210ReviewPacketPanel = ({
             />
           </div>
 
-          {/* Strengths Input */}
-          <div>
-            <label
-              htmlFor="review-packet-strengths"
-              style={{
-                display: 'block',
-                fontWeight: 700,
-                fontSize: '14px',
-                marginBottom: '6px',
-                color: '#15803d',
-              }}
-            >
-              Strengths{' '}
-              <span
+          <div className="review-packet-two-col">
+            {/* Strengths Input */}
+            <div>
+              <label
+                htmlFor="review-packet-strengths"
                 style={{
-                  fontWeight: 400,
-                  fontSize: '12px',
-                  color: 'var(--software-muted, #6b7280)',
+                  display: 'block',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  marginBottom: '6px',
+                  color: '#15803d',
                 }}
               >
-                (One point per line)
-              </span>
-            </label>
-            <textarea
-              id="review-packet-strengths"
-              aria-label="Strengths"
-              rows={3}
-              value={strengthsText}
-              onChange={(e) => setStrengthsText(e.target.value)}
-              placeholder="Demonstrated defensive error handling&#10;Clean separation of concerns"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid var(--software-border, #d1d5db)',
-                fontSize: '14px',
-                lineHeight: 1.5,
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
-            />
-          </div>
+                Strengths{' '}
+                <span
+                  style={{
+                    fontWeight: 400,
+                    fontSize: '12px',
+                    color: 'var(--software-muted, #6b7280)',
+                  }}
+                >
+                  (One point per line)
+                </span>
+              </label>
+              <textarea
+                id="review-packet-strengths"
+                aria-label="Strengths"
+                rows={3}
+                value={strengthsText}
+                onChange={(e) => setStrengthsText(e.target.value)}
+                placeholder="Demonstrated defensive error handling&#10;Clean separation of concerns"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--software-border, #d1d5db)',
+                  fontSize: '14px',
+                  lineHeight: 1.5,
+                  boxSizing: 'border-box',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
 
-          {/* Concerns Input */}
-          <div>
-            <label
-              htmlFor="review-packet-concerns"
-              style={{
-                display: 'block',
-                fontWeight: 700,
-                fontSize: '14px',
-                marginBottom: '6px',
-                color: '#b45309',
-              }}
-            >
-              Concerns{' '}
-              <span
+            {/* Concerns Input */}
+            <div>
+              <label
+                htmlFor="review-packet-concerns"
                 style={{
-                  fontWeight: 400,
-                  fontSize: '12px',
-                  color: 'var(--software-muted, #6b7280)',
+                  display: 'block',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  marginBottom: '6px',
+                  color: '#b45309',
                 }}
               >
-                (One point per line)
-              </span>
-            </label>
-            <textarea
-              id="review-packet-concerns"
-              aria-label="Concerns"
-              rows={3}
-              value={concernsText}
-              onChange={(e) => setConcernsText(e.target.value)}
-              placeholder="Potential edge case with missing booking ID&#10;Incomplete test coverage for retry timeout"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid var(--software-border, #d1d5db)',
-                fontSize: '14px',
-                lineHeight: 1.5,
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
-            />
+                Concerns{' '}
+                <span
+                  style={{
+                    fontWeight: 400,
+                    fontSize: '12px',
+                    color: 'var(--software-muted, #6b7280)',
+                  }}
+                >
+                  (One point per line)
+                </span>
+              </label>
+              <textarea
+                id="review-packet-concerns"
+                aria-label="Concerns"
+                rows={3}
+                value={concernsText}
+                onChange={(e) => setConcernsText(e.target.value)}
+                placeholder="Potential edge case with missing booking ID&#10;Incomplete test coverage for retry timeout"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--software-border, #d1d5db)',
+                  fontSize: '14px',
+                  lineHeight: 1.5,
+                  boxSizing: 'border-box',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
           </div>
 
           {/* Unresolved Questions Input */}
@@ -4502,7 +4540,7 @@ export const R210ReviewPacketPanel = ({
                           cursor: 'pointer',
                           padding: '6px 8px',
                           borderRadius: '6px',
-                          backgroundColor: checked ? '#fef3c7' : 'transparent',
+                          backgroundColor: checked ? '#f7ecd8' : 'transparent',
                         }}
                       >
                         <input
@@ -4583,7 +4621,7 @@ export const R210ReviewPacketPanel = ({
                           cursor: 'pointer',
                           padding: '6px 8px',
                           borderRadius: '6px',
-                          backgroundColor: checked ? '#eff6ff' : 'transparent',
+                          backgroundColor: checked ? '#efe7f5' : 'transparent',
                         }}
                       >
                         <input
@@ -4631,7 +4669,7 @@ export const R210ReviewPacketPanel = ({
                         cursor: 'pointer',
                         padding: '6px 8px',
                         borderRadius: '6px',
-                        backgroundColor: checked ? '#eff6ff' : 'transparent',
+                        backgroundColor: checked ? '#efe7f5' : 'transparent',
                       }}
                     >
                       <input

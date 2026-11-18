@@ -11,11 +11,17 @@ import {
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
+import {
+  IconChevronRight,
+  IconClock,
+  IconFileCode,
+  IconFolder,
+  IconFolderOpen,
+  IconSparkles,
+  IconTerminal2,
+} from '@tabler/icons-react';
 
-import type {
-  R26CandidateEvent,
-  R26CandidateFileView,
-} from '../../../../../../database/postgres/r26/adapter.mjs';
+import type { R26CandidateFileView } from '../../../../../../database/postgres/r26/adapter.mjs';
 import type {
   R26CandidateActivationInput,
   R26CandidateGetResponse,
@@ -100,9 +106,87 @@ function formatDuration(milliseconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
-  if (hours > 0) return `${hours} hr ${minutes} min remaining`;
-  if (minutes > 0) return `${minutes} min ${remainingSeconds} sec remaining`;
-  return `${remainingSeconds} sec remaining`;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  if (hours > 0) {
+    return `${hours}:${pad(minutes)}:${pad(remainingSeconds)}`;
+  }
+  return `${pad(minutes)}:${pad(remainingSeconds)}`;
+}
+
+type FileTreeNode =
+  | Readonly<{
+      kind: 'folder';
+      name: string;
+      path: string;
+      children: FileTreeNode[];
+    }>
+  | Readonly<{
+      kind: 'file';
+      name: string;
+      path: string;
+    }>;
+
+function sortFileTree(nodes: FileTreeNode[]): FileTreeNode[] {
+  return [...nodes]
+    .sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    })
+    .map((node) =>
+      node.kind === 'folder'
+        ? { ...node, children: sortFileTree(node.children) }
+        : node,
+    );
+}
+
+function buildFileTree(files: readonly R26CandidateFileView[]): FileTreeNode[] {
+  const root: FileTreeNode[] = [];
+  const folderMap = new Map<
+    string,
+    { kind: 'folder'; name: string; path: string; children: FileTreeNode[] }
+  >();
+
+  for (const file of files) {
+    const segments = file.path.split('/').filter(Boolean);
+    if (segments.length <= 1) {
+      root.push({ kind: 'file', name: file.path, path: file.path });
+      continue;
+    }
+
+    let parentChildren = root;
+    let accumulatedPath = '';
+    for (let index = 0; index < segments.length - 1; index += 1) {
+      const segment = segments[index];
+      accumulatedPath = accumulatedPath
+        ? `${accumulatedPath}/${segment}`
+        : segment;
+      let folder = folderMap.get(accumulatedPath);
+      if (!folder) {
+        folder = {
+          kind: 'folder',
+          name: segment,
+          path: accumulatedPath,
+          children: [],
+        };
+        folderMap.set(accumulatedPath, folder);
+        parentChildren.push(folder);
+      }
+      parentChildren = folder.children;
+    }
+
+    parentChildren.push({
+      kind: 'file',
+      name: segments[segments.length - 1],
+      path: file.path,
+    });
+  }
+
+  return sortFileTree(root);
+}
+
+function fileBasename(filePath: string): string {
+  const index = filePath.lastIndexOf('/');
+  return index >= 0 ? filePath.slice(index + 1) : filePath;
 }
 
 function timestampMilliseconds(
@@ -150,19 +234,6 @@ function scenarioList(
     : [];
 }
 
-function eventTitle(event: R26CandidateEvent): string {
-  if (event.type === 'SESSION_ACTIVATED') return 'Assessment activated';
-  if (event.type === 'SESSION_SUBMITTED') return 'Assessment submitted';
-  return 'Workspace file saved';
-}
-
-function eventDetail(event: R26CandidateEvent): string {
-  const path = event.payload.path;
-  return event.type === 'WORKSPACE_CHANGED' && typeof path === 'string'
-    ? path
-    : '';
-}
-
 function requestId(): string {
   return crypto.randomUUID();
 }
@@ -204,6 +275,11 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const [saveConflict, setSaveConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [showExecutionDrawer, setShowExecutionDrawer] = useState(true);
+  const [showAiDrawer, setShowAiDrawer] = useState(true);
   const [message, setMessage] = useState('');
   const [loadFailure, setLoadFailure] = useState('');
   const [accessUnavailable, setAccessUnavailable] = useState(false);
@@ -1032,22 +1108,200 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   const showEditor = Boolean(
     view && (view.status !== 'CREATED' || view.files.length > 0),
   );
+  const fileTree = useMemo(
+    () => buildFileTree(view?.files ?? []),
+    [view?.files],
+  );
+  const canSwitchFile = Boolean(
+    !busy &&
+    !isDirty &&
+    !pendingSave &&
+    !pendingSubmit &&
+    !saveConflict &&
+    !conflictLatest,
+  );
+  const selectWorkspaceFile = (nextPath: string) => {
+    if (!canSwitchFile) return;
+    setSelectedPath(nextPath);
+    setConflictLatest(null);
+    setMessage('');
+  };
+  const toggleFolder = (folderPath: string) => {
+    setCollapsedFolders((current) => {
+      const next = new Set(current);
+      if (next.has(folderPath)) next.delete(folderPath);
+      else next.add(folderPath);
+      return next;
+    });
+  };
   const openSectionDisclosure = (targetId: string) => {
     const details = document.getElementById(targetId)?.closest('details');
     if (details) details.open = true;
   };
-  const renderedEvents = (view?.events ?? []).map((event) => (
-    <li className="r26-event" key={event.sequence}>
-      <span className="r26-event-marker" aria-hidden="true" />
-      <div>
-        <p>{eventTitle(event)}</p>
-        {eventDetail(event) ? <code>{eventDetail(event)}</code> : null}
-        <time dateTime={event.timestamp}>
-          {new Date(event.timestamp).toLocaleString()}
-        </time>
-      </div>
-    </li>
-  ));
+  const activatedAtMs = timestampMilliseconds(view?.activatedAt);
+  const totalWindowMs =
+    view?.durationSeconds && view.durationSeconds > 0
+      ? view.durationSeconds * 1000
+      : activeAccessEndsAtMs !== null &&
+          activatedAtMs !== null &&
+          activeAccessEndsAtMs > activatedAtMs
+        ? activeAccessEndsAtMs - activatedAtMs
+        : null;
+  const remainingPercent =
+    remainingMs !== null && totalWindowMs && totalWindowMs > 0
+      ? Math.max(0, Math.min(100, (remainingMs / totalWindowMs) * 100))
+      : null;
+  const timerLow = remainingPercent !== null && remainingPercent <= 20;
+
+  const renderTreeNodes = (nodes: readonly FileTreeNode[], depth = 0) =>
+    nodes.map((node) => {
+      if (node.kind === 'folder') {
+        const isOpen = !collapsedFolders.has(node.path);
+        return (
+          <li className="r26-tree-folder" key={`folder:${node.path}`}>
+            <button
+              type="button"
+              className="r26-tree-folder-btn"
+              style={{ paddingLeft: `${10 + depth * 12}px` }}
+              aria-expanded={isOpen}
+              onClick={() => toggleFolder(node.path)}
+            >
+              <IconChevronRight
+                size={13}
+                stroke={2}
+                className={`r26-tree-chevron ${isOpen ? 'is-open' : ''}`}
+                aria-hidden="true"
+              />
+              {isOpen ? (
+                <IconFolderOpen size={15} stroke={1.8} aria-hidden="true" />
+              ) : (
+                <IconFolder size={15} stroke={1.8} aria-hidden="true" />
+              )}
+              <span>{node.name}</span>
+            </button>
+            {isOpen ? (
+              <ul className="r26-tree-list" role="group">
+                {renderTreeNodes(node.children, depth + 1)}
+              </ul>
+            ) : null}
+          </li>
+        );
+      }
+
+      const isSelected = node.path === selectedPath;
+      return (
+        <li className="r26-tree-file" key={`file:${node.path}`}>
+          <button
+            type="button"
+            className={`r26-tree-file-btn ${isSelected ? 'is-active' : ''}`}
+            style={{ paddingLeft: `${26 + depth * 12}px` }}
+            aria-current={isSelected ? 'page' : undefined}
+            disabled={!canSwitchFile && !isSelected}
+            title={
+              !canSwitchFile && !isSelected
+                ? 'Wait for the current file to save before switching files'
+                : node.path
+            }
+            onClick={() => selectWorkspaceFile(node.path)}
+          >
+            <IconFileCode size={15} stroke={1.8} aria-hidden="true" />
+            <span className="r26-tree-file-name">{node.name}</span>
+            {isSelected && isDirty ? (
+              <span
+                className="r26-tree-dirty-dot"
+                title="Unsaved edits"
+                aria-hidden="true"
+              />
+            ) : null}
+          </button>
+        </li>
+      );
+    });
+
+  const renderCapabilitiesDisclosure = (placement: 'prestart' | 'footer') =>
+    view ? (
+      <details
+        className={`r26-disclosure r26-availability ${placement === 'footer' ? 'r26-footer-capabilities' : ''}`}
+      >
+        <summary>Workspace capabilities</summary>
+        <div className="r26-capabilities-body">
+          <ul>
+            <li>
+              <span>Code editing</span>
+              <strong>Available</strong>
+            </li>
+            <li>
+              <span>Terminal</span>
+              {view.capabilities.execution && executionView?.terminalEnabled ? (
+                <div className="r26-capability-detail">
+                  <strong data-testid="terminal-capability-status">
+                    Available (Synthetic Test Lane)
+                  </strong>
+                  <span data-testid="execution-budget-badge">
+                    {executionView.remainingExecutions} of{' '}
+                    {executionView.maxExecutions} runs remaining
+                  </span>
+                </div>
+              ) : view.capabilities.execution &&
+                !executionView &&
+                executionViewLoading ? (
+                <strong data-testid="terminal-capability-status">
+                  Checking availability…
+                </strong>
+              ) : (
+                <div className="r26-capability-detail">
+                  <strong data-testid="terminal-capability-status">
+                    Unavailable
+                  </strong>
+                  {!view.capabilities.execution ? (
+                    <span className="r26-capability-note">
+                      Code execution is unavailable for this assessment.
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </li>
+            <li>
+              <span>AI assistance</span>
+              {view.capabilities.ai && aiView?.enabled ? (
+                <div className="r26-capability-detail">
+                  <strong>Available (Synthetic Test Lane)</strong>
+                  <span data-testid="ai-budget-badge">
+                    {aiView.remainingInteractions} of{' '}
+                    {aiView.totalInteractionsAllowed} questions remaining
+                  </span>
+                </div>
+              ) : view.capabilities.ai && !aiView ? (
+                <strong>Checking availability…</strong>
+              ) : (
+                <div className="r26-capability-detail">
+                  <strong>Unavailable</strong>
+                  <span className="r26-capability-note">
+                    {view.capabilities.ai
+                      ? 'AI assistance is disabled for this assessment.'
+                      : 'AI assistance is unavailable in this demo.'}
+                  </span>
+                </div>
+              )}
+            </li>
+            <li>
+              <span>Verification</span>
+              <strong data-testid="verification-status-badge">
+                {!view.capabilities.execution
+                  ? 'Unavailable in this demo'
+                  : latestExecution
+                    ? `Executed (${latestExecution.status})`
+                    : 'Not run'}
+              </strong>
+            </li>
+          </ul>
+          <p>
+            This workspace records saved code changes and final submission for
+            your assigned hiring team’s review.
+          </p>
+        </div>
+      </details>
+    ) : null;
 
   return (
     <main className="r26-candidate software-product">
@@ -1055,20 +1309,55 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         <div className="r26-brand">
           <strong>Hirearchy</strong>
           <span className="r26-product-tab">Software</span>
-          <span className="r26-workspace-label">Candidate workspace</span>
+          <span className="r26-workspace-label">
+            {view && view.status !== 'CREATED'
+              ? scenarioTitle
+              : 'Candidate workspace'}
+          </span>
         </div>
         <div className="r26-header-status">
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
-            <p
-              className="r26-timer"
+            <div
+              className={`r26-timer ${timerLow ? 'is-low' : ''}`}
               aria-label="Workspace access time remaining"
+              title={`Access ends no later than ${formatDateTime(activeAccessEndsAtMs)}`}
             >
-              <span>Time remaining</span>
-              <strong>{formatDuration(remainingMs)}</strong>
-              <span>
-                Access ends no later than {formatDateTime(activeAccessEndsAtMs)}
-              </span>
-            </p>
+              <div className="r26-timer-row">
+                <IconClock size={14} stroke={2} aria-hidden="true" />
+                <span className="r26-timer-label">Time remaining</span>
+                <strong>{formatDuration(remainingMs)}</strong>
+              </div>
+              {remainingPercent !== null ? (
+                <div className="r26-timer-track" aria-hidden="true">
+                  <div
+                    className="r26-timer-fill"
+                    style={{ width: `${remainingPercent}%` }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {view && view.status !== 'CREATED' && view.capabilities.execution ? (
+            <button
+              type="button"
+              className={`r26-header-tool ${showExecutionDrawer ? 'is-active' : ''}`}
+              aria-expanded={showExecutionDrawer}
+              onClick={() => setShowExecutionDrawer((current) => !current)}
+            >
+              <IconTerminal2 size={15} stroke={1.9} aria-hidden="true" />
+              <span>Terminal</span>
+            </button>
+          ) : null}
+          {view && view.status !== 'CREATED' && view.capabilities.ai ? (
+            <button
+              type="button"
+              className={`r26-header-tool ${showAiDrawer ? 'is-active' : ''}`}
+              aria-expanded={showAiDrawer}
+              onClick={() => setShowAiDrawer((current) => !current)}
+            >
+              <IconSparkles size={15} stroke={1.9} aria-hidden="true" />
+              <span>AI Assistant</span>
+            </button>
           ) : null}
           {view ? (
             <span
@@ -1087,6 +1376,34 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                         : 'Submitted'}
             </span>
           ) : null}
+          {showEditor && (canEdit || pendingSubmit) ? (
+            <button
+              className="r26-button r26-button-primary r26-header-submit"
+              disabled={
+                busy ||
+                (!pendingSubmit &&
+                  (isDirty || Boolean(pendingSave) || saveConflict))
+              }
+              aria-describedby={
+                isDirty || pendingSave || saveConflict
+                  ? 'candidate-submit-save-status'
+                  : undefined
+              }
+              title={
+                isDirty
+                  ? 'Waiting for latest edits to save automatically before submission'
+                  : undefined
+              }
+              onClick={() => void submit()}
+              type="button"
+            >
+              {busy && pendingSubmit
+                ? 'Submitting…'
+                : pendingSubmit
+                  ? 'Retry submission'
+                  : 'Submit assessment'}
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -1099,12 +1416,6 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           >
             Task brief
           </a>
-          <a
-            href="#candidate-activity"
-            onClick={() => openSectionDisclosure('candidate-activity')}
-          >
-            Recorded activity
-          </a>
         </nav>
       ) : null}
 
@@ -1112,7 +1423,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         className="r26-workspace"
         data-session-state={view?.status.toLowerCase() ?? 'loading'}
         data-ai-enabled={
-          view?.capabilities.ai === true && aiView?.enabled ? 'true' : 'false'
+          view?.capabilities.ai === true && aiView?.enabled && showAiDrawer
+            ? 'true'
+            : 'false'
         }
       >
         <aside
@@ -1165,8 +1478,48 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   </p>
                 </div>
               ) : null}
-              <p className="r26-eyebrow">Engineering assessment</p>
-              <h1>{scenarioTitle}</h1>
+              {submitted ? (
+                <div className="r26-notice r26-notice-success" role="status">
+                  <strong>Assessment submitted</strong>
+                  <p>
+                    {view.closureReason === 'timeout'
+                      ? 'The assessment closed when its time limit ended.'
+                      : 'Your saved work has been submitted and is read-only.'}
+                  </p>
+                  {view.submission ? (
+                    <details className="r26-disclosure">
+                      <summary>Submission receipt</summary>
+                      <p>
+                        Workspace digest{' '}
+                        <code>{view.submission.workspaceDigest}</code>
+                      </p>
+                    </details>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {view.status === 'CREATED' ? (
+                <>
+                  <p className="r26-eyebrow">Engineering assessment</p>
+                  <h1>{scenarioTitle}</h1>
+                </>
+              ) : null}
+
+              {view.status !== 'CREATED' && view.files.length > 0 ? (
+                <section
+                  className="r26-file-explorer"
+                  aria-label="Files explorer"
+                >
+                  <div className="r26-explorer-header">
+                    <p className="r26-eyebrow">Files</p>
+                    <span>{view.files.length} files</span>
+                  </div>
+                  <ul className="r26-tree-list r26-tree-root">
+                    {renderTreeNodes(fileTree)}
+                  </ul>
+                </section>
+              ) : null}
+
               <details
                 key={view.status}
                 className="r26-disclosure r26-task-reading"
@@ -1196,26 +1549,20 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                   </ul>
                 </details>
               ) : null}
-              {view.dataNotice || view.status === 'CREATED' ? (
-                <div className="r26-entry-actions">
-                  {view.dataNotice ? (
-                    <section
-                      className="r26-notice"
-                      aria-labelledby="candidate-data-use-title"
-                      data-testid="candidate-data-use-notice"
-                    >
-                      <strong id="candidate-data-use-title">
-                        Data use and consent
-                      </strong>
-                      {view.status === 'CREATED' ? (
+              {view.status === 'CREATED' ? (
+                <>
+                  {renderCapabilitiesDisclosure('prestart')}
+                  <div className="r26-entry-actions">
+                    {view.dataNotice ? (
+                      <section
+                        className="r26-notice"
+                        aria-labelledby="candidate-data-use-title"
+                        data-testid="candidate-data-use-notice"
+                      >
+                        <strong id="candidate-data-use-title">
+                          Data use and consent
+                        </strong>
                         <p>{view.dataNotice.text}</p>
-                      ) : (
-                        <details className="r26-disclosure">
-                          <summary>Read the data-use notice</summary>
-                          <p>{view.dataNotice.text}</p>
-                        </details>
-                      )}
-                      {view.status === 'CREATED' ? (
                         <label>
                           <input
                             checked={consentAccepted}
@@ -1234,10 +1581,8 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                           />{' '}
                           I acknowledge and agree to this data-use notice.
                         </label>
-                      ) : null}
-                    </section>
-                  ) : null}
-                  {view.status === 'CREATED' ? (
+                      </section>
+                    ) : null}
                     <div className="r26-prestart">
                       <p>
                         Your assessment timer starts when you activate this
@@ -1273,129 +1618,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                         </p>
                       ) : null}
                     </div>
-                  ) : null}
-                </div>
+                  </div>
+                </>
               ) : null}
-              {submitted ? (
-                <div className="r26-notice r26-notice-success" role="status">
-                  <strong>Assessment submitted</strong>
-                  <p>
-                    {view.closureReason === 'timeout'
-                      ? 'The assessment closed when its time limit ended.'
-                      : 'Your saved work has been submitted and is read-only.'}
-                  </p>
-                  {view.submission ? (
-                    <details className="r26-disclosure">
-                      <summary>Submission receipt</summary>
-                      <p>
-                        Workspace digest{' '}
-                        <code>{view.submission.workspaceDigest}</code>
-                      </p>
-                    </details>
-                  ) : null}
-                </div>
-              ) : null}
-              <details className="r26-disclosure r26-availability">
-                <summary>Workspace capabilities</summary>
-                <ul>
-                  <li>
-                    <span>Code editing</span>
-                    <strong>Available</strong>
-                  </li>
-                  <li>
-                    <span>Terminal</span>
-                    {view.capabilities.execution &&
-                    executionView?.terminalEnabled ? (
-                      <div className="r26-capability-detail">
-                        <strong data-testid="terminal-capability-status">
-                          Available (Synthetic Test Lane)
-                        </strong>
-                        <span data-testid="execution-budget-badge">
-                          {executionView.remainingExecutions} of{' '}
-                          {executionView.maxExecutions} runs remaining
-                        </span>
-                      </div>
-                    ) : view.capabilities.execution &&
-                      !executionView &&
-                      executionViewLoading ? (
-                      <strong data-testid="terminal-capability-status">
-                        Checking availability…
-                      </strong>
-                    ) : (
-                      <div className="r26-capability-detail">
-                        <strong data-testid="terminal-capability-status">
-                          Unavailable
-                        </strong>
-                        {!view.capabilities.execution ? (
-                          <span className="r26-capability-note">
-                            Code execution is unavailable for this assessment.
-                          </span>
-                        ) : null}
-                      </div>
-                    )}
-                  </li>
-                  <li>
-                    <span>AI assistance</span>
-                    {view.capabilities.ai && aiView?.enabled ? (
-                      <div className="r26-capability-detail">
-                        <strong>Available (Synthetic Test Lane)</strong>
-                        <span data-testid="ai-budget-badge">
-                          {aiView.remainingInteractions} of{' '}
-                          {aiView.totalInteractionsAllowed} questions remaining
-                        </span>
-                      </div>
-                    ) : view.capabilities.ai && !aiView ? (
-                      <strong>Checking availability…</strong>
-                    ) : (
-                      <div className="r26-capability-detail">
-                        <strong>Unavailable</strong>
-                        <span className="r26-capability-note">
-                          {view.capabilities.ai
-                            ? 'AI assistance is disabled for this assessment.'
-                            : 'AI assistance is unavailable in this demo.'}
-                        </span>
-                      </div>
-                    )}
-                  </li>
-                  <li>
-                    <span>Verification</span>
-                    <strong data-testid="verification-status-badge">
-                      {!view.capabilities.execution
-                        ? 'Unavailable in this demo'
-                        : latestExecution
-                          ? `Executed (${latestExecution.status})`
-                          : 'Not run'}
-                    </strong>
-                  </li>
-                </ul>
-                <p>
-                  This workspace records saved code changes, task activity, and
-                  submission for the assigned hiring team’s review.
-                </p>
-              </details>
-              <details className="r26-disclosure r26-activity">
-                <summary>
-                  Recorded activity <span>{renderedEvents.length}</span>
-                </summary>
-                <div className="r26-section-heading">
-                  <h2 id="candidate-activity">Workspace events</h2>
-                  <button
-                    className="r26-link-button"
-                    onClick={() => void refresh()}
-                    type="button"
-                  >
-                    Refresh
-                  </button>
-                </div>
-                {renderedEvents.length ? (
-                  <ol>{renderedEvents}</ol>
-                ) : (
-                  <p className="r26-empty">
-                    Activity appears after the assessment is activated and work
-                    is saved.
-                  </p>
-                )}
-              </details>
             </>
           ) : null}
         </aside>
@@ -1407,42 +1632,28 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           className="r26-editor-panel"
           aria-label="Candidate editor"
         >
-          <div className="r26-editor-heading">
-            <div>
-              <p className="r26-eyebrow">Workspace files</p>
-              <h2>{selectedPath || 'Your code workspace'}</h2>
-            </div>
+          <div className="r26-editor-tabbar">
             {view && view.files.length > 0 ? (
-              <label className="r26-file-picker">
-                <span className="sr-only">Workspace file</span>
-                <select
-                  aria-label="Workspace file"
-                  aria-describedby="candidate-file-save-hint"
-                  disabled={
-                    busy ||
-                    isDirty ||
-                    Boolean(pendingSave) ||
-                    Boolean(pendingSubmit) ||
-                    saveConflict ||
-                    Boolean(conflictLatest)
-                  }
-                  onChange={(event) => {
-                    setSelectedPath(event.target.value);
-                    setConflictLatest(null);
-                    setMessage('');
-                  }}
-                  value={selectedPath}
-                >
-                  {view.files.map((file) => (
-                    <option key={file.path} value={file.path}>
-                      {file.path}
-                    </option>
-                  ))}
-                </select>
-                <span
-                  id="candidate-file-save-hint"
-                  className="r26-capability-note"
-                >
+              <>
+                <label className="sr-only">
+                  Workspace file
+                  <select
+                    aria-label="Workspace file"
+                    aria-describedby="candidate-file-save-hint"
+                    disabled={!canSwitchFile}
+                    onChange={(event) =>
+                      selectWorkspaceFile(event.target.value)
+                    }
+                    value={selectedPath}
+                  >
+                    {view.files.map((file) => (
+                      <option key={file.path} value={file.path}>
+                        {file.path}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span id="candidate-file-save-hint" className="sr-only">
                   {saveConflict
                     ? 'Resolve the saved-version conflict before switching files.'
                     : pendingSave
@@ -1451,9 +1662,92 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                         ? 'Wait for the current file to save before switching files.'
                         : 'Changes save automatically after you pause editing.'}
                 </span>
-              </label>
-            ) : null}
+                <nav className="r26-editor-tabs" aria-label="Workspace files">
+                  {view.files.map((file) => {
+                    const isSelected = file.path === selectedPath;
+                    return (
+                      <button
+                        key={file.path}
+                        type="button"
+                        className={`r26-editor-tab ${isSelected ? 'is-active' : ''}`}
+                        aria-current={isSelected ? 'page' : undefined}
+                        disabled={!canSwitchFile && !isSelected}
+                        title={
+                          !canSwitchFile && !isSelected
+                            ? 'Wait for current edits to save before switching files'
+                            : file.path
+                        }
+                        onClick={() => selectWorkspaceFile(file.path)}
+                      >
+                        <IconFileCode
+                          size={14}
+                          stroke={1.8}
+                          aria-hidden="true"
+                        />
+                        <span>{fileBasename(file.path)}</span>
+                        {isSelected && isDirty ? (
+                          <span
+                            className="r26-tree-dirty-dot"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </>
+            ) : (
+              <span className="r26-editor-tabbar-title">
+                {selectedPath || 'Code workspace'}
+              </span>
+            )}
+            <div className="r26-editor-tabbar-actions">
+              {canEdit && !pendingSubmit && activeFile ? (
+                <button
+                  className={`r26-button ${isDirty || pendingSave ? 'r26-button-primary' : 'r26-button-secondary'} r26-save-button`}
+                  disabled={busy || !isDirty || saveConflict}
+                  onClick={() => void save()}
+                  type="button"
+                >
+                  {busy && pendingSave
+                    ? 'Saving…'
+                    : pendingSave
+                      ? 'Retry save'
+                      : 'Save work'}
+                </button>
+              ) : null}
+            </div>
           </div>
+
+          {pendingSubmit ? (
+            <p
+              className="r26-message"
+              role="status"
+              data-testid="candidate-submit-uncertain"
+            >
+              {busy
+                ? 'Submission is being confirmed. Editing and other actions are paused.'
+                : 'The submission outcome is unknown. Your workspace is read-only until you retry the same submission.'}
+            </p>
+          ) : canEdit && (isDirty || pendingSave || saveConflict) ? (
+            <p
+              id="candidate-submit-save-status"
+              className="r26-message"
+              role="status"
+            >
+              {saveConflict
+                ? 'Submission is paused until you resolve the saved-version conflict.'
+                : pendingSave && busy
+                  ? 'Submission is paused while the current save finishes.'
+                  : pendingSave
+                    ? 'Submission is paused. Retry the same save to confirm its result first.'
+                    : 'Saving your latest edits automatically…'}
+            </p>
+          ) : message ? (
+            <p className="r26-message" role="status">
+              {message}
+            </p>
+          ) : null}
 
           {saveConflict ? (
             <div className="r26-conflict" role="alert">
@@ -1499,83 +1793,6 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
             </div>
           ) : null}
 
-          <div className="r26-editor-toolbar">
-            <span>
-              {activeFile
-                ? `Version ${activeFile.version}`
-                : 'Activate the assessment to load the workspace files'}
-            </span>
-            <div>
-              {canEdit && !pendingSubmit && activeFile ? (
-                <button
-                  className="r26-button r26-button-primary"
-                  disabled={busy || !isDirty || saveConflict}
-                  onClick={() => void save()}
-                  type="button"
-                >
-                  {busy && pendingSave
-                    ? 'Saving…'
-                    : pendingSave
-                      ? 'Retry save'
-                      : 'Save work'}
-                </button>
-              ) : null}
-              {canEdit || pendingSubmit ? (
-                <button
-                  className="r26-button r26-button-secondary"
-                  disabled={
-                    busy ||
-                    (!pendingSubmit &&
-                      (isDirty || Boolean(pendingSave) || saveConflict))
-                  }
-                  aria-describedby={
-                    isDirty || pendingSave || saveConflict
-                      ? 'candidate-submit-save-status'
-                      : undefined
-                  }
-                  onClick={() => void submit()}
-                  type="button"
-                >
-                  {busy && pendingSubmit
-                    ? 'Submitting…'
-                    : pendingSubmit
-                      ? 'Retry submission'
-                      : 'Submit assessment'}
-                </button>
-              ) : null}
-            </div>
-            {pendingSubmit ? (
-              <p
-                className="r26-capability-note"
-                role="status"
-                data-testid="candidate-submit-uncertain"
-              >
-                {busy
-                  ? 'Submission is being confirmed. Editing and other actions are paused.'
-                  : 'The submission outcome is unknown. Your workspace is read-only until you retry the same submission.'}
-              </p>
-            ) : canEdit && (isDirty || pendingSave || saveConflict) ? (
-              <p
-                id="candidate-submit-save-status"
-                className="r26-capability-note"
-                role="status"
-              >
-                {saveConflict
-                  ? 'Submission is paused until you resolve the saved-version conflict.'
-                  : pendingSave && busy
-                    ? 'Submission is paused while the current save finishes.'
-                    : pendingSave
-                      ? 'Submission is paused. Retry the same save to confirm its result first.'
-                      : 'Submission is paused while your latest edits save automatically.'}
-              </p>
-            ) : null}
-          </div>
-
-          {message ? (
-            <p className="r26-message" role="status">
-              {message}
-            </p>
-          ) : null}
           {view?.status === 'CREATED' ? (
             <div className="r26-editor-empty">
               <p>
@@ -1593,7 +1810,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                 basicSetup={{
                   lineNumbers: true,
                   foldGutter: false,
-                  highlightActiveLine: false,
+                  highlightActiveLine: true,
                 }}
                 className="r26-code-mirror"
                 editable={!editorLocked}
@@ -1638,30 +1855,6 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
             </div>
           )}
 
-          {view && view.status === 'ACTIVE' ? (
-            <div className="r26-draft-state" role="status">
-              <span
-                className={
-                  isDirty || pendingSave ? 'r26-dot r26-dot-unsaved' : 'r26-dot'
-                }
-                aria-hidden="true"
-              />
-              {accessUnavailable
-                ? 'Access ended — the current draft may not be saved'
-                : saveConflict
-                  ? 'Save conflict — your draft is preserved'
-                  : pendingSave && busy
-                    ? 'Saving changes…'
-                    : pendingSave
-                      ? 'Save outcome unknown — retry the same save to confirm'
-                      : isDirty
-                        ? 'Unsaved changes — saving automatically…'
-                        : 'All changes saved'}
-            </div>
-          ) : null}
-          {submitted ? (
-            <p className="r26-readonly-note">Submitted work is read-only.</p>
-          ) : null}
           {submitted &&
           draft?.path === selectedPath &&
           draft.content !== draft.baseContent &&
@@ -1676,8 +1869,11 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
             </details>
           ) : null}
 
-          {/* R2.13 Candidate Workspace Execution Panel */}
-          {view && view.status !== 'CREATED' && view.capabilities.execution ? (
+          {/* R2.13 Candidate Workspace Execution Panel (IDE Bottom Drawer) */}
+          {view &&
+          view.status !== 'CREATED' &&
+          view.capabilities.execution &&
+          showExecutionDrawer ? (
             <section
               className="r26-execution-panel"
               aria-label="Automated Checks"
@@ -2093,9 +2289,50 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               ) : null}
             </section>
           ) : null}
+
+          {view && view.status !== 'CREATED' ? (
+            <footer className="r26-status-bar">
+              <div className="r26-status-bar-left">
+                {view.status === 'ACTIVE' ? (
+                  <div className="r26-draft-state" role="status">
+                    <span
+                      className={
+                        isDirty || pendingSave
+                          ? 'r26-dot r26-dot-unsaved'
+                          : 'r26-dot'
+                      }
+                      aria-hidden="true"
+                    />
+                    {accessUnavailable
+                      ? 'Access ended — the current draft may not be saved'
+                      : saveConflict
+                        ? 'Save conflict — your draft is preserved'
+                        : pendingSave && busy
+                          ? 'Saving changes…'
+                          : pendingSave
+                            ? 'Save outcome unknown — retry the same save to confirm'
+                            : isDirty
+                              ? 'Unsaved changes — saving automatically…'
+                              : 'All changes saved'}
+                  </div>
+                ) : null}
+                {submitted ? (
+                  <p className="r26-readonly-note">
+                    Submitted work is read-only.
+                  </p>
+                ) : null}
+              </div>
+              <div className="r26-status-bar-right">
+                {selectedPath ? (
+                  <code className="r26-status-path">{selectedPath}</code>
+                ) : null}
+                {renderCapabilitiesDisclosure('footer')}
+              </div>
+            </footer>
+          ) : null}
         </section>
 
-        {view?.capabilities.ai === true ? (
+        {view?.capabilities.ai === true && showAiDrawer ? (
           <aside
             className={`r26-ai-panel ${view.capabilities.ai !== true || !aiView?.enabled ? 'r26-ai-panel-disabled' : ''}`}
             aria-label="AI assistance"
