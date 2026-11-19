@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { isAuthenticatedStaging } from '../../../src/runtime/profile';
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
 import { r23IsEnabled } from '../../../src/r23-auth/config';
+import { ThemeToggle } from '../../_components/theme-toggle';
+import { PasswordToggleInput } from '../../_components/password-field';
 
 export const metadata = { title: 'Sign in' };
 export const dynamic = 'force-dynamic';
@@ -34,7 +36,7 @@ export default async function R23LoginPage({
     params.error === 'credentials' || params.error === 'unavailable';
 
   return (
-    <div className="software-product software-document-access">
+    <div className="software-product software-document-access software-team-access">
       <header className="software-document-header">
         <Link
           className="software-document-wordmark"
@@ -45,6 +47,7 @@ export default async function R23LoginPage({
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </Link>
+        <ThemeToggle variant="header" />
       </header>
       <main className="software-document-shell">
         <p className="software-access-principle">
@@ -56,7 +59,7 @@ export default async function R23LoginPage({
           className="software-document-panel"
           aria-labelledby="signin-title"
         >
-          <h1 id="signin-title">Sign in</h1>
+          <h1 id="signin-title">Team sign in</h1>
           <p>Access your assessments and assigned reviews.</p>
           {notice ? (
             <p role={noticeIsError ? 'alert' : 'status'}>{notice}</p>
@@ -77,12 +80,10 @@ export default async function R23LoginPage({
                 Reset your password
               </Link>
             </div>
-            <input
+            <PasswordToggleInput
               id="password"
               name="password"
-              type="password"
               autoComplete="current-password"
-              required
               maxLength={1024}
             />
             <button type="submit">Sign in</button>

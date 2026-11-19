@@ -3581,8 +3581,14 @@
   gap: 1rem;
 }
 
+.r27-human-review {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+
 @media (min-width: 70rem) {
-  .r27-review-stack:has(> .evaluator-review-packet) {
+  .r27-review-stack:has(> .r27-human-review) {
     grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.45fr);
   }
 }
@@ -3775,4 +3781,200 @@
   .evaluator-submitted-file-list li {
     align-items: flex-start;
   }
+}
+
+/* ==========================================================================
+   Obsidian Plum Dark Mode Overrides for Evaluator Review Surfaces
+   ========================================================================== */
+
+html[data-theme='dark'] .evaluator-review-shell,
+html[data-theme='dark'] .workspace-shell,
+html[data-theme='dark'] .evaluator-access-shell {
+  --paper: var(--software-canvas);
+  --paper-subtle: var(--software-surface-subtle);
+  --surface: var(--software-surface);
+  --surface-subtle: var(--software-surface-subtle);
+  --surface-note: var(--software-surface-note);
+  --surface-muted: var(--software-lilac);
+  --line: var(--software-border);
+  --line-subtle: var(--software-border-subtle);
+  --line-strong: var(--software-border-strong);
+  --accent: var(--software-plum);
+  --accent-light: var(--software-lilac);
+  --accent-dark: var(--software-plum);
+  --focus-ring: var(--software-focus);
+  --code-background: #140d1c;
+  --code-surface: var(--software-surface);
+  --code-border: var(--software-border);
+  --code-text: var(--software-ink);
+  --code-muted: var(--software-muted);
+  --diff-addition-background: rgba(142, 227, 184, 0.14);
+  --diff-addition-text: #8ee3b8;
+  --diff-deletion-background: rgba(248, 113, 113, 0.16);
+  --diff-deletion-text: #fca5a5;
+  --notice-bg: var(--software-status-info-surface);
+  --notice-text: var(--software-status-info);
+  --notice-border: var(--software-status-info-border);
+  background: var(--software-canvas);
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .evaluator-report-header {
+  background: var(--software-canvas);
+  border-bottom-color: var(--software-border);
+}
+
+html[data-theme='dark'] .evaluator-back-link {
+  color: var(--software-link);
+}
+
+html[data-theme='dark'] .evaluator-workbench-modes button[aria-selected='true'],
+html[data-theme='dark']
+  .evaluator-evidence-filter-bar
+  button[aria-selected='true'],
+html[data-theme='dark'] .evaluator-review-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--software-mint);
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .evaluator-workbench-modes button:hover,
+html[data-theme='dark'] .evaluator-evidence-filter-bar button:hover,
+html[data-theme='dark'] .evaluator-review-tabs button:hover {
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .task-assessment-report .task-evidence-link,
+html[data-theme='dark'] .task-assessment-report .task-evidence-inspector,
+html[data-theme='dark'] .task-assessment-report .task-ai-source-excerpt,
+html[data-theme='dark'] .reviewer-workflow-panel .review-workflow-card,
+html[data-theme='dark']
+  .reviewer-workflow-panel
+  .review-workflow-card
+  :where(textarea, select),
+html[data-theme='dark']
+  .reviewer-workflow-panel
+  .review-note-conflict
+  blockquote,
+html[data-theme='dark'] .evaluator-event-card,
+html[data-theme='dark'] .evaluator-ai-conversation-list > li,
+html[data-theme='dark'] .evaluator-source-list button,
+html[data-theme='dark'] .evaluator-source-inspector .evaluator-ai-message pre {
+  background: var(--software-surface);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .task-assessment-report .task-evidence-link:hover,
+html[data-theme='dark']
+  .task-assessment-report
+  .task-evidence-link[aria-pressed='true'],
+html[data-theme='dark'] .evaluator-source-list button[aria-pressed='true'] {
+  background: var(--software-surface-note);
+  border-color: var(--software-mint);
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .task-assessment-report .task-criterion:focus-within,
+html[data-theme='dark'] .task-assessment-report .task-criterion-source-selected,
+html[data-theme='dark'] .evaluator-review-main .engineer-inspection-panel {
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .evaluator-source-list button:hover {
+  background: var(--software-surface-subtle);
+  border-color: var(--software-border-strong);
+}
+
+html[data-theme='dark'] .evaluator-technical-record-disclosure > summary:hover,
+html[data-theme='dark'] .evaluator-source-details > summary:hover,
+html[data-theme='dark'] .evaluator-technical-record-disclosure[open] > summary,
+html[data-theme='dark'] .evaluator-source-details[open] > summary {
+  background: var(--software-surface-note);
+  border-color: var(--software-mint);
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .evaluator-ai-message {
+  background: var(--software-surface-note);
+}
+
+html[data-theme='dark'] .evaluator-ai-message:nth-child(2) {
+  background: var(--software-status-success-surface);
+}
+
+html[data-theme='dark'] .code-diff-pre,
+html[data-theme='dark'] .code-file-pre {
+  background: #140d1c;
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .code-diff-num {
+  background: #1a1124;
+  color: var(--software-muted);
+  border-right-color: var(--software-border);
+}
+
+html[data-theme='dark'] .code-diff-row.is-addition {
+  background: rgba(142, 227, 184, 0.12);
+  color: #e6faf0;
+}
+
+html[data-theme='dark'] .code-diff-row.is-addition .code-diff-num {
+  background: rgba(142, 227, 184, 0.2);
+  color: #8ee3b8;
+}
+
+html[data-theme='dark'] .code-diff-row.is-addition .code-diff-sign {
+  color: #8ee3b8;
+}
+
+html[data-theme='dark'] .code-diff-row.is-deletion {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fee2e2;
+}
+
+html[data-theme='dark'] .code-diff-row.is-deletion .code-diff-num {
+  background: rgba(248, 113, 113, 0.22);
+  color: #fca5a5;
+}
+
+html[data-theme='dark'] .code-diff-row.is-deletion .code-diff-sign {
+  color: #fca5a5;
+}
+
+html[data-theme='dark'] .code-diff-row.is-hunk {
+  background: #241834;
+  color: #d6c2f0;
+  border-block-color: var(--software-border);
+}
+
+html[data-theme='dark'] .code-diff-row.is-hunk .code-diff-num {
+  background: #2c1e3f;
+  color: #d6c2f0;
+}
+
+html[data-theme='dark'] .code-diff-stat-add {
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+  border-color: var(--software-status-success-border);
+}
+
+html[data-theme='dark'] .code-diff-stat-del {
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+  border-color: var(--software-status-danger-border);
+}
+
+html[data-theme='dark'] .code-diff-stat-neutral {
+  background: var(--software-surface-subtle);
+  color: var(--software-muted);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .r27-ai-review-card {
+  background: var(--software-surface);
+  border-color: var(--software-border);
 }

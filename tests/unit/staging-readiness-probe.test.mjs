@@ -4,8 +4,8 @@ import { probeStagingReadiness } from '../../scripts/check-staging-readiness.mjs
 const readyPayload = {
   status: 'ready',
   database: {
-    migrationVersion: '0017',
-    targetMigrationVersion: '0017',
+    migrationVersion: '0018',
+    targetMigrationVersion: '0018',
     markers: {
       candidateLifecycle: true,
       onboarding: true,
@@ -29,7 +29,7 @@ describe('staging readiness operator probe', () => {
     ).resolves.toMatchObject({
       state: 'ready',
       httpStatus: 200,
-      migrationVersion: '0017',
+      migrationVersion: '0018',
       markers: { executionR214: true },
     });
     expect(fetchImpl.mock.calls[0][0].href).toBe(

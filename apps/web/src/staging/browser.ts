@@ -8,6 +8,11 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { isIP } from 'node:net';
+import {
+  candidateConfirmationParams,
+  candidateSignInPath,
+} from '../hiring/candidate-entry';
+import { enforceRateLimit } from '../security/rate-limit';
 
 import {
   invitationTokenHash,
@@ -30,6 +35,7 @@ import type {
   R23CandidateInvitationRevocationResponse,
 } from '../r23-auth/contract';
 import {
+  candidateTokenHash,
   decryptCandidateToken,
   encryptCandidateToken,
   loadCandidateTokenEncryptionKey,
@@ -69,6 +75,7 @@ import {
   R23EmailConfirmationRequired,
   R23AuthUnavailable,
   verifyR23AccessToken,
+  verifyR23Otp,
   type R23CredentialPair,
   type R23TokenGrant,
   type R23VerifiedIdentity,
@@ -95,8 +102,21 @@ import type {
   R211AssessmentDraftInput,
   R211RubricCriterion,
   R211StarterFile,
+  R211TemplateId,
   R211ValidatedVersion,
 } from '../r211-builder/contract';
+import {
+  formatPlanBadge,
+  getPlanDefinition,
+  hasPlanFeature,
+  isPlanTier,
+  PAID_PLAN_ORDER,
+  type OrganizationPlanSummary,
+} from '../plans/entitlements';
+import type {
+  SessionHiringReviewContext,
+  WorkspaceRoleKind,
+} from '../hiring/types';
 import { validateAssessmentDraft } from '../r211-builder/validation';
 import type {
   R29EvidenceSourceType,
@@ -111,7 +131,10 @@ import {
   validateFinalizePacketInput,
   validateSaveDraftInput,
 } from '../r210-review-packets/presentation';
-import { isAuthenticatedStaging } from '../runtime/profile';
+import {
+  isAuthenticatedStaging,
+  isHiringPlatformEnabled,
+} from '../runtime/profile';
 import {
   founderUatMailInboxUrl,
   isFounderUatEnabled,
@@ -125,6 +148,7 @@ import {
 import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
 import {
   renderSoftwareDocument,
+  type SoftwareDocumentTheme,
   type SoftwareWorkspace,
 } from '../ui/software-document';
 
@@ -172,7 +196,7 @@ type StagingBrowserSessionPayload = Readonly<{
 
 type StagingMembershipItem = Readonly<{
   organizationId: string;
-  role: 'recruiter' | 'reviewer';
+  role: WorkspaceRoleKind;
   version: number;
   displayName: string | null;
 }>;
@@ -216,7 +240,7 @@ type StagingSessionRecord = Readonly<{
 }>;
 
 export type StagingTemplateSummary = Readonly<{
-  templateId: 'custom' | 'reservation-moves-v3';
+  templateId: R211TemplateId;
   title: string;
   description: string;
   scenarioId?: string;
@@ -226,7 +250,8 @@ export type StagingTemplateSummary = Readonly<{
 type StagingOrganizationContextResponse = Readonly<{
   organizationId: string;
   principalId: string;
-  role: 'recruiter' | 'reviewer';
+  role: WorkspaceRoleKind;
+  isOwner?: boolean;
   displayName: string | null;
   reviewers: StagingReviewerItem[];
   draft: R211AssessmentDraft | null;
@@ -541,17 +566,31 @@ function securityHeaders(): Headers {
   });
 }
 
+function readRequestTheme(request?: Request): SoftwareDocumentTheme {
+  const cookieHeader = request?.headers.get('cookie');
+  if (!cookieHeader) {
+    return 'light';
+  }
+  const match = cookieHeader.match(/(?:^|;\s*)hirearchy-theme=(dark|light)/);
+  return match?.[1] === 'dark' ? 'dark' : 'light';
+}
+
 function htmlResponse(
   title: string,
   content: string,
   status = 200,
   headers = securityHeaders(),
   workspace?: SoftwareWorkspace,
+  theme?: SoftwareDocumentTheme,
+  currentPath?: string,
 ): Response {
-  return new Response(renderSoftwareDocument(title, content, workspace), {
-    status,
-    headers,
-  });
+  return new Response(
+    renderSoftwareDocument(title, content, workspace, theme, currentPath),
+    {
+      status,
+      headers,
+    },
+  );
 }
 
 function loginForm(message = ''): string {
@@ -1367,7 +1406,13 @@ export async function stagingOrganizationsGet(
               membership.displayName?.trim() ||
                 `Organization ${membership.organizationId.slice(0, 8)}`,
             );
-            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span>${displayName}</span><span class="software-role-badge">${membership.role === 'reviewer' ? 'Evaluator' : 'Recruiter'}</span></button></form></li>`;
+            const roleLabelDisplay =
+              membership.role === 'cto'
+                ? 'CTO / Owner'
+                : membership.role === 'reviewer'
+                  ? 'Evaluator'
+                  : 'Recruiter';
+            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span>${displayName}</span><span class="software-role-badge">${roleLabelDisplay}</span></button></form></li>`;
           })
           .join('');
         let content = '';
@@ -1402,6 +1447,11 @@ export async function stagingOrganizationsGet(
         const response = htmlResponse(
           'Choose an organization',
           `${content}<form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><button type="submit">Sign out</button></form>`,
+          200,
+          securityHeaders(),
+          undefined,
+          readRequestTheme(request),
+          '/r23/organizations',
         );
         return attachRefreshedCookie(response, refreshedSessionCookie);
       },
@@ -1471,6 +1521,7 @@ export async function stagingLoadOrganizationSessionList(
     draft: R211AssessmentDraft | null;
     validatedVersions: R211ValidatedVersion[];
     availableTemplates?: StagingTemplateSummary[];
+    plan?: OrganizationPlanSummary | null;
     refreshedSessionCookie: string | null;
   }
 > {
@@ -1520,6 +1571,15 @@ export async function stagingLoadOrganizationSessionList(
         nextCursor: null,
       };
 
+      const plan = isHiringPlatformEnabled()
+        ? ((await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'hiring.plan.get',
+            { organizationId: orgIdLower },
+          ).catch(() => null)) as OrganizationPlanSummary | null)
+        : null;
+
       return {
         identity,
         membership,
@@ -1536,6 +1596,7 @@ export async function stagingLoadOrganizationSessionList(
         draft: orgContext.draft ?? null,
         validatedVersions: orgContext.validatedVersions ?? [],
         availableTemplates: orgContext.availableTemplates ?? [],
+        plan,
         refreshedSessionCookie,
       };
     },
@@ -1657,10 +1718,16 @@ export async function stagingOrganizationGet(
     );
 
     const { organization, membership, identity, csrfToken, result } = context;
+    const hiring = isHiringPlatformEnabled();
+    const isOrgManager =
+      membership.role === 'recruiter' || membership.role === 'cto';
     const safeOrgId = safeHtml(organizationId.toLowerCase());
     const safeOrgName = safeHtml(organization.name);
-    const roleScopeText =
-      membership.role === 'recruiter'
+    const roleScopeText = hiring
+      ? isOrgManager
+        ? 'All assessments across your hiring workspace.'
+        : 'Assessments assigned to you for evaluation or authored by you.'
+      : membership.role === 'recruiter'
         ? 'Assessments issued by you, from invitation to human review.'
         : 'The submitted work assigned to you for review.';
 
@@ -1674,13 +1741,13 @@ export async function stagingOrganizationGet(
       );
       const emptyTitle = filtered
         ? 'No matching assessments'
-        : membership.role === 'recruiter'
+        : isOrgManager || hiring
           ? 'Create your first assessment'
           : 'No assigned reviews yet';
       const emptyExplanation = filtered
         ? 'Try a different search or clear the filters.'
-        : membership.role === 'recruiter'
-          ? 'Choose a scenario, review the candidate brief and assign an evaluator.'
+        : isOrgManager || hiring
+          ? 'Choose a platform template or generate a role-tailored problem with Kimi K3.1 Pro.'
           : 'When your team assigns a session to you, it will appear here.';
 
       sessionsHtml = `
@@ -1780,8 +1847,8 @@ export async function stagingOrganizationGet(
 
     const content = `
       <header class="software-page-heading">
-        <div><p class="software-eyebrow">${safeOrgName}</p><h1>${membership.role === 'recruiter' ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
-        ${membership.role === 'recruiter' ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>` : ''}
+        <div><p class="software-eyebrow">${safeOrgName}</p><h1>${isOrgManager ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
+        ${isOrgManager || hiring ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>` : ''}
       </header>
 
       ${
@@ -1840,6 +1907,9 @@ export async function stagingOrganizationGet(
         email: identity.email ?? '',
         csrf: csrfToken,
         active: 'assessments',
+        planBadge: context.plan ? formatPlanBadge(context.plan) : undefined,
+        theme: readRequestTheme(request),
+        currentPath: `/r23/organizations/${organizationId.toLowerCase()}`,
       },
     );
     return attachRefreshedCookie(response, context.refreshedSessionCookie);
@@ -2881,6 +2951,7 @@ export async function stagingAssessmentIssuanceApiPost(
   });
 
   try {
+    if (isHiringPlatformEnabled()) throw new StagingForbidden();
     if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
     const organizationId = targetOrganizationId.toLowerCase();
     const body = await parseBody(request, false, 65536);
@@ -3408,6 +3479,7 @@ type RawStagingEvidencePayload = {
     validUntil: string;
     recordedAt: string;
   }>;
+  aiInteractions?: R27Evidence['aiInteractions'];
   captureLimitation?: string;
 };
 
@@ -3605,7 +3677,7 @@ function mapStagingEvidenceToR27(
       payload: ev.payload ?? {},
       provenance: 'hirearchy.candidate_session_events',
     })),
-    aiInteractions: [],
+    aiInteractions: Array.isArray(raw.aiInteractions) ? raw.aiInteractions : [],
     executions: [],
     pagination: {
       limit,
@@ -3613,7 +3685,10 @@ function mapStagingEvidenceToR27(
     },
     availability: {
       terminal: 'unavailable',
-      ai: 'unavailable',
+      ai:
+        Array.isArray(raw.aiInteractions) && raw.aiInteractions.length > 0
+          ? 'available'
+          : 'unavailable',
       verification: 'unavailable',
       history: 'metadata_only',
       limitations: [
@@ -3658,7 +3733,7 @@ export async function stagingLoadR27EvidencePage(
         const raw = (await dispatchVerifiedStagingOperation(
           config,
           identity,
-          'evidence.read',
+          isHiringPlatformEnabled() ? 'hiring.evidence.read' : 'evidence.read',
           { organizationId, sessionId },
         )) as unknown as RawStagingEvidencePayload;
         if (raw.session.status !== 'SUBMITTED') {
@@ -3769,6 +3844,81 @@ export async function stagingEvidenceApiGet(
   }
 }
 
+async function loadHiringAiReviewGuardAndContext(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<{
+  blockedResponse: Response | null;
+  hiringContext?: {
+    targetRole?: string;
+    experienceLevel?: string;
+    skills?: readonly string[];
+  };
+}> {
+  if (!isHiringPlatformEnabled()) {
+    return { blockedResponse: null };
+  }
+  const orgIdLower = targetOrganizationId.toLowerCase();
+  const csrf = requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+  return withStagingBrowserSession(
+    request,
+    digest(csrf),
+    async ({ session, config, identity }) => {
+      if (session.selectedOrganizationId !== orgIdLower) {
+        throw new StagingForbidden();
+      }
+      const plan = (await dispatchVerifiedStagingOperation(
+        config,
+        identity,
+        'hiring.plan.get',
+        { organizationId: orgIdLower },
+      )) as OrganizationPlanSummary;
+
+      if (!hasPlanFeature(plan.planTier, 'aiCandidateReview')) {
+        return {
+          blockedResponse: Response.json(
+            {
+              error: {
+                code: 'PLAN_UPGRADE_REQUIRED',
+                requiredPlan: 'ultra',
+                currentPlan: plan.planTier,
+                message:
+                  'AI Candidate Review with Kimi K3.1 Pro requires the Ultra plan. Upgrade in Team & Plan settings.',
+              },
+            },
+            {
+              status: 402,
+              headers: {
+                'Cache-Control': 'private, no-store, max-age=0',
+                'Content-Type': 'application/json; charset=utf-8',
+              },
+            },
+          ),
+        };
+      }
+
+      const reviewContext = (await dispatchVerifiedStagingOperation(
+        config,
+        identity,
+        'hiring.review.context',
+        { organizationId: orgIdLower, sessionId },
+      ).catch(() => null)) as SessionHiringReviewContext | null;
+
+      return {
+        blockedResponse: null,
+        hiringContext: reviewContext
+          ? {
+              targetRole: reviewContext.targetRole,
+              experienceLevel: reviewContext.experienceLevel,
+              skills: reviewContext.skills,
+            }
+          : undefined,
+      };
+    },
+  );
+}
+
 export async function stagingAiReviewApiGet(
   request: Request,
   organizationId: string,
@@ -3786,6 +3936,14 @@ export async function stagingAiReviewApiGet(
     const preset = params.get('preset') ?? undefined;
     const customModelId = params.get('customModelId') ?? undefined;
     const forcePreview = params.get('forcePreview') === 'true';
+
+    const { blockedResponse, hiringContext } =
+      await loadHiringAiReviewGuardAndContext(
+        request,
+        organizationId,
+        sessionId,
+      );
+    if (blockedResponse) return blockedResponse;
 
     const evidence = await stagingLoadR27Evidence(
       request,
@@ -3810,6 +3968,7 @@ export async function stagingAiReviewApiGet(
       preset,
       customModelId,
       forcePreview,
+      hiringContext,
     });
     return Response.json(
       { report, availablePresets: AI_REVIEW_MODEL_CATALOG },
@@ -3859,6 +4018,14 @@ export async function stagingAiReviewApiPost(
         : undefined;
     const forcePreview = body.forcePreview === true;
 
+    const { blockedResponse, hiringContext } =
+      await loadHiringAiReviewGuardAndContext(
+        request,
+        targetOrganizationId,
+        sessionId,
+      );
+    if (blockedResponse) return blockedResponse;
+
     const evidence = await stagingLoadR27Evidence(
       request,
       targetOrganizationId,
@@ -3882,6 +4049,7 @@ export async function stagingAiReviewApiPost(
       preset,
       customModelId,
       forcePreview,
+      hiringContext,
     });
     return Response.json(
       { report, availablePresets: AI_REVIEW_MODEL_CATALOG },
@@ -3925,7 +4093,7 @@ export async function stagingLoadR28Revision(
         const raw = (await dispatchVerifiedStagingOperation(
           config,
           identity,
-          'evidence.read',
+          isHiringPlatformEnabled() ? 'hiring.evidence.read' : 'evidence.read',
           { organizationId, sessionId },
         )) as unknown as RawStagingEvidencePayload;
         if (raw.session.status !== 'SUBMITTED') return null;
@@ -4144,7 +4312,7 @@ export async function stagingObservationsApiGet(
         const raw = (await dispatchVerifiedStagingOperation(
           config,
           identity,
-          'evidence.read',
+          isHiringPlatformEnabled() ? 'hiring.evidence.read' : 'evidence.read',
           { organizationId, sessionId },
         )) as unknown as RawStagingEvidencePayload;
         const observations = mapStagingObservations(
@@ -4322,7 +4490,7 @@ export async function stagingObservationApiGet(
         const raw = (await dispatchVerifiedStagingOperation(
           config,
           identity,
-          'evidence.read',
+          isHiringPlatformEnabled() ? 'hiring.evidence.read' : 'evidence.read',
           { organizationId, sessionId },
         )) as unknown as RawStagingEvidencePayload;
         const observations = mapStagingObservations(
@@ -4840,6 +5008,11 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
         </nav>
       </section>
     `,
+    200,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+    '/r23/signup',
   );
 }
 
@@ -4925,10 +5098,56 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
   }
 }
 
+function candidateConfirmationForm(
+  request: Request,
+  email: string,
+  next: string | null,
+  invalid = false,
+): Response {
+  const query = candidateConfirmationParams(email, next);
+  const action = '/r23/verify-email?' + query;
+  const signIn = candidateSignInPath(next);
+  const local = isFounderUatEnabled();
+  return htmlResponse(
+    'Confirm your email',
+    `<section aria-labelledby="verify-heading">
+      <h1 id="verify-heading">Confirm your email</h1>
+      ${invalid ? '<p role="alert">That code could not be confirmed. Check your email and try again.</p>' : ''}
+      <p>${local ? 'Open the local inbox to confirm your account.' : 'Enter the confirmation code from your account email.'}</p>
+      <form action="${local ? '/r23/mail' : safeHtml(action)}" method="${local ? 'get' : 'post'}">
+        <label for="verify-email">Email</label>
+        <input id="verify-email" name="email" type="email" value="${safeHtml(email)}" autocomplete="email" required maxlength="320">
+        ${
+          local
+            ? `<input type="hidden" name="audience" value="candidate"><input type="hidden" name="next" value="${safeHtml(query.get('next') ?? '')}">`
+            : '<label for="verify-code">Confirmation code</label><input id="verify-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="6" required>'
+        }
+        <button type="submit">${local ? 'Open local inbox' : 'Confirm email'}</button>
+      </form>
+      <nav aria-label="Account help"><a href="${safeHtml(signIn)}">Return to candidate sign in</a></nav>
+    </section>`,
+    invalid ? 400 : 200,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+    action,
+  );
+}
+
 export async function stagingVerifyEmailGet(
   request: Request,
 ): Promise<Response> {
   const url = new URL(request.url);
+  if (
+    isHiringPlatformEnabled() &&
+    url.searchParams.get('audience') === 'candidate'
+  ) {
+    return candidateConfirmationForm(
+      request,
+      url.searchParams.get('email') ?? '',
+      url.searchParams.get('next'),
+    );
+  }
   const token = url.searchParams.get('token');
   const tokenHash = url.searchParams.get('token_hash');
   const type = url.searchParams.get('type') || 'signup';
@@ -5020,6 +5239,41 @@ export async function stagingVerifyEmailPost(
   request: Request,
 ): Promise<Response> {
   try {
+    const query = new URL(request.url).searchParams;
+    if (isHiringPlatformEnabled() && query.get('audience') === 'candidate') {
+      const origin = requireSameOrigin(request);
+      const limited = enforceRateLimit(request, 'auth');
+      if (limited) return limited;
+      const next = query.get('next');
+      if (isFounderUatEnabled())
+        return candidateConfirmationForm(request, '', next);
+      const body = await parseBody(request, false);
+      allowedFields(body, ['email', 'code']);
+      const email = String(body.email ?? '')
+        .trim()
+        .toLowerCase();
+      const config = resolveAuthAuthConfig();
+      try {
+        const grant = await verifyR23Otp(
+          config,
+          email,
+          String(body.code ?? '').trim(),
+          'signup',
+        );
+        const identity = assertR23StagingEligibleIdentity(
+          await verifyR23AccessToken(config, grant.accessToken, grant),
+        );
+        if (
+          identity.email?.toLowerCase() !== email ||
+          !identity.authMethods.includes('otp')
+        )
+          throw new R23AuthenticationDenied();
+      } catch (error) {
+        if (!(error instanceof R23AuthenticationDenied)) throw error;
+        return candidateConfirmationForm(request, email, next, true);
+      }
+      return redirect(origin, candidateSignInPath(next, true));
+    }
     if (isFounderUatEnabled()) {
       return htmlResponse(
         'Confirm your email address',
@@ -5083,7 +5337,7 @@ export async function stagingVerifyEmailPost(
   }
 }
 
-export function stagingRecoverGet(_request?: Request): Response {
+export function stagingRecoverGet(request?: Request): Response {
   const recoveryNotice = isFounderUatEnabled()
     ? '<p>Recovery messages for this local test appear in the local inbox. No email leaves this machine.</p>'
     : '<p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Recovery tokens are generated by the identity provider.</p>';
@@ -5101,6 +5355,11 @@ export function stagingRecoverGet(_request?: Request): Response {
         <p><a href="/r23/login">Return to sign in</a></p>
       </section>
     `,
+    200,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+    '/r23/recover',
   );
 }
 
@@ -5187,6 +5446,11 @@ export function stagingResetPasswordGet(request: Request): Response {
           <p><a href="/r23/login">Cancel and return to sign in</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/reset-password',
     );
   }
 
@@ -5212,6 +5476,11 @@ export function stagingResetPasswordGet(request: Request): Response {
         <p><a href="/r23/login">Cancel and return to sign in</a></p>
       </section>
     `,
+    200,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+    '/r23/reset-password',
   );
 }
 
@@ -5406,15 +5675,35 @@ export async function stagingOrganizationSettingsGet(
       const safeEmail = safeHtml(profile.email || identity.email || '');
       const safeDisplayName = safeHtml(profile.displayName || '');
 
+      const hiring = isHiringPlatformEnabled();
+      const isOrgAdmin =
+        orgContext.role === 'cto' ||
+        orgContext.role === 'recruiter' ||
+        orgContext.isOwner === true;
+      const planSummary = hiring
+        ? ((await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'hiring.plan.get',
+            { organizationId: orgIdLower },
+          ).catch(() => null)) as OrganizationPlanSummary | null)
+        : null;
+
       const membersRows = members
         .map((m) => {
           const ownerLabel = m.isOwner
             ? '<span class="software-owner-badge">Owner</span>'
             : '';
+          const roleDisplay =
+            m.role === 'cto'
+              ? 'CTO / Owner'
+              : m.role === 'reviewer'
+                ? 'Evaluator'
+                : m.role === 'recruiter'
+                  ? 'Recruiter'
+                  : m.role;
           const removeButton =
-            !m.isOwner &&
-            (orgContext.role === 'recruiter' ||
-              m.principalId === profile.principalId)
+            !m.isOwner && (isOrgAdmin || m.principalId === profile.principalId)
               ? `<form action="/r23/organizations/${safeOrgId}/settings" method="post">
                   <input type="hidden" name="csrf" value="${safeCsrf}">
                   <input type="hidden" name="action" value="remove_member">
@@ -5429,7 +5718,7 @@ export async function stagingOrganizationSettingsGet(
             <tr>
               <td>${safeHtml(m.displayName || 'No display name')}</td>
               <td>${safeHtml(m.email || 'Email unavailable')}</td>
-              <td><span class="software-role-badge">${m.role === 'reviewer' ? 'Evaluator' : safeHtml(m.role)}</span></td>
+              <td><span class="software-role-badge">${safeHtml(roleDisplay)}</span></td>
               <td>${safeHtml(m.status)} ${ownerLabel}</td>
               <td><time datetime="${safeHtml(m.joinedAt)}" title="${safeHtml(m.joinedAt)}">${safeHtml(new Date(m.joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time></td>
               <td>${removeButton}</td>
@@ -5450,7 +5739,7 @@ export async function stagingOrganizationSettingsGet(
                 candidateEncryptionKey,
               );
               const acceptUrl = `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`;
-              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this link and share it with the evaluator.</span></label>`;
+              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this link and share it with your teammate.</span></label>`;
             } catch {
               // decryption fallback
             }
@@ -5466,10 +5755,17 @@ export async function stagingOrganizationSettingsGet(
                 </form>`
               : '';
 
+          const inviteRoleText =
+            inv.role === 'cto'
+              ? 'CTO / Owner invitation'
+              : inv.role === 'recruiter'
+                ? 'Recruiter invitation'
+                : 'Evaluator invitation';
+
           return `
             <li class="software-invitation-row">
               <div class="software-invitation-heading">
-                <div><strong>${safeHtml(inv.targetEmail)}</strong><span>Evaluator invitation</span></div>
+                <div><strong>${safeHtml(inv.targetEmail)}</strong><span>${inviteRoleText}</span></div>
                 <span class="software-role-badge">${inv.status === 'active' ? 'Pending' : safeHtml(inv.status)}</span>
               </div>
               <p class="software-invitation-meta">Expires <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(new Date(inv.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>${inv.acceptedAt ? ` · Accepted <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(new Date(inv.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : ''}</p>
@@ -5480,11 +5776,87 @@ export async function stagingOrganizationSettingsGet(
         })
         .join('');
 
+      let planSectionHtml = '';
+      if (hiring && planSummary) {
+        const currentPlanDef = getPlanDefinition(planSummary.planTier);
+        const creditSummary =
+          planSummary.planTier === 'per_candidate'
+            ? `<p><strong>Candidate slots:</strong> ${planSummary.candidateCreditsUsed} used of ${planSummary.candidateCreditsPurchased} purchased (${planSummary.candidateCreditsRemaining ?? 0} remaining). Re-issuing to an already credited candidate email does not consume another slot.</p>`
+            : planSummary.planTier === 'none'
+              ? '<p><strong>Status:</strong> An active paid plan is required before issuing candidate assessments. There is no free plan.</p>'
+              : `<p><strong>Candidate capacity:</strong> Unlimited candidate assessments included (${planSummary.candidateCreditsUsed} distinct candidates assessed so far).</p>`;
+
+        const planCardsHtml = PAID_PLAN_ORDER.map((tierId) => {
+          const def = getPlanDefinition(tierId);
+          const isCurrent = planSummary.planTier === tierId;
+          const highlightsHtml = def.highlights
+            .map((item) => `<li>${safeHtml(item)}</li>`)
+            .join('');
+          return `
+            <article class="hiring-plan-card${isCurrent ? ' is-current' : ''}">
+              <div class="software-invitation-heading">
+                <strong>${safeHtml(def.name)}</strong>
+                <span class="software-role-badge">${isCurrent ? 'Current plan' : safeHtml(def.priceLabel)}</span>
+              </div>
+              <p>${safeHtml(def.tagline)}</p>
+              <ul>${highlightsHtml}</ul>
+            </article>
+          `;
+        }).join('');
+
+        const isCtoOrOwner =
+          orgContext.role === 'cto' || orgContext.isOwner === true;
+        const planManageFormHtml =
+          isCtoOrOwner && isFounderUatEnabled()
+            ? `<form action="/r23/organizations/${safeOrgId}/settings" method="post">
+              <input type="hidden" name="csrf" value="${safeCsrf}">
+              <input type="hidden" name="action" value="update_plan">
+              <div class="hiring-two-col">
+                <div class="hiring-field">
+                  <label for="planTier">Select organization plan</label>
+                  <select id="planTier" name="planTier">
+                    <option value="per_candidate"${planSummary.planTier === 'per_candidate' || planSummary.planTier === 'none' ? ' selected' : ''}>Per Candidate (pay per candidate slot)</option>
+                    <option value="pro"${planSummary.planTier === 'pro' ? ' selected' : ''}>Pro (unlimited candidates + AI builder)</option>
+                    <option value="ultra"${planSummary.planTier === 'ultra' ? ' selected' : ''}>Ultra (Pro + Kimi K3.1 Pro AI Review &amp; Fit Reports)</option>
+                  </select>
+                </div>
+                <div class="hiring-field">
+                  <label for="creditsMode">Candidate credit update</label>
+                  <select id="creditsMode" name="creditsMode">
+                    <option value="add">Add candidate slots</option>
+                    <option value="set">Set total purchased slots</option>
+                  </select>
+                </div>
+              </div>
+              <div class="hiring-field">
+                <label for="creditsAmount">Candidate slots (used when Per Candidate plan is active)</label>
+                <input id="creditsAmount" name="creditsAmount" type="number" min="0" max="10000" value="${planSummary.planTier === 'per_candidate' ? 5 : 10}">
+              </div>
+              <button type="submit">Save plan &amp; credits</button>
+            </form>`
+            : '<p class="software-field-help">Only a CTO / Owner can modify the organization plan and candidate credits.</p>';
+
+        planSectionHtml = `
+          <section class="software-settings-section software-team-section" aria-labelledby="plan-credits-heading">
+            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">00</span><div><h2 id="plan-credits-heading">Organization plan &amp; candidate credits</h2><p>Active tier: <strong>${safeHtml(currentPlanDef.name)}</strong> (${safeHtml(formatPlanBadge(planSummary))}).</p></div></div>
+            ${creditSummary}
+            <div class="hiring-plan-grid">${planCardsHtml}</div>
+            ${planManageFormHtml}
+          </section>
+        `;
+      }
+
+      const inviteRoleFieldHtml = hiring
+        ? `<div><label for="inviteRole">Workspace role</label><select id="inviteRole" name="role"><option value="reviewer" selected>Evaluator (Reviews &amp; hiring decision)</option><option value="recruiter">Recruiter (Pipeline &amp; invitations)</option><option value="cto">CTO / Owner (Full workspace &amp; plan)</option></select></div>`
+        : '';
+
       const content = `
         <header class="software-page-heading">
-          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1></div>
+          <div><p class="software-eyebrow">${safeOrgName}</p><h1>${hiring ? 'Team &amp; plan' : 'Team &amp; settings'}</h1></div>
           <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
         </header>
+
+        ${planSectionHtml}
 
         <div class="software-settings-grid">
           <section class="software-settings-section" aria-labelledby="account-profile-heading">
@@ -5502,7 +5874,7 @@ export async function stagingOrganizationSettingsGet(
           <section class="software-settings-section" aria-labelledby="org-profile-heading">
             <header class="software-section-intro"><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></header>
             ${
-              orgContext.role === 'recruiter'
+              isOrgAdmin
                 ? `
               <form action="/r23/organizations/${safeOrgId}/settings" method="post">
                 <input type="hidden" name="csrf" value="${safeCsrf}">
@@ -5528,26 +5900,27 @@ export async function stagingOrganizationSettingsGet(
         </section>
 
         <section class="software-settings-section" aria-labelledby="invitations-heading">
-          <header class="software-section-intro"><h2 id="invitations-heading">Invite an evaluator</h2><p>Bring the right person into the review.</p></header>
+          <header class="software-section-intro"><h2 id="invitations-heading">${hiring ? 'Invite a teammate' : 'Invite an evaluator'}</h2></header>
           ${
-            orgContext.role === 'recruiter'
+            isOrgAdmin
               ? `
-            <p class="software-field-help">Create an invitation, then share its link with the evaluator. Invitations are not emailed automatically.</p>
+            <p class="software-field-help">Create an invitation, then share its link with the invited teammate. Invitations are not emailed automatically.</p>
             <form class="software-invite-form" action="/r23/organizations/${safeOrgId}/settings" method="post">
               <input type="hidden" name="csrf" value="${safeCsrf}">
               <input type="hidden" name="action" value="create_invitation">
               <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
-              <div><label for="targetEmail">Reviewer email</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
-              <button type="submit">Create reviewer invitation</button>
+              <div><label for="targetEmail">${hiring ? 'Teammate email' : 'Reviewer email'}</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
+              ${inviteRoleFieldHtml}
+              <button type="submit">${hiring ? 'Create team invitation' : 'Create reviewer invitation'}</button>
             </form>`
               : ''
           }
-          <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet. Your next reviewer starts here.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
+          <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet. Your next teammate starts here.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
         </section>
       `;
 
       const response = htmlResponse(
-        'Team & Settings',
+        hiring ? 'Team & Plan' : 'Team & Settings',
         content,
         200,
         securityHeaders(),
@@ -5558,6 +5931,9 @@ export async function stagingOrganizationSettingsGet(
           email: profile.email || identity.email || '',
           csrf: csrfToken,
           active: 'settings',
+          planBadge: planSummary ? formatPlanBadge(planSummary) : undefined,
+          theme: readRequestTheme(request),
+          currentPath: `/r23/organizations/${orgIdLower}/settings`,
         },
       );
       return attachRefreshedCookie(response, refreshedSessionCookie);
@@ -5585,7 +5961,27 @@ export async function stagingOrganizationSettingsPost(
         throw new StagingForbidden();
       }
 
-      if (action === 'update_account_profile') {
+      if (action === 'update_plan' && isHiringPlatformEnabled()) {
+        if (!isFounderUatEnabled()) throw new StagingForbidden();
+        const planTier = requiredText(body, 'planTier', 32);
+        if (!isPlanTier(planTier)) throw new StagingBadRequest();
+        const creditsMode = body.creditsMode === 'set' ? 'set' : 'add';
+        const creditsRaw = Number(body.creditsAmount ?? 0);
+        const creditsAmount = Number.isFinite(creditsRaw)
+          ? Math.min(10000, Math.max(0, Math.trunc(creditsRaw)))
+          : 0;
+        await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'hiring.plan.update',
+          {
+            organizationId: orgIdLower,
+            planTier,
+            creditsMode,
+            creditsAmount,
+          },
+        );
+      } else if (action === 'update_account_profile') {
         const displayName = requiredText(body, 'displayName', 100);
         await dispatchVerifiedStagingOperation(
           config,
@@ -5614,19 +6010,41 @@ export async function stagingOrganizationSettingsPost(
           loadCandidateTokenEncryptionKey(),
         );
         const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
-        await dispatchVerifiedStagingOperation(
-          config,
-          identity,
-          'organization.invitation.create',
-          {
-            organizationId: orgIdLower,
-            targetEmail,
-            expiresAt,
-            idempotencyKey,
-            invitationTokenHash: tokenHash,
-            invitationTokenCiphertext: ciphertext,
-          },
-        );
+        const requestedRole =
+          typeof body.role === 'string' &&
+          ['cto', 'recruiter', 'reviewer'].includes(body.role)
+            ? body.role
+            : null;
+        if (isHiringPlatformEnabled() && requestedRole) {
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'hiring.team.invitation.create',
+            {
+              organizationId: orgIdLower,
+              targetEmail,
+              role: requestedRole,
+              expiresAt,
+              idempotencyKey,
+              invitationTokenHash: tokenHash,
+              invitationTokenCiphertext: ciphertext,
+            },
+          );
+        } else {
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'organization.invitation.create',
+            {
+              organizationId: orgIdLower,
+              targetEmail,
+              expiresAt,
+              idempotencyKey,
+              invitationTokenHash: tokenHash,
+              invitationTokenCiphertext: ciphertext,
+            },
+          );
+        }
       } else if (action === 'revoke_invitation') {
         const invitationId = requiredText(body, 'invitationId', 128);
         await dispatchVerifiedStagingOperation(
@@ -5889,4 +6307,468 @@ export async function stagingInvitationAcceptPost(
   } catch (error) {
     return failureResponse(request, error);
   }
+}
+
+/* ========================================================================== */
+/* Hiring Platform Bridge Exports                                             */
+/* ========================================================================== */
+
+export { StagingBadRequest, StagingForbidden, StagingUnavailable };
+
+export function buildHiringSyntheticRequest(
+  cookieHeaderValue: string,
+): Request {
+  return new Request('https://hirearchy-internal.invalid/', {
+    headers: {
+      Accept: 'application/json',
+      ...(cookieHeaderValue ? { Cookie: cookieHeaderValue } : {}),
+    },
+  });
+}
+
+export function hiringFailureJsonResponse(
+  request: Request,
+  error: unknown,
+): Response {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: request.method,
+    headers: jsonHeaders,
+  });
+  return failureResponse(jsonRequest, error);
+}
+
+export async function hiringParseJsonBody(
+  request: Request,
+  maxBytes = 256 * 1024,
+): Promise<Record<string, unknown>> {
+  return parseBody(request, false, maxBytes);
+}
+
+export async function withHiringOrganizationSession(
+  request: Request,
+  targetOrganizationId: string,
+  opts: {
+    requireOriginCsrf?: boolean;
+    body?: Record<string, unknown>;
+  },
+  operation: (ctx: {
+    config: StagingConfiguration;
+    identity: R23VerifiedIdentity;
+    session: StagingBrowserSessionPayload;
+    csrfToken: string;
+    organizationId: string;
+    organizationName: string;
+    orgContext: StagingOrganizationContextResponse;
+    plan: OrganizationPlanSummary;
+    dispatch: (op: string, args: Record<string, unknown>) => Promise<unknown>;
+  }) => Promise<Response>,
+): Promise<Response> {
+  if (!isHiringPlatformEnabled()) {
+    return Response.json(
+      { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+      { status: 404 },
+    );
+  }
+  if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
+  const orgIdLower = targetOrganizationId.toLowerCase();
+  const body = opts.body ?? Object.create(null);
+  const csrf = opts.requireOriginCsrf
+    ? requireOriginAndCsrf(request, body).csrf
+    : requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+
+  return withStagingBrowserSession(
+    request,
+    digest(csrf),
+    async ({
+      config,
+      session,
+      identity,
+      csrfToken,
+      refreshedSessionCookie,
+    }) => {
+      if (session.selectedOrganizationId !== orgIdLower) {
+        throw new StagingForbidden();
+      }
+      const orgContext = await fetchOrganizationContext(
+        config,
+        identity,
+        orgIdLower,
+      );
+      const membership: R23Membership & { displayName: string | null } = {
+        organizationId: orgIdLower,
+        role: orgContext.role,
+        membershipVersion: '1',
+        displayName: orgContext.displayName,
+      };
+      const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
+      const plan = (await dispatchVerifiedStagingOperation(
+        config,
+        identity,
+        'hiring.plan.get',
+        { organizationId: orgIdLower },
+      )) as OrganizationPlanSummary;
+
+      const response = await operation({
+        config,
+        identity,
+        session,
+        csrfToken,
+        organizationId: orgIdLower,
+        organizationName: orgDisplay.name,
+        orgContext,
+        plan,
+        dispatch: (op, args) =>
+          dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            op,
+            args as StagingProofArgs,
+          ),
+      });
+      return attachRefreshedCookie(response, refreshedSessionCookie);
+    },
+  );
+}
+
+export async function loadHiringOrganizationWorkspaceFromCookie(
+  cookieHeaderValue: string,
+  targetOrganizationId: string,
+): Promise<{
+  config: StagingConfiguration;
+  identity: R23VerifiedIdentity;
+  csrfToken: string;
+  organizationId: string;
+  organizationName: string;
+  role: WorkspaceRoleKind;
+  isOwner: boolean;
+  email: string;
+  orgContext: StagingOrganizationContextResponse;
+  plan: OrganizationPlanSummary;
+  dispatch: (op: string, args: Record<string, unknown>) => Promise<unknown>;
+} | null> {
+  if (!isHiringPlatformEnabled() || !UUID.test(targetOrganizationId)) {
+    return null;
+  }
+  const orgIdLower = targetOrganizationId.toLowerCase();
+  const request = buildHiringSyntheticRequest(cookieHeaderValue);
+  const csrf = cookieValue(request, R23_CSRF_COOKIE);
+  if (!csrf || !RANDOM_VALUE.test(csrf)) return null;
+
+  try {
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ config, session, identity, csrfToken }) => {
+        if (session.selectedOrganizationId !== orgIdLower) {
+          throw new StagingForbidden();
+        }
+        const orgContext = await fetchOrganizationContext(
+          config,
+          identity,
+          orgIdLower,
+        );
+        const membership: R23Membership & { displayName: string | null } = {
+          organizationId: orgIdLower,
+          role: orgContext.role,
+          membershipVersion: '1',
+          displayName: orgContext.displayName,
+        };
+        const orgDisplay = resolveOrgDisplay(orgIdLower, membership);
+        const plan = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'hiring.plan.get',
+          { organizationId: orgIdLower },
+        )) as OrganizationPlanSummary;
+
+        return {
+          config,
+          identity,
+          csrfToken,
+          organizationId: orgIdLower,
+          organizationName: orgDisplay.name,
+          role: orgContext.role,
+          isOwner: Boolean(orgContext.isOwner),
+          email: identity.email ?? '',
+          orgContext,
+          plan,
+          dispatch: (op, args) =>
+            dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              op,
+              args as StagingProofArgs,
+            ),
+        };
+      },
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function withHiringAccountSession(
+  request: Request,
+  opts: {
+    requireOriginCsrf?: boolean;
+    body?: Record<string, unknown>;
+  },
+  operation: (ctx: {
+    config: StagingConfiguration;
+    identity: R23VerifiedIdentity;
+    csrfToken: string;
+    dispatch: (op: string, args: Record<string, unknown>) => Promise<unknown>;
+  }) => Promise<Response>,
+): Promise<Response> {
+  if (!isHiringPlatformEnabled()) {
+    return Response.json(
+      { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+      { status: 404 },
+    );
+  }
+  const body = opts.body ?? Object.create(null);
+  const csrf = opts.requireOriginCsrf
+    ? requireOriginAndCsrf(request, body).csrf
+    : requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+
+  return withStagingBrowserSession(
+    request,
+    digest(csrf),
+    async ({ config, identity, csrfToken, refreshedSessionCookie }) => {
+      const response = await operation({
+        config,
+        identity,
+        csrfToken,
+        dispatch: (op, args) =>
+          dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            op,
+            args as StagingProofArgs,
+          ),
+      });
+      return attachRefreshedCookie(response, refreshedSessionCookie);
+    },
+  );
+}
+
+export async function withHiringCandidateSession(
+  request: Request,
+  sessionId: string,
+  operation: () => Promise<Response>,
+): Promise<Response> {
+  if (!isHiringPlatformEnabled()) return operation();
+  try {
+    return await withHiringAccountSession(request, {}, async ({ dispatch }) => {
+      const access = (await dispatch('candidate.session.verify_access', {
+        sessionId,
+      })) as { gateState?: string } | null;
+      if (access?.gateState !== 'ready') throw new StagingForbidden();
+      return operation();
+    });
+  } catch (error) {
+    return hiringFailureJsonResponse(request, error);
+  }
+}
+
+export async function tryReadHiringAccountFromCookie(
+  cookieHeaderValue: string,
+): Promise<{
+  config: StagingConfiguration;
+  identity: R23VerifiedIdentity;
+  csrfToken: string;
+  dispatch: (op: string, args: Record<string, unknown>) => Promise<unknown>;
+} | null> {
+  if (!isHiringPlatformEnabled()) return null;
+  const request = buildHiringSyntheticRequest(cookieHeaderValue);
+  const csrf = cookieValue(request, R23_CSRF_COOKIE);
+  if (!csrf || !RANDOM_VALUE.test(csrf)) return null;
+
+  try {
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ config, identity, csrfToken }) => ({
+        config,
+        identity,
+        csrfToken,
+        dispatch: (op, args) =>
+          dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            op,
+            args as StagingProofArgs,
+          ),
+      }),
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function authenticateCandidatePasswordLogin(
+  request: Request,
+  email: string,
+  password: string,
+): Promise<
+  | {
+      status: 'ok';
+      email: string;
+      cookies: readonly string[];
+    }
+  | {
+      status: 'email_confirmation_required';
+    }
+> {
+  if (!isAuthenticatedStaging() || !isHiringPlatformEnabled()) {
+    throw new StagingForbidden();
+  }
+  const config = loadStagingConfiguration();
+  requireSameOrigin(request);
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !password) throw new StagingBadRequest();
+
+  let pair: R23TokenGrant;
+  try {
+    pair = await passwordGrant(config.auth, cleanEmail, password);
+  } catch (error) {
+    if (error instanceof R23EmailConfirmationRequired) {
+      return { status: 'email_confirmation_required' };
+    }
+    throw error;
+  }
+
+  const identity = assertR23StagingEligibleIdentity(
+    await verifyR23AccessToken(config.auth, pair.accessToken, pair),
+  );
+  const csrf = randomOpaqueValue();
+  const sessionKey = deriveSessionKey(config);
+  const now = Math.floor(Date.now() / 1000);
+  const payload: StagingBrowserSessionPayload = Object.freeze({
+    v: 1,
+    sub: identity.subjectId,
+    sid: identity.sessionId,
+    aal: identity.assurance,
+    accessToken: pair.accessToken,
+    refreshToken: pair.refreshToken,
+    csrfHash: digest(csrf),
+    callbackHash: null,
+    selectedOrganizationId: null,
+    expiresAt: now + APP_SESSION_TTL_SECONDS,
+  });
+  const encodedSession = encryptSessionPayload(payload, sessionKey);
+  return {
+    status: 'ok',
+    email: identity.email ?? cleanEmail,
+    cookies: [
+      cookieHeader(R23_SESSION_COOKIE, encodedSession, true),
+      cookieHeader(R23_CSRF_COOKIE, csrf, false),
+    ],
+  };
+}
+
+export async function registerCandidateAccount(
+  request: Request,
+  email: string,
+  password: string,
+): Promise<
+  | {
+      ok: true;
+      email: string;
+      localConfirmation: boolean;
+    }
+  | {
+      ok: false;
+      status: number;
+      message: string;
+    }
+> {
+  if (!isHiringPlatformEnabled()) throw new StagingForbidden();
+  requireSameOrigin(request);
+  const cleanEmail = email.trim().toLowerCase();
+  if (
+    !cleanEmail.includes('@') ||
+    password.length < 6 ||
+    password.length > 1024
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        'Please provide a valid email address and a password of at least 6 characters.',
+    };
+  }
+  const authConfig = resolveAuthAuthConfig();
+  const authResponse = await fetch(
+    new URL('/signup', authConfig.authUrl).toString(),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ email: cleanEmail, password }),
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+  if (!authResponse.ok) {
+    const data = (await authResponse.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    const message = String(
+      data?.msg ??
+        data?.error_description ??
+        'Unable to create candidate account.',
+    );
+    return {
+      ok: false,
+      status: authResponse.status,
+      message,
+    };
+  }
+  return {
+    ok: true,
+    email: cleanEmail,
+    localConfirmation: founderUatMailInboxUrl(cleanEmail) !== null,
+  };
+}
+
+export function clearHiringAuthCookies(): readonly string[] {
+  return [
+    clearCookieHeader(R23_SESSION_COOKIE, true),
+    clearCookieHeader(R23_CSRF_COOKIE, false),
+  ];
+}
+
+export function generateOpaqueLinkToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+export function computeCandidateLinkTokenHash(rawToken: string): string {
+  return candidateTokenHash(rawToken);
+}
+
+export function encryptCandidateLinkToken(
+  rawToken: string,
+  sessionId: string,
+): string {
+  return encryptCandidateToken(
+    rawToken,
+    sessionId,
+    loadCandidateTokenEncryptionKey(),
+  );
+}
+
+export function decryptCandidateLinkToken(
+  ciphertext: string,
+  sessionId: string,
+): string {
+  return decryptCandidateToken(
+    ciphertext,
+    sessionId,
+    loadCandidateTokenEncryptionKey(),
+  );
 }

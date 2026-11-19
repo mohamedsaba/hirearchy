@@ -18,6 +18,8 @@ export type R27AiReviewPanelProps = Readonly<{
   report?: R27AiReviewReport | null;
   onReportChange?: (report: R27AiReviewReport | null) => void;
   defaultPreset?: AiReviewPresetId;
+  planLocked?: boolean;
+  planSettingsHref?: string;
 }>;
 
 function readCsrfCookie(): string {
@@ -33,6 +35,8 @@ export const R27AiReviewPanel = ({
   report: controlledReport,
   onReportChange,
   defaultPreset = 'nvidia:kimi-k2',
+  planLocked = false,
+  planSettingsHref,
 }: R27AiReviewPanelProps) => {
   const [internalReport, setInternalReport] =
     useState<R27AiReviewReport | null>(null);
@@ -102,8 +106,14 @@ export const R27AiReviewPanel = ({
 
       if (!response.ok) {
         const errPayload = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
+          error?: { code?: string; message?: string };
         } | null;
+        if (response.status === 402) {
+          throw new Error(
+            errPayload?.error?.message ??
+              'AI Candidate Review requires the Ultra plan. Upgrade in Team & Plan.',
+          );
+        }
         throw new Error(
           errPayload?.error?.message ??
             `Unable to generate AI review (HTTP ${response.status})`,
@@ -172,12 +182,29 @@ export const R27AiReviewPanel = ({
             ) : null}
           </div>
 
+          {planLocked ? (
+            <div className="hiring-banner hiring-banner-warning" role="status">
+              <div>
+                <strong>
+                  Ultra plan required for Kimi K3.1 Pro AI Review:
+                </strong>{' '}
+                Your organization can upgrade in Team &amp; Plan to unlock
+                automated timing-delta &amp; evidence analysis.
+              </div>
+              {planSettingsHref ? (
+                <a className="hiring-btn hiring-btn-sm" href={planSettingsHref}>
+                  Upgrade to Ultra
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="r27-ai-review-actions">
             <button
               type="button"
               className="r27-ai-review-primary-btn"
               onClick={() => void handleGenerate(false)}
-              disabled={loading}
+              disabled={loading || planLocked}
             >
               {loading ? 'Analyzing candidate evidence…' : 'Generate AI Review'}
             </button>
@@ -185,7 +212,7 @@ export const R27AiReviewPanel = ({
               type="button"
               className="r27-ai-review-secondary-btn"
               onClick={() => void handleGenerate(true)}
-              disabled={loading}
+              disabled={loading || planLocked}
             >
               Instant Preview
             </button>
@@ -266,6 +293,41 @@ export const R27AiReviewPanel = ({
               </ul>
             </div>
           </div>
+
+          {report.timingInsights && report.timingInsights.length > 0 ? (
+            <div className="hiring-card-subtle">
+              <h4>Chronological Timing &amp; Workflow Analysis</h4>
+              <ul className="hiring-timing-list">
+                {report.timingInsights.map((insight, index) => (
+                  <li
+                    key={`${index}:${insight}`}
+                    className="hiring-timing-item"
+                  >
+                    {insight}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {report.requirementBreakdown &&
+          report.requirementBreakdown.length > 0 ? (
+            <div className="hiring-card-subtle">
+              <h4>Requirement Evidence Breakdown</h4>
+              <ul className="hiring-timing-list">
+                {report.requirementBreakdown.map((item, index) => (
+                  <li
+                    key={`${index}:${item.requirement}`}
+                    className="hiring-timing-item"
+                  >
+                    <strong>{item.requirement}</strong> ·{' '}
+                    <span className="hiring-pill">{item.status}</span> —{' '}
+                    {item.evidence}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="r27-ai-review-footer">
             <div className="r27-ai-review-footer-controls">

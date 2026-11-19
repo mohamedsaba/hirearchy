@@ -11,7 +11,7 @@
   gap: 4px 24px;
   padding-inline: var(--software-space-page);
   border-bottom: 1px solid var(--software-plum-line);
-  background: var(--software-plum);
+  background: var(--software-brand-plum);
   color: var(--software-on-plum);
 }
 
@@ -264,12 +264,22 @@
 .evaluator-signin-form .access-form .button-primary {
   min-height: 44px;
   border: 0;
-  border-radius: 7px;
-  background: var(--software-plum);
-  color: white;
+  border-radius: 9px;
+  background: var(--software-btn-primary-bg, var(--software-plum));
+  color: var(--software-btn-primary-fg, #ffffff);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.evaluator-signin-form .access-form .button-primary:hover:not(:disabled) {
+  background: var(--software-btn-primary-bg-hover, #3b2b4a);
+  color: var(--software-btn-primary-fg, #ffffff);
+  transform: translateY(-1px);
 }
 
 .evaluator-signin-form nav {

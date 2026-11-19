@@ -28,21 +28,21 @@ export interface BootstrapOrganizationInput {
 export interface BootstrapOrganizationResponse {
   readonly organizationId: string;
   readonly displayName: string;
-  readonly role: 'recruiter';
+  readonly role: 'cto' | 'recruiter';
   readonly isOwner: boolean;
   readonly emailDeliveryEnabled: false;
 }
 
 export interface AcceptInvitationResponse {
   readonly organizationId: string;
-  readonly role: 'reviewer';
+  readonly role: 'cto' | 'recruiter' | 'reviewer';
   readonly status: 'accepted';
 }
 
 export interface ReviewerInvitationItem {
   readonly id: string;
   readonly targetEmail: string;
-  readonly role: 'reviewer';
+  readonly role: 'cto' | 'recruiter' | 'reviewer';
   readonly status: 'active' | 'expired' | 'revoked' | 'accepted';
   readonly expiresAt: string;
   readonly createdAt: string;

@@ -42,6 +42,8 @@ export function founderUatRedirect(
     | '/r23/login?reset=1'
     | '/r23/login'
     | '/r23/signup'
+    | '/candidate/login'
+    | `/candidate/login?${string}`
     | '/r23/reset-password'
     | '/r23/reset-password?error=expired'
     | '/r23/reset-password?error=password'

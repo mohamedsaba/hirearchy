@@ -65,7 +65,7 @@
   padding: 4px 7px;
   border-radius: 4px;
   background: var(--software-mint);
-  color: var(--r26-plum);
+  color: #211426;
   font-size: 10px;
   font-weight: 650;
 }
@@ -354,7 +354,7 @@
 
 .r26-eyebrow {
   margin: 0;
-  color: #756780;
+  color: var(--r26-muted);
   font-size: 0.68rem;
   font-weight: 750;
   letter-spacing: 0.1em;
@@ -384,7 +384,7 @@
   gap: 0.65rem;
   margin: 0.75rem 0 0;
   padding-left: 1.1rem;
-  color: #51465d;
+  color: var(--software-ink-soft, #51465d);
   font-size: 0.83rem;
   line-height: 1.5;
 }
@@ -584,8 +584,8 @@
 .r26-editor-tab {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 14px;
+  gap: 5px;
+  padding: 0 10px;
   border: 0;
   border-right: 1px solid var(--software-border-subtle, #eae1d9);
   border-bottom: 2px solid transparent;
@@ -593,7 +593,7 @@
   color: var(--r26-muted);
   cursor: pointer;
   font-family: var(--software-mono);
-  font-size: 0.77rem;
+  font-size: 0.73rem;
   font-weight: 500;
   white-space: nowrap;
   transition:
@@ -641,9 +641,10 @@
 }
 
 .r26-file-switcher {
-  min-height: 2rem;
-  max-width: 170px;
-  padding: 0 22px 0 9px;
+  height: 32px;
+  min-height: 32px;
+  max-width: 195px;
+  padding: 4px 10px;
   border: 1px solid var(--r26-line);
   border-radius: 6px;
   background: #fff;
@@ -651,7 +652,6 @@
   font-family: var(--software-mono);
   font-size: 0.74rem;
   cursor: pointer;
-  text-overflow: ellipsis;
 }
 
 .r26-file-switcher:focus-visible {
@@ -1842,6 +1842,22 @@
     grid-column: 2;
     grid-row: 1 / span 6;
   }
+
+  .r26-workspace:not([data-session-state='created']) .r26-editor-panel {
+    height: calc(100dvh - 59px);
+    min-height: 0;
+  }
+
+  .r26-workspace:not([data-session-state='created']) .r26-code-editor {
+    min-height: 0;
+    flex: 1;
+  }
+
+  .r26-workspace:not([data-session-state='created'])
+    .r26-code-mirror
+    .cm-content {
+    min-height: 100%;
+  }
 }
 
 @media (min-width: 54.001rem) and (max-width: 1100px) {
@@ -1861,4 +1877,242 @@
 
 #candidate-brief-content {
   scroll-margin-top: 11rem;
+}
+
+/* ==========================================================================
+   Dual-Theme Surface & Obsidian Plum Dark IDE Overrides for Candidate Workspace
+   ========================================================================== */
+
+.r26-candidate .r26-button-primary {
+  background: var(--software-btn-primary-bg, var(--r26-plum));
+  color: var(--software-btn-primary-fg, #ffffff);
+  border-color: var(--software-btn-primary-bg, var(--r26-plum));
+}
+
+.r26-candidate .r26-button-primary:hover:not(:disabled) {
+  background: var(--software-btn-primary-bg-hover, #43324f);
+  border-color: var(--software-btn-primary-bg-hover, #43324f);
+  color: var(--software-btn-primary-fg, #ffffff);
+}
+
+.r26-candidate .r26-button-secondary {
+  background: var(--software-surface);
+  border-color: var(--software-border);
+  color: var(--software-ink);
+}
+
+.r26-candidate .r26-timer.is-low {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+}
+
+.r26-candidate .r26-notice-error {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+html[data-theme='dark'] .r26-candidate {
+  --r26-ink: #efe7f4;
+  --r26-muted: #b3a2c4;
+  --r26-line: #382849;
+  --r26-surface: #21172b;
+  --r26-canvas: #160f1d;
+  --r26-plum: #8ee3b8;
+  --r26-lilac: #281d35;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-product-tab {
+  color: #211426;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-brand-mark {
+  background: #152b25;
+  color: #8ee3b8;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-task-panel,
+html[data-theme='dark'] .r26-candidate .r26-editor-tabbar,
+html[data-theme='dark'] .r26-candidate .r26-status-bar,
+html[data-theme='dark'] .r26-candidate .r26-execution-panel,
+html[data-theme='dark'] .r26-candidate .r26-file-meta,
+html[data-theme='dark'] .r26-candidate .r26-timer {
+  background: var(--software-surface-subtle);
+  border-color: var(--software-border);
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-timer-track {
+  background: var(--software-border);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-timer-fill {
+  background: #8ee3b8;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-timer.is-low .r26-timer-fill {
+  background: #f3cf7a;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-event-line::before {
+  background: var(--software-border);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-event-marker,
+html[data-theme='dark'] .r26-candidate .r26-editor-panel,
+html[data-theme='dark'] .r26-candidate .r26-editor-tab.is-active,
+html[data-theme='dark'] .r26-candidate .r26-file-switcher,
+html[data-theme='dark'] .r26-candidate .r26-message,
+html[data-theme='dark'] .r26-candidate .r26-editor-empty,
+html[data-theme='dark']
+  .r26-candidate
+  .r26-footer-capabilities[open]
+  .r26-capabilities-body,
+html[data-theme='dark'] .r26-candidate .r26-not-submitted-draft pre,
+html[data-theme='dark'] .r26-candidate .r26-ai-textarea,
+html[data-theme='dark'] .r26-candidate .r26-execution-receipt-details,
+html[data-theme='dark'] .r26-candidate .r26-history-item-btn {
+  background: var(--software-surface);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-editor-tab.is-active {
+  border-bottom-color: #8ee3b8;
+  color: #8ee3b8;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-tree-folder-btn:hover,
+html[data-theme='dark'] .r26-candidate .r26-tree-file-btn:hover:not(:disabled),
+html[data-theme='dark'] .r26-candidate .r26-header-tool:hover,
+html[data-theme='dark'] .r26-candidate .r26-disclosure > summary:hover,
+html[data-theme='dark'] .r26-candidate .r26-footer-capabilities > summary:hover,
+html[data-theme='dark']
+  .r26-candidate
+  .r26-button-secondary:hover:not(:disabled),
+html[data-theme='dark'] .r26-candidate .r26-editor-tab:hover:not(:disabled) {
+  background: #281d35;
+  color: #f2ecf6;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-tree-file-btn.is-active {
+  background: #152b25;
+  color: #8ee3b8;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-disclosure > summary > span,
+html[data-theme='dark'] .r26-candidate .r26-execution-budget-pill,
+html[data-theme='dark'] .r26-candidate .r26-ai-message-candidate {
+  background: #281d35;
+  color: #e9dcf6;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-ai-message-assistant,
+html[data-theme='dark'] .r26-candidate .r26-ai-composer,
+html[data-theme='dark'] .r26-candidate .r26-ai-textarea:disabled,
+html[data-theme='dark'] .r26-candidate .r26-history-item-btn.selected {
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-status-submitted,
+html[data-theme='dark'] .r26-candidate .r26-notice-success,
+html[data-theme='dark'] .r26-candidate .r26-task-panel .r26-notice-success {
+  background: var(--software-status-success-surface);
+  border-color: var(--software-status-success-border);
+  color: var(--software-status-success);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-file-readonly-banner,
+html[data-theme='dark'] .r26-candidate .r26-not-submitted-draft {
+  background: var(--software-status-warning-surface);
+  border-color: var(--software-status-warning-border);
+  color: var(--software-status-warning);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-not-submitted-draft p {
+  color: #e6d39a;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-ai-message-failed {
+  background: var(--software-status-danger-surface);
+  border-color: var(--software-status-danger-border);
+  color: var(--software-status-danger);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-execution-state-badge.state-never {
+  background: #281d35;
+  color: #d4c8df;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-execution-state-badge.state-running,
+html[data-theme='dark'] .r26-candidate .r26-receipt-badge-real {
+  background: var(--software-status-info-surface);
+  border-color: var(--software-status-info-border);
+  color: var(--software-status-info);
+}
+
+html[data-theme='dark']
+  .r26-candidate
+  .r26-execution-state-badge.state-completed,
+html[data-theme='dark'] .r26-candidate .r26-cleanup-pill.cleanup-clean {
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-execution-state-badge.state-failed,
+html[data-theme='dark'] .r26-candidate .r26-execution-state-badge.state-unknown,
+html[data-theme='dark'] .r26-candidate .r26-execution-state-badge.state-error,
+html[data-theme='dark'] .r26-candidate .r26-cleanup-pill.cleanup-unknown {
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+html[data-theme='dark']
+  .r26-candidate
+  .r26-execution-state-badge.state-timed_out,
+html[data-theme='dark'] .r26-candidate .r26-cleanup-pill.cleanup-resource_leak {
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
+}
+
+html[data-theme='dark'] .r26-candidate .r26-receipt-badge-synthetic {
+  background: #281d35;
+  border-color: #4a3562;
+  color: #d5c1ee;
+}
+
+/* Obsidian Plum dark IDE surface for CodeMirror editor inside Candidate Workspace */
+html[data-theme='dark'] .r26-candidate .r26-code-editor,
+html[data-theme='dark'] .r26-candidate .r26-code-mirror .cm-editor,
+html[data-theme='dark'] .r26-candidate .r26-code-mirror .cm-scroller {
+  background: #160e1f !important;
+  color: #efe7f4;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-code-mirror .cm-gutters {
+  background: #110a18 !important;
+  color: #7d6b91 !important;
+  border-right: 1px solid #382849 !important;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-code-mirror .cm-activeLine {
+  background: rgba(142, 227, 184, 0.08) !important;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-code-mirror .cm-activeLineGutter {
+  background: #1e142b !important;
+  color: #8ee3b8 !important;
+}
+
+html[data-theme='dark'] .r26-candidate .r26-code-mirror .cm-cursor {
+  border-left-color: #8ee3b8 !important;
+}
+
+html[data-theme='dark']
+  .r26-candidate
+  .r26-code-mirror
+  .cm-selectionBackground {
+  background: rgba(142, 227, 184, 0.22) !important;
 }

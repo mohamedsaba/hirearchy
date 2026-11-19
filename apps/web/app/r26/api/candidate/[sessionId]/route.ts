@@ -1,3 +1,4 @@
+import { withHiringCandidateSession } from '../../../../../src/staging/browser';
 import {
   r26CandidateAction,
   r26CandidateRead,
@@ -13,10 +14,14 @@ export const revalidate = 0;
 
 export async function GET(request: Request, context: CandidateRouteContext) {
   const { sessionId } = await context.params;
-  return r26CandidateRead(request, sessionId);
+  return withHiringCandidateSession(request, sessionId, () =>
+    r26CandidateRead(request, sessionId),
+  );
 }
 
 export async function POST(request: Request, context: CandidateRouteContext) {
   const { sessionId } = await context.params;
-  return r26CandidateAction(request, sessionId);
+  return withHiringCandidateSession(request, sessionId, () =>
+    r26CandidateAction(request, sessionId),
+  );
 }

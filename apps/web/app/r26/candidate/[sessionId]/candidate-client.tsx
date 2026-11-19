@@ -32,9 +32,28 @@ import type {
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import {
+  ThemeToggle,
+  useHirearchyTheme,
+} from '../../../_components/theme-toggle';
 import './candidate-workspace.css';
 
-type CandidateClientProps = Readonly<{ sessionId: string }>;
+export type CandidateAccountGate = Readonly<{
+  state:
+    | 'ready'
+    | 'sign_in_required'
+    | 'profile_required'
+    | 'email_mismatch'
+    | 'unavailable';
+  signedInEmail?: string;
+  candidateName?: string;
+  candidateCode?: string;
+}>;
+
+type CandidateClientProps = Readonly<{
+  sessionId: string;
+  accountGate?: CandidateAccountGate;
+}>;
 
 type ApiFailure = Error & Readonly<{ status?: number; code?: string }>;
 
@@ -256,7 +275,14 @@ function makeDraft(file: R26CandidateFileView): Draft {
   };
 }
 
-export function R26CandidateClient({ sessionId }: CandidateClientProps) {
+export function R26CandidateClient({
+  sessionId,
+  accountGate,
+}: CandidateClientProps) {
+  const activeTheme = useHirearchyTheme();
+  const isAccountGateBlocked = Boolean(
+    accountGate && accountGate.state !== 'ready',
+  );
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [view, setView] = useState<R26CandidateGetResponse | null>(null);
   const viewRef = useRef<R26CandidateGetResponse | null>(null);
@@ -312,7 +338,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               Authorization: `Bearer ${token}`,
             },
             cache: 'no-store',
-            credentials: 'omit',
+            credentials: 'same-origin',
             referrerPolicy: 'no-referrer',
           },
         );
@@ -358,7 +384,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               candidatePrompt: prompt,
             }),
             cache: 'no-store',
-            credentials: 'omit',
+            credentials: 'same-origin',
             referrerPolicy: 'no-referrer',
           },
         );
@@ -420,7 +446,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               Authorization: `Bearer ${token}`,
             },
             cache: 'no-store',
-            credentials: 'omit',
+            credentials: 'same-origin',
             referrerPolicy: 'no-referrer',
           },
         );
@@ -488,7 +514,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           },
           ...(body ? { body: JSON.stringify(body) } : {}),
           cache: 'no-store',
-          credentials: 'omit',
+          credentials: 'same-origin',
           referrerPolicy: 'no-referrer',
         },
       );
@@ -507,8 +533,10 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
     const fragment = window.location.hash.slice(1);
     if (fragment) {
       try {
-        const decoded = decodeURIComponent(fragment);
-        if (isValidToken(decoded)) fragmentToken = decoded;
+        const rawFragmentToken = fragment.startsWith('token=')
+          ? new URLSearchParams(fragment).get('token')
+          : decodeURIComponent(fragment);
+        if (isValidToken(rawFragmentToken)) fragmentToken = rawFragmentToken;
       } catch {
         fragmentToken = null;
       }
@@ -545,6 +573,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   }, [sessionId]);
 
   useEffect(() => {
+    if (isAccountGateBlocked) {
+      let active = true;
+      queueMicrotask(() => {
+        if (active) setLoading(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
     if (token === undefined) return;
     if (!token) {
       let active = true;
@@ -771,7 +808,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
             expectedWorkspaceDigest: view.workspaceDigest,
           }),
           cache: 'no-store',
-          credentials: 'omit',
+          credentials: 'same-origin',
           referrerPolicy: 'no-referrer',
         },
       );
@@ -1303,6 +1340,124 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
       </details>
     ) : null;
 
+  if (isAccountGateBlocked && accountGate) {
+    const returnUrl = `/r26/candidate/${encodeURIComponent(sessionId)}`;
+    return (
+      <div className="hiring-gate-shell software-product">
+        <div className="hiring-gate-card">
+          <div className="hiring-gate-topbar">
+            <span className="hiring-eyebrow">Hirearchy Software</span>
+            <ThemeToggle variant="pill" />
+          </div>
+          {accountGate.state === 'sign_in_required' ? (
+            <>
+              <h1 style={{ margin: 0, fontSize: '24px' }}>
+                Sign in to start your assessment
+              </h1>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--software-muted)',
+                  margin: 0,
+                }}
+              >
+                Sign in or create a Hirearchy Software candidate account using
+                the email address invited to this assessment. Your assessment
+                link stays preserved automatically.
+              </p>
+              <div className="hiring-header-actions">
+                <a
+                  className="hiring-btn hiring-btn-primary"
+                  href={`/candidate/login?next=${encodeURIComponent(returnUrl)}`}
+                >
+                  Sign in
+                </a>
+                <a
+                  className="hiring-btn"
+                  href={`/candidate/signup?next=${encodeURIComponent(returnUrl)}`}
+                >
+                  Create Candidate Account
+                </a>
+              </div>
+            </>
+          ) : accountGate.state === 'profile_required' ? (
+            <>
+              <h1 style={{ margin: 0, fontSize: '24px' }}>
+                Complete your candidate profile
+              </h1>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--software-muted)',
+                  margin: 0,
+                }}
+              >
+                Signed in as <strong>{accountGate.signedInEmail}</strong>. Add
+                your name to finish setting up your candidate profile.
+              </p>
+              <div className="hiring-header-actions">
+                <a
+                  className="hiring-btn hiring-btn-primary"
+                  href={`/candidate?setup=1&next=${encodeURIComponent(returnUrl)}`}
+                >
+                  Complete profile
+                </a>
+              </div>
+            </>
+          ) : accountGate.state === 'unavailable' ? (
+            <>
+              <h1>Assessment unavailable</h1>
+              <p>Open an active invitation from your assessments.</p>
+              <a className="hiring-btn hiring-btn-primary" href="/candidate">
+                My assessments
+              </a>
+            </>
+          ) : (
+            <>
+              <h1 style={{ margin: 0, fontSize: '24px' }}>
+                Use the email from your invitation
+              </h1>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--software-muted)',
+                  margin: 0,
+                }}
+              >
+                You are signed in as{' '}
+                <strong>{accountGate.signedInEmail}</strong>. Switch to the
+                account that received this invitation.
+              </p>
+              <div className="hiring-header-actions">
+                <button
+                  type="button"
+                  className="hiring-btn hiring-btn-primary"
+                  onClick={() => {
+                    void fetch('/api/candidate-portal', {
+                      method: 'POST',
+                      credentials: 'same-origin',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'logout' }),
+                    }).finally(() => {
+                      window.location.assign(
+                        `/candidate/login?next=${encodeURIComponent(returnUrl)}`,
+                      );
+                    });
+                  }}
+                >
+                  Switch account
+                </button>
+                <a className="hiring-btn" href="/candidate">
+                  My assessments
+                </a>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="r26-candidate software-product">
       <header className="r26-header">
@@ -1316,6 +1471,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           </span>
         </div>
         <div className="r26-header-status">
+          {accountGate ? <ThemeToggle variant="header" /> : null}
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
             <div
               className={`r26-timer ${timerLow ? 'is-low' : ''}`}
@@ -1830,6 +1986,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
             >
               <CodeMirror
                 aria-label="Edit file"
+                theme={activeTheme}
                 basicSetup={{
                   lineNumbers: true,
                   foldGutter: false,

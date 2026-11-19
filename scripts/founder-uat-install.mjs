@@ -183,8 +183,15 @@ async function readFounderUatDatabaseCounts(client) {
   const output = {
     authUsers: counts.get('auth.users') ?? 0n,
     authSessions: counts.get('auth.sessions') ?? 0n,
-    applicationPrincipals: counts.get('hirearchy.application_principals') ?? 0n,
-    organizations: counts.get('hirearchy.organizations') ?? 0n,
+    applicationPrincipals: sum([
+      'hirearchy.application_principals',
+      'hirearchy.candidate_profiles',
+    ]),
+    organizations: sum([
+      'hirearchy.organizations',
+      'hirearchy.organization_plans',
+      'hirearchy.organization_candidate_credits',
+    ]),
     organizationMemberships:
       counts.get('hirearchy.organization_memberships') ?? 0n,
     assessments: sum([
@@ -192,9 +199,11 @@ async function readFounderUatDatabaseCounts(client) {
       'hirearchy.assessment_drafts',
       'hirearchy.assessment_validated_versions',
       'hirearchy.assessment_issuances',
+      'hirearchy.assessment_library_entries',
     ]),
     candidateSessions: sum([
       'hirearchy.assessment_sessions',
+      'hirearchy.hiring_session_metadata',
       'hirearchy.candidate_workspace_files',
       'hirearchy.candidate_file_revisions',
       'hirearchy.candidate_session_events',
@@ -214,6 +223,8 @@ async function readFounderUatDatabaseCounts(client) {
       'hirearchy.evaluator_review_packets',
       'hirearchy.evaluator_review_packet_history',
       'hirearchy.reviewer_assignments',
+      'hirearchy.hiring_decisions',
+      'hirearchy.hiring_second_opinions',
     ]),
     invitations: sum([
       'hirearchy.organization_invitations',
@@ -226,13 +237,18 @@ async function readFounderUatDatabaseCounts(client) {
             'auth.users',
             'auth.sessions',
             'hirearchy.application_principals',
+            'hirearchy.candidate_profiles',
             'hirearchy.organizations',
+            'hirearchy.organization_plans',
+            'hirearchy.organization_candidate_credits',
             'hirearchy.organization_memberships',
             'hirearchy.assessment_definitions',
             'hirearchy.assessment_drafts',
             'hirearchy.assessment_validated_versions',
             'hirearchy.assessment_issuances',
+            'hirearchy.assessment_library_entries',
             'hirearchy.assessment_sessions',
+            'hirearchy.hiring_session_metadata',
             'hirearchy.candidate_workspace_files',
             'hirearchy.candidate_file_revisions',
             'hirearchy.candidate_session_events',
@@ -248,6 +264,8 @@ async function readFounderUatDatabaseCounts(client) {
             'hirearchy.evaluator_review_packets',
             'hirearchy.evaluator_review_packet_history',
             'hirearchy.reviewer_assignments',
+            'hirearchy.hiring_decisions',
+            'hirearchy.hiring_second_opinions',
             'hirearchy.organization_invitations',
             'hirearchy.onboarding_request_receipts',
           ].includes(name),
@@ -325,8 +343,8 @@ async function main() {
   try {
     const result = await applyMigrations(migrator);
     assert(
-      result.appliedVersions.includes('0017'),
-      'Founder UAT requires migration 0017',
+      result.appliedVersions.includes('0018'),
+      'Founder UAT requires migration 0018',
     );
     console.log(
       `Migrations verified through ${result.appliedVersions.at(-1)} (${result.appliedVersions.length} total).`,

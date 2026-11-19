@@ -1,4 +1,5 @@
 import type { R27Evidence } from '../../../../database/postgres/r27/contract.mjs';
+import { extractJsonFromLlmText } from '../ai/kimi-client';
 import {
   resolveAiReviewProviderConfig,
   type ResolvedAiReviewProvider,
@@ -12,40 +13,60 @@ import {
 
 export * from './ai-review-contract';
 
+export interface HiringReviewRoleContext {
+  readonly targetRole?: string;
+  readonly experienceLevel?: string;
+  readonly skills?: readonly string[];
+}
+
 export interface GenerateR27AiReviewOptions {
   preset?: string;
   customModelId?: string;
   forcePreview?: boolean;
   fetchImpl?: typeof fetch;
   providerOverride?: ResolvedAiReviewProvider;
+  hiringContext?: HiringReviewRoleContext;
 }
 
-const MAX_PROMPT_DIFF_CHARS = 14000;
+const MAX_PROMPT_DIFF_CHARS = 16000;
 
-function extractJsonObject(rawText: string): Record<string, unknown> | null {
-  const trimmed = rawText.trim();
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const candidate = fencedMatch ? fencedMatch[1].trim() : trimmed;
-  try {
-    const parsed: unknown = JSON.parse(candidate);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    const start = candidate.indexOf('{');
-    const end = candidate.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      try {
-        const sliced: unknown = JSON.parse(candidate.slice(start, end + 1));
-        if (sliced && typeof sliced === 'object' && !Array.isArray(sliced)) {
-          return sliced as Record<string, unknown>;
-        }
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
+function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0s';
+  const totalSec = Math.round(ms / 1000);
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+function buildChronologyWithTimingDeltas(evidence: R27Evidence): string[] {
+  const startMs = Date.parse(evidence.activatedAt || evidence.createdAt);
+  let prevMs = startMs;
+  return evidence.events.map((ev) => {
+    const ts = Date.parse(ev.timestamp);
+    const offsetStr =
+      Number.isFinite(ts) && Number.isFinite(startMs)
+        ? `+${formatDurationMs(ts - startMs)}`
+        : '+?';
+    const deltaStr =
+      Number.isFinite(ts) && Number.isFinite(prevMs)
+        ? `Δ+${formatDurationMs(ts - prevMs)}`
+        : 'Δ+?';
+    if (Number.isFinite(ts)) prevMs = ts;
+    const payload = (ev.payload ?? {}) as Record<string, unknown>;
+    const filePath =
+      typeof payload.path === 'string'
+        ? ` file=${payload.path}`
+        : typeof payload.filePath === 'string'
+          ? ` file=${payload.filePath}`
+          : '';
+    const version =
+      payload.version !== undefined ? ` v${String(payload.version)}` : '';
+    const promptChars =
+      payload.promptChars !== undefined
+        ? ` promptChars=${String(payload.promptChars)}`
+        : '';
+    return `#${ev.sequence} [${offsetStr} | ${deltaStr}] ${ev.type}${filePath}${version}${promptChars}`;
+  });
 }
 
 function normalizeStringArray(
@@ -97,7 +118,10 @@ function normalizeConfidenceLabel(
   return fallback;
 }
 
-function buildReviewPromptPayload(evidence: R27Evidence) {
+function buildReviewPromptPayload(
+  evidence: R27Evidence,
+  hiringContext?: HiringReviewRoleContext,
+) {
   const summary = computeEvidenceMetricsAndDiffSummary(evidence);
   const diffSections: string[] = [];
   let remaining = MAX_PROMPT_DIFF_CHARS;
@@ -114,32 +138,51 @@ function buildReviewPromptPayload(evidence: R27Evidence) {
     }
   }
 
+  const timelineLines = buildChronologyWithTimingDeltas(evidence);
+
   const executionLines = (evidence.executions ?? []).map((run, index) => {
     const outSnippet = (run.stdout ?? '').slice(0, 400).trim();
     return `${index + 1}. recipe=${run.recipeId} status=${run.status} exitCode=${run.exitCode ?? 'null'} durationMs=${run.durationMs ?? 'null'}${outSnippet ? ` stdout="${outSnippet}"` : ''}`;
   });
 
-  const aiLines = (evidence.aiInteractions ?? []).map(
-    (item, index) =>
-      `${index + 1}. prompt="${item.candidatePrompt.slice(0, 240)}" status=${item.status}`,
-  );
+  const aiLines = (evidence.aiInteractions ?? []).map((item, index) => {
+    const respSnippet = (item.assistantResponse ?? '').slice(0, 180).trim();
+    return `${index + 1}. [seq ${item.sequenceStart}] prompt="${item.candidatePrompt.slice(0, 260)}" status=${item.status}${respSnippet ? ` assistantSummary="${respSnippet}"` : ''}`;
+  });
 
   const systemPrompt = [
-    'You are the Hirearchy Software AI Candidate Review Assistant.',
-    'Analyze ONLY the observed candidate engineering evidence provided.',
+    'You are a Principal Staff Engineer performing a deep, forensic, evidence-grounded technical review for Hirearchy Software.',
+    'You are given ONLY observable candidate engineering records: chronological session events WITH exact timing deltas between actions, file revisions and unified diffs against starter files, recorded verification runs, recorded workspace AI assistant conversations, and role/acceptance requirements.',
+    'Analyze between the lines — rigorously and fairly:',
+    '- Look closely at timing cadences & intervals (Δ): Did the candidate explore and save incrementally across modules, pause to think/debug before targeted edits, or make a single abrupt large dump near the end? Note timing observations strictly as observable patterns without asserting unobservable mental states or making fabricated accusations.',
+    '- Inspect code correctness, edge-case coverage, invariants, regression safety, and test changes directly from the diffs.',
+    '- Note whether AI assistant usage (if present) was structured, focused on clarifying invariants, or superficial — without penalizing neutral AI use.',
+    '- Cross-check every single acceptance criterion and role requirement against actual submitted code.',
+    'NEVER invent files, symbols, or test passes that are not in the evidence. Cite exact file paths, event sequences, and time offsets.',
     'Respond strictly with a single JSON object (no markdown outside JSON) with keys:',
     '- "score": integer 0 to 100',
     '- "verdict": "accept" or "reject"',
     '- "confidenceLabel": "High Confidence" | "Moderate Confidence" | "Low Confidence"',
-    '- "headline": crisp 1-sentence executive summary (max 140 chars)',
-    '- "rationale": 2-4 sentences explaining clearly WHY the candidate should be accepted or rejected, citing observed files, diffs, or verification outcomes',
-    '- "strengths": array of 2-5 concise factual bullets citing observed files/evidence',
-    '- "weaknesses": array of 1-4 concise factual bullets identifying gaps, missing tests, or edge cases',
-    '- "evidenceHighlights": array of { "label": string, "detail": string } (up to 3 items)',
+    '- "headline": crisp 1-sentence executive engineering summary (max 150 chars)',
+    '- "rationale": 3-5 analytical sentences explaining clearly WHY the candidate should be accepted or rejected, citing observed files, diffs, timing progression, and acceptance criteria',
+    '- "strengths": array of 2-5 specific factual engineering strengths citing files/diffs/events',
+    '- "weaknesses": array of 1-4 specific factual engineering gaps, edge-case risks, or verification omissions',
+    '- "timingInsights": array of 1-3 concrete observations about the candidate\'s chronological workflow & time intervals between edits/saves/AI prompts',
+    '- "requirementBreakdown": array of { "requirement": string, "status": "met" | "partial" | "not_observed", "evidence": string } checking each acceptance criterion & key role skill',
+    '- "evidenceHighlights": array of { "label": string, "detail": string } (up to 4 items)',
   ].join('\n');
+
+  const roleHeader = hiringContext
+    ? [
+        `Target Role: ${hiringContext.targetRole || 'Not specified'}`,
+        `Experience Level: ${hiringContext.experienceLevel || 'Not specified'}`,
+        `Target Skills: ${hiringContext.skills?.length ? hiringContext.skills.join(', ') : 'Not specified'}`,
+      ]
+    : [];
 
   const userPrompt = [
     `Scenario: ${evidence.scenario.title} (v${evidence.scenario.version})`,
+    ...roleHeader,
     `Session Status: ${evidence.status}, Closure: ${evidence.closureReason}, Elapsed: ${summary.elapsedMinutes ?? 'unknown'} minutes`,
     `Files Submitted: ${summary.submittedFilesCount}, Modified Files: ${summary.modifiedFilesCount}, Net Diff: +${summary.linesAdded} / -${summary.linesRemoved}`,
     `Timeline Events: ${summary.timelineEventsCount}, Save Checkpoints: ${summary.saveEventsCount}`,
@@ -152,13 +195,16 @@ function buildReviewPromptPayload(evidence: R27Evidence) {
       ? summary.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
       : '(Not listed)',
     '',
+    'Chronological Timeline & Timing Deltas:',
+    timelineLines.length ? timelineLines.join('\n') : '(No events)',
+    '',
     'Execution Runs:',
     executionLines.length ? executionLines.join('\n') : '(None recorded)',
     '',
-    'AI Assistant Prompts:',
+    'Recorded Candidate AI Assistant Conversations:',
     aiLines.length ? aiLines.join('\n') : '(None recorded)',
     '',
-    'Code Diffs:',
+    'Code Diffs (Starter Baseline vs Submitted):',
     diffSections.length
       ? diffSections.join('\n\n')
       : '(No file changes relative to starter baseline)',
@@ -190,7 +236,10 @@ export async function generateR27AiCandidateReview(
   }
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const { systemPrompt, userPrompt } = buildReviewPromptPayload(evidence);
+  const { systemPrompt, userPrompt } = buildReviewPromptPayload(
+    evidence,
+    options.hiringContext,
+  );
 
   try {
     const headers: Record<string, string> = {
@@ -205,11 +254,11 @@ export async function generateR27AiCandidateReview(
     const response = await fetchImpl(resolved.endpoint, {
       method: 'POST',
       headers,
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(35_000),
       body: JSON.stringify({
         model: resolved.modelId,
         temperature: 0.2,
-        max_tokens: 1200,
+        max_tokens: 1800,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -238,7 +287,7 @@ export async function generateR27AiCandidateReview(
       });
     }
 
-    const parsed = extractJsonObject(content);
+    const parsed = extractJsonFromLlmText(content);
     if (!parsed) {
       return buildDeterministicEvidencePreviewReport(evidence, {
         modelId: resolved.modelId,
@@ -261,7 +310,7 @@ export async function generateR27AiCandidateReview(
         : baselineReport.headline;
     const rationale =
       typeof parsed.rationale === 'string' && parsed.rationale.trim()
-        ? parsed.rationale.trim().slice(0, 1600)
+        ? parsed.rationale.trim().slice(0, 2000)
         : baselineReport.rationale;
 
     const evidenceHighlights = Array.isArray(parsed.evidenceHighlights)
@@ -275,6 +324,36 @@ export async function generateR27AiCandidateReview(
           )
           .slice(0, 4)
       : baselineReport.evidenceHighlights;
+
+    const timingInsights = Array.isArray(parsed.timingInsights)
+      ? parsed.timingInsights
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+          .slice(0, 4)
+      : undefined;
+
+    const requirementBreakdown = Array.isArray(parsed.requirementBreakdown)
+      ? parsed.requirementBreakdown
+          .filter(
+            (
+              item,
+            ): item is {
+              requirement: string;
+              status: 'met' | 'partial' | 'not_observed';
+              evidence: string;
+            } =>
+              Boolean(item) &&
+              typeof item === 'object' &&
+              typeof (item as { requirement?: unknown }).requirement ===
+                'string' &&
+              ['met', 'partial', 'not_observed'].includes(
+                String((item as { status?: unknown }).status),
+              ) &&
+              typeof (item as { evidence?: unknown }).evidence === 'string',
+          )
+          .slice(0, 10)
+      : undefined;
 
     return {
       ...baselineReport,
@@ -301,6 +380,8 @@ export async function generateR27AiCandidateReview(
         evidenceHighlights.length > 0
           ? evidenceHighlights
           : baselineReport.evidenceHighlights,
+      ...(timingInsights?.length ? { timingInsights } : {}),
+      ...(requirementBreakdown?.length ? { requirementBreakdown } : {}),
       provider: {
         providerId: resolved.providerId === 'nvidia' ? 'nvidia' : 'openrouter',
         modelId: resolved.modelId,

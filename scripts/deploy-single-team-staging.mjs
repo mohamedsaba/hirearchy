@@ -37,7 +37,7 @@ if (!preflightPassed) {
 }
 
 // 2. Database Migration Engine
-console.log('\n--- Step 2: Database Migration Check (0001 - 0017) ---');
+console.log('\n--- Step 2: Database Migration Check (0001 - 0018) ---');
 const migratorUrl = process.env.STAGING_MIGRATOR_DATABASE_URL;
 
 assert(migratorUrl, 'Database migrator connection URL is required');
@@ -54,8 +54,8 @@ try {
     `✓ Schema migrations current up to: ${migrationRes.appliedVersions[migrationRes.appliedVersions.length - 1]} (Total: ${migrationRes.appliedVersions.length})`,
   );
   assert(
-    migrationRes.appliedVersions.includes('0017'),
-    'Migration 0017_self_service_onboarding is required',
+    migrationRes.appliedVersions.includes('0018'),
+    'Migration 0018_hiring_platform is required',
   );
 } finally {
   await migratorClient.end().catch(() => {});

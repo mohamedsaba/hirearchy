@@ -19,7 +19,7 @@ export const OPENROUTER_MODEL_ID = 'google/gemini-3.8-flash';
 export const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT =
   'https://openrouter.ai/api/v1/chat/completions';
 export const NVIDIA_PROVIDER_ID = 'nvidia-nim';
-export const NVIDIA_MODEL_ID = 'nvidia/nemotron-3-super-120b-a12b';
+export const NVIDIA_MODEL_ID = 'moonshotai/kimi-k3.1-pro';
 export const NVIDIA_CHAT_COMPLETIONS_ENDPOINT =
   'https://integrate.api.nvidia.com/v1/chat/completions';
 

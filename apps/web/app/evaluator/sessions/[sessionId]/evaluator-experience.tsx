@@ -8,6 +8,7 @@ import type {
 } from '../../../../src/evaluator/evaluator-review-presentation';
 import type { EvaluatorAiConversation } from '../../../../src/evaluator/evaluator-ai-conversations';
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
+import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
 import { EvaluatorReviewWorkspace } from './evaluator-review-workspace';
 import { SoftwareProductHeader } from '../../software-product-header';
 import '../../evaluator-product.css';
@@ -26,6 +27,7 @@ type R27EvaluatorExperienceProps = Readonly<{
   sessionId: string;
   readOnly: true;
   r27Evidence: R27Evidence;
+  hiringReviewContext?: SessionHiringReviewContext | null;
 }>;
 
 type EvaluatorExperienceProps =
@@ -51,6 +53,7 @@ export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
             sessionId={props.sessionId}
             readOnly
             r27Evidence={props.r27Evidence}
+            hiringReviewContext={props.hiringReviewContext}
           />
         </div>
       </div>

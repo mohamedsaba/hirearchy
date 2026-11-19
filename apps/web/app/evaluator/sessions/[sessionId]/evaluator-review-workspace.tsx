@@ -31,8 +31,11 @@ import {
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
+import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
+import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { R27AiReviewPanel } from './ai-review-panel';
+import { HiringDecisionPanel } from './hiring-decision-panel';
 import { computeDiffStats } from './code-diff-viewer';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
@@ -1221,12 +1224,19 @@ type R27EvaluatorReviewWorkspaceProps = Readonly<{
   sessionId: string;
   readOnly: true;
   r27Evidence: R27Evidence;
+  hiringReviewContext?: SessionHiringReviewContext | null;
 }>;
 
 export const EvaluatorReviewWorkspace = (
   props: LegacyEvaluatorReviewWorkspaceProps | R27EvaluatorReviewWorkspaceProps,
 ) => {
   const { sessionId } = props;
+  const hiringReviewContext =
+    'hiringReviewContext' in props ? (props.hiringReviewContext ?? null) : null;
+  const aiReviewPlanLocked = Boolean(
+    hiringReviewContext &&
+    !hasPlanFeature(hiringReviewContext.plan.planTier, 'aiCandidateReview'),
+  );
   const initialR27Evidence = 'r27Evidence' in props ? props.r27Evidence : null;
   const [r27Evidence, setR27Evidence] = useState<R27Evidence | null>(
     initialR27Evidence,
@@ -1701,22 +1711,31 @@ export const EvaluatorReviewWorkspace = (
             {mode === 'Review' && readOnly ? (
               r27Evidence ? (
                 <div className="r27-review-stack">
-                  {r210IsEnabled() ? (
-                    <R210ReviewPacketPanel
-                      organizationId={r27Evidence.organizationId}
-                      sessionId={r27Evidence.sessionId}
-                      reviewer={r27Evidence.reviewer}
-                      r27Evidence={r27Evidence}
-                      sources={sources}
-                      onOpenEvidence={openEvidence}
-                    />
-                  ) : null}
+                  <div className="r27-human-review">
+                    {r210IsEnabled() ? (
+                      <R210ReviewPacketPanel
+                        organizationId={r27Evidence.organizationId}
+                        sessionId={r27Evidence.sessionId}
+                        reviewer={r27Evidence.reviewer}
+                        r27Evidence={r27Evidence}
+                        sources={sources}
+                        onOpenEvidence={openEvidence}
+                      />
+                    ) : null}
+                    {hiringReviewContext ? (
+                      <HiringDecisionPanel
+                        initialContext={hiringReviewContext}
+                      />
+                    ) : null}
+                  </div>
                   <R27AiReviewPanel
                     organizationId={r27Evidence.organizationId}
                     sessionId={r27Evidence.sessionId}
                     evidence={r27Evidence}
                     report={aiReviewReport}
                     onReportChange={setAiReviewReport}
+                    planLocked={aiReviewPlanLocked}
+                    planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
                   />
                 </div>
               ) : (
