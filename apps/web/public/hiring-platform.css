@@ -75,19 +75,6 @@ html:not([data-theme='dark']) .hiring-theme-toggle-icon {
   color: #5b3a7a;
 }
 
-.hiring-theme-toggle-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: #4e2b6b;
-  box-shadow: 0 0 0 2px rgba(78, 43, 107, 0.16);
-}
-
-html[data-theme='dark'] .hiring-theme-toggle-dot {
-  background: var(--software-mint);
-  box-shadow: 0 0 0 2px rgba(142, 227, 184, 0.25);
-}
-
 html[data-theme='dark']
   .software-product-header
   .software-nav-link[aria-current='page']:hover {
@@ -474,17 +461,17 @@ html[data-theme='dark']
   font-size: 14px;
 }
 
-.hiring-input-wrap.has-leading-icon input {
-  padding-left: 38px;
+.software-product .hiring-input-wrap.has-leading-icon input {
+  padding-left: 40px;
 }
 
-.hiring-input-wrap.has-trailing-toggle input {
+.software-product .hiring-input-wrap.has-trailing-toggle input {
   padding-right: 42px;
 }
 
 .hiring-input-icon {
   position: absolute;
-  left: 12px;
+  left: 13px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -492,28 +479,31 @@ html[data-theme='dark']
   pointer-events: none;
 }
 
-.hiring-password-reveal {
+.software-product button.hiring-password-reveal {
   position: absolute;
-  right: 8px;
+  right: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  min-height: 0;
   padding: 0;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--software-muted);
+  box-shadow: none;
   cursor: pointer;
   transition:
     color 140ms ease,
     background-color 140ms ease;
 }
 
-.hiring-password-reveal:hover {
+.software-product button.hiring-password-reveal:hover {
   color: var(--software-ink);
   background: var(--software-surface-subtle);
+  transform: none;
 }
 
 .hiring-password-reveal:focus-visible {
@@ -680,241 +670,64 @@ html[data-theme='dark']
   letter-spacing: -0.02em;
 }
 
-/* Split Architectural Editorial Auth Portals (Candidate & Evaluator)
+/* Editorial Auth Portals (Candidate & Evaluator — Unified Flat Brand Cards)
    ========================================================================== */
 
 .hiring-auth-page {
   min-height: 100vh;
-  background: var(--software-canvas);
-  color: var(--software-ink);
 }
 
-.hiring-auth-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  min-height: 100vh;
+.hiring-evaluator-auth-content {
+  max-width: 1060px;
 }
 
-.hiring-auth-visual {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: clamp(32px, 5vw, 60px);
-  background: linear-gradient(155deg, #160e20 0%, #241433 55%, #190e26 100%);
-  color: #f5efe6;
+.hiring-evaluator-signin-panel {
+  max-width: 1000px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
 }
 
-.hiring-auth-aura {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  filter: blur(56px);
-  animation: hiringAuraDrift 11s ease-in-out infinite;
-}
-
-.hiring-auth-aura--mint {
-  width: 340px;
-  height: 340px;
-  top: -80px;
-  right: -70px;
-  background: rgba(142, 227, 184, 0.16);
-}
-
-.hiring-auth-aura--plum {
-  width: 380px;
-  height: 380px;
-  bottom: -110px;
-  left: -90px;
-  background: rgba(173, 127, 232, 0.18);
-  animation-delay: -5s;
-}
-
-.hiring-auth-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 38px 38px;
-  pointer-events: none;
-}
-
-.hiring-auth-visual-inner {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 32px;
-  height: 100%;
-  max-width: 520px;
-}
-
-.hiring-auth-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.hiring-auth-brand-name {
-  font-size: 27px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  color: #f5efe6;
-}
-
-.hiring-auth-hero-copy {
+.hiring-evaluator-copy-inner {
   display: grid;
   gap: 14px;
 }
 
-.hiring-auth-hero-copy h1 {
+.hiring-evaluator-copy-inner > h1 {
   margin: 0;
   color: #f5efe6;
-  font-size: clamp(32px, 4vw, 48px);
-  font-weight: 650;
-  letter-spacing: -0.04em;
-  line-height: 1.04;
 }
 
-.hiring-auth-hero-copy p {
+.hiring-evaluator-copy-inner > p:not(.software-eyebrow) {
   margin: 0;
   color: #d6c8e0;
-  font-size: 15.5px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
-.hiring-auth-preview-card {
-  padding: 18px 20px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(20, 12, 29, 0.68);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 18px 40px rgba(8, 4, 14, 0.35);
-  animation: hiringFadeUp 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.hiring-auth-preview-card--compact {
-  margin-top: 26px;
-}
-
-.hiring-auth-preview-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.hiring-auth-preview-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #f5efe6;
-}
-
-.hiring-auth-preview-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(142, 227, 184, 0.15);
-  color: #8ee3b8;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.hiring-live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #8ee3b8;
-  box-shadow: 0 0 0 3px rgba(142, 227, 184, 0.24);
-}
-
-.hiring-auth-preview-list {
+.hiring-auth-facts {
   display: grid;
-  gap: 10px;
-  margin: 12px 0 0;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
 }
 
-.hiring-auth-preview-list > div {
+.hiring-auth-facts > div {
   display: grid;
   grid-template-columns: 124px minmax(0, 1fr);
   gap: 10px;
   align-items: baseline;
-  font-size: 12.5px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.hiring-auth-preview-list dt {
-  color: #b4a1c7;
-  font-weight: 600;
-}
-
-.hiring-auth-preview-list dd {
-  margin: 0;
-  color: #f5efe6;
-}
-
-.hiring-auth-corner-bracket {
-  width: 96px;
-  height: 26px;
-  border-bottom: 7px solid #8ee3b8;
-  border-left: 7px solid #8ee3b8;
-  border-radius: 0 0 0 20px;
-}
-
-.hiring-auth-main {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: clamp(20px, 3vw, 32px) clamp(20px, 4vw, 48px);
-}
-
-.hiring-auth-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.hiring-auth-portal-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--software-border);
-  background: var(--software-surface);
-  color: var(--software-ink);
-  font-size: 12px;
+.hiring-auth-facts dt {
+  color: #8ee3b8;
   font-weight: 650;
 }
 
-.hiring-auth-card-wrap {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 28px 0;
-}
-
-.hiring-auth-card {
-  width: 100%;
-  max-width: 440px;
-  display: grid;
-  gap: 20px;
-  padding: clamp(26px, 4vw, 38px);
-  border: 1px solid var(--software-border);
-  border-radius: 20px;
-  background: var(--software-surface);
-  box-shadow: var(--software-shadow-elevated);
-  animation: hiringFadeUp 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.hiring-auth-facts dd {
+  margin: 0;
+  color: #ece2f4;
 }
 
 .hiring-auth-card-head {
@@ -925,10 +738,10 @@ html[data-theme='dark']
 .hiring-auth-card-head h2 {
   margin: 0;
   color: var(--software-plum);
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
 }
 
 .hiring-auth-card-head p {
@@ -938,40 +751,15 @@ html[data-theme='dark']
   color: var(--software-muted);
 }
 
-.hiring-auth-form {
-  display: grid;
-  gap: 16px;
-}
-
-.hiring-auth-card-footer {
-  padding-top: 14px;
-  border-top: 1px solid var(--software-border-subtle);
-  font-size: 13px;
-  color: var(--software-muted);
-}
-
-/* Evaluator / HR Split Auth Refinements */
-.hiring-evaluator-auth-content {
-  max-width: 1060px;
-}
-
-.hiring-evaluator-signin-panel {
-  max-width: 1020px !important;
-  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr) !important;
-}
-
-.hiring-evaluator-signin-copy {
-  position: relative;
-  overflow: hidden;
-}
-
-.hiring-evaluator-copy-inner {
-  position: relative;
-  z-index: 1;
-}
-
 .hiring-evaluator-signin-form .hiring-auth-card-head {
   margin-bottom: 18px;
+}
+
+.hiring-evaluator-signin-form .access-form label,
+.hiring-evaluator-signin-form .hiring-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--software-ink);
 }
 
 /* Assessment Builder — Journey Steps, Studio, Rubric & Slot Meter
@@ -1019,13 +807,13 @@ html[data-theme='dark']
   color: var(--software-plum);
 }
 
-.hiring-journey-step span {
+.hiring-journey-step > div > span {
   display: block;
   font-size: 12px;
   color: var(--software-muted);
 }
 
-.hiring-journey-num {
+.hiring-journey-step > .hiring-journey-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1035,14 +823,15 @@ html[data-theme='dark']
   border-radius: 9px;
   background: var(--software-lilac);
   color: var(--software-plum);
-  font-size: 12px !important;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.hiring-journey-step.is-done .hiring-journey-num {
+.hiring-journey-step.is-done > .hiring-journey-num {
   background: var(--software-mint);
-  color: #140d1b !important;
+  color: #160f1d;
 }
 
 .hiring-builder-head {
@@ -2105,18 +1894,13 @@ html[data-theme='dark']
    ========================================================================== */
 
 @media (max-width: 900px) {
-  .hiring-auth-split,
   .hiring-evaluator-signin-panel {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  .hiring-auth-visual {
-    padding: 32px 24px;
-  }
-
-  .hiring-auth-preview-card,
-  .hiring-auth-corner-bracket {
-    display: none;
+  .hiring-auth-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
   }
 
   .hiring-journey-bar,
@@ -2137,10 +1921,7 @@ html[data-theme='dark']
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hiring-auth-aura,
   .hiring-card-animated,
-  .hiring-auth-card,
-  .hiring-auth-preview-card,
   .hiring-banner,
   .hiring-issued-box,
   .hiring-candidate-card,

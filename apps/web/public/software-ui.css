@@ -1409,8 +1409,8 @@ body.software-document-body *::after {
 
 html[data-theme='dark'],
 html[data-theme='dark'] body.software-document-body {
-  background: #140d1b;
-  color: #efe7f4;
+  background: #160f1d;
+  color: #f2ecf6;
   color-scheme: dark;
 }
 
@@ -1418,18 +1418,18 @@ html[data-theme='dark'] .software-product,
 html[data-theme='dark'].software-product {
   color-scheme: dark;
   --software-plum: #f5efe6;
-  --software-lilac: #2b1e39;
+  --software-lilac: #281d35;
   --software-mint: #8ee3b8;
-  --software-ink: #efe7f4;
-  --software-ink-soft: #d2c5de;
-  --software-muted: #b3a2c4;
-  --software-canvas: #140d1b;
-  --software-surface: #1d1426;
-  --software-surface-subtle: #251a31;
-  --software-surface-note: #2b1e38;
-  --software-border: #382849;
-  --software-border-subtle: #2b1f3a;
-  --software-border-strong: #674f82;
+  --software-ink: #f2ecf6;
+  --software-ink-soft: #d4c8df;
+  --software-muted: #b09fc2;
+  --software-canvas: #160f1d;
+  --software-surface: #21172b;
+  --software-surface-subtle: #1a1223;
+  --software-surface-note: #281d35;
+  --software-border: #382a47;
+  --software-border-subtle: #2c2039;
+  --software-border-strong: #6c5488;
   --software-focus: #8ee3b8;
   --software-status-info: #c7d9ff;
   --software-status-info-surface: #1d273c;
@@ -1444,19 +1444,19 @@ html[data-theme='dark'].software-product {
   --software-status-danger-surface: #351822;
   --software-status-danger-border: #6d2e42;
   --software-btn-primary-bg: #8ee3b8;
-  --software-btn-primary-bg-hover: #a7eec9;
-  --software-btn-primary-fg: #140d1b;
+  --software-btn-primary-bg-hover: #a7edc9;
+  --software-btn-primary-fg: #160f1d;
   --software-link: #8ee3b8;
   --software-link-hover: #b6f5d5;
   --software-link-underline: rgba(142, 227, 184, 0.42);
-  --software-sidebar-bg: #100916;
-  --software-sidebar-border: #2e203d;
+  --software-sidebar-bg: #120b19;
+  --software-sidebar-border: #2c2039;
   --software-sidebar-fg: #f5efe6;
-  --software-sidebar-muted: #a896ba;
+  --software-sidebar-muted: #b09fc2;
   --software-sidebar-link: #e5d8f1;
   --software-sidebar-btn: #c8b6da;
-  --software-shadow-card: 0 12px 30px rgba(10, 5, 16, 0.42);
-  --software-shadow-elevated: 0 24px 60px rgba(8, 4, 13, 0.62);
+  --software-shadow-card: 0 10px 26px rgba(10, 5, 16, 0.28);
+  --software-shadow-elevated: 0 18px 44px rgba(8, 4, 13, 0.42);
   --software-glow-mint: rgba(142, 227, 184, 0.14);
   --software-glow-plum: rgba(182, 137, 255, 0.14);
 }
@@ -1564,10 +1564,20 @@ html[data-theme='dark'] .software-role-badge {
   color: #e9dcf6;
 }
 
-html[data-theme='dark'] .software-document-product,
-html[data-theme='dark'] .software-product-capsule {
-  background: var(--software-lilac);
-  color: #e9dcf6;
+.software-document-product,
+.software-product-capsule {
+  border: 1px solid #8ee3b8;
+  border-radius: 6px;
+  padding: 4px 9px;
+  background: #8ee3b8;
+  color: #211426;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.software-product :where(h1, h2, h3, h4) {
+  text-transform: none;
 }
 
 /* Global bespoke link styling inside software surfaces (no default browser blue/purple) */
@@ -1732,16 +1742,6 @@ html[data-theme='dark'] .software-product-capsule {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes hiringAuraDrift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(14px, -12px, 0) scale(1.04);
   }
 }
 

@@ -134,5 +134,17 @@ describe('renderSoftwareDocument dual-theme and CSP compliance', () => {
     );
     expect(html).not.toMatch(/<script/i);
     expect(html).not.toMatch(/\sstyle=/i);
+
+    const signupHtml = renderSoftwareDocument(
+      'Create account',
+      '<h1>Create</h1>',
+      undefined,
+      'dark',
+      '/r23/signup',
+    );
+    expect(signupHtml).toContain('name="next" value="/r23/signup"');
+    expect(signupHtml).toContain('<svg ');
+    expect(signupHtml).not.toMatch(/<script/i);
+    expect(signupHtml).not.toMatch(/\sstyle=/i);
   });
 });

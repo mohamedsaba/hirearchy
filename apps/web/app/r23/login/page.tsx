@@ -55,10 +55,6 @@ export default async function R23LoginPage({
           aria-labelledby="signin-title"
         >
           <div className="evaluator-signin-copy hiring-evaluator-signin-copy">
-            <div
-              className="hiring-auth-aura hiring-auth-aura--mint"
-              aria-hidden="true"
-            />
             <div className="hiring-evaluator-copy-inner">
               <p className="software-eyebrow">Hirearchy Software</p>
               <h1 id="signin-title">Sign in to your workspace</h1>
@@ -67,40 +63,27 @@ export default async function R23LoginPage({
                 evidence, and record human hiring decisions.
               </p>
 
-              <div
-                className="hiring-auth-preview-card hiring-auth-preview-card--compact"
-                aria-hidden="true"
-              >
-                <div className="hiring-auth-preview-head">
-                  <span className="hiring-auth-preview-title">
-                    Evaluator Suite
-                  </span>
-                  <span className="hiring-auth-preview-status">
-                    <span className="hiring-live-dot" /> Evidence First
-                  </span>
+              <dl className="hiring-auth-facts">
+                <div>
+                  <dt>Reconstruction</dt>
+                  <dd>File edits, test runs &amp; command timing deltas</dd>
                 </div>
-                <dl className="hiring-auth-preview-list">
-                  <div>
-                    <dt>Reconstruction</dt>
-                    <dd>File edits, test runs &amp; command timing deltas</dd>
-                  </div>
-                  <div>
-                    <dt>AI Signal (Ultra)</dt>
-                    <dd>Kimi K3.1 Pro analytical evidence synthesis</dd>
-                  </div>
-                  <div>
-                    <dt>Decision Gate</dt>
-                    <dd>Human evaluator owns final feedback &amp; outcome</dd>
-                  </div>
-                </dl>
-              </div>
+                <div>
+                  <dt>AI Signal (Ultra)</dt>
+                  <dd>Kimi K3.1 Pro analytical evidence synthesis</dd>
+                </div>
+                <div>
+                  <dt>Decision Gate</dt>
+                  <dd>Human evaluator owns final feedback &amp; outcome</dd>
+                </div>
+              </dl>
             </div>
           </div>
 
           <div className="evaluator-signin-form hiring-evaluator-signin-form">
             <div className="hiring-auth-card-head">
               <span className="hiring-eyebrow">Hiring Team Access</span>
-              <h2>Evaluator &amp; Organization Sign In</h2>
+              <h2>Evaluator &amp; organization sign in</h2>
             </div>
 
             <form

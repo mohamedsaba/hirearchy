@@ -576,9 +576,10 @@ function htmlResponse(
   headers = securityHeaders(),
   workspace?: SoftwareWorkspace,
   theme?: SoftwareDocumentTheme,
+  currentPath?: string,
 ): Response {
   return new Response(
-    renderSoftwareDocument(title, content, workspace, theme),
+    renderSoftwareDocument(title, content, workspace, theme, currentPath),
     {
       status,
       headers,
@@ -1445,6 +1446,7 @@ export async function stagingOrganizationsGet(
           securityHeaders(),
           undefined,
           readRequestTheme(request),
+          '/r23/organizations',
         );
         return attachRefreshedCookie(response, refreshedSessionCookie);
       },
@@ -5008,6 +5010,7 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
     securityHeaders(),
     undefined,
     readRequestTheme(request),
+    '/r23/signup',
   );
 }
 
@@ -5273,6 +5276,7 @@ export function stagingRecoverGet(request?: Request): Response {
     securityHeaders(),
     undefined,
     readRequestTheme(request),
+    '/r23/recover',
   );
 }
 
@@ -5363,6 +5367,7 @@ export function stagingResetPasswordGet(request: Request): Response {
       securityHeaders(),
       undefined,
       readRequestTheme(request),
+      '/r23/reset-password',
     );
   }
 
@@ -5392,6 +5397,7 @@ export function stagingResetPasswordGet(request: Request): Response {
     securityHeaders(),
     undefined,
     readRequestTheme(request),
+    '/r23/reset-password',
   );
 }
 
