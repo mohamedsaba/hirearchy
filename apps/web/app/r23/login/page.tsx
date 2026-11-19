@@ -58,25 +58,7 @@ export default async function R23LoginPage({
             <div className="hiring-evaluator-copy-inner">
               <p className="software-eyebrow">Hirearchy Software</p>
               <h1 id="signin-title">Sign in to your workspace</h1>
-              <p>
-                Author repository challenges, inspect chronological engineering
-                evidence, and record human hiring decisions.
-              </p>
-
-              <dl className="hiring-auth-facts">
-                <div>
-                  <dt>Reconstruction</dt>
-                  <dd>File edits, test runs &amp; command timing deltas</dd>
-                </div>
-                <div>
-                  <dt>AI Signal (Ultra)</dt>
-                  <dd>Kimi K3.1 Pro analytical evidence synthesis</dd>
-                </div>
-                <div>
-                  <dt>Decision Gate</dt>
-                  <dd>Human evaluator owns final feedback &amp; outcome</dd>
-                </div>
-              </dl>
+              <p>Prepare an assessment or pick up an assigned review.</p>
             </div>
           </div>
 

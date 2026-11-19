@@ -304,7 +304,8 @@ export function CandidatePortalClient({
       <header className="hiring-portal-header">
         <div className="hiring-portal-brand">
           <strong>Hirearchy</strong>
-          <span className="hiring-sidebar-plan-badge">Candidate Portal</span>
+          <span className="software-product-capsule">Software</span>
+          <span className="hiring-pill">Candidate Portal</span>
           {profile?.candidateCode ? (
             <span className="hiring-pill hiring-pill-plum">
               {profile.candidateCode}

@@ -95,9 +95,9 @@ export function CandidateAuthClient({
   return (
     <main className="software-product evaluator-product-shell software-access-page hiring-auth-page hiring-auth-page--candidate">
       <header className="software-product-header">
-        <span className="software-wordmark" aria-label="Hirearchy Candidate">
+        <span className="software-wordmark" aria-label="Hirearchy Software">
           <span>Hirearchy</span>
-          <span className="software-product-capsule">Candidate</span>
+          <span className="software-product-capsule">Software</span>
         </span>
         <ThemeToggle variant="header" />
       </header>
@@ -109,7 +109,7 @@ export function CandidateAuthClient({
         >
           <div className="evaluator-signin-copy hiring-evaluator-signin-copy">
             <div className="hiring-evaluator-copy-inner">
-              <p className="software-eyebrow">Hirearchy Candidate</p>
+              <p className="software-eyebrow">Hirearchy Software</p>
               <h1 id="candidate-auth-hero-title">
                 {mode === 'login'
                   ? 'Proof of how you engineer.'
@@ -117,24 +117,9 @@ export function CandidateAuthClient({
               </h1>
               <p>
                 {mode === 'login'
-                  ? 'Open assigned technical challenges in an isolated repository workspace, manage every company invite in one queue, and read published evaluator decisions.'
-                  : 'Verify your identity once to receive engineering challenges from hiring teams and track feedback clearly across every company.'}
+                  ? 'Open assigned technical challenges and review published evaluator decisions.'
+                  : 'Verify your identity once to receive engineering assessments from hiring teams.'}
               </p>
-
-              <dl className="hiring-auth-facts">
-                <div>
-                  <dt>Identity baseline</dt>
-                  <dd>Profile, birth year, location &amp; government ID</dd>
-                </div>
-                <div>
-                  <dt>Work environment</dt>
-                  <dd>Timed repository workspace &amp; live terminal</dd>
-                </div>
-                <div>
-                  <dt>Outcome clarity</dt>
-                  <dd>Published status with strengths &amp; growth notes</dd>
-                </div>
-              </dl>
             </div>
           </div>
 
