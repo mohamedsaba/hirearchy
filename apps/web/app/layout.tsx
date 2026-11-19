@@ -3,6 +3,7 @@ import localFont from 'next/font/local';
 import type { ReactNode } from 'react';
 import './styles.css';
 import '../public/software-ui.css';
+import '../public/hiring-platform.css';
 import './workspace.css';
 import './home.css';
 import { IntentPrefetch } from './home/intent-prefetch';

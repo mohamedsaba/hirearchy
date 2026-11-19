@@ -23,10 +23,10 @@ export const AI_REVIEW_MODEL_CATALOG: readonly AiReviewModelOption[] = [
   {
     id: 'nvidia:kimi-k2',
     providerId: 'nvidia',
-    modelId: 'moonshotai/kimi-k2-instruct',
-    label: 'NVIDIA NIM · Kimi K2 / 3.1',
+    modelId: 'moonshotai/kimi-k3.1-pro',
+    label: 'NVIDIA NIM · Kimi K3.1 Pro',
     description:
-      'High-reasoning coding and architecture reviewer on NVIDIA NIM (supports Kimi K2 / K2.5 / custom model slugs).',
+      'High-reasoning Staff Engineer reviewer on NVIDIA NIM (moonshotai/kimi-k3.1-pro).',
   },
   {
     id: 'nvidia:nemotron',
@@ -80,6 +80,12 @@ export interface R27AiReviewReport {
   evidenceHighlights: Array<{
     label: string;
     detail: string;
+  }>;
+  timingInsights?: string[];
+  requirementBreakdown?: Array<{
+    requirement: string;
+    status: 'met' | 'partial' | 'not_observed';
+    evidence: string;
   }>;
   metrics: {
     submittedFilesCount: number;

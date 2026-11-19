@@ -34,7 +34,18 @@ import type {
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import './candidate-workspace.css';
 
-type CandidateClientProps = Readonly<{ sessionId: string }>;
+export type CandidateAccountGate = Readonly<{
+  state: 'ready' | 'sign_in_required' | 'profile_required' | 'email_mismatch';
+  signedInEmail?: string;
+  expectedEmailHint?: string;
+  candidateName?: string;
+  candidateCode?: string;
+}>;
+
+type CandidateClientProps = Readonly<{
+  sessionId: string;
+  accountGate?: CandidateAccountGate;
+}>;
 
 type ApiFailure = Error & Readonly<{ status?: number; code?: string }>;
 
@@ -256,7 +267,13 @@ function makeDraft(file: R26CandidateFileView): Draft {
   };
 }
 
-export function R26CandidateClient({ sessionId }: CandidateClientProps) {
+export function R26CandidateClient({
+  sessionId,
+  accountGate,
+}: CandidateClientProps) {
+  const isAccountGateBlocked = Boolean(
+    accountGate && accountGate.state !== 'ready',
+  );
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [view, setView] = useState<R26CandidateGetResponse | null>(null);
   const viewRef = useRef<R26CandidateGetResponse | null>(null);
@@ -545,6 +562,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
   }, [sessionId]);
 
   useEffect(() => {
+    if (isAccountGateBlocked) {
+      let active = true;
+      queueMicrotask(() => {
+        if (active) setLoading(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
     if (token === undefined) return;
     if (!token) {
       let active = true;
@@ -1302,6 +1328,120 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         </div>
       </details>
     ) : null;
+
+  if (isAccountGateBlocked && accountGate) {
+    const returnUrl = `/r26/candidate/${encodeURIComponent(sessionId)}`;
+    return (
+      <div className="hiring-gate-shell software-product">
+        <div className="hiring-gate-card">
+          <span className="hiring-eyebrow">
+            Hirearchy Candidate Verification
+          </span>
+          {accountGate.state === 'sign_in_required' ? (
+            <>
+              <h1 style={{ margin: 0, fontSize: '24px' }}>
+                Sign in to start your assessment
+              </h1>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--software-muted)',
+                  margin: 0,
+                }}
+              >
+                Sign in or create a Hirearchy Candidate Account using the email
+                address invited to this assessment. Your assessment link stays
+                preserved automatically.
+              </p>
+              <div className="hiring-header-actions">
+                <a
+                  className="hiring-btn hiring-btn-primary"
+                  href={`/candidate/login?next=${encodeURIComponent(returnUrl)}`}
+                >
+                  Sign In as Candidate
+                </a>
+                <a
+                  className="hiring-btn"
+                  href={`/candidate/signup?next=${encodeURIComponent(returnUrl)}`}
+                >
+                  Create Candidate Account
+                </a>
+              </div>
+            </>
+          ) : accountGate.state === 'profile_required' ? (
+            <>
+              <h1 style={{ margin: 0, fontSize: '24px' }}>
+                Complete your candidate profile
+              </h1>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--software-muted)',
+                  margin: 0,
+                }}
+              >
+                Signed in as <strong>{accountGate.signedInEmail}</strong>.
+                Confirm your name, birth year, location, experience, and ID
+                reference before entering the isolated workspace.
+              </p>
+              <div className="hiring-header-actions">
+                <a
+                  className="hiring-btn hiring-btn-primary"
+                  href={`/candidate?setup=1&next=${encodeURIComponent(returnUrl)}`}
+                >
+                  Complete Candidate Profile →
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 style={{ margin: 0, fontSize: '24px' }}>
+                Signed-in email does not match invitation
+              </h1>
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: 'var(--software-muted)',
+                  margin: 0,
+                }}
+              >
+                You are signed in as{' '}
+                <strong>{accountGate.signedInEmail}</strong>, but this
+                assessment was issued to{' '}
+                <strong>
+                  {accountGate.expectedEmailHint ?? 'another address'}
+                </strong>
+                .
+              </p>
+              <div className="hiring-header-actions">
+                <button
+                  type="button"
+                  className="hiring-btn hiring-btn-primary"
+                  onClick={() => {
+                    void fetch('/api/candidate-portal', {
+                      method: 'POST',
+                      credentials: 'same-origin',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'logout' }),
+                    }).finally(() => {
+                      window.location.assign(
+                        `/candidate/login?next=${encodeURIComponent(returnUrl)}`,
+                      );
+                    });
+                  }}
+                >
+                  Sign Out &amp; Switch Account
+                </button>
+                <a className="hiring-btn" href="/candidate">
+                  Go to Candidate Portal
+                </a>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="r26-candidate software-product">

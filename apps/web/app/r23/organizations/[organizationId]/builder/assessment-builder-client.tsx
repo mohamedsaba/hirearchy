@@ -157,7 +157,11 @@ export function AssessmentBuilderClient({
     initialDraft?.version ?? 1,
   );
   const [templateId, setTemplateId] = useState<
-    'custom' | 'reservation-moves-v3'
+    | 'custom'
+    | 'reservation-moves-v3'
+    | 'webhook-dedup-v1'
+    | 'cache-rate-limiter-v1'
+    | 'ai-generated'
   >(
     initialDraft
       ? (initialDraft.templateId ?? 'custom')

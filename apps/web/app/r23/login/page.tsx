@@ -1,7 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { isAuthenticatedStaging } from '../../../src/runtime/profile';
+import {
+  isAuthenticatedStaging,
+  isHiringPlatformEnabled,
+} from '../../../src/runtime/profile';
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
 import { r23IsEnabled } from '../../../src/r23-auth/config';
 import '../../evaluator/evaluator-product.css';
@@ -107,6 +110,14 @@ export default async function R23LoginPage({
                     Create an account
                   </Link>
                 </p>
+                {isHiringPlatformEnabled() ? (
+                  <p>
+                    Taking an assessment?{' '}
+                    <Link href="/candidate/login" prefetch={false}>
+                      Sign in to Candidate Portal →
+                    </Link>
+                  </p>
+                ) : null}
               </nav>
             ) : null}
           </div>

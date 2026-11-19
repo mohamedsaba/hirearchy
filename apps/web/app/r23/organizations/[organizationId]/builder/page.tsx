@@ -12,8 +12,20 @@ import {
 } from '../../../../../src/staging/server';
 import type { OrganizationMemberItem } from '../../../../../src/staging/onboarding';
 import { isFounderUatEnabled } from '../../../../../src/runtime/founder-uat';
-import { isAuthenticatedStaging } from '../../../../../src/runtime/profile';
+import {
+  isAuthenticatedStaging,
+  isHiringPlatformEnabled,
+} from '../../../../../src/runtime/profile';
+import { serializePlatformTemplates } from '../../../../../src/hiring/templates';
+import type {
+  SavedLibraryProblem,
+  TeamMemberOption,
+  WorkspaceRoleKind,
+} from '../../../../../src/hiring/types';
+import { loadHiringOrganizationWorkspaceFromCookie } from '../../../../../src/staging/browser';
+import { OrganizationWorkspaceShell } from '../../../_components/workspace-shell';
 import { AssessmentBuilderClient } from './assessment-builder-client';
+import { HiringAssessmentBuilderClient } from './hiring-assessment-builder-client';
 import type { R211AssessmentDraft } from '../../../../../src/r211-builder/contract';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +46,75 @@ export default async function AssessmentBuilderPage({
     typeof query?.issuedSession === 'string' ? query.issuedSession : null;
   const incomingHeaders = await headers();
   const cookie = incomingHeaders.get('cookie') ?? '';
+
+  if (isHiringPlatformEnabled()) {
+    const workspace = await loadHiringOrganizationWorkspaceFromCookie(
+      cookie,
+      organizationId,
+    );
+    if (!workspace) {
+      redirect('/r23/login');
+    }
+
+    const [libraryRes, membersRes] = await Promise.all([
+      workspace.dispatch('hiring.library.list', {
+        organizationId: workspace.organizationId,
+      }) as Promise<{ problems?: SavedLibraryProblem[] }>,
+      workspace.dispatch('organization.members.list', {
+        organizationId: workspace.organizationId,
+      }) as Promise<{ members?: OrganizationMemberItem[] }>,
+    ]);
+
+    const teamMembers: TeamMemberOption[] = (membersRes?.members ?? [])
+      .filter((m) => m.status === 'active')
+      .map((m) => ({
+        principalId: m.principalId,
+        displayName: m.displayName ?? m.email ?? 'Team Member',
+        email: m.email ?? '',
+        role:
+          m.role === 'cto' || m.role === 'recruiter'
+            ? (m.role as WorkspaceRoleKind)
+            : 'reviewer',
+        isOwner: Boolean(m.isOwner),
+      }));
+
+    return (
+      <OrganizationWorkspaceShell
+        organizationId={workspace.organizationId}
+        organizationName={workspace.organizationName}
+        email={workspace.email}
+        role={workspace.role}
+        csrf={workspace.csrfToken}
+        active="builder"
+        plan={workspace.plan}
+      >
+        <div className="hiring-page-shell">
+          <header className="hiring-page-header">
+            <div>
+              <span className="hiring-eyebrow">
+                {workspace.organizationName}
+              </span>
+              <h1>Assessment Builder</h1>
+              <p>
+                Choose a curated platform template, generate a role-specific
+                engineering problem with Kimi K3.1 Pro, or reuse a problem from
+                your saved library.
+              </p>
+            </div>
+          </header>
+
+          <HiringAssessmentBuilderClient
+            organizationId={workspace.organizationId}
+            currentPrincipalId={workspace.orgContext.principalId}
+            initialPlan={workspace.plan}
+            initialLibrary={libraryRes?.problems ?? []}
+            initialTemplates={serializePlatformTemplates()}
+            teamMembers={teamMembers}
+          />
+        </div>
+      </OrganizationWorkspaceShell>
+    );
+  }
 
   const request = new Request('https://hirearchy-builder.invalid/', {
     headers: {

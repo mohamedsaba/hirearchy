@@ -24,7 +24,13 @@ const rootDir = fileURLToPath(new URL('../', import.meta.url));
 const composeFile = 'deploy/founder-uat/docker-compose.yml';
 const automationFile = 'deploy/founder-uat/docker-compose.automation.yml';
 const stateRoot = path.join(os.homedir(), '.config/hirearchy/founder-uat');
-const ports = [1025, 3000, 5434, 8025, 9997];
+const defaultPorts = {
+  app: '3000',
+  pg: '5434',
+  gotrue: '9997',
+  mailpitApi: '8025',
+  mailpitSmtp: '1025',
+};
 const services = ['postgres', 'gotrue', 'mailpit', 'web'];
 const systemSecrets = [
   'POSTGRES_PASSWORD',
@@ -41,22 +47,39 @@ const systemSecrets = [
   'STAGING_MIGRATOR_DATABASE_URL',
   'STAGING_DATABASE_URL',
   'STAGING_CANDIDATE_DATABASE_URL',
+  'NVIDIA_API_KEY',
 ];
 
 const modes = {
   persistent: {
     project: 'hirearchy-founder-uat',
     stateName: 'persistent',
+    ports: defaultPorts,
+    hiringPlatformEnabled: true,
   },
   automation: {
     project: 'hirearchy-founder-uat-automation',
     stateName: 'automation',
+    ports: defaultPorts,
+    hiringPlatformEnabled: false,
+  },
+  hiring: {
+    project: 'hirearchy-hiring-platform',
+    stateName: 'hiring',
+    ports: {
+      app: '3300',
+      pg: '5436',
+      gotrue: '9996',
+      mailpitApi: '8026',
+      mailpitSmtp: '1026',
+    },
+    hiringPlatformEnabled: true,
   },
 };
 
 function usage() {
   console.log(
-    'Usage: node scripts/founder-uat-runtime.mjs <start|restart|stop|status> <persistent|automation>',
+    'Usage: node scripts/founder-uat-runtime.mjs <start|restart|stop|status> <persistent|automation|hiring>',
   );
 }
 
@@ -211,11 +234,14 @@ async function readState(mode, { createIfMissing = true } = {}) {
     'Runtime project name does not match the selected mode',
   );
   assert.equal(values.HIREARCHY_RUNTIME_PROFILE, 'founder-uat');
-  assert.equal(values.PG_PORT, '5434');
-  assert.equal(values.APP_PORT, '3000');
-  assert.equal(values.GOTRUE_API_PORT, '9997');
-  assert.equal(values.MAILPIT_API_PORT, '8025');
-  assert.equal(values.MAILPIT_SMTP_PORT, '1025');
+  assert.equal(values.PG_PORT, info.ports.pg);
+  assert.equal(values.APP_PORT, info.ports.app);
+  assert.equal(values.GOTRUE_API_PORT, info.ports.gotrue);
+  assert.equal(values.MAILPIT_API_PORT, info.ports.mailpitApi);
+  assert.equal(values.MAILPIT_SMTP_PORT, info.ports.mailpitSmtp);
+  values.HIREARCHY_HIRING_PLATFORM_ENABLED = info.hiringPlatformEnabled
+    ? 'true'
+    : 'false';
   assert.equal(values.FOUNDER_UAT_SOURCE_DIR, await realpath(rootDir));
   assert.equal(
     values.FOUNDER_UAT_NODE_MODULES_DIR,
@@ -238,7 +264,7 @@ async function readState(mode, { createIfMissing = true } = {}) {
 }
 
 async function createRuntimeEnvironment(mode) {
-  const { project } = modes[mode];
+  const { project, ports: modePorts, hiringPlatformEnabled } = modes[mode];
   const sourceDir = await realpath(rootDir);
   const nodeModulesDir = await realpath(path.join(rootDir, 'node_modules'));
   const nextCacheDir = path.join(sourceDir, 'apps/web/.next/cache');
@@ -260,10 +286,10 @@ async function createRuntimeEnvironment(mode) {
     .export({ format: 'der', type: 'pkcs8' })
     .toString('base64');
   const candidateKey = randomBytes(32).toString('base64');
-  const authOrigin = 'http://127.0.0.1:9997';
-  const appOrigin = 'http://127.0.0.1:3000';
+  const authOrigin = `http://127.0.0.1:${modePorts.gotrue}`;
+  const appOrigin = `http://127.0.0.1:${modePorts.app}`;
   const database = (user, password) =>
-    `postgres://${user}:${password}@127.0.0.1:5434/postgres`;
+    `postgres://${user}:${password}@127.0.0.1:${modePorts.pg}/postgres`;
 
   return {
     COMPOSE_PROJECT_NAME: project,
@@ -271,17 +297,18 @@ async function createRuntimeEnvironment(mode) {
     FOUNDER_UAT_NODE_MODULES_DIR: nodeModulesDir,
     FOUNDER_UAT_NEXT_CACHE_DIR: nextCacheDir,
     HIREARCHY_RUNTIME_PROFILE: 'founder-uat',
+    HIREARCHY_HIRING_PLATFORM_ENABLED: hiringPlatformEnabled ? 'true' : 'false',
     HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED: 'true',
     HIREARCHY_RATE_LIMIT_ENABLED: 'true',
-    PG_PORT: '5434',
-    APP_PORT: '3000',
-    GOTRUE_API_PORT: '9997',
-    MAILPIT_API_PORT: '8025',
-    MAILPIT_SMTP_PORT: '1025',
+    PG_PORT: modePorts.pg,
+    APP_PORT: modePorts.app,
+    GOTRUE_API_PORT: modePorts.gotrue,
+    MAILPIT_API_PORT: modePorts.mailpitApi,
+    MAILPIT_SMTP_PORT: modePorts.mailpitSmtp,
     FOUNDER_UAT_SIGNUP_ENABLED: 'false',
     FOUNDER_UAT_SIGNUP_DISABLED: 'true',
     FOUNDER_UAT_APP_ORIGIN: appOrigin,
-    FOUNDER_UAT_MAILPIT_API_URL: 'http://127.0.0.1:8025',
+    FOUNDER_UAT_MAILPIT_API_URL: `http://127.0.0.1:${modePorts.mailpitApi}`,
     STAGING_PUBLIC_ORIGIN: appOrigin,
     STAGING_AUTH_URL: authOrigin,
     STAGING_AUTH_ISSUER: authOrigin,
@@ -469,8 +496,9 @@ async function portAvailable(port) {
   });
 }
 
-async function assertPortsAvailable() {
-  for (const port of ports) await portAvailable(port);
+async function assertPortsAvailable(mode) {
+  const modePorts = Object.values(modes[mode].ports).map(Number);
+  for (const port of modePorts) await portAvailable(port);
 }
 
 function markerPath(state) {
@@ -568,12 +596,13 @@ async function waitForHttp(url, description) {
   }, description);
 }
 
-function assertLoopbackListeners() {
+function assertLoopbackListeners(mode) {
   const output = execFileSync('ss', ['-ltn'], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  for (const port of ports) {
+  const modePorts = Object.values(modes[mode].ports).map(Number);
+  for (const port of modePorts) {
     const matches = output
       .split(/\r?\n/)
       .map((line) => line.trim().split(/\s+/)[3])
@@ -625,9 +654,10 @@ async function runInstaller(state, mode, requireEmpty) {
 }
 
 async function readiness(state, mode) {
+  const appPort = modes[mode].ports.app;
   const response = await waitFor(async () => {
     try {
-      return await fetch('http://127.0.0.1:3000/api/staging/readiness', {
+      return await fetch(`http://127.0.0.1:${appPort}/api/staging/readiness`, {
         signal: AbortSignal.timeout(3000),
       });
     } catch {
@@ -692,7 +722,7 @@ async function status(mode) {
   if (projectContainers(modes[mode].project)) {
     try {
       await readiness(state, mode);
-      assertLoopbackListeners();
+      assertLoopbackListeners(mode);
       console.log('Founder UAT application and loopback listeners are ready.');
     } catch (error) {
       console.log(
@@ -705,11 +735,13 @@ async function status(mode) {
 async function start(mode, { forceRestart = false } = {}) {
   docker(['info', '--format', '{{.ServerVersion}}']);
   const state = await readState(mode);
-  const otherMode = mode === 'automation' ? 'persistent' : 'automation';
-  if (projectContainers(modes[otherMode].project)) {
-    throw new Error(
-      `Refusing to start ${modes[mode].project} while ${modes[otherMode].project} is active; both profiles use the same loopback ports.`,
-    );
+  if (mode !== 'hiring') {
+    const otherMode = mode === 'automation' ? 'persistent' : 'automation';
+    if (projectContainers(modes[otherMode].project)) {
+      throw new Error(
+        `Refusing to start ${modes[mode].project} while ${modes[otherMode].project} is active; both profiles use the same loopback ports.`,
+      );
+    }
   }
 
   const fingerprint = await sourceFingerprint();
@@ -724,7 +756,7 @@ async function start(mode, { forceRestart = false } = {}) {
   } else if (active && currentBuild) {
     try {
       await readiness(state, mode);
-      assertLoopbackListeners();
+      assertLoopbackListeners(mode);
       console.log(
         `Founder UAT is already ready at ${state.values.FOUNDER_UAT_APP_ORIGIN}.`,
       );
@@ -744,7 +776,7 @@ async function start(mode, { forceRestart = false } = {}) {
     );
   }
 
-  if (!active) await assertPortsAvailable();
+  if (!active) await assertPortsAvailable(mode);
   if (!(await buildIsCurrent(fingerprint))) {
     await buildApplication(state, mode, fingerprint);
   }
@@ -781,7 +813,7 @@ async function start(mode, { forceRestart = false } = {}) {
 
   compose(state, mode, ['up', '-d', 'web']);
   await waitForServices(state, mode, services);
-  assertLoopbackListeners();
+  assertLoopbackListeners(mode);
   await readiness(state, mode);
   console.log(
     `Founder UAT is ready at ${state.values.FOUNDER_UAT_APP_ORIGIN}.`,

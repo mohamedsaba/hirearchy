@@ -10,7 +10,10 @@ import {
 } from '../../../../database/postgres/r26/adapter.mjs';
 import { readCandidateAiCapability } from '../r212-ai/server';
 import { readCandidateExecutionCapability } from '../r213-execution/server';
-import { isAuthenticatedStaging } from '../runtime/profile';
+import {
+  isAuthenticatedStaging,
+  isHiringPlatformEnabled,
+} from '../runtime/profile';
 import {
   R26_CANDIDATE_DATA_NOTICE_TEXT,
   R26_CANDIDATE_DATA_NOTICE_VERSION,
@@ -159,8 +162,9 @@ function requireEnabledConfig() {
 function candidateResponse(
   view: R26CandidateView & Record<string, unknown>,
   profile: 'durable-staging' | 'disposable',
-  disposableCapabilities: Readonly<{ ai: boolean; execution: boolean }>,
+  resolvedCapabilities: Readonly<{ ai: boolean; execution: boolean }>,
 ): R26CandidateGetResponse {
+  const hiringActive = isHiringPlatformEnabled();
   const invitationExpiresAt = view.invitationExpiresAt;
   if (
     profile === 'durable-staging' &&
@@ -182,7 +186,7 @@ function candidateResponse(
     if (
       !isRecord(capabilities) ||
       Object.keys(capabilities).sort().join(',') !== 'ai,execution' ||
-      capabilities.ai !== false ||
+      (!hiringActive && capabilities.ai !== false) ||
       capabilities.execution !== false ||
       !isRecord(notice) ||
       Object.keys(notice).sort().join(',') !== 'digest,text,version' ||
@@ -203,8 +207,10 @@ function candidateResponse(
       profile === 'durable-staging' ? (invitationExpiresAt as string) : null,
     capabilities:
       profile === 'durable-staging'
-        ? { ai: false, execution: false }
-        : disposableCapabilities,
+        ? hiringActive
+          ? { ai: resolvedCapabilities.ai, execution: false }
+          : { ai: false, execution: false }
+        : resolvedCapabilities,
     dataNotice:
       profile === 'durable-staging'
         ? {
@@ -222,7 +228,19 @@ async function candidateCapabilities(
   sessionId: string,
   profile: 'durable-staging' | 'disposable',
 ): Promise<Readonly<{ ai: boolean; execution: boolean }>> {
-  if (profile === 'durable-staging') return { ai: false, execution: false };
+  if (profile === 'durable-staging') {
+    if (!isHiringPlatformEnabled()) return { ai: false, execution: false };
+    try {
+      const ai = await readCandidateAiCapability(
+        databaseUrl,
+        tokenHash,
+        sessionId,
+      );
+      return { ai: ai === true, execution: false };
+    } catch {
+      return { ai: false, execution: false };
+    }
+  }
   const [ai, execution] = await Promise.allSettled([
     readCandidateAiCapability(databaseUrl, tokenHash, sessionId),
     readCandidateExecutionCapability(databaseUrl, tokenHash, sessionId),

@@ -1,0 +1,585 @@
+/* Hirearchy Hiring Platform styles — Common Thread foundation companion */
+
+.hiring-sidebar-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid rgb(142 227 184 / 45%);
+  border-radius: 999px;
+  background: rgb(142 227 184 / 14%);
+  color: var(--software-mint, #8ee3b8);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.hiring-page-shell {
+  display: grid;
+  gap: 24px;
+}
+
+.hiring-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--software-border, #ded4cc);
+}
+
+.hiring-page-header h1 {
+  margin: 4px 0 0;
+  color: var(--software-plum, #211426);
+  font-size: clamp(1.6rem, 2.8vw, 2rem);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.hiring-page-header p {
+  margin: 6px 0 0;
+  max-width: 68ch;
+  color: var(--software-muted, #635661);
+  font-size: 14px;
+}
+
+.hiring-eyebrow {
+  display: inline-block;
+  color: var(--software-muted, #635661);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hiring-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.hiring-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 8px;
+  background: var(--software-surface, #fff);
+  color: var(--software-plum, #211426);
+  font: 600 13px / 1 var(--software-sans, sans-serif);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.hiring-btn:hover:not(:disabled) {
+  border-color: var(--software-plum, #211426);
+  background: var(--software-surface-subtle, #f3ede6);
+}
+
+.hiring-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hiring-btn-primary {
+  border-color: var(--software-plum, #211426);
+  background: var(--software-plum, #211426);
+  color: #fff;
+}
+
+.hiring-btn-primary:hover:not(:disabled) {
+  background: #36223e;
+}
+
+.hiring-btn-mint {
+  border-color: #166534;
+  background: var(--software-mint, #8ee3b8);
+  color: var(--software-plum, #211426);
+  font-weight: 700;
+}
+
+.hiring-btn-mint:hover:not(:disabled) {
+  background: #7cd8aa;
+}
+
+.hiring-btn-danger {
+  border-color: var(--software-status-danger-border, #fecaca);
+  background: var(--software-status-danger-surface, #fef2f2);
+  color: var(--software-status-danger, #b42318);
+}
+
+.hiring-btn-danger:hover:not(:disabled) {
+  border-color: var(--software-status-danger, #b42318);
+  background: #fee2e2;
+}
+
+.hiring-btn-sm {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.hiring-card {
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 12px;
+  background: var(--software-surface, #fff);
+  padding: 20px 22px;
+}
+
+.hiring-card-subtle {
+  border: 1px solid var(--software-border-subtle, #eae1d9);
+  border-radius: 10px;
+  background: var(--software-surface-subtle, #f3ede6);
+  padding: 16px 18px;
+}
+
+.hiring-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 12px;
+}
+
+.hiring-kpi-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 10px;
+  background: var(--software-surface, #fff);
+}
+
+.hiring-kpi-label {
+  color: var(--software-muted, #635661);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hiring-kpi-value {
+  color: var(--software-plum, #211426);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.hiring-kpi-note {
+  color: var(--software-muted, #635661);
+  font-size: 12px;
+}
+
+.hiring-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 10px;
+  background: var(--software-surface-note, #eee7f4);
+  color: var(--software-plum, #211426);
+  font-size: 13px;
+}
+
+.hiring-banner-warning {
+  border-color: var(--software-status-warning-border, #e2c66f);
+  background: var(--software-status-warning-surface, #fff7df);
+  color: var(--software-status-warning, #74520a);
+}
+
+.hiring-banner-danger {
+  border-color: var(--software-status-danger-border, #fecaca);
+  background: var(--software-status-danger-surface, #fef2f2);
+  color: var(--software-status-danger, #b42318);
+}
+
+.hiring-banner-success {
+  border-color: var(--software-status-success-border, #bbf7d0);
+  background: var(--software-status-success-surface, #ecfdf3);
+  color: var(--software-status-success, #166534);
+}
+
+.hiring-filter-bar {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 12px;
+  background: var(--software-surface, #fff);
+}
+
+.hiring-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 12px;
+}
+
+.hiring-field {
+  display: grid;
+  gap: 6px;
+}
+
+.hiring-field label,
+.hiring-field-label {
+  color: var(--software-ink, #291d2c);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.hiring-field input:not([type='checkbox']):not([type='radio']),
+.hiring-field select,
+.hiring-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 8px;
+  background: var(--software-surface, #fff);
+  color: var(--software-ink, #291d2c);
+  font: inherit;
+  font-size: 13px;
+}
+
+.hiring-field textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.hiring-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.hiring-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 999px;
+  background: var(--software-surface-subtle, #f3ede6);
+  color: var(--software-ink, #291d2c);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.hiring-chip:hover {
+  border-color: var(--software-plum, #211426);
+}
+
+.hiring-chip.is-active {
+  border-color: var(--software-plum, #211426);
+  background: var(--software-plum, #211426);
+  color: #fff;
+}
+
+.hiring-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 999px;
+  background: var(--software-surface-subtle, #f3ede6);
+  color: var(--software-ink, #291d2c);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.hiring-pill-success {
+  border-color: var(--software-status-success-border, #bbf7d0);
+  background: var(--software-status-success-surface, #ecfdf3);
+  color: var(--software-status-success, #166534);
+}
+
+.hiring-pill-warning {
+  border-color: var(--software-status-warning-border, #e2c66f);
+  background: var(--software-status-warning-surface, #fff7df);
+  color: var(--software-status-warning, #74520a);
+}
+
+.hiring-pill-danger {
+  border-color: var(--software-status-danger-border, #fecaca);
+  background: var(--software-status-danger-surface, #fef2f2);
+  color: var(--software-status-danger, #b42318);
+}
+
+.hiring-pill-plum {
+  border-color: #d6c8e4;
+  background: var(--software-lilac, #ebe5f2);
+  color: var(--software-plum, #211426);
+}
+
+.hiring-candidate-list {
+  display: grid;
+  gap: 14px;
+}
+
+.hiring-candidate-card {
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 12px;
+  background: var(--software-surface, #fff);
+  overflow: hidden;
+}
+
+.hiring-candidate-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr) auto;
+  align-items: start;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.hiring-candidate-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hiring-candidate-name h2 {
+  margin: 0;
+  color: var(--software-plum, #211426);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.hiring-candidate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 6px;
+  color: var(--software-muted, #635661);
+  font-size: 12px;
+}
+
+.hiring-session-sublist {
+  display: grid;
+  border-top: 1px solid var(--software-border-subtle, #eae1d9);
+  background: #fcfaf7;
+}
+
+.hiring-session-subrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 20px;
+  border-top: 1px solid var(--software-border-subtle, #eae1d9);
+}
+
+.hiring-session-subrow:first-child {
+  border-top: 0;
+}
+
+.hiring-builder-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hiring-builder-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 9px;
+  background: var(--software-surface, #fff);
+  color: var(--software-ink, #291d2c);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.hiring-builder-tab.is-active {
+  border-color: var(--software-plum, #211426);
+  background: var(--software-plum, #211426);
+  color: #fff;
+}
+
+.hiring-problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.hiring-problem-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 10px;
+  background: var(--software-surface, #fff);
+  align-content: space-between;
+}
+
+.hiring-problem-card.is-selected {
+  border-color: var(--software-plum, #211426);
+  box-shadow: 0 0 0 2px rgb(33 20 38 / 12%);
+}
+
+.hiring-file-preview {
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 9px;
+  background: #faf7f3;
+  padding: 12px 14px;
+  font-family: var(--software-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 260px;
+}
+
+.hiring-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.hiring-plan-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 10px;
+  background: var(--software-surface, #fff);
+  align-content: start;
+}
+
+.hiring-plan-card.is-current {
+  border-color: var(--software-plum, #211426);
+  background: var(--software-lilac, #ebe5f2);
+}
+
+.hiring-plan-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--software-muted, #635661);
+  font-size: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.hiring-timing-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.hiring-timing-item {
+  padding: 10px 12px;
+  border: 1px solid var(--software-border-subtle, #eae1d9);
+  border-radius: 8px;
+  background: #fcfaf7;
+  font-size: 12px;
+}
+
+.hiring-opinion-list {
+  display: grid;
+  gap: 10px;
+}
+
+.hiring-opinion-card {
+  padding: 12px 14px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 9px;
+  background: var(--software-surface-subtle, #f3ede6);
+}
+
+.hiring-handoff-dossier {
+  display: grid;
+  gap: 18px;
+}
+
+.hiring-candidate-portal {
+  min-height: 100vh;
+  background: var(--software-canvas, #f5efe6);
+  color: var(--software-ink, #291d2c);
+}
+
+.hiring-portal-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px clamp(20px, 4vw, 56px);
+  border-bottom: 1px solid var(--software-border, #ded4cc);
+  background: var(--software-plum, #211426);
+  color: #fff;
+}
+
+.hiring-portal-header a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.hiring-portal-main {
+  width: min(100%, 1160px);
+  margin: 0 auto;
+  padding: 32px clamp(18px, 3vw, 40px) 64px;
+  display: grid;
+  gap: 24px;
+}
+
+.hiring-gate-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px 18px;
+  background: var(--software-canvas, #f5efe6);
+}
+
+.hiring-gate-card {
+  width: min(100%, 560px);
+  padding: 28px 30px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 14px;
+  background: var(--software-surface, #fff);
+  display: grid;
+  gap: 16px;
+}
+
+.hiring-outcome-box {
+  padding: 12px 14px;
+  border: 1px solid var(--software-border, #ded4cc);
+  border-radius: 9px;
+  background: #fcfaf7;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.hiring-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 860px) {
+  .hiring-candidate-header,
+  .hiring-session-subrow,
+  .hiring-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

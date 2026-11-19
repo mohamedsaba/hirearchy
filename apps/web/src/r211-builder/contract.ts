@@ -14,8 +14,15 @@ export interface R211RubricCriterion {
   };
 }
 
+export type R211TemplateId =
+  | 'custom'
+  | 'reservation-moves-v3'
+  | 'webhook-dedup-v1'
+  | 'cache-rate-limiter-v1'
+  | 'ai-generated';
+
 export interface R211AssessmentDraftInput {
-  readonly templateId?: 'custom' | 'reservation-moves-v3';
+  readonly templateId?: R211TemplateId;
   readonly definitionId?: string;
   readonly title: string;
   readonly brief: string;
@@ -31,7 +38,7 @@ export interface R211AssessmentDraftInput {
 }
 
 export interface R211AssessmentDraft {
-  readonly templateId: 'custom' | 'reservation-moves-v3';
+  readonly templateId: R211TemplateId;
   readonly definitionId: string;
   readonly organizationId: string;
   readonly authorPrincipalId: string;
