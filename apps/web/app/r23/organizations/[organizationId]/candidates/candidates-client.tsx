@@ -57,6 +57,13 @@ function statusPillClass(status: PipelineStatusId): string {
   }
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
 function statusLabel(status: PipelineStatusId): string {
   return (
     PIPELINE_STATUS_OPTIONS.find((item) => item.id === status)?.label ?? status
@@ -376,53 +383,58 @@ export function CandidatesPipelineClient({
                 className="hiring-candidate-card"
               >
                 <div className="hiring-candidate-header">
-                  <div>
-                    <div className="hiring-candidate-name">
-                      <h2>{candidate.fullName}</h2>
-                      <span
-                        className={statusPillClass(
-                          candidate.latestPipelineStatus,
+                  <div className="hiring-candidate-identity">
+                    <span className="hiring-avatar" aria-hidden="true">
+                      {getInitials(candidate.fullName)}
+                    </span>
+                    <div>
+                      <div className="hiring-candidate-name">
+                        <h2>{candidate.fullName}</h2>
+                        <span
+                          className={statusPillClass(
+                            candidate.latestPipelineStatus,
+                          )}
+                        >
+                          {statusLabel(candidate.latestPipelineStatus)}
+                        </span>
+                        {candidate.idVerificationStatus !== 'unsubmitted' ? (
+                          <span className="hiring-pill hiring-pill-success">
+                            <IconShieldCheck size={13} /> ID{' '}
+                            {candidate.idVerificationStatus}
+                          </span>
+                        ) : (
+                          <span className="hiring-pill">
+                            {candidate.hasAccount
+                              ? 'Account ready'
+                              : 'Pending candidate signup'}
+                          </span>
                         )}
-                      >
-                        {statusLabel(candidate.latestPipelineStatus)}
-                      </span>
-                      {candidate.idVerificationStatus !== 'unsubmitted' ? (
-                        <span className="hiring-pill hiring-pill-success">
-                          <IconShieldCheck size={13} /> ID{' '}
-                          {candidate.idVerificationStatus}
-                        </span>
-                      ) : (
-                        <span className="hiring-pill">
-                          {candidate.hasAccount
-                            ? 'Account ready'
-                            : 'Pending candidate signup'}
-                        </span>
-                      )}
-                      {candidate.candidateCode ? (
-                        <span className="hiring-pill hiring-pill-plum">
-                          {candidate.candidateCode}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="hiring-candidate-meta">
-                      <span>{candidate.email || 'Unassigned email'}</span>
-                      <span>{candidate.headlineRole}</span>
-                      <span>
-                        {candidate.experienceLevel
-                          ? experienceLevelLabel(candidate.experienceLevel)
-                          : 'Level unspecified'}
-                        {candidate.yearsExperience !== null
-                          ? ` · ${candidate.yearsExperience} yrs`
-                          : ''}
-                      </span>
-                      {candidate.age !== null ? (
-                        <span>Age {candidate.age}</span>
-                      ) : null}
-                      {locationLabel ? (
+                        {candidate.candidateCode ? (
+                          <span className="hiring-pill hiring-pill-plum">
+                            {candidate.candidateCode}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="hiring-candidate-meta">
+                        <span>{candidate.email || 'Unassigned email'}</span>
+                        <span>{candidate.headlineRole}</span>
                         <span>
-                          <IconMapPin size={12} /> {locationLabel}
+                          {candidate.experienceLevel
+                            ? experienceLevelLabel(candidate.experienceLevel)
+                            : 'Level unspecified'}
+                          {candidate.yearsExperience !== null
+                            ? ` · ${candidate.yearsExperience} yrs`
+                            : ''}
                         </span>
-                      ) : null}
+                        {candidate.age !== null ? (
+                          <span>Age {candidate.age}</span>
+                        ) : null}
+                        {locationLabel ? (
+                          <span>
+                            <IconMapPin size={12} /> {locationLabel}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 

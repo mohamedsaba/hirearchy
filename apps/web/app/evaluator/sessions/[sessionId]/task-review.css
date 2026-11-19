@@ -3549,9 +3549,9 @@
 }
 
 .r27-ai-review-card {
-  border: 1px solid #dcd5c9;
-  background: linear-gradient(180deg, #fffdf9 0%, #f9f6f0 100%);
-  box-shadow: 0 1px 2px rgba(20, 19, 17, 0.04);
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-card, 0 1px 2px rgba(20, 19, 17, 0.04));
 }
 
 .r27-ai-review-header {
@@ -3561,7 +3561,7 @@
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #ebe4d8;
+  border-bottom: 1px solid var(--software-border-subtle);
 }
 
 .r27-ai-review-title-group {
@@ -3579,21 +3579,21 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  border: 1px solid #ddd6ca;
-  background: #f3efe6;
-  color: #4b473f;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface-subtle);
+  color: var(--software-muted);
 }
 
 .r27-ai-review-mode-pill.is-live {
-  background: #e9f6ef;
-  border-color: #b7e2cb;
-  color: #165e3f;
+  background: var(--software-status-success-surface);
+  border-color: var(--software-status-success-border);
+  color: var(--software-status-success);
 }
 
 .r27-ai-review-mode-pill.is-preview {
-  background: #f2eef9;
-  border-color: #d9cdf0;
-  color: #4d3775;
+  background: var(--software-lilac);
+  border-color: var(--software-border-strong);
+  color: var(--software-plum);
 }
 
 .r27-ai-review-launcher {
@@ -3615,7 +3615,7 @@
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #4b473f;
+  color: var(--software-muted);
 }
 
 .r27-ai-review-field select,
@@ -3625,9 +3625,9 @@
   min-height: 38px;
   padding: 7px 11px;
   border-radius: 8px;
-  border: 1px solid #d5cdc0;
-  background: #ffffff;
-  color: #141311;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-ink);
   font-size: 13px;
   font-family: inherit;
 }
@@ -3645,9 +3645,9 @@
   gap: 8px;
   padding: 9px 18px;
   border-radius: 9px;
-  border: 1px solid #1e5b4f;
-  background: #1e5b4f;
-  color: #fbfaf7;
+  border: 1px solid var(--software-btn-primary-bg, #1e5b4f);
+  background: var(--software-btn-primary-bg, #1e5b4f);
+  color: var(--software-btn-primary-fg, #fbfaf7);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -3657,7 +3657,8 @@
 }
 
 .r27-ai-review-primary-btn:hover:not(:disabled) {
-  background: #17493f;
+  background: var(--software-btn-primary-bg-hover, #17493f);
+  transform: translateY(-1px);
 }
 
 .r27-ai-review-primary-btn:disabled,
@@ -3672,16 +3673,16 @@
   gap: 6px;
   padding: 8px 14px;
   border-radius: 9px;
-  border: 1px solid #d5cdc0;
-  background: #ffffff;
-  color: #2c2a26;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-ink);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .r27-ai-review-secondary-btn:hover:not(:disabled) {
-  background: #f5f1ea;
+  background: var(--software-surface-subtle);
 }
 
 .r27-ai-review-report {
@@ -3710,27 +3711,28 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 4px solid #1e5b4f;
-  background: #ffffff;
+  border: 4px solid var(--software-status-success);
+  background: var(--software-surface);
+  color: var(--software-ink);
   font-variant-numeric: tabular-nums;
 }
 
 .r27-ai-review-score-ring.is-accept {
-  border-color: #1e7e56;
-  background: #f0fbf5;
-  color: #124d34;
+  border-color: var(--software-status-success);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
 }
 
 .r27-ai-review-score-ring.is-borderline {
-  border-color: #c97d1a;
-  background: #fff9ed;
-  color: #7c4a09;
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
 }
 
 .r27-ai-review-score-ring.is-reject {
-  border-color: #c84b31;
-  background: #fdf2ef;
-  color: #8a2c17;
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
 }
 
 .r27-ai-review-score-ring strong {
@@ -3770,24 +3772,24 @@
 }
 
 .r27-ai-review-verdict-pill.is-accept {
-  background: #dcf5e8;
-  color: #115737;
-  border: 1px solid #9fdcc0;
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+  border: 1px solid var(--software-status-success-border);
 }
 
 .r27-ai-review-verdict-pill.is-reject {
-  background: #fde8e4;
-  color: #8f2414;
-  border: 1px solid #f2b7ac;
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+  border: 1px solid var(--software-status-danger-border);
 }
 
 .r27-ai-review-confidence {
   font-size: 12px;
   font-weight: 600;
-  color: #5b564e;
+  color: var(--software-muted);
   padding: 4px 10px;
   border-radius: 999px;
-  background: #f2ede3;
+  background: var(--software-surface-subtle);
 }
 
 .r27-ai-review-headline {
@@ -3795,23 +3797,23 @@
   font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
-  color: #141311;
+  color: var(--software-ink);
 }
 
 .r27-ai-review-rationale {
   margin: 0;
   font-size: 14px;
   line-height: 1.55;
-  color: #36332e;
+  color: var(--software-ink-soft, var(--software-ink));
 }
 
 .r27-ai-review-fallback-note {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #f6f1fa;
-  border: 1px solid #ded1ee;
-  color: #463268;
+  background: var(--software-surface-note);
+  border: 1px solid var(--software-border);
+  color: var(--software-plum);
   font-size: 12.5px;
   line-height: 1.45;
 }
@@ -3823,8 +3825,8 @@
   margin: 0;
   padding: 12px;
   border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #e6dfd3;
+  background: var(--software-surface);
+  border: 1px solid var(--software-border);
 }
 
 .r27-ai-review-metrics div {
@@ -3838,7 +3840,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #6b655c;
+  color: var(--software-muted);
 }
 
 .r27-ai-review-metrics dd {
@@ -3846,7 +3848,7 @@
   font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #141311;
+  color: var(--software-ink);
 }
 
 .r27-ai-review-columns {
@@ -3862,18 +3864,18 @@
 .r27-ai-review-list-card {
   padding: 14px 16px;
   border-radius: 10px;
-  border: 1px solid #e5ddd0;
-  background: #ffffff;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
 }
 
 .r27-ai-review-list-card.is-strengths {
-  border-color: #c2e5d3;
-  background: #f6fcf9;
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
 }
 
 .r27-ai-review-list-card.is-weaknesses {
-  border-color: #f0cfc7;
-  background: #fef8f6;
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
 }
 
 .r27-ai-review-list-card h4 {
@@ -3884,15 +3886,15 @@
   font-size: 13px;
   font-weight: 700;
   text-transform: none;
-  color: #141311;
+  color: var(--software-ink);
 }
 
 .r27-ai-review-list-card.is-strengths h4 {
-  color: #125738;
+  color: var(--software-status-success);
 }
 
 .r27-ai-review-list-card.is-weaknesses h4 {
-  color: #8f2d1b;
+  color: var(--software-status-danger);
 }
 
 .r27-ai-review-list-card ul {
@@ -3903,7 +3905,7 @@
   gap: 7px;
   font-size: 13px;
   line-height: 1.48;
-  color: #2c2924;
+  color: var(--software-ink);
 }
 
 .r27-ai-review-footer {
@@ -3913,7 +3915,7 @@
   justify-content: space-between;
   gap: 12px;
   padding-top: 12px;
-  border-top: 1px solid #ebe4d8;
+  border-top: 1px solid var(--software-border-subtle);
 }
 
 .r27-ai-review-footer-controls {
@@ -3931,16 +3933,16 @@
 .r27-ai-review-disclaimer {
   margin: 0;
   font-size: 12px;
-  color: #6b655c;
+  color: var(--software-muted);
 }
 
 .r27-ai-review-error {
   margin: 12px 0 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #fdf0f0;
-  border: 1px solid #f5c2c2;
-  color: #991b1b;
+  background: var(--software-status-danger-surface);
+  border: 1px solid var(--software-status-danger-border);
+  color: var(--software-status-danger);
   font-size: 13px;
 }
 
@@ -3954,4 +3956,46 @@
   .evaluator-submitted-file-list li {
     align-items: flex-start;
   }
+}
+
+/* ==========================================================================
+   Obsidian Plum Dark Mode Overrides for Evaluator Review Surfaces
+   ========================================================================== */
+
+html[data-theme='dark'] .task-assessment-report .task-evidence-link,
+html[data-theme='dark'] .task-assessment-report .task-evidence-inspector,
+html[data-theme='dark'] .task-assessment-report .task-ai-source-excerpt,
+html[data-theme='dark'] .reviewer-workflow-panel .review-workflow-card,
+html[data-theme='dark']
+  .reviewer-workflow-panel
+  .review-workflow-card
+  :where(textarea, select),
+html[data-theme='dark']
+  .reviewer-workflow-panel
+  .review-note-conflict
+  blockquote,
+html[data-theme='dark'] .evaluator-event-card,
+html[data-theme='dark'] .evaluator-ai-conversation-list > li,
+html[data-theme='dark'] .evaluator-source-list button,
+html[data-theme='dark'] .evaluator-source-inspector .evaluator-ai-message pre {
+  background: var(--software-surface);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .task-assessment-report .task-criterion-source-selected,
+html[data-theme='dark'] .evaluator-review-main .engineer-inspection-panel {
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .evaluator-source-list button:hover {
+  background: var(--software-surface-subtle);
+  border-color: var(--software-border-strong);
+}
+
+html[data-theme='dark'] .r27-ai-review-card {
+  background: linear-gradient(180deg, var(--software-surface) 0%, #191022 100%);
+  border-color: var(--software-border);
 }

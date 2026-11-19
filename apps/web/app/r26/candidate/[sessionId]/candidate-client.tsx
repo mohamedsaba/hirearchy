@@ -32,6 +32,7 @@ import type {
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { ThemeToggle } from '../../../_components/theme-toggle';
 import './candidate-workspace.css';
 
 export type CandidateAccountGate = Readonly<{
@@ -1334,9 +1335,12 @@ export function R26CandidateClient({
     return (
       <div className="hiring-gate-shell software-product">
         <div className="hiring-gate-card">
-          <span className="hiring-eyebrow">
-            Hirearchy Candidate Verification
-          </span>
+          <div className="hiring-gate-topbar">
+            <span className="hiring-eyebrow">
+              Hirearchy Candidate Verification
+            </span>
+            <ThemeToggle variant="pill" />
+          </div>
           {accountGate.state === 'sign_in_required' ? (
             <>
               <h1 style={{ margin: 0, fontSize: '24px' }}>
@@ -1499,6 +1503,7 @@ export function R26CandidateClient({
               <span>AI Assistant</span>
             </button>
           ) : null}
+          <ThemeToggle variant="pill" />
           {view ? (
             <span
               className={`r26-status r26-status-${accessUnavailable || invitationExpired || sessionTimeExpired ? 'expired' : view.status.toLowerCase()}`}

@@ -26,6 +26,13 @@ function handoffPillClass(status: string): string {
   }
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
 export function HandoffsHubClient({
   organizationId,
   initialHandoffs,
@@ -120,40 +127,49 @@ export function HandoffsHubClient({
           {filtered.map((item) => (
             <article key={item.sessionId} className="hiring-candidate-card">
               <div className="hiring-candidate-header">
-                <div>
-                  <div className="hiring-candidate-name">
-                    <h2>{item.candidateName}</h2>
-                    <span
-                      className={handoffPillClass(item.decision.handoffStatus)}
-                    >
-                      {item.decision.handoffStatus}
-                    </span>
-                    <span className="hiring-pill hiring-pill-plum">
-                      {item.decision.nextStageLabel ?? 'Managerial Interview'}
-                    </span>
-                    {item.candidateCode ? (
-                      <span className="hiring-pill">{item.candidateCode}</span>
+                <div className="hiring-candidate-identity">
+                  <span className="hiring-avatar" aria-hidden="true">
+                    {getInitials(item.candidateName)}
+                  </span>
+                  <div>
+                    <div className="hiring-candidate-name">
+                      <h2>{item.candidateName}</h2>
+                      <span
+                        className={handoffPillClass(
+                          item.decision.handoffStatus,
+                        )}
+                      >
+                        {item.decision.handoffStatus}
+                      </span>
+                      <span className="hiring-pill hiring-pill-plum">
+                        {item.decision.nextStageLabel ?? 'Managerial Interview'}
+                      </span>
+                      {item.candidateCode ? (
+                        <span className="hiring-pill">
+                          {item.candidateCode}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="hiring-candidate-meta">
+                      <span>{item.candidateEmail}</span>
+                      <span>
+                        {item.targetRole} ·{' '}
+                        {experienceLevelLabel(item.experienceLevel)}
+                      </span>
+                      <span>Assessment: {item.scenarioTitle}</span>
+                      <span>Decided by: {item.decision.decidedByName}</span>
+                      <span>
+                        Manager:{' '}
+                        {item.decision.handoffRecipientName ?? 'Team manager'}
+                      </span>
+                    </div>
+                    {item.decision.performanceReport ? (
+                      <p className="hiring-fit-headline">
+                        <strong>Fit Report:</strong>{' '}
+                        {item.decision.performanceReport.fitHeadline}
+                      </p>
                     ) : null}
                   </div>
-                  <div className="hiring-candidate-meta">
-                    <span>{item.candidateEmail}</span>
-                    <span>
-                      {item.targetRole} ·{' '}
-                      {experienceLevelLabel(item.experienceLevel)}
-                    </span>
-                    <span>Assessment: {item.scenarioTitle}</span>
-                    <span>Decided by: {item.decision.decidedByName}</span>
-                    <span>
-                      Manager:{' '}
-                      {item.decision.handoffRecipientName ?? 'Team manager'}
-                    </span>
-                  </div>
-                  {item.decision.performanceReport ? (
-                    <p style={{ fontSize: '13px', marginTop: '8px' }}>
-                      <strong>Fit Report:</strong>{' '}
-                      {item.decision.performanceReport.fitHeadline}
-                    </p>
-                  ) : null}
                 </div>
 
                 <div className="hiring-chip-group">

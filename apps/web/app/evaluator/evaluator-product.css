@@ -674,3 +674,83 @@
     display: none;
   }
 }
+
+/* Dual-theme cohesion and refined link/button/surface contrasts */
+.software-product-header .hiring-theme-toggle {
+  margin-left: auto;
+}
+
+.software-product-header nav + .hiring-theme-toggle {
+  margin-left: 8px;
+}
+
+.software-product-capsule {
+  color: #140d1b;
+}
+
+.software-button-primary,
+.button-primary,
+.evaluator-signin-form button {
+  background: var(--software-btn-primary-bg, var(--software-plum));
+  color: var(--software-btn-primary-fg, #ffffff);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.software-button-primary:hover:not(:disabled),
+.button-primary:hover:not(:disabled),
+.evaluator-signin-form button:hover:not(:disabled) {
+  background: var(--software-btn-primary-bg-hover, #3b2b4a);
+  color: var(--software-btn-primary-fg, #ffffff);
+  transform: translateY(-1px);
+}
+
+.evaluator-queue-search input {
+  background: var(--software-surface);
+  color: var(--software-ink);
+}
+
+.software-access-page .evaluator-signin-panel {
+  border: 1px solid var(--software-border-subtle);
+  box-shadow: var(
+    --software-shadow-elevated,
+    0 22px 54px rgba(33, 20, 38, 0.12)
+  );
+  animation: hiringFadeUp 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.software-field-heading a,
+.evaluator-signin-form nav a,
+.software-mail-page p a {
+  color: var(--software-link);
+  text-decoration: underline;
+  text-decoration-color: var(--software-link-underline);
+  text-underline-offset: 3px;
+  font-weight: 600;
+  transition:
+    color 150ms ease,
+    text-decoration-color 150ms ease;
+}
+
+.software-field-heading a:hover,
+.evaluator-signin-form nav a:hover,
+.software-mail-page p a:hover {
+  color: var(--software-link-hover);
+  text-decoration-color: var(--software-link-hover);
+}
+
+.software-access-page .evaluator-signin-form input {
+  background: var(--software-surface-subtle);
+}
+
+html[data-theme='dark'] .software-access-page .evaluator-signin-copy {
+  background: linear-gradient(155deg, #1b1025 0%, #261636 60%, #170e20 100%);
+  border-right: 1px solid var(--software-border);
+}
+
+html[data-theme='dark'] .software-product-header {
+  border-bottom-color: var(--software-border);
+}

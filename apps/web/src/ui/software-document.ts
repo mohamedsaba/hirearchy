@@ -20,6 +20,8 @@ function escapeHtml(value: string): string {
 export type SoftwareWorkspaceActiveSection =
   'assessments' | 'settings' | 'candidates' | 'builder' | 'handoffs';
 
+export type SoftwareDocumentTheme = 'light' | 'dark';
+
 export type SoftwareWorkspace = Readonly<{
   organizationId: string;
   organizationName: string;
@@ -28,6 +30,8 @@ export type SoftwareWorkspace = Readonly<{
   csrf: string;
   active: SoftwareWorkspaceActiveSection;
   planBadge?: string;
+  theme?: SoftwareDocumentTheme;
+  currentPath?: string;
 }>;
 
 function resolveRoleLabel(role: string, hiringEnabled: boolean): string {
@@ -50,9 +54,14 @@ export function renderSoftwareDocument(
   title: string,
   content: string,
   workspace?: SoftwareWorkspace,
+  theme?: SoftwareDocumentTheme,
 ): string {
   const safeTitle = escapeHtml(title);
   const hiringEnabled = isHiringPlatformEnabled();
+  const resolvedTheme: SoftwareDocumentTheme =
+    theme ?? workspace?.theme ?? 'light';
+  const nextTheme: SoftwareDocumentTheme =
+    resolvedTheme === 'dark' ? 'light' : 'dark';
   const fallbackHeading = /<h1(?:\s|>)/i.test(content)
     ? ''
     : `<h1>${safeTitle}</h1>`;
@@ -60,6 +69,19 @@ export function renderSoftwareDocument(
   const organizationPath = workspace
     ? `/r23/organizations/${encodeURIComponent(workspace.organizationId)}`
     : '/r23/login';
+
+  const derivedWorkspacePath = workspace
+    ? (workspace.currentPath ??
+      (workspace.active === 'settings'
+        ? `${organizationPath}/settings`
+        : workspace.active === 'candidates'
+          ? `${organizationPath}/candidates`
+          : workspace.active === 'builder'
+            ? `${organizationPath}/builder`
+            : workspace.active === 'handoffs'
+              ? `${organizationPath}/handoffs`
+              : organizationPath))
+    : undefined;
 
   const navLinks = workspace
     ? hiringEnabled
@@ -105,8 +127,15 @@ export function renderSoftwareDocument(
   const hiringStylesheet = hiringEnabled
     ? '<link rel="stylesheet" href="/hiring-platform.css">'
     : '';
+  const nextInput = derivedWorkspacePath
+    ? `<input type="hidden" name="next" value="${escapeHtml(derivedWorkspacePath)}">`
+    : '';
+  const themeToggleForm = hiringEnabled
+    ? `<form class="hiring-doc-theme-form" action="/api/theme" method="post"><input type="hidden" name="theme" value="${nextTheme}">${nextInput}<button type="submit" class="hiring-theme-toggle hiring-theme-toggle--header" aria-label="Switch to ${nextTheme} theme"><span class="hiring-theme-toggle-dot" aria-hidden="true"></span><span>${resolvedTheme === 'dark' ? 'Light' : 'Dark'}</span></button></form>`
+    : '';
+  const htmlThemeAttr = resolvedTheme === 'dark' ? ' data-theme="dark"' : '';
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${
+  return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${
     workspace ? ' software-document-workspace' : ''
-  }"><header class="software-document-header"><a class="software-document-wordmark" href="${organizationPath}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a></header><div class="software-document-layout">${navigation}<main class="software-document-shell"><div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
+  }"><header class="software-document-header"><a class="software-document-wordmark" href="${organizationPath}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a>${themeToggleForm}</header><div class="software-document-layout">${navigation}<main class="software-document-shell"><div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
 }

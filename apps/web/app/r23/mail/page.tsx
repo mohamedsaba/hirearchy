@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
+import { ThemeToggle } from '../../_components/theme-toggle';
 import { FounderUatMailInbox } from './mail-inbox';
 import '../../evaluator/evaluator-product.css';
 
@@ -28,6 +29,7 @@ export default async function FounderUatMailPage({
           <span>Hirearchy</span>
           <span className="software-product-capsule">Software</span>
         </Link>
+        <ThemeToggle variant="header" />
       </header>
       <div className="evaluator-product-content">
         <section className="evaluator-page-intro" aria-labelledby="mail-title">

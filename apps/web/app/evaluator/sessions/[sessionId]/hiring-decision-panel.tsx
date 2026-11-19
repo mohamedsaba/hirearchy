@@ -35,6 +35,13 @@ function splitLines(raw: string): string[] {
     .filter(Boolean);
 }
 
+function candidateInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
 export function HiringDecisionPanel({
   initialContext,
 }: HiringDecisionPanelProps) {
@@ -229,34 +236,43 @@ export function HiringDecisionPanel({
 
   return (
     <div className="hiring-page-shell" data-testid="hiring-decision-panel">
-      <section className="hiring-card">
-        <div className="hiring-candidate-name">
-          <span className="hiring-eyebrow">Candidate Context</span>
-          {ctx.candidateCode ? (
-            <span className="hiring-pill hiring-pill-plum">
-              {ctx.candidateCode}
-            </span>
-          ) : null}
-          {ctx.decision ? (
-            <span
-              className={`hiring-pill ${ctx.decision.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
-            >
-              {ctx.decision.decision === 'accepted'
-                ? `Accepted · ${ctx.decision.nextStageLabel ?? 'Handoff Ready'}`
-                : 'Rejected · Feedback Sent'}
-            </span>
-          ) : null}
-        </div>
-        <h3>
-          {ctx.candidateName || ctx.candidateEmail || 'Candidate Session'}
-        </h3>
-        <div className="hiring-candidate-meta">
-          {ctx.candidateEmail ? <span>{ctx.candidateEmail}</span> : null}
-          <span>Role: {ctx.targetRole || 'Software Engineer'}</span>
-          <span>Level: {experienceLevelLabel(ctx.experienceLevel)}</span>
-          {ctx.skills.length > 0 ? (
-            <span>Focus: {ctx.skills.join(', ')}</span>
-          ) : null}
+      <section className="hiring-card hiring-card-animated">
+        <div className="hiring-candidate-identity">
+          <span className="hiring-avatar" aria-hidden="true">
+            {candidateInitials(
+              ctx.candidateName || ctx.candidateEmail || 'Candidate',
+            )}
+          </span>
+          <div>
+            <div className="hiring-candidate-name">
+              <span className="hiring-eyebrow">Candidate Context</span>
+              {ctx.candidateCode ? (
+                <span className="hiring-pill hiring-pill-plum">
+                  {ctx.candidateCode}
+                </span>
+              ) : null}
+              {ctx.decision ? (
+                <span
+                  className={`hiring-pill ${ctx.decision.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
+                >
+                  {ctx.decision.decision === 'accepted'
+                    ? `Accepted · ${ctx.decision.nextStageLabel ?? 'Handoff Ready'}`
+                    : 'Rejected · Feedback Sent'}
+                </span>
+              ) : null}
+            </div>
+            <h3>
+              {ctx.candidateName || ctx.candidateEmail || 'Candidate Session'}
+            </h3>
+            <div className="hiring-candidate-meta">
+              {ctx.candidateEmail ? <span>{ctx.candidateEmail}</span> : null}
+              <span>Role: {ctx.targetRole || 'Software Engineer'}</span>
+              <span>Level: {experienceLevelLabel(ctx.experienceLevel)}</span>
+              {ctx.skills.length > 0 ? (
+                <span>Focus: {ctx.skills.join(', ')}</span>
+              ) : null}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -271,14 +287,17 @@ export function HiringDecisionPanel({
         </div>
       ) : null}
 
-      <section className="hiring-card" aria-labelledby="second-opinion-heading">
+      <section
+        className="hiring-card hiring-card-animated"
+        aria-labelledby="second-opinion-heading"
+      >
         <div className="hiring-candidate-name">
           <IconUsers size={18} />
           <h3 id="second-opinion-heading">
             Second Opinion (Team Collaboration)
           </h3>
         </div>
-        <p style={{ fontSize: '13px', color: 'var(--software-muted)' }}>
+        <p className="hiring-muted-copy">
           Ask another evaluator, CTO, or engineering manager on your team to
           inspect this candidate&apos;s evidence before publishing a final
           decision.
@@ -286,8 +305,7 @@ export function HiringDecisionPanel({
 
         <form
           onSubmit={handleRequestOpinion}
-          className="hiring-page-shell"
-          style={{ marginTop: '12px' }}
+          className="hiring-page-shell hiring-mt-sm"
         >
           <div className="hiring-two-col">
             <div className="hiring-field">
@@ -332,7 +350,7 @@ export function HiringDecisionPanel({
         </form>
 
         {ctx.secondOpinions.length > 0 ? (
-          <div className="hiring-opinion-list" style={{ marginTop: '14px' }}>
+          <div className="hiring-opinion-list hiring-mt-md">
             {ctx.secondOpinions.map((op) => {
               const isAssignedResponder =
                 op.requestedReviewerPrincipalId === ctx.currentPrincipalId &&
@@ -350,19 +368,17 @@ export function HiringDecisionPanel({
                     </span>
                   </div>
                   {op.requestNote ? (
-                    <p style={{ fontSize: '13px', marginTop: '4px' }}>
+                    <p className="hiring-dossier-bio hiring-mt-xs">
                       Request: {op.requestNote}
                     </p>
                   ) : null}
                   {op.responseNote ? (
-                    <p style={{ fontSize: '13px', marginTop: '6px' }}>
+                    <p className="hiring-dossier-bio hiring-mt-xs">
                       <strong>Response:</strong> {op.responseNote}
                     </p>
                   ) : null}
                   {isAssignedResponder ? (
-                    <div
-                      style={{ marginTop: '8px', display: 'grid', gap: '8px' }}
-                    >
+                    <div className="hiring-stack-xs hiring-mt-xs">
                       <textarea
                         rows={2}
                         value={opinionResponses[op.id] ?? ''}
@@ -391,14 +407,17 @@ export function HiringDecisionPanel({
         ) : null}
       </section>
 
-      <section className="hiring-card" aria-labelledby="final-decision-heading">
+      <section
+        className="hiring-card hiring-card-animated"
+        aria-labelledby="final-decision-heading"
+      >
         <div className="hiring-candidate-name">
           <IconCheck size={18} />
           <h3 id="final-decision-heading">
             Evaluator Decision, Feedback &amp; Managerial Handoff
           </h3>
         </div>
-        <p style={{ fontSize: '13px', color: 'var(--software-muted)' }}>
+        <p className="hiring-muted-copy">
           The human evaluator owns the verdict. Choose whether to accept the
           candidate to the next interview stage or send structured rejection
           feedback.
@@ -406,8 +425,7 @@ export function HiringDecisionPanel({
 
         <form
           onSubmit={handlePublishDecision}
-          className="hiring-page-shell"
-          style={{ marginTop: '14px' }}
+          className="hiring-page-shell hiring-mt-md"
         >
           <div className="hiring-builder-tabs">
             <button
@@ -513,7 +531,7 @@ export function HiringDecisionPanel({
                 </div>
               </div>
 
-              <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
+              <div className="hiring-stack-sm hiring-mt-sm">
                 {canGenerateFitReport ? (
                   <div className="hiring-header-actions">
                     <button
@@ -547,13 +565,13 @@ export function HiringDecisionPanel({
                 )}
 
                 {performanceReport ? (
-                  <div className="hiring-card" style={{ padding: '14px' }}>
+                  <div className="hiring-card hiring-card-compact">
                     <span className="hiring-eyebrow">
                       Managerial Performance &amp; Fit Report ·{' '}
                       {performanceReport.provider.modelId}
                     </span>
                     <h4>{performanceReport.fitHeadline}</h4>
-                    <p style={{ fontSize: '13px' }}>
+                    <p className="hiring-dossier-bio">
                       {performanceReport.whyGoodOrBadFit}
                     </p>
                   </div>

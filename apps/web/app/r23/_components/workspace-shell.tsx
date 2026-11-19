@@ -5,6 +5,7 @@ import {
   type OrganizationPlanSummary,
 } from '../../../src/plans/entitlements';
 import type { SoftwareWorkspaceActiveSection } from '../../../src/ui/software-document';
+import { ThemeToggle } from '../../_components/theme-toggle';
 
 function resolveRoleLabel(role: string): string {
   switch (role) {
@@ -54,6 +55,7 @@ export function OrganizationWorkspaceShell({
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </a>
+        <ThemeToggle variant="header" />
       </header>
       <div className="software-document-layout">
         <aside className="software-workspace-sidebar">

@@ -29,6 +29,7 @@ import type {
   CandidateProfile,
   SafePortalAssessmentView,
 } from '../../src/hiring/types';
+import { ThemeToggle } from '../_components/theme-toggle';
 
 export interface CandidatePortalClientProps {
   readonly email: string;
@@ -301,7 +302,7 @@ export function CandidatePortalClient({
   return (
     <div className="hiring-candidate-portal software-product">
       <header className="hiring-portal-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="hiring-portal-brand">
           <strong>Hirearchy</strong>
           <span className="hiring-sidebar-plan-badge">Candidate Portal</span>
           {profile?.candidateCode ? (
@@ -311,7 +312,8 @@ export function CandidatePortalClient({
           ) : null}
         </div>
         <div className="hiring-header-actions">
-          <span style={{ fontSize: '13px', opacity: 0.9 }}>{email}</span>
+          <span className="hiring-portal-email">{email}</span>
+          <ThemeToggle variant="header" />
           <button
             type="button"
             className="hiring-btn hiring-btn-sm"
@@ -457,16 +459,11 @@ export function CandidatePortalClient({
             ) : (
               <div className="hiring-candidate-list">
                 {filteredAssessments.map((item) => (
-                  <article key={item.sessionId} className="hiring-card">
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        gap: '14px',
-                      }}
-                    >
+                  <article
+                    key={item.sessionId}
+                    className="hiring-card hiring-card-animated"
+                  >
+                    <div className="hiring-portal-card-head">
                       <div>
                         <div className="hiring-candidate-name">
                           <span className="hiring-pill hiring-pill-plum">
@@ -480,7 +477,7 @@ export function CandidatePortalClient({
                             {portalStatusLabel(item.pipelineStatus)}
                           </span>
                         </div>
-                        <h2 style={{ margin: '8px 0 4px' }}>
+                        <h2 className="hiring-portal-card-title">
                           {item.scenarioTitle}
                         </h2>
                         <div className="hiring-candidate-meta">
@@ -525,10 +522,7 @@ export function CandidatePortalClient({
                     </div>
 
                     {item.publishedOutcome ? (
-                      <div
-                        className="hiring-outcome-box"
-                        style={{ marginTop: '14px' }}
-                      >
+                      <div className="hiring-outcome-box hiring-mt-md">
                         <div className="hiring-candidate-name">
                           <strong>
                             {item.publishedOutcome.decision === 'accepted'
@@ -543,7 +537,7 @@ export function CandidatePortalClient({
                         </div>
 
                         {item.publishedOutcome.feedbackNote ? (
-                          <p style={{ margin: 0 }}>
+                          <p className="hiring-outcome-note">
                             {item.publishedOutcome.feedbackNote}
                           </p>
                         ) : null}
@@ -552,12 +546,7 @@ export function CandidatePortalClient({
                           {item.publishedOutcome.strengths.length > 0 ? (
                             <div>
                               <strong>Strengths noted</strong>
-                              <ul
-                                style={{
-                                  margin: '4px 0 0',
-                                  paddingLeft: '18px',
-                                }}
-                              >
+                              <ul className="hiring-bullet-list">
                                 {item.publishedOutcome.strengths.map((s, i) => (
                                   <li key={i}>{s}</li>
                                 ))}
@@ -567,12 +556,7 @@ export function CandidatePortalClient({
                           {item.publishedOutcome.weaknesses.length > 0 ? (
                             <div>
                               <strong>Areas for growth</strong>
-                              <ul
-                                style={{
-                                  margin: '4px 0 0',
-                                  paddingLeft: '18px',
-                                }}
-                              >
+                              <ul className="hiring-bullet-list">
                                 {item.publishedOutcome.weaknesses.map(
                                   (w, i) => (
                                     <li key={i}>{w}</li>
@@ -592,14 +576,14 @@ export function CandidatePortalClient({
         ) : (
           <form
             onSubmit={handleSaveProfile}
-            className="hiring-card hiring-page-shell"
+            className="hiring-card hiring-card-animated hiring-page-shell"
           >
             <div>
               <span className="hiring-eyebrow">
                 Verified Candidate Identity
               </span>
               <h2>Profile &amp; Legitimacy Details</h2>
-              <p style={{ fontSize: '13px', color: 'var(--software-muted)' }}>
+              <p className="hiring-muted-copy hiring-mt-xs">
                 Complete these details once. Every hiring team assessing your
                 submissions can verify your identity and filter cleanly by
                 experience, skills, and location.
@@ -751,17 +735,11 @@ export function CandidatePortalClient({
                   </span>
                 ) : null}
               </div>
-              <p
-                style={{
-                  fontSize: '12px',
-                  color: 'var(--software-muted)',
-                  marginTop: '4px',
-                }}
-              >
+              <p className="hiring-muted-copy hiring-mt-xs">
                 Only the masked last 4 digits and verification status are stored
                 so hiring teams can confirm candidate authenticity safely.
               </p>
-              <div className="hiring-two-col" style={{ marginTop: '10px' }}>
+              <div className="hiring-two-col hiring-mt-sm">
                 <div className="hiring-field">
                   <label htmlFor="prof-id-type">Document type</label>
                   <select

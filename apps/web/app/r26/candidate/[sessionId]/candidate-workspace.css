@@ -1814,3 +1814,117 @@
 #candidate-brief-content {
   scroll-margin-top: 140px;
 }
+
+/* ==========================================================================
+   Dual-Theme Surface & Obsidian Plum Dark IDE Overrides for Candidate Workspace
+   ========================================================================== */
+
+.r26-shell .r26-button-primary {
+  background: var(--software-btn-primary-bg, var(--r26-plum));
+  color: var(--software-btn-primary-fg, #ffffff);
+  border-color: var(--software-btn-primary-bg, var(--r26-plum));
+}
+
+.r26-shell .r26-button-primary:hover:not(:disabled) {
+  background: var(--software-btn-primary-bg-hover, #43324f);
+  border-color: var(--software-btn-primary-bg-hover, #43324f);
+  color: var(--software-btn-primary-fg, #ffffff);
+}
+
+.r26-shell .r26-button-secondary {
+  background: var(--software-surface);
+  border-color: var(--software-border);
+  color: var(--software-ink);
+}
+
+.r26-shell .r26-timer.is-low {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+}
+
+.r26-shell .r26-notice-error {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+html[data-theme='dark'] .r26-shell {
+  --r26-ink: #efe7f4;
+  --r26-muted: #b3a2c4;
+  --r26-line: #382849;
+  --r26-surface: #1d1426;
+  --r26-canvas: #140d1b;
+  --r26-plum: #8ee3b8;
+  --r26-lilac: #2b1e39;
+}
+
+html[data-theme='dark'] .r26-shell .r26-product-tab {
+  color: #140d1b;
+}
+
+html[data-theme='dark'] .r26-shell .r26-event-marker,
+html[data-theme='dark'] .r26-shell .r26-editor-panel,
+html[data-theme='dark'] .r26-shell .r26-editor-tab.is-active,
+html[data-theme='dark'] .r26-shell .r26-file-switcher,
+html[data-theme='dark'] .r26-shell .r26-message,
+html[data-theme='dark'] .r26-shell .r26-editor-empty,
+html[data-theme='dark']
+  .r26-shell
+  .r26-footer-capabilities[open]
+  .r26-capabilities-body,
+html[data-theme='dark'] .r26-shell .r26-not-submitted-draft pre,
+html[data-theme='dark'] .r26-shell .r26-ai-textarea,
+html[data-theme='dark'] .r26-shell .r26-execution-receipt-details,
+html[data-theme='dark'] .r26-shell .r26-history-item-btn {
+  background: var(--software-surface);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .r26-shell .r26-editor-tab:hover:not(:disabled),
+html[data-theme='dark'] .r26-shell .r26-ai-message-assistant,
+html[data-theme='dark'] .r26-shell .r26-ai-composer,
+html[data-theme='dark'] .r26-shell .r26-ai-textarea:disabled,
+html[data-theme='dark'] .r26-shell .r26-execution-budget-pill,
+html[data-theme='dark'] .r26-shell .r26-history-item-btn.selected {
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .r26-shell .r26-ai-message-failed {
+  background: var(--software-status-danger-surface);
+  border-color: var(--software-status-danger-border);
+  color: var(--software-status-danger);
+}
+
+/* Obsidian Plum dark IDE surface for CodeMirror editor inside Candidate Workspace */
+html[data-theme='dark'] .r26-shell .r26-code-editor,
+html[data-theme='dark'] .r26-shell .r26-code-mirror .cm-editor,
+html[data-theme='dark'] .r26-shell .r26-code-mirror .cm-scroller {
+  background: #160e1f;
+  color: #efe7f4;
+}
+
+html[data-theme='dark'] .r26-shell .r26-code-mirror .cm-gutters {
+  background: #110a18;
+  color: #7d6b91;
+  border-right: 1px solid #382849;
+}
+
+html[data-theme='dark'] .r26-shell .r26-code-mirror .cm-activeLine {
+  background: rgba(142, 227, 184, 0.08);
+}
+
+html[data-theme='dark'] .r26-shell .r26-code-mirror .cm-activeLineGutter {
+  background: #1e142b;
+  color: #8ee3b8;
+}
+
+html[data-theme='dark'] .r26-shell .r26-code-mirror .cm-cursor {
+  border-left-color: #8ee3b8;
+}
+
+html[data-theme='dark'] .r26-shell .r26-code-mirror .cm-selectionBackground {
+  background: rgba(142, 227, 184, 0.22);
+}

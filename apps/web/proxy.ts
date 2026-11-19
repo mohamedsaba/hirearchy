@@ -111,6 +111,7 @@ const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
 ];
 
 const HIRING_PLATFORM_POST_PATTERNS: readonly RegExp[] = [
+  /^\/api\/theme$/,
   /^\/api\/candidate-portal$/,
   /^\/r26\/api\/candidate\/[^/]+\/ai$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/plan$/,

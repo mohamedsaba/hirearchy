@@ -5,7 +5,6 @@ import {
   IconBookmark,
   IconCheck,
   IconCopy,
-  IconFileCode,
   IconSend,
   IconSparkles,
   IconTemplate,
@@ -35,6 +34,7 @@ import {
   type OrganizationPlanSummary,
 } from '../../../../../src/plans/entitlements';
 import type { R211AssessmentDraftInput } from '../../../../../src/r211-builder/contract';
+import { VsCodeFileInspector } from './vscode-file-inspector';
 
 export interface HiringAssessmentBuilderClientProps {
   readonly organizationId: string;
@@ -46,6 +46,7 @@ export interface HiringAssessmentBuilderClientProps {
 }
 
 type BuilderMode = 'templates' | 'ai' | 'library';
+type PreviewTab = 'overview' | 'rubric';
 
 function readCsrfCookie(): string {
   if (typeof document === 'undefined') return '';
@@ -98,8 +99,8 @@ export function HiringAssessmentBuilderClient({
   const [library, setLibrary] =
     useState<readonly SavedLibraryProblem[]>(initialLibrary);
   const [mode, setMode] = useState<BuilderMode>('templates');
+  const [previewTab, setPreviewTab] = useState<PreviewTab>('overview');
 
-  // Active preview problem state
   const defaultTemplate = initialTemplates[0];
   const [activeDraft, setActiveDraft] = useState<R211AssessmentDraftInput>(
     () => ({
@@ -136,11 +137,9 @@ export function HiringAssessmentBuilderClient({
     defaultTemplate.baseDraft.primaryFilePath,
   );
 
-  // Template tab options
   const [tplDuration, setTplDuration] = useState<30 | 45 | 60 | 90>(60);
   const [tplIntegratedAi, setTplIntegratedAi] = useState(false);
 
-  // AI Generator state
   const [aiRole, setAiRole] = useState<string>(HIRING_ROLES[0]);
   const [aiExpLevel, setAiExpLevel] = useState<ExperienceLevelId>('mid');
   const [aiYears, setAiYears] = useState<number>(3);
@@ -158,14 +157,12 @@ export function HiringAssessmentBuilderClient({
   const [aiGuidance, setAiGuidance] = useState<string>('');
   const [generating, setGenerating] = useState(false);
 
-  // Library filters
   const [libOwnerFilter, setLibOwnerFilter] = useState<'all' | 'mine'>('all');
   const [libSourceFilter, setLibSourceFilter] = useState<
     'all' | 'template' | 'ai_generated'
   >('all');
   const [libRoleFilter, setLibRoleFilter] = useState<string>('all');
 
-  // Issuance form state
   const [candidateEmail, setCandidateEmail] = useState('');
   const [reviewerPrincipalId, setReviewerPrincipalId] = useState<string>(
     teamMembers.find((m) => m.principalId === currentPrincipalId)
@@ -176,7 +173,6 @@ export function HiringAssessmentBuilderClient({
   const [expiresInDays, setExpiresInDays] = useState<number>(7);
   const [invitationNote, setInvitationNote] = useState('');
 
-  // Status / Feedback state
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -225,10 +221,6 @@ export function HiringAssessmentBuilderClient({
     libRoleFilter,
     currentPrincipalId,
   ]);
-
-  const activePreviewFile =
-    activeDraft.starterFiles.find((f) => f.path === previewFilePath) ??
-    activeDraft.starterFiles[0];
 
   const selectTemplate = (tpl: PlatformTemplateView) => {
     const nextDraft: R211AssessmentDraftInput = {
@@ -405,7 +397,6 @@ export function HiringAssessmentBuilderClient({
     };
     setSavedIds(ids);
 
-    // Refresh library list
     const listRes = await fetch(`${apiBase}/library`, {
       headers: { Accept: 'application/json' },
     }).catch(() => null);
@@ -540,8 +531,61 @@ export function HiringAssessmentBuilderClient({
     setCopiedLink(true);
   };
 
+  const step1Summary =
+    activeSourceMeta.sourceKind === 'ai_generated'
+      ? 'Kimi K3.1 Pro draft ready'
+      : savedIds
+        ? 'Library problem active'
+        : 'Template loaded';
+
   return (
-    <div className="hiring-page-shell">
+    <div className="hiring-page-shell hiring-builder-shell">
+      <ol
+        className="hiring-journey-bar"
+        aria-label="Assessment builder workflow steps"
+      >
+        <li className="hiring-journey-step is-done">
+          <span className="hiring-journey-num">01</span>
+          <div>
+            <strong>Author or Select</strong>
+            <span>{step1Summary}</span>
+          </div>
+        </li>
+        <li
+          className={`hiring-journey-step${savedIds ? ' is-done' : ' is-active'}`}
+        >
+          <span className="hiring-journey-num">02</span>
+          <div>
+            <strong>Inspect Repository &amp; Rubric</strong>
+            <span>
+              {activeDraft.starterFiles.length} files ·{' '}
+              {activeDraft.durationMinutes} min
+            </span>
+          </div>
+        </li>
+        <li
+          className={`hiring-journey-step${
+            issuedResult ? ' is-done' : creditsBlocked ? ' is-blocked' : ''
+          }`}
+        >
+          <span className="hiring-journey-num">03</span>
+          <div>
+            <strong>Issue to Candidate</strong>
+            <span>
+              {issuedResult
+                ? 'Sent to candidate'
+                : alreadyCreditedCandidate
+                  ? '0 slots (re-issue)'
+                  : plan.planTier === 'per_candidate'
+                    ? `${plan.candidateCreditsRemaining ?? 0} slots left`
+                    : plan.planTier === 'none'
+                      ? 'Plan required'
+                      : 'Unlimited capacity'}
+            </span>
+          </div>
+        </li>
+      </ol>
+
       {creditsBlocked ? (
         <div className="hiring-banner hiring-banner-warning" role="alert">
           <div>
@@ -560,43 +604,50 @@ export function HiringAssessmentBuilderClient({
         </div>
       ) : null}
 
-      <section className="hiring-card">
-        <div
-          className="hiring-builder-tabs"
-          role="tablist"
-          aria-label="Assessment source mode"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'templates'}
-            className={`hiring-builder-tab${mode === 'templates' ? ' is-active' : ''}`}
-            onClick={() => setMode('templates')}
+      <section className="hiring-card hiring-card-animated">
+        <div className="hiring-builder-head">
+          <div>
+            <span className="hiring-eyebrow">Step 01 · Problem Source</span>
+            <h2>Choose, Generate, or Reuse</h2>
+          </div>
+          <div
+            className="hiring-builder-tabs"
+            role="tablist"
+            aria-label="Assessment source mode"
           >
-            <IconTemplate size={16} /> Platform Templates
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'ai'}
-            className={`hiring-builder-tab${mode === 'ai' ? ' is-active' : ''}`}
-            onClick={() => setMode('ai')}
-          >
-            <IconSparkles size={16} /> Generate with AI (Kimi K3.1 Pro)
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'library'}
-            className={`hiring-builder-tab${mode === 'library' ? ' is-active' : ''}`}
-            onClick={() => setMode('library')}
-          >
-            <IconBookmark size={16} /> Saved Problem Library ({library.length})
-          </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'templates'}
+              className={`hiring-builder-tab${mode === 'templates' ? ' is-active' : ''}`}
+              onClick={() => setMode('templates')}
+            >
+              <IconTemplate size={16} /> Platform Templates
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'ai'}
+              className={`hiring-builder-tab${mode === 'ai' ? ' is-active' : ''}`}
+              onClick={() => setMode('ai')}
+            >
+              <IconSparkles size={16} /> Generate with AI (Kimi K3.1 Pro)
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'library'}
+              className={`hiring-builder-tab${mode === 'library' ? ' is-active' : ''}`}
+              onClick={() => setMode('library')}
+            >
+              <IconBookmark size={16} /> Saved Problem Library ({library.length}
+              )
+            </button>
+          </div>
         </div>
 
         {mode === 'templates' ? (
-          <div className="hiring-page-shell" style={{ marginTop: '18px' }}>
+          <div className="hiring-builder-pane">
             <div className="hiring-two-col">
               <div className="hiring-field">
                 <label htmlFor="tpl-duration">Session duration</label>
@@ -618,20 +669,17 @@ export function HiringAssessmentBuilderClient({
                 <span className="hiring-field-label">
                   Candidate Workspace AI
                 </span>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    minHeight: '38px',
-                  }}
-                >
+                <label className="hiring-switch-row">
                   <input
                     type="checkbox"
+                    className="hiring-switch-input"
                     checked={tplIntegratedAi}
                     onChange={(e) => setTplIntegratedAi(e.target.checked)}
                   />
-                  Enable Kimi K3.1 Pro assistant inside Candidate IDE
+                  <span className="hiring-switch-track" aria-hidden="true" />
+                  <span className="hiring-switch-copy">
+                    Enable Kimi K3.1 Pro assistant inside Candidate IDE
+                  </span>
                 </label>
               </div>
             </div>
@@ -646,11 +694,8 @@ export function HiringAssessmentBuilderClient({
                     key={tpl.templateId}
                     className={`hiring-problem-card${selected ? ' is-selected' : ''}`}
                   >
-                    <div>
-                      <div
-                        className="hiring-chip-group"
-                        style={{ marginBottom: '8px' }}
-                      >
+                    <div className="hiring-stack-xs">
+                      <div className="hiring-chip-group">
                         <span className="hiring-pill hiring-pill-plum">
                           {tpl.targetRole}
                         </span>
@@ -664,18 +709,8 @@ export function HiringAssessmentBuilderClient({
                         </span>
                       </div>
                       <h3>{tpl.title}</h3>
-                      <p
-                        style={{
-                          fontSize: '13px',
-                          color: 'var(--software-muted)',
-                        }}
-                      >
-                        {tpl.summary}
-                      </p>
-                      <div
-                        className="hiring-chip-group"
-                        style={{ marginTop: '8px' }}
-                      >
+                      <p className="hiring-muted-copy">{tpl.summary}</p>
+                      <div className="hiring-chip-group">
                         {tpl.skills.map((s) => (
                           <span key={s} className="hiring-pill">
                             {s}
@@ -698,7 +733,7 @@ export function HiringAssessmentBuilderClient({
         ) : null}
 
         {mode === 'ai' ? (
-          <div className="hiring-page-shell" style={{ marginTop: '18px' }}>
+          <div className="hiring-builder-pane">
             {!canUseAiBuilder ? (
               <div className="hiring-banner hiring-banner-warning">
                 <div>
@@ -715,195 +750,204 @@ export function HiringAssessmentBuilderClient({
               </div>
             ) : null}
 
-            <div className="hiring-filter-grid">
-              <div className="hiring-field">
-                <label htmlFor="ai-role">Target role</label>
-                <select
-                  id="ai-role"
-                  value={aiRole}
-                  onChange={(e) => setAiRole(e.target.value)}
-                >
-                  {HIRING_ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
+            <div className="hiring-ai-studio">
+              <div className="hiring-ai-studio-head">
+                <div className="hiring-ai-studio-badge">
+                  <IconSparkles size={15} /> Kimi K3.1 Pro Studio
+                </div>
+                <span className="hiring-muted-copy">
+                  Generates a multi-file repository, deterministic test suite,
+                  and calibrated scoring rubric.
+                </span>
               </div>
 
-              <div className="hiring-field">
-                <label htmlFor="ai-level">Seniority level</label>
-                <select
-                  id="ai-level"
-                  value={aiExpLevel}
-                  onChange={(e) => {
-                    const lvl = e.target.value as ExperienceLevelId;
-                    setAiExpLevel(lvl);
-                    const found = EXPERIENCE_LEVELS.find((x) => x.id === lvl);
-                    if (found) setAiYears(found.defaultYears);
-                  }}
-                >
-                  {EXPERIENCE_LEVELS.map((lvl) => (
-                    <option key={lvl.id} value={lvl.id}>
-                      {lvl.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <div className="hiring-filter-grid">
+                <div className="hiring-field">
+                  <label htmlFor="ai-role">Target role</label>
+                  <select
+                    id="ai-role"
+                    value={aiRole}
+                    onChange={(e) => setAiRole(e.target.value)}
+                  >
+                    {HIRING_ROLES.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="hiring-field">
-                <label htmlFor="ai-years">Years of experience</label>
-                <select
-                  id="ai-years"
-                  value={aiYears}
-                  onChange={(e) => setAiYears(Number(e.target.value))}
-                >
-                  {YEARS_EXPERIENCE_OPTIONS.map((y) => (
-                    <option key={y.value} value={y.value}>
-                      {y.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="hiring-field">
+                  <label htmlFor="ai-level">Seniority level</label>
+                  <select
+                    id="ai-level"
+                    value={aiExpLevel}
+                    onChange={(e) => {
+                      const lvl = e.target.value as ExperienceLevelId;
+                      setAiExpLevel(lvl);
+                      const found = EXPERIENCE_LEVELS.find((x) => x.id === lvl);
+                      if (found) setAiYears(found.defaultYears);
+                    }}
+                  >
+                    {EXPERIENCE_LEVELS.map((lvl) => (
+                      <option key={lvl.id} value={lvl.id}>
+                        {lvl.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="hiring-field">
-                <label htmlFor="ai-structure">Repository structure</label>
-                <select
-                  id="ai-structure"
-                  value={aiStructure}
-                  onChange={(e) =>
-                    setAiStructure(e.target.value as ProblemStructureId)
-                  }
-                >
-                  {PROBLEM_STRUCTURE_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="hiring-field">
+                  <label htmlFor="ai-years">Years of experience</label>
+                  <select
+                    id="ai-years"
+                    value={aiYears}
+                    onChange={(e) => setAiYears(Number(e.target.value))}
+                  >
+                    {YEARS_EXPERIENCE_OPTIONS.map((y) => (
+                      <option key={y.value} value={y.value}>
+                        {y.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="hiring-field">
-                <label htmlFor="ai-work-kind">Work scenario focus</label>
-                <select
-                  id="ai-work-kind"
-                  value={aiWorkKind}
-                  onChange={(e) => setAiWorkKind(e.target.value)}
-                >
-                  {WORK_KIND_OPTIONS.map((wk) => (
-                    <option key={wk.id} value={wk.id}>
-                      {wk.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="hiring-field">
+                  <label htmlFor="ai-structure">Repository structure</label>
+                  <select
+                    id="ai-structure"
+                    value={aiStructure}
+                    onChange={(e) =>
+                      setAiStructure(e.target.value as ProblemStructureId)
+                    }
+                  >
+                    {PROBLEM_STRUCTURE_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="hiring-field">
-                <label htmlFor="ai-domain">Engineering domain</label>
-                <select
-                  id="ai-domain"
-                  value={aiDomain}
-                  onChange={(e) => setAiDomain(e.target.value)}
-                >
-                  {DOMAIN_OPTIONS.map((dom) => (
-                    <option key={dom.id} value={dom.id}>
-                      {dom.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="hiring-field">
+                  <label htmlFor="ai-work-kind">Work scenario focus</label>
+                  <select
+                    id="ai-work-kind"
+                    value={aiWorkKind}
+                    onChange={(e) => setAiWorkKind(e.target.value)}
+                  >
+                    {WORK_KIND_OPTIONS.map((wk) => (
+                      <option key={wk.id} value={wk.id}>
+                        {wk.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="hiring-field">
-                <label htmlFor="ai-duration">Duration</label>
-                <select
-                  id="ai-duration"
-                  value={aiDuration}
-                  onChange={(e) =>
-                    setAiDuration(Number(e.target.value) as 30 | 45 | 60 | 90)
-                  }
-                >
-                  <option value={30}>30 minutes</option>
-                  <option value={45}>45 minutes</option>
-                  <option value={60}>60 minutes</option>
-                  <option value={90}>90 minutes</option>
-                </select>
+                <div className="hiring-field">
+                  <label htmlFor="ai-domain">Engineering domain</label>
+                  <select
+                    id="ai-domain"
+                    value={aiDomain}
+                    onChange={(e) => setAiDomain(e.target.value)}
+                  >
+                    {DOMAIN_OPTIONS.map((dom) => (
+                      <option key={dom.id} value={dom.id}>
+                        {dom.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="hiring-field">
+                  <label htmlFor="ai-duration">Duration</label>
+                  <select
+                    id="ai-duration"
+                    value={aiDuration}
+                    onChange={(e) =>
+                      setAiDuration(Number(e.target.value) as 30 | 45 | 60 | 90)
+                    }
+                  >
+                    <option value={30}>30 minutes</option>
+                    <option value={45}>45 minutes</option>
+                    <option value={60}>60 minutes</option>
+                    <option value={90}>90 minutes</option>
+                  </select>
+                </div>
+
+                <div className="hiring-field">
+                  <span className="hiring-field-label">
+                    Candidate AI Assistant
+                  </span>
+                  <label className="hiring-switch-row">
+                    <input
+                      type="checkbox"
+                      className="hiring-switch-input"
+                      checked={aiIntegratedAi}
+                      onChange={(e) => setAiIntegratedAi(e.target.checked)}
+                    />
+                    <span className="hiring-switch-track" aria-hidden="true" />
+                    <span className="hiring-switch-copy">
+                      Enable Kimi K3.1 Pro inside workspace
+                    </span>
+                  </label>
+                </div>
               </div>
 
               <div className="hiring-field">
                 <span className="hiring-field-label">
-                  Candidate AI Assistant
+                  Priority skills to test ({aiSkills.length}/10 selected)
                 </span>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    minHeight: '38px',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={aiIntegratedAi}
-                    onChange={(e) => setAiIntegratedAi(e.target.checked)}
-                  />
-                  Enable Kimi K3.1 Pro inside workspace
+                <div className="hiring-chip-group">
+                  {CURATED_SKILLS.map((skill) => {
+                    const active = aiSkills.includes(skill);
+                    return (
+                      <button
+                        key={skill}
+                        type="button"
+                        className={`hiring-chip${active ? ' is-active' : ''}`}
+                        onClick={() => toggleAiSkill(skill)}
+                        aria-pressed={active}
+                      >
+                        {skill}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="hiring-field">
+                <label htmlFor="ai-guidance">
+                  Optional role focus note (for example: emphasize idempotent
+                  webhook retries or clock-skew handling)
                 </label>
+                <textarea
+                  id="ai-guidance"
+                  value={aiGuidance}
+                  onChange={(e) => setAiGuidance(e.target.value)}
+                  placeholder="Optional architectural context or tricky edge cases you want Kimi K3.1 Pro to include..."
+                />
               </div>
-            </div>
 
-            <div className="hiring-field">
-              <span className="hiring-field-label">
-                Priority skills to test (select up to 10)
-              </span>
-              <div className="hiring-chip-group">
-                {CURATED_SKILLS.map((skill) => {
-                  const active = aiSkills.includes(skill);
-                  return (
-                    <button
-                      key={skill}
-                      type="button"
-                      className={`hiring-chip${active ? ' is-active' : ''}`}
-                      onClick={() => toggleAiSkill(skill)}
-                      aria-pressed={active}
-                    >
-                      {skill}
-                    </button>
-                  );
-                })}
+              <div className="hiring-header-actions">
+                <button
+                  type="button"
+                  className="hiring-btn hiring-btn-primary"
+                  disabled={generating || !canUseAiBuilder}
+                  onClick={handleGenerateAi}
+                >
+                  <IconSparkles size={16} />{' '}
+                  {generating
+                    ? 'Generating problem with Kimi K3.1 Pro...'
+                    : 'Generate Assessment with Kimi K3.1 Pro'}
+                </button>
               </div>
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="ai-guidance">
-                Optional role focus note (for example: emphasize idempotent
-                webhook retries or clock-skew handling)
-              </label>
-              <textarea
-                id="ai-guidance"
-                value={aiGuidance}
-                onChange={(e) => setAiGuidance(e.target.value)}
-                placeholder="Optional architectural context or tricky edge cases you want Kimi K3.1 Pro to include..."
-              />
-            </div>
-
-            <div className="hiring-header-actions">
-              <button
-                type="button"
-                className="hiring-btn hiring-btn-primary"
-                disabled={generating || !canUseAiBuilder}
-                onClick={handleGenerateAi}
-              >
-                <IconSparkles size={16} />{' '}
-                {generating
-                  ? 'Generating problem with Kimi K3.1 Pro...'
-                  : 'Generate Assessment with Kimi K3.1 Pro'}
-              </button>
             </div>
           </div>
         ) : null}
 
         {mode === 'library' ? (
-          <div className="hiring-page-shell" style={{ marginTop: '18px' }}>
+          <div className="hiring-builder-pane">
             <div className="hiring-filter-grid">
               <div className="hiring-field">
                 <label htmlFor="lib-owner">Authored by</label>
@@ -954,7 +998,7 @@ export function HiringAssessmentBuilderClient({
             </div>
 
             {filteredLibrary.length === 0 ? (
-              <p style={{ color: 'var(--software-muted)', fontSize: '13px' }}>
+              <p className="hiring-muted-copy">
                 No saved problems match these filters yet. Load a Platform
                 Template or generate a problem with Kimi K3.1 Pro and save it
                 for reuse.
@@ -969,11 +1013,8 @@ export function HiringAssessmentBuilderClient({
                       key={problem.definitionId}
                       className={`hiring-problem-card${isSelected ? ' is-selected' : ''}`}
                     >
-                      <div>
-                        <div
-                          className="hiring-chip-group"
-                          style={{ marginBottom: '8px' }}
-                        >
+                      <div className="hiring-stack-xs">
+                        <div className="hiring-chip-group">
                           <span className="hiring-pill hiring-pill-plum">
                             {problem.sourceKind === 'template'
                               ? 'Template'
@@ -987,12 +1028,7 @@ export function HiringAssessmentBuilderClient({
                           </span>
                         </div>
                         <h3>{problem.title}</h3>
-                        <p
-                          style={{
-                            fontSize: '12px',
-                            color: 'var(--software-muted)',
-                          }}
-                        >
+                        <p className="hiring-muted-copy">
                           By {problem.authorName} · {problem.durationMinutes}{' '}
                           min · {experienceLevelLabel(problem.experienceLevel)}
                         </p>
@@ -1024,21 +1060,14 @@ export function HiringAssessmentBuilderClient({
         </div>
       ) : null}
 
-      <section className="hiring-card">
-        <header
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            marginBottom: '14px',
-          }}
-        >
-          <div>
-            <span className="hiring-eyebrow">Read-only Problem Preview</span>
+      <section className="hiring-card hiring-card-animated">
+        <header className="hiring-preview-header">
+          <div className="hiring-stack-xs">
+            <span className="hiring-eyebrow">
+              Step 02 · Candidate Workspace Preview
+            </span>
             <h2>{activeDraft.title}</h2>
-            <div className="hiring-chip-group" style={{ marginTop: '6px' }}>
+            <div className="hiring-chip-group">
               <span className="hiring-pill hiring-pill-plum">
                 {activeSourceMeta.targetRole}
               </span>
@@ -1049,8 +1078,8 @@ export function HiringAssessmentBuilderClient({
                 {activeDraft.durationMinutes} min
               </span>
               <span className="hiring-pill">
-                {activeDraft.starterFiles.length} workspace file
-                {activeDraft.starterFiles.length === 1 ? '' : 's'}
+                {activeDraft.starterFiles.length} workspace{' '}
+                {activeDraft.starterFiles.length === 1 ? 'file' : 'files'}
               </span>
               <span className="hiring-pill">
                 Candidate AI:{' '}
@@ -1080,90 +1109,133 @@ export function HiringAssessmentBuilderClient({
           </button>
         </header>
 
-        <p style={{ fontSize: '14px', lineHeight: 1.55 }}>
-          {activeDraft.brief}
-        </p>
-
-        <div className="hiring-two-col" style={{ marginTop: '16px' }}>
-          <div className="hiring-card-subtle">
-            <strong>Acceptance Criteria</strong>
-            <ul
-              style={{
-                margin: '8px 0 0',
-                paddingLeft: '18px',
-                fontSize: '13px',
-              }}
-            >
-              {activeDraft.acceptanceCriteria.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="hiring-card-subtle">
-            <strong>Evaluation Rubric</strong>
-            <ul
-              style={{
-                margin: '8px 0 0',
-                paddingLeft: '18px',
-                fontSize: '13px',
-              }}
-            >
-              {activeDraft.rubric.map((item) => (
-                <li key={item.id}>
-                  <strong>{item.label}</strong> ({item.weight}%):{' '}
-                  {item.description}
-                </li>
-              ))}
-            </ul>
-          </div>
+        <div className="hiring-preview-subtabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={previewTab === 'overview'}
+            className={`hiring-preview-subtab${previewTab === 'overview' ? ' is-active' : ''}`}
+            onClick={() => setPreviewTab('overview')}
+          >
+            Brief &amp; Acceptance Criteria (
+            {activeDraft.acceptanceCriteria.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={previewTab === 'rubric'}
+            className={`hiring-preview-subtab${previewTab === 'rubric' ? ' is-active' : ''}`}
+            onClick={() => setPreviewTab('rubric')}
+          >
+            Rubric &amp; Signal Weights ({activeDraft.rubric.length})
+          </button>
         </div>
 
-        <div style={{ marginTop: '16px' }}>
-          <div className="hiring-chip-group" style={{ marginBottom: '10px' }}>
-            {activeDraft.starterFiles.map((file) => {
-              const active = file.path === activePreviewFile?.path;
-              return (
-                <button
-                  key={file.path}
-                  type="button"
-                  className={`hiring-chip${active ? ' is-active' : ''}`}
-                  onClick={() => setPreviewFilePath(file.path)}
-                >
-                  <IconFileCode size={13} /> {file.path}
-                </button>
-              );
-            })}
+        {previewTab === 'overview' ? (
+          <div className="hiring-preview-panel">
+            <p className="hiring-brief-copy">{activeDraft.brief}</p>
+            <div className="hiring-card-subtle">
+              <strong>Acceptance Criteria</strong>
+              <ul className="hiring-bullet-list">
+                {activeDraft.acceptanceCriteria.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
           </div>
-          {activePreviewFile ? (
-            <pre className="hiring-file-preview">
-              {activePreviewFile.content}
-            </pre>
-          ) : null}
+        ) : (
+          <div className="hiring-preview-panel">
+            <div className="hiring-rubric-list">
+              {activeDraft.rubric.map((item) => (
+                <article key={item.id} className="hiring-rubric-item">
+                  <div className="hiring-rubric-row">
+                    <strong>{item.label}</strong>
+                    <span className="hiring-pill hiring-pill-plum">
+                      {item.weight}% weight
+                    </span>
+                  </div>
+                  <progress
+                    className="hiring-rubric-progress"
+                    value={item.weight}
+                    max={100}
+                    aria-label={`${item.label} rubric weight ${item.weight} percent`}
+                  />
+                  <p className="hiring-muted-copy">{item.description}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="hiring-vsc-wrap">
+          <div className="hiring-vsc-heading">
+            <span className="hiring-eyebrow">Starter Repository</span>
+            <span className="hiring-muted-copy">
+              Read-only view of files provisioned inside the candidate IDE.
+            </span>
+          </div>
+          <VsCodeFileInspector
+            files={activeDraft.starterFiles}
+            workspaceName={activeDraft.templateId || 'candidate-repo'}
+            activePath={previewFilePath}
+            onSelectPath={setPreviewFilePath}
+          />
         </div>
       </section>
 
-      <section className="hiring-card">
-        <span className="hiring-eyebrow">
-          Issue to Candidate · {formatPlanBadge(plan)}
-        </span>
-        <h2>Send Assessment Invitation</h2>
-        <p
-          style={{
-            fontSize: '13px',
-            color: 'var(--software-muted)',
-            marginTop: '4px',
-          }}
-        >
-          Candidates must sign in with a matching Hirearchy Candidate Account to
-          launch their isolated workspace. The assessment also appears
-          immediately in their <code>/candidate</code> portal.
-        </p>
+      <section className="hiring-card hiring-card-animated">
+        <header className="hiring-preview-header">
+          <div className="hiring-stack-xs">
+            <span className="hiring-eyebrow">
+              Step 03 · Issue to Candidate · {formatPlanBadge(plan)}
+            </span>
+            <h2>Send Assessment Invitation</h2>
+            <p className="hiring-muted-copy">
+              Candidates must sign in with a matching Hirearchy Candidate
+              Account to launch their isolated workspace. The assessment also
+              appears immediately in their <code>/candidate</code> portal.
+            </p>
+          </div>
+          <div className="hiring-slot-meter">
+            {plan.planTier === 'per_candidate' ? (
+              <>
+                <div className="hiring-slot-meter-head">
+                  <span>Candidate Slots</span>
+                  <strong>
+                    {plan.candidateCreditsUsed}/{plan.candidateCreditsPurchased}{' '}
+                    used
+                  </strong>
+                </div>
+                <progress
+                  className="hiring-slot-progress"
+                  value={plan.candidateCreditsUsed}
+                  max={Math.max(1, plan.candidateCreditsPurchased)}
+                  aria-label="Candidate slots used"
+                />
+                <span className="hiring-slot-note">
+                  {alreadyCreditedCandidate
+                    ? 'Candidate already credited — 0 extra slots'
+                    : `${plan.candidateCreditsRemaining ?? 0} slots remaining`}
+                </span>
+              </>
+            ) : plan.planTier === 'none' ? (
+              <span className="hiring-pill hiring-pill-danger">
+                No active plan
+              </span>
+            ) : (
+              <div className="hiring-slot-unlimited">
+                <span className="hiring-pill hiring-pill-success">
+                  Unlimited candidate capacity
+                </span>
+                <span className="hiring-slot-note">
+                  {plan.candidateCreditsUsed} distinct candidates assessed
+                </span>
+              </div>
+            )}
+          </div>
+        </header>
 
-        <form
-          onSubmit={handleIssue}
-          className="hiring-page-shell"
-          style={{ marginTop: '14px' }}
-        >
+        <form onSubmit={handleIssue} className="hiring-issue-form">
           <div className="hiring-filter-grid">
             <div className="hiring-field">
               <label htmlFor="issue-candidate-email">Candidate email</label>
@@ -1235,39 +1307,25 @@ export function HiringAssessmentBuilderClient({
         </form>
 
         {issuedResult ? (
-          <div className="hiring-card-subtle" style={{ marginTop: '16px' }}>
+          <div className="hiring-issued-box">
             <div className="hiring-candidate-name">
               <strong>Assessment Issued</strong>
               <span className="hiring-pill hiring-pill-success">
                 Candidate Portal Synced
               </span>
             </div>
-            <p style={{ fontSize: '13px', marginTop: '8px' }}>
+            <p className="hiring-muted-copy">
               Share this direct invitation link with{' '}
               <strong>{trimmedEmail}</strong> (they can also start it directly
               from <code>/candidate</code>):
             </p>
-            <div
-              style={{
-                display: 'flex',
-                gap: '8px',
-                marginTop: '8px',
-                flexWrap: 'wrap',
-              }}
-            >
+            <div className="hiring-issued-link-row">
               <input
                 type="text"
                 readOnly
                 value={issuedResult.candidateLink}
                 aria-label="Issued candidate link"
-                style={{
-                  flex: '1 1 320px',
-                  padding: '8px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--software-border)',
-                  fontFamily: 'var(--software-mono)',
-                  fontSize: '12px',
-                }}
+                className="hiring-issued-link-input"
               />
               <button
                 type="button"
