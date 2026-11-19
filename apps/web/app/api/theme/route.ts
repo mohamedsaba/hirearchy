@@ -75,12 +75,16 @@ export async function POST(request: NextRequest) {
     (request.headers.get('accept')?.includes('application/json') &&
       !request.headers.get('accept')?.includes('text/html'));
 
+  const safeNext = sanitizeRedirectTarget(nextPath, request);
   const response = prefersJson
     ? NextResponse.json({ theme: resolvedTheme }, { status: 200 })
-    : NextResponse.redirect(
-        new URL(sanitizeRedirectTarget(nextPath, request), request.url),
-        303,
-      );
+    : new NextResponse(null, {
+        status: 303,
+        headers: {
+          Location: safeNext,
+          'Cache-Control': 'private, no-store',
+        },
+      });
 
   response.cookies.set(THEME_COOKIE_NAME, resolvedTheme, {
     path: '/',
