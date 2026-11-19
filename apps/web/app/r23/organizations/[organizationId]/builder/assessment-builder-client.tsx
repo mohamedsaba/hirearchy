@@ -2547,7 +2547,9 @@ export function AssessmentBuilderClient({
                         }}
                       >
                         <h3 style={{ margin: '0 0 12px', fontSize: '1.1rem' }}>
-                          Ready to Issue Assessment
+                          {isAuthenticatedStaging && reviewers.length === 0
+                            ? 'Invite an evaluator first'
+                            : 'Ready to issue assessment'}
                         </h3>
                         <p
                           style={{
@@ -2556,51 +2558,58 @@ export function AssessmentBuilderClient({
                             color: 'var(--software-muted)',
                           }}
                         >
-                          You are about to issue a candidate session backed by
-                          immutable validated version{' '}
-                          {validatedVersion.versionNumber}.
+                          {validatedVersion.scenarioTitle} ·{' '}
+                          {Math.round(validatedVersion.durationSeconds / 60)}{' '}
+                          minutes
                         </p>
-                        <dl
-                          className="assessment-snapshot-facts"
-                          style={{
-                            display: 'grid',
-                            gap: '6px',
-                            fontSize: '0.85rem',
-                            margin: 0,
-                          }}
-                        >
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Assessment Title
-                          </dt>
-                          <dd>
-                            <strong>{validatedVersion.scenarioTitle}</strong>
-                          </dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Validated Version
-                          </dt>
-                          <dd>Version {validatedVersion.versionNumber}</dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Content Digest
-                          </dt>
-                          <dd style={{ fontFamily: 'monospace' }}>
-                            {formatDigestBadge(validatedVersion.contentDigest)}
-                          </dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Time Limit
-                          </dt>
-                          <dd>
-                            {Math.round(validatedVersion.durationSeconds / 60)}{' '}
-                            minutes
-                          </dd>
-                          <dt style={{ color: 'var(--software-muted)' }}>
-                            Idempotency Key
-                          </dt>
-                          <dd suppressHydrationWarning>
-                            <code suppressHydrationWarning>
-                              {idempotencyKey}
-                            </code>
-                          </dd>
-                        </dl>
+                        <details className="software-reference-details">
+                          <summary>Version details</summary>
+                          <dl
+                            className="assessment-snapshot-facts"
+                            style={{
+                              display: 'grid',
+                              gap: '6px',
+                              fontSize: '0.85rem',
+                              margin: 0,
+                            }}
+                          >
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Assessment Title
+                            </dt>
+                            <dd>
+                              <strong>{validatedVersion.scenarioTitle}</strong>
+                            </dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Validated Version
+                            </dt>
+                            <dd>Version {validatedVersion.versionNumber}</dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Content Digest
+                            </dt>
+                            <dd style={{ fontFamily: 'monospace' }}>
+                              {formatDigestBadge(
+                                validatedVersion.contentDigest,
+                              )}
+                            </dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Time Limit
+                            </dt>
+                            <dd>
+                              {Math.round(
+                                validatedVersion.durationSeconds / 60,
+                              )}{' '}
+                              minutes
+                            </dd>
+                            <dt style={{ color: 'var(--software-muted)' }}>
+                              Idempotency Key
+                            </dt>
+                            <dd suppressHydrationWarning>
+                              <code suppressHydrationWarning>
+                                {idempotencyKey}
+                              </code>
+                            </dd>
+                          </dl>
+                        </details>
 
                         {(isAuthenticatedStaging || reviewers.length > 0) && (
                           <div
@@ -2620,13 +2629,14 @@ export function AssessmentBuilderClient({
                                 fontSize: '0.9rem',
                               }}
                             >
-                              Assign Authorized Evaluator (Reviewer)
+                              Assign an evaluator
                             </label>
                             <select
                               id="issue-reviewer-select"
                               name="reviewerPrincipalId"
                               data-testid="issue-reviewer-select"
                               suppressHydrationWarning
+                              disabled={reviewers.length === 0}
                               value={effectiveReviewerPrincipalId}
                               onChange={(e) =>
                                 setSelectedReviewerPrincipalId(e.target.value)
@@ -2640,6 +2650,21 @@ export function AssessmentBuilderClient({
                                 reviewers={reviewers}
                               />
                             </select>
+                            {isAuthenticatedStaging &&
+                            reviewers.length === 0 ? (
+                              <p>
+                                Your draft is saved. Invite a team member, then
+                                return here after they accept.{' '}
+                                <Link
+                                  href={`/r23/organizations/${encodeURIComponent(
+                                    organizationId,
+                                  )}/settings#invitations-heading`}
+                                  prefetch={false}
+                                >
+                                  Invite an evaluator
+                                </Link>
+                              </p>
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -2677,7 +2702,11 @@ export function AssessmentBuilderClient({
                           type="button"
                           data-testid="issue-assessment-button"
                           className="button button-primary"
-                          disabled={isIssuing}
+                          disabled={
+                            isIssuing ||
+                            (isAuthenticatedStaging &&
+                              !effectiveReviewerPrincipalId)
+                          }
                           onClick={handleIssue}
                         >
                           {isIssuing

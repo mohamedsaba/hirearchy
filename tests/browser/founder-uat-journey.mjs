@@ -244,9 +244,7 @@ async function signup(page, email, password) {
   await form.locator('input[name="email"]').fill(email);
   await form.locator('input[name="password"]').fill(password);
   await form.locator('button[type="submit"]').click();
-  await page
-    .getByRole('heading', { name: /account registration initiated/i })
-    .waitFor();
+  await page.getByRole('heading', { name: 'Confirm your email' }).waitFor();
 }
 
 async function signIn(page, email, password, expectedPath) {
@@ -544,6 +542,10 @@ export async function runFounderUatJourney() {
     observeProblems(ownerPage, problems, 'owner');
     await goto(ownerPage, `${origin}/`, 'Landing page');
     await audit(ownerPage, 'landing sign-in');
+    assert.equal(
+      await ownerPage.locator('a[href="/r23/verify-email"]').count(),
+      0,
+    );
     await clickLink(ownerPage, 'a[href="/r23/signup"]', '/r23/signup');
     await audit(ownerPage, 'signup screen');
     await saveScreenshot(
@@ -556,14 +558,17 @@ export async function runFounderUatJourney() {
 
     await ownerPage
       .locator('main')
-      .getByRole('link', { name: 'Sign in', exact: true })
+      .getByRole('link', { name: 'Already confirmed? Sign in', exact: true })
       .click();
     const unverifiedForm = ownerPage.locator('form[action="/r23/auth/login"]');
     await unverifiedForm.locator('input[name="email"]').fill(ownerEmail);
     await unverifiedForm.locator('input[name="password"]').fill(ownerPassword);
     await unverifiedForm.locator('button[type="submit"]').click();
-    await ownerPage.locator('.access-form p[role="alert"]').waitFor();
-    assert.equal(new URL(ownerPage.url()).pathname, '/r23/login');
+    await ownerPage.waitForURL((url) => url.pathname === '/r23/verify-email');
+    assert.equal(
+      new URL(ownerPage.url()).searchParams.get('email'),
+      ownerEmail,
+    );
     assert.equal(
       authCookiePresent(await ownerContext.cookies()),
       false,
@@ -890,6 +895,9 @@ export async function runFounderUatJourney() {
       viewports[2],
     );
     await candidatePage.setViewportSize(viewports[0]);
+    const capabilities = candidatePage.locator('details.r26-availability');
+    assert.equal(await capabilities.getAttribute('open'), null);
+    await capabilities.locator('summary').click();
     const executionStatusBadge = candidatePage.getByTestId(
       'terminal-capability-status',
     );

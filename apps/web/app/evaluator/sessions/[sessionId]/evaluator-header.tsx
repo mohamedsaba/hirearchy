@@ -36,7 +36,7 @@ export const EvaluatorHeader = ({
       <span title={`Candidate session reference: ${sessionId}`}>
         Session {sessionId.slice(0, 8)}…
       </span>
-      <time dateTime={submittedAt}>
+      <time dateTime={submittedAt} title={`Submitted ${submittedAt}`}>
         {new Date(submittedAt).toLocaleString('en-US', {
           dateStyle: 'medium',
           timeStyle: 'short',

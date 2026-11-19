@@ -15,19 +15,19 @@ body.software-document-body *::after {
 .software-product {
   /* Common Thread foundation. Route styles may refine these values, but
      shared selectors should not need to invent a second token vocabulary. */
-  --software-plum: #291e36;
+  --software-plum: #211426;
   --software-lilac: #ebe5f2;
-  --software-mint: #b0f0ce;
-  --software-ink: #251a35;
-  --software-muted: #625871;
-  --software-canvas: #f7f6f9;
+  --software-mint: #8ee3b8;
+  --software-ink: #291d2c;
+  --software-muted: #635661;
+  --software-canvas: #f5efe6;
   --software-surface: #fff;
-  --software-surface-subtle: #f2f0f5;
+  --software-surface-subtle: #f3ede6;
   --software-surface-note: #eee7f4;
-  --software-border: #e2dee8;
-  --software-border-subtle: #eeeaf2;
+  --software-border: #ded4cc;
+  --software-border-subtle: #eae1d9;
   --software-border-strong: #8b7c99;
-  --software-focus: #291e36;
+  --software-focus: #211426;
 
   --software-status-info: #334155;
   --software-status-info-surface: #f8fafc;
@@ -1213,6 +1213,12 @@ body.software-document-body *::after {
   max-width: 900px;
 }
 
+.software-session-action-bar {
+  margin: 0 0 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--software-border-subtle);
+}
+
 .software-document-panel .software-session-facts {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
@@ -1239,6 +1245,46 @@ body.software-document-body *::after {
   margin: 24px 0;
   color: var(--software-muted);
   font-size: 13px;
+}
+
+.software-reviewer-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.software-reviewer-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--software-border);
+  border-radius: 8px;
+  background: var(--software-surface);
+  font-size: 13px;
+}
+
+.software-reviewer-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.software-reviewer-status.is-active {
+  background: #e9f6ee;
+  color: #166534;
+}
+
+.software-reviewer-status.is-revoked {
+  background: #fef2f2;
+  color: #b42318;
 }
 
 @media (max-width: 600px) {
@@ -1316,4 +1362,23 @@ body.software-document-body *::after {
   padding: 0;
   background: transparent;
   font-size: 0.9em;
+}
+
+.software-document-body:not(.software-document-workspace)
+  .software-document-panel {
+  border: 0;
+  border-top: 5px solid var(--software-mint);
+  border-radius: 16px;
+}
+
+.software-document-workspace .software-page-heading h1 {
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+}
+
+.software-document-panel .software-empty-state h2 {
+  font-size: clamp(22px, 3vw, 32px);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
 }

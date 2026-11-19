@@ -34,7 +34,7 @@ export default async function R23LoginPage({
     params.error === 'credentials' || params.error === 'unavailable';
 
   return (
-    <main className="software-product evaluator-product-shell">
+    <main className="software-product evaluator-product-shell software-access-page">
       <header className="software-product-header">
         <Link
           className="software-wordmark"
@@ -52,12 +52,9 @@ export default async function R23LoginPage({
           aria-labelledby="signin-title"
         >
           <div className="evaluator-signin-copy">
-            <p className="software-eyebrow">Welcome back</p>
+            <p className="software-eyebrow">Hirearchy Software</p>
             <h1 id="signin-title">Sign in to your workspace</h1>
-            <p>
-              Create assessments, follow candidate work, and review the
-              evidence.
-            </p>
+            <p>Prepare an assessment or pick up an assigned review.</p>
           </div>
           <div className="evaluator-signin-form">
             <form
@@ -101,36 +98,17 @@ export default async function R23LoginPage({
                 Sign in
               </button>
             </form>
-            <nav aria-label="Account help">
-              {founderUat ? (
-                <>
-                  <p>
-                    <span>New to Hirearchy? </span>
-                    <Link href="/r23/signup" prefetch={false}>
-                      Sign up
-                    </Link>
-                  </p>
-                  <p>
-                    <Link href="/r23/verify-email" prefetch={false}>
-                      Verify your email
-                    </Link>
-                  </p>
-                  <p>
-                    <Link href="/r23/mail" prefetch={false}>
-                      Local email inbox
-                    </Link>
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p>
-                    <Link href="/r23/verify-email" prefetch={false}>
-                      Verify your email
-                    </Link>
-                  </p>
-                </>
-              )}
-            </nav>
+            {founderUat ||
+            process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true' ? (
+              <nav aria-label="Account help">
+                <p>
+                  New to Hirearchy?{' '}
+                  <Link href="/r23/signup" prefetch={false}>
+                    Create an account
+                  </Link>
+                </p>
+              </nav>
+            ) : null}
           </div>
         </section>
       </div>

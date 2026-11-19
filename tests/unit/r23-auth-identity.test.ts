@@ -4,7 +4,9 @@ import type { R23Config } from '../../apps/web/src/r23-auth/config';
 import {
   assertR23StagingEligibleIdentity,
   assertR23VerifiedIdentity,
+  passwordGrant,
   R23AuthenticationDenied,
+  R23EmailConfirmationRequired,
   verifyR23Otp,
   verifyR23AccessToken,
 } from '../../apps/web/src/r23-auth/identity';
@@ -47,6 +49,27 @@ function accessToken(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('R23 Auth identity verification', () => {
+  it('only identifies pending confirmation when the password grant reports it', async () => {
+    const authFetch = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', authFetch);
+    for (const code of ['invalid_credentials', 'email_not_confirmed']) {
+      authFetch.mockResolvedValueOnce(
+        Response.json({ error_code: code }, { status: 400 }),
+      );
+      const result = passwordGrant(config, 'member@example.test', 'example');
+      await expect(result).rejects.toBeInstanceOf(R23AuthenticationDenied);
+      if (code === 'email_not_confirmed') {
+        await expect(result).rejects.toBeInstanceOf(
+          R23EmailConfirmationRequired,
+        );
+      } else {
+        await expect(result).rejects.not.toBeInstanceOf(
+          R23EmailConfirmationRequired,
+        );
+      }
+    }
+  });
+
   it('uses GoTrue email OTP verification without relying on a response type field', async () => {
     const authFetch = vi.fn<typeof fetch>(async () =>
       Response.json({

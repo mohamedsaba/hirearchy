@@ -1,35 +1,58 @@
 # Hirearchy Software
 
-Hirearchy Software helps a hiring team review realistic engineering work. A candidate completes a task in a controlled workspace; the system records observable activity and evidence; an assigned human evaluator decides what that evidence means. The product does not score, rank, or make hiring decisions.
+**Hirearchy Software** is an engineering-evaluation platform where candidates solve realistic debugging and engineering problems inside an authentic browser IDE while teams inspect chronological work evidence, unified code diffs, and an advisory **AI Candidate Review**.
 
-## Current release state
+Start with **[docs/README.md](docs/README.md)** for the complete agent and developer onboarding map.
 
-PR #5 is merged to protected `main` as `1a919b40ab45f9788a8cf0f785d33449379b7098`. It provides the authenticated PostgreSQL staging foundation for recruiter assessment authoring, issuance, and reviewer assignment. It does not provide the complete candidate-to-human-review journey.
+---
 
-PR #6 is merged to protected `main` at `6f144045a3dcfa523fd7d79112c09721011b4871`, from accepted source `74d523c91ecd4bc547cfa1fbe4c85b87cf2de749`. All four required CI contexts, the positive and negative browser journey, and late separate-instance restore passed. This is technical acceptance, not a release or deployment approval: authenticated visual review, the approved-template walkthrough, first-team onboarding, and operational release gates remain open. See [release readiness](docs/release-readiness.md) for the sole current source of release status and evidence.
+## Core Product Journey
 
-## Product and architecture
+1. **Recruiter & Evaluator Onboarding (`/r23/*`)**: Sign up -> verify email OTP -> bootstrap organization -> author or customize an assessment -> assign reviewers -> issue candidate invitation links.
+2. **Candidate IDE Workspace (`/r26/candidate/[sessionId]`)**: Review brief & data-capture notice -> enter a distraction-free IDE with folder tree explorer, tabbed CodeMirror editor, save checkpoints, toggleable sandboxed test runner (`packages/restricted-executor`), toggleable AI coding assistant, status bar, and countdown timer pill -> submit final work.
+3. **Evaluator Evidence Workbench & AI Review (`/r27/organizations/[organizationId]/sessions/[sessionId]`)**:
+   - **Platform AI Candidate Review**: One-click AI analysis backed by **NVIDIA NIM** (including Kimi K2 / 3.1, Nemotron Super 120B, Qwen 3 235B, or custom model slugs), **OpenRouter**, or offline **Evidence-Grounded Preview**—delivering a `0–100` score, `Should Accept` / `Should Reject` recommendation, `"Why"` rationale, and Strengths vs. Weaknesses.
+   - **Chronological Evidence & Diffs**: GitHub-style unified diffs, intermediate save revisions (`R28`), execution runs (`R213`), anchored observations (`R29`), and human-finalized review packets (`R210`).
 
-The release path is a Next.js modular monolith with PostgreSQL as its durable product store. GoTrue verifies user identity; an app-signed, one-use proof scopes trusted PostgreSQL operations. Organization membership uses recruiter and reviewer roles, with evidence access restricted by organization and reviewer assignment. The accepted PR #6 candidate path uses a distinct opaque invitation token and database-checked lifecycle rather than recruiter credentials. Its AI and code-execution capabilities remain disabled.
+---
 
-Legacy SQLite prototype code, data, and migration history remain preserved. SQLite is not a release fallback and there is no dual-write path. Candidate AI, code execution, and candidate invitation email are off in the internal demo. Basic first-team onboarding is proposed, not implemented; initial organization provisioning still requires an administrator.
+## Quickstart & Development Checks
 
-## Development checks
-
-Use Node.js 22 or later and npm 10 or later. Run the repository checks with:
+Requirements: **Node.js >= 22**, **npm >= 10**.
 
 ```bash
+# Install dependencies
+npm install
+
+# Run standard Next.js development server (workspace root)
+npm run dev
+
+# Full quality gate (Prettier, ESLint, Next/TSC typegen, Vitest, Restricted Executor, Production Build)
 npm run verify
 ```
 
-Staging verification requires its provisioned PostgreSQL and GoTrue environment. Follow the [active release plan](docs/plans/active/mvp-release-program.md) and [readiness record](docs/release-readiness.md); do not treat a local SQLite run or the disposable R2.14 executor as durable staging acceptance.
+### Environment Configuration (`.env`)
 
-## Project map
+Copy `.env.example` to `.env` and configure active keys when testing AI features:
 
-- [Product principles](docs/product/product-principles.md), [thesis](docs/product/product-thesis.md), and [non-goals](docs/product/non-goals.md)
-- [System overview](docs/architecture/system-overview.md) and [architecture decisions](docs/decisions/README.md)
-- [Active MVP release plan](docs/plans/active/mvp-release-program.md) and [single release-readiness record](docs/release-readiness.md)
-- [Current-state handoff](docs/handoff/current-state.md)
-- [Scenario rules](docs/scenarios/constitution.md)
+- `NVIDIA_API_KEY`: Enables NVIDIA NIM models (`moonshotai/kimi-k2-instruct`, `nvidia/nemotron-3-super-120b-a12b`, etc.) for Candidate AI and Evaluator AI Review.
+- `OPENROUTER_KEY`: Enables OpenRouter models (`google/gemini-2.5-flash`, `anthropic/claude-3.7-sonnet`, etc.).
+- When API keys are absent or placeholders, the Evaluator AI Review gracefully runs in **Evidence-Grounded Preview** mode directly from captured diffs and timeline events.
 
-The earlier SQLite prototype and engineering slices remain in the completed plans as historical implementation evidence.
+### Persistent Founder UAT Runtime (PostgreSQL + GoTrue + Mailpit)
+
+```bash
+bash scripts/founder-uat-start.sh --keep-db
+bash scripts/founder-uat-stop.sh
+```
+
+---
+
+## Documentation Map
+
+- **[Master Documentation Hub](docs/README.md)**
+- **[System & Backend Architecture](docs/architecture/system-overview.md)** & **[Architecture Summary](ARCHITECTURE.md)**
+- **[Frontend, UI & Common Thread Brand System](docs/design/frontend-and-brand-system.md)**
+- **[Product Principles & ADRs](docs/decisions/README.md)** ([ADR 0006 — AI Candidate Review](docs/decisions/0006-ai-assisted-candidate-review.md))
+- **[Scenario Design Constitution](docs/scenarios/constitution.md)**
+- **[Agent Guide](AGENTS.md)**

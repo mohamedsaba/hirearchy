@@ -28,6 +28,8 @@ export class R23AuthenticationDenied extends Error {
   }
 }
 
+export class R23EmailConfirmationRequired extends R23AuthenticationDenied {}
+
 export class R23AuthUnavailable extends Error {
   readonly code = 'AUTH_SERVICE_UNAVAILABLE';
 
@@ -241,7 +243,15 @@ export async function passwordGrant(
       body: JSON.stringify({ email, password }),
     },
   );
-  if (!response.ok) return denied();
+  if (!response.ok) {
+    if (response.status === 400) {
+      const body = await readJson(response, 65536);
+      if (body.error_code === 'email_not_confirmed') {
+        throw new R23EmailConfirmationRequired();
+      }
+    }
+    return denied();
+  }
   return credentialPair(await readJson(response, 65536));
 }
 

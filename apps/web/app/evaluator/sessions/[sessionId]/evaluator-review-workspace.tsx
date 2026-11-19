@@ -29,7 +29,10 @@ import {
   buildR27Presentation,
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
+import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { R27AiReviewPanel } from './ai-review-panel';
+import { computeDiffStats } from './code-diff-viewer';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
 import {
@@ -52,6 +55,7 @@ import { ReviewGuidance } from './review-guidance';
 import { ReviewWorkflowPanel } from './review-workflow-panel';
 import { TaskAssessmentReport } from './task-assessment-report';
 import { TaskBrief } from './task-brief';
+import './task-review.css';
 
 const modes = ['Summary', 'Evidence', 'Review'] as const;
 type WorkbenchMode = (typeof modes)[number];
@@ -120,7 +124,9 @@ const SourceRow = ({
     >
       <span className="evaluator-source-row-mark" aria-hidden="true" />
       <span className="evaluator-source-row-copy">
-        <strong>{source.title}</strong>
+        <strong>
+          {source.r27?.kind === 'file' ? source.r27.file.path : source.title}
+        </strong>
         <span>{source.summary}</span>
         <small>
           {sourceLabel(source)} · {sourceTime(source, activatedAt)}
@@ -249,6 +255,8 @@ const R27SummaryView = ({
   onLoadMore,
   loadingMore,
   pageError,
+  aiReviewReport,
+  onAiReviewReportChange,
 }: Readonly<{
   evidence: R27Evidence;
   presentation: R27Presentation;
@@ -257,8 +265,23 @@ const R27SummaryView = ({
   onLoadMore: () => void;
   loadingMore: boolean;
   pageError: string | null;
+  aiReviewReport: R27AiReviewReport | null;
+  onAiReviewReportChange: (report: R27AiReviewReport | null) => void;
 }>) => {
-  const fileSources = sources.filter((source) => source.r27?.kind === 'file');
+  const fileSources = [...sources]
+    .filter((source) => source.r27?.kind === 'file')
+    .sort((left, right) => {
+      const leftFile = left.r27?.kind === 'file' ? left.r27.file : null;
+      const rightFile = right.r27?.kind === 'file' ? right.r27.file : null;
+      const leftModified =
+        leftFile !== null &&
+        leftFile.starterContent !== leftFile.submittedContent;
+      const rightModified =
+        rightFile !== null &&
+        rightFile.starterContent !== rightFile.submittedContent;
+      if (leftModified !== rightModified) return leftModified ? -1 : 1;
+      return left.title.localeCompare(right.title);
+    });
   const eventSources = sources.filter((source) => source.r27?.kind === 'event');
   const conversationSources = sources.filter(
     (source) =>
@@ -269,83 +292,81 @@ const R27SummaryView = ({
   );
   const elapsedMs =
     Date.parse(evidence.submittedAt) - Date.parse(evidence.activatedAt);
-  const duration =
+  const elapsedMinutes =
     Number.isFinite(elapsedMs) && elapsedMs >= 0
-      ? `${Math.floor(elapsedMs / 60_000)} minutes`
+      ? Math.max(1, Math.round(elapsedMs / 60_000))
+      : null;
+  const duration =
+    elapsedMinutes !== null
+      ? `${elapsedMinutes} ${elapsedMinutes === 1 ? 'minute' : 'minutes'}`
       : 'Unavailable';
 
   return (
     <div className="workbench-summary-grid">
       <div className="workbench-summary-content">
+        <R27AiReviewPanel
+          organizationId={evidence.organizationId}
+          sessionId={evidence.sessionId}
+          evidence={evidence}
+          report={aiReviewReport}
+          onReportChange={onAiReviewReportChange}
+        />
+
         <section
-          className="evaluator-review-card"
-          aria-labelledby="r27-summary-title"
+          className="evaluator-review-card workbench-session-timeline"
+          aria-labelledby="r27-timeline-title"
         >
-          <div>
-            <p className="section-kicker">Assigned reviewer · Read only</p>
-            <h2 id="r27-summary-title">Submitted evidence</h2>
-            <p>
-              This view contains the frozen submission and authorized session
-              records. It does not provide a score or decision.
+          <header className="evaluator-review-section-heading">
+            <span className="evaluator-review-title-icon" aria-hidden="true">
+              <IconListDetails size={21} stroke={1.8} />
+            </span>
+            <div>
+              <p className="section-kicker">Session chronology</p>
+              <h2 id="r27-timeline-title">Recorded timeline</h2>
+            </div>
+            <span>{eventSources.length} events available</span>
+          </header>
+          {eventSources.length ? (
+            <ol className="workbench-progression-list">
+              {eventSources.map((source) => {
+                const event =
+                  source.r27?.kind === 'event' ? source.r27.event : null;
+                if (!event) return null;
+                return (
+                  <li key={source.key}>
+                    <time dateTime={event.timestamp} title={event.timestamp}>
+                      {formatEvidenceTime(source, evidence.activatedAt)}
+                    </time>
+                    <div>
+                      <p className="workbench-timeline-title">
+                        <code>#{event.sequence}</code> {source.title}
+                      </p>
+                      <small className="workbench-timeline-subtitle">
+                        {source.summary}
+                      </small>
+                      <button
+                        type="button"
+                        className="evaluator-text-link"
+                        onClick={() => onOpenEvidence('Chronology', source)}
+                      >
+                        Inspect event metadata →
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="evaluator-muted-copy">
+              No candidate event is present on this evidence page.
             </p>
-            <dl className="evaluator-source-metadata">
-              <div>
-                <dt>Session</dt>
-                <dd>
-                  <code>{evidence.sessionId}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>Scenario</dt>
-                <dd>
-                  {evidence.scenario.title} · v{evidence.scenario.version}
-                </dd>
-              </div>
-              <div>
-                <dt>Created from session record</dt>
-                <dd>
-                  <time dateTime={evidence.createdAt}>
-                    {evidence.createdAt}
-                  </time>
-                </dd>
-              </div>
-              <div>
-                <dt>Activated</dt>
-                <dd>
-                  <time dateTime={evidence.activatedAt}>
-                    {evidence.activatedAt}
-                  </time>
-                </dd>
-              </div>
-              <div>
-                <dt>Submitted</dt>
-                <dd>
-                  <time dateTime={evidence.submittedAt}>
-                    {evidence.submittedAt}
-                  </time>
-                </dd>
-              </div>
-              <div>
-                <dt>Elapsed time</dt>
-                <dd>{duration}</dd>
-              </div>
-              <div>
-                <dt>Closure</dt>
-                <dd>
-                  {evidence.closureReason === 'candidate_submission'
-                    ? 'Candidate submission'
-                    : 'Timeout'}
-                </dd>
-              </div>
-              <div>
-                <dt>Assignment</dt>
-                <dd>
-                  <code>{evidence.assignment.id}</code> · version{' '}
-                  <code>{evidence.assignment.version}</code>
-                </dd>
-              </div>
-            </dl>
-          </div>
+          )}
+          {pageError ? <p role="alert">{pageError}</p> : null}
+          {evidence.pagination.nextAfterSequence !== null ? (
+            <button type="button" onClick={onLoadMore} disabled={loadingMore}>
+              {loadingMore ? 'Loading events…' : 'Load more recorded events'}
+            </button>
+          ) : null}
         </section>
 
         <section
@@ -361,35 +382,40 @@ const R27SummaryView = ({
               <h2 id="r27-snapshot-title">Task context</h2>
             </div>
           </header>
-          <p style={{ overflowWrap: 'anywhere' }}>Scenario snapshot digest:</p>
-          <code className="evaluator-integrity-digest">
-            {evidence.scenario.snapshotDigest}
-          </code>
-          <ScenarioBrief
-            markdown={
-              presentation.scenarioContext.brief ??
-              'Scenario brief unavailable in this snapshot.'
-            }
-          />
-          <h3>Acceptance criteria</h3>
-          {presentation.scenarioContext.acceptanceCriteria.length ? (
-            <ul>
-              {presentation.scenarioContext.acceptanceCriteria.map(
-                (criterion, index) => (
-                  <li key={`${index}:${criterion}`}>{criterion}</li>
-                ),
-              )}
-            </ul>
-          ) : (
-            <p className="evaluator-muted-copy">
-              Acceptance criteria unavailable in this snapshot.
-            </p>
-          )}
+          <details className="evaluator-source-details">
+            <summary>Read task brief and acceptance criteria</summary>
+            <ScenarioBrief
+              markdown={
+                presentation.scenarioContext.brief ??
+                'Scenario brief unavailable in this snapshot.'
+              }
+            />
+            <h3>Acceptance criteria</h3>
+            {presentation.scenarioContext.acceptanceCriteria.length ? (
+              <ul>
+                {presentation.scenarioContext.acceptanceCriteria.map(
+                  (criterion, index) => (
+                    <li key={`${index}:${criterion}`}>{criterion}</li>
+                  ),
+                )}
+              </ul>
+            ) : (
+              <p className="evaluator-muted-copy">
+                Acceptance criteria unavailable in this snapshot.
+              </p>
+            )}
+          </details>
           <details
             className="evaluator-source-details"
             style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
           >
             <summary>Open immutable scenario snapshot</summary>
+            <p style={{ overflowWrap: 'anywhere' }}>
+              Scenario snapshot digest:
+            </p>
+            <code className="evaluator-integrity-digest">
+              {evidence.scenario.snapshotDigest}
+            </code>
             <pre
               tabIndex={0}
               aria-label="Immutable versioned scenario snapshot"
@@ -422,22 +448,57 @@ const R27SummaryView = ({
           </header>
           {fileSources.length ? (
             <ul className="evaluator-submitted-file-list">
-              {fileSources.map((source) => (
-                <li key={source.key}>
-                  <code>
-                    {source.r27?.kind === 'file'
-                      ? source.r27.file.path
-                      : source.key}
-                  </code>{' '}
-                  <button
-                    type="button"
-                    className="evaluator-text-link"
-                    onClick={() => onOpenEvidence('Code changes', source)}
-                  >
-                    Open contents and derived diff →
-                  </button>
-                </li>
-              ))}
+              {fileSources.map((source) => {
+                const file =
+                  source.r27?.kind === 'file' ? source.r27.file : null;
+                const stats = file
+                  ? computeDiffStats(file.diff)
+                  : { additions: 0, deletions: 0 };
+                const changed =
+                  file !== null &&
+                  (file.starterContent !== file.submittedContent ||
+                    stats.additions > 0 ||
+                    stats.deletions > 0);
+                return (
+                  <li key={source.key}>
+                    <div className="evaluator-submitted-file-meta">
+                      <code>{file ? file.path : source.key}</code>
+                      {file ? (
+                        changed ? (
+                          <span className="evaluator-file-diff-stats">
+                            {stats.additions > 0 ? (
+                              <span className="code-diff-stat-add">
+                                +{stats.additions}
+                              </span>
+                            ) : null}
+                            {stats.deletions > 0 ? (
+                              <span className="code-diff-stat-del">
+                                -{stats.deletions}
+                              </span>
+                            ) : null}
+                            {stats.additions === 0 && stats.deletions === 0 ? (
+                              <span className="code-diff-stat-neutral">
+                                Modified
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="code-diff-stat-neutral">
+                            Unchanged
+                          </span>
+                        )
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="evaluator-text-link"
+                      onClick={() => onOpenEvidence('Code changes', source)}
+                    >
+                      Open contents and derived diff →
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="evaluator-muted-copy">
@@ -464,61 +525,6 @@ const R27SummaryView = ({
                 ))}
               </ul>
             </details>
-          ) : null}
-        </section>
-
-        <section
-          className="evaluator-review-card"
-          aria-labelledby="r27-timeline-title"
-        >
-          <header className="evaluator-review-section-heading">
-            <span className="evaluator-review-title-icon" aria-hidden="true">
-              <IconListDetails size={21} stroke={1.8} />
-            </span>
-            <div>
-              <p className="section-kicker">Candidate event sequence</p>
-              <h2 id="r27-timeline-title">Recorded timeline</h2>
-            </div>
-            <span>{eventSources.length} events available</span>
-          </header>
-          {eventSources.length ? (
-            <ol className="workbench-progression-list">
-              {eventSources.map((source) => {
-                const event =
-                  source.r27?.kind === 'event' ? source.r27.event : null;
-                if (!event) return null;
-                return (
-                  <li key={source.key}>
-                    <time dateTime={event.timestamp}>{event.timestamp}</time>
-                    <div>
-                      <p>
-                        <code>{event.sequence}</code> · {source.title}
-                      </p>
-                      <small>
-                        Provenance: <code>{event.provenance}</code>
-                      </small>
-                      <button
-                        type="button"
-                        className="evaluator-text-link"
-                        onClick={() => onOpenEvidence('Chronology', source)}
-                      >
-                        Inspect event metadata →
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            <p className="evaluator-muted-copy">
-              No candidate event is present on this evidence page.
-            </p>
-          )}
-          {pageError ? <p role="alert">{pageError}</p> : null}
-          {evidence.pagination.nextAfterSequence !== null ? (
-            <button type="button" onClick={onLoadMore} disabled={loadingMore}>
-              {loadingMore ? 'Loading events…' : 'Load more recorded events'}
-            </button>
           ) : null}
         </section>
 
@@ -613,24 +619,27 @@ const R27SummaryView = ({
             Submitted workspace integrity metadata
           </p>
           <h2 id="r27-digests-title">Submission digests</h2>
-          <dl className="evaluator-source-metadata">
-            <div>
-              <dt>Workspace digest</dt>
-              <dd>
-                <code className="evaluator-integrity-digest">
-                  {evidence.submission.workspaceDigest}
-                </code>
-              </dd>
-            </div>
-            <div>
-              <dt>Manifest digest</dt>
-              <dd>
-                <code className="evaluator-integrity-digest">
-                  {evidence.submission.manifestDigest}
-                </code>
-              </dd>
-            </div>
-          </dl>
+          <details className="evaluator-source-details">
+            <summary>Show workspace and manifest digests</summary>
+            <dl className="evaluator-source-metadata">
+              <div>
+                <dt>Workspace digest</dt>
+                <dd>
+                  <code className="evaluator-integrity-digest">
+                    {evidence.submission.workspaceDigest}
+                  </code>
+                </dd>
+              </div>
+              <div>
+                <dt>Manifest digest</dt>
+                <dd>
+                  <code className="evaluator-integrity-digest">
+                    {evidence.submission.manifestDigest}
+                  </code>
+                </dd>
+              </div>
+            </dl>
+          </details>
         </section>
       </div>
 
@@ -638,6 +647,77 @@ const R27SummaryView = ({
         className="workbench-summary-sidebar"
         aria-label="Evidence availability"
       >
+        <section
+          className="evaluator-review-card"
+          aria-labelledby="r27-summary-title"
+        >
+          <p className="section-kicker">Assigned reviewer · Read only</p>
+          <h2 id="r27-summary-title">Submitted evidence</h2>
+          <dl className="evaluator-source-metadata">
+            <div>
+              <dt>Scenario</dt>
+              <dd>
+                {evidence.scenario.title} · v
+                {evidence.scenario.version.replace(/^v/i, '')}
+              </dd>
+            </div>
+            <div>
+              <dt>Elapsed time</dt>
+              <dd>{duration}</dd>
+            </div>
+            <div>
+              <dt>Closure</dt>
+              <dd>
+                {evidence.closureReason === 'candidate_submission'
+                  ? 'Candidate submission'
+                  : 'Timeout'}
+              </dd>
+            </div>
+          </dl>
+          <details className="evaluator-source-details">
+            <summary>Session details</summary>
+            <dl className="evaluator-source-metadata">
+              <div>
+                <dt>Session</dt>
+                <dd>
+                  <code>{evidence.sessionId}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Created from session record</dt>
+                <dd>
+                  <time dateTime={evidence.createdAt}>
+                    {evidence.createdAt}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Activated</dt>
+                <dd>
+                  <time dateTime={evidence.activatedAt}>
+                    {evidence.activatedAt}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Submitted</dt>
+                <dd>
+                  <time dateTime={evidence.submittedAt}>
+                    {evidence.submittedAt}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Assignment</dt>
+                <dd>
+                  <code>{evidence.assignment.id}</code> · version{' '}
+                  <code>{evidence.assignment.version}</code>
+                </dd>
+              </div>
+            </dl>
+          </details>
+        </section>
+
         <section className="evaluator-review-card">
           <p className="section-kicker">Source availability</p>
           <h2>Evidence limits</h2>
@@ -1182,6 +1262,8 @@ export const EvaluatorReviewWorkspace = (
   );
   const [loadingMoreR27, setLoadingMoreR27] = useState(false);
   const [r27PageError, setR27PageError] = useState<string | null>(null);
+  const [aiReviewReport, setAiReviewReport] =
+    useState<R27AiReviewReport | null>(null);
   const evidence = 'evidence' in props ? props.evidence : null;
   const review = 'review' in props ? props.review : null;
   const projection = 'projection' in props ? props.projection : null;
@@ -1410,6 +1492,21 @@ export const EvaluatorReviewWorkspace = (
       setMobileInspectorOpen(true);
   };
 
+  const handleFilterChange = (nextFilter: EvidenceFilter) => {
+    setFilter(nextFilter);
+    const nextVisible = sourcesForFilter(
+      sources,
+      nextFilter,
+      projection?.briefing.recordedVerification.runs ?? [],
+    );
+    if (
+      nextVisible.length > 0 &&
+      !nextVisible.some((source) => source.key === effectiveSelectedSourceKey)
+    ) {
+      setSelectedSourceKey(nextVisible[0].key);
+    }
+  };
+
   const openEvidence = (
     nextFilter?: EvidenceFilter,
     source?: EvidenceSource,
@@ -1568,6 +1665,8 @@ export const EvaluatorReviewWorkspace = (
                   onLoadMore={loadMoreR27Events}
                   loadingMore={loadingMoreR27}
                   pageError={r27PageError}
+                  aiReviewReport={aiReviewReport}
+                  onAiReviewReportChange={setAiReviewReport}
                 />
               ) : evidence && review && projection ? (
                 <SummaryView
@@ -1592,7 +1691,7 @@ export const EvaluatorReviewWorkspace = (
                 filter={filter}
                 selectedSource={selectedSource}
                 selectedSourceKey={effectiveSelectedSourceKey}
-                onFilterChange={setFilter}
+                onFilterChange={handleFilterChange}
                 onSelectSource={selectSource}
                 registerRow={(key, element) => {
                   if (element) sourceRows.current.set(key, element);
@@ -1631,15 +1730,27 @@ export const EvaluatorReviewWorkspace = (
               </p>
             ) : null}
             {mode === 'Review' && readOnly ? (
-              r27Evidence && r210IsEnabled() ? (
-                <R210ReviewPacketPanel
-                  organizationId={r27Evidence.organizationId}
-                  sessionId={r27Evidence.sessionId}
-                  reviewer={r27Evidence.reviewer}
-                  r27Evidence={r27Evidence}
-                  sources={sources}
-                  onOpenEvidence={openEvidence}
-                />
+              r27Evidence ? (
+                <div className="r27-review-stack">
+                  <R27AiReviewPanel
+                    organizationId={r27Evidence.organizationId}
+                    sessionId={r27Evidence.sessionId}
+                    evidence={r27Evidence}
+                    report={aiReviewReport}
+                    onReportChange={setAiReviewReport}
+                    compact
+                  />
+                  {r210IsEnabled() ? (
+                    <R210ReviewPacketPanel
+                      organizationId={r27Evidence.organizationId}
+                      sessionId={r27Evidence.sessionId}
+                      reviewer={r27Evidence.reviewer}
+                      r27Evidence={r27Evidence}
+                      sources={sources}
+                      onOpenEvidence={openEvidence}
+                    />
+                  ) : null}
+                </div>
               ) : (
                 <section
                   className="evaluator-review-card"
