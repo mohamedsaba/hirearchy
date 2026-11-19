@@ -539,12 +539,6 @@ export const sourcesForFilter = (
 export const preferredEvidenceSource = (sources: readonly EvidenceSource[]) => {
   if (sources.some((source) => source.r27)) {
     return (
-      sources.find(
-        (source) =>
-          source.r27?.kind === 'event' &&
-          source.r27.event.type !== 'SESSION_ACTIVATED' &&
-          source.r27.event.type !== 'SESSION_SUBMITTED',
-      ) ??
       sources.find((source) => source.r27?.kind === 'event') ??
       sources.find((source) => source.r27?.kind === 'file') ??
       sources[0] ??
@@ -726,10 +720,11 @@ const R29ObservationPanel = ({
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
     fetch(
       `/r27/api/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sessionId)}/observations`,
-      { headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json' }, signal: controller.signal },
     )
       .then(async (response) => {
         if (!response.ok) {
@@ -760,6 +755,7 @@ const R29ObservationPanel = ({
         },
       )
       .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (active) {
           setError(err instanceof Error ? err.message : String(err));
           setLoading(false);
@@ -768,6 +764,7 @@ const R29ObservationPanel = ({
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [organizationId, sessionId]);
 
@@ -1475,10 +1472,11 @@ const R28WorkspaceRevisionView = ({
     }
 
     let active = true;
+    const controller = new AbortController();
 
     fetch(
       `/r27/api/organizations/${encodeURIComponent(r27Evidence.organizationId)}/sessions/${encodeURIComponent(r27Evidence.sessionId)}/evidence/revisions/${encodeURIComponent(event.sequence)}`,
-      { headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json' }, signal: controller.signal },
     )
       .then(async (response) => {
         if (!response.ok) {
@@ -1517,6 +1515,7 @@ const R28WorkspaceRevisionView = ({
         }
       })
       .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (active) {
           setError(err instanceof Error ? err.message : String(err));
           setLoading(false);
@@ -1525,6 +1524,7 @@ const R28WorkspaceRevisionView = ({
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [
     cacheKey,

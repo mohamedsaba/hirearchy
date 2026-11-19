@@ -105,8 +105,12 @@ async function assertWorkspaceChrome(page, organizationId, expectedTeamLabel) {
   const workspaceNavigation = page.getByRole('navigation', {
     name: 'Workspace navigation',
   });
+  const primaryNavLabel =
+    expectedTeamLabel === 'Evaluation team'
+      ? 'Assigned reviews'
+      : 'Assessments';
   const assessmentsLink = workspaceNavigation.getByRole('link', {
-    name: 'Assessments',
+    name: primaryNavLabel,
     exact: true,
   });
   assert.equal(await assessmentsLink.getAttribute('href'), organizationPath);

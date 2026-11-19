@@ -1708,7 +1708,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               {canEdit && !pendingSubmit && activeFile ? (
                 <button
                   className={`r26-button ${isDirty || pendingSave ? 'r26-button-primary' : 'r26-button-secondary'} r26-save-button`}
-                  disabled={busy || !isDirty || saveConflict}
+                  disabled={busy || (!isDirty && !pendingSave) || saveConflict}
                   onClick={() => void save()}
                   type="button"
                 >
@@ -1746,7 +1746,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
                     ? 'Submission is paused. Retry the same save to confirm its result first.'
                     : 'Saving your latest edits automatically…'}
             </p>
-          ) : message ? (
+          ) : null}
+
+          {message ? (
             <p className="r26-message" role="status">
               {message}
             </p>
