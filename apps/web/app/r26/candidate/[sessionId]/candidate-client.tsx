@@ -525,8 +525,10 @@ export function R26CandidateClient({
     const fragment = window.location.hash.slice(1);
     if (fragment) {
       try {
-        const decoded = decodeURIComponent(fragment);
-        if (isValidToken(decoded)) fragmentToken = decoded;
+        const rawFragmentToken = fragment.startsWith('token=')
+          ? new URLSearchParams(fragment).get('token')
+          : decodeURIComponent(fragment);
+        if (isValidToken(rawFragmentToken)) fragmentToken = rawFragmentToken;
       } catch {
         fragmentToken = null;
       }
@@ -1336,9 +1338,7 @@ export function R26CandidateClient({
       <div className="hiring-gate-shell software-product">
         <div className="hiring-gate-card">
           <div className="hiring-gate-topbar">
-            <span className="hiring-eyebrow">
-              Hirearchy Candidate Verification
-            </span>
+            <span className="hiring-eyebrow">Hirearchy Software</span>
             <ThemeToggle variant="pill" />
           </div>
           {accountGate.state === 'sign_in_required' ? (
@@ -1353,9 +1353,9 @@ export function R26CandidateClient({
                   margin: 0,
                 }}
               >
-                Sign in or create a Hirearchy Candidate Account using the email
-                address invited to this assessment. Your assessment link stays
-                preserved automatically.
+                Sign in or create a Hirearchy Software candidate account using
+                the email address invited to this assessment. Your assessment
+                link stays preserved automatically.
               </p>
               <div className="hiring-header-actions">
                 <a
