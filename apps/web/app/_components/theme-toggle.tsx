@@ -68,6 +68,10 @@ function applyThemeToDocument(theme: ThemeMode) {
   window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
 }
 
+export function useHirearchyTheme(): ThemeMode {
+  return useSyncExternalStore(subscribeTheme, readClientTheme, getServerTheme);
+}
+
 export function ThemeToggle({
   variant = 'pill',
   className = '',
@@ -75,11 +79,7 @@ export function ThemeToggle({
   variant?: 'pill' | 'header' | 'floating';
   className?: string;
 }) {
-  const theme = useSyncExternalStore(
-    subscribeTheme,
-    readClientTheme,
-    getServerTheme,
-  );
+  const theme = useHirearchyTheme();
   const isDark = theme === 'dark';
   const nextTheme: ThemeMode = isDark ? 'light' : 'dark';
 

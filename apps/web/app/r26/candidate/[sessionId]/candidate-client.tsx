@@ -32,7 +32,10 @@ import type {
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
-import { ThemeToggle } from '../../../_components/theme-toggle';
+import {
+  ThemeToggle,
+  useHirearchyTheme,
+} from '../../../_components/theme-toggle';
 import './candidate-workspace.css';
 
 export type CandidateAccountGate = Readonly<{
@@ -272,6 +275,7 @@ export function R26CandidateClient({
   sessionId,
   accountGate,
 }: CandidateClientProps) {
+  const activeTheme = useHirearchyTheme();
   const isAccountGateBlocked = Boolean(
     accountGate && accountGate.state !== 'ready',
   );
@@ -1957,6 +1961,7 @@ export function R26CandidateClient({
             >
               <CodeMirror
                 aria-label="Edit file"
+                theme={activeTheme}
                 basicSetup={{
                   lineNumbers: true,
                   foldGutter: false,
