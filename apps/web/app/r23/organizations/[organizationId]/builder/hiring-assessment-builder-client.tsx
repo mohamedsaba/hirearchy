@@ -1191,9 +1191,9 @@ export function HiringAssessmentBuilderClient({
             </span>
             <h2>Send Assessment Invitation</h2>
             <p className="hiring-muted-copy">
-              Candidates must sign in with a matching Hirearchy Candidate
-              Account to launch their isolated workspace. The assessment also
-              appears immediately in their <code>/candidate</code> portal.
+              Candidates must sign in to Hirearchy Software with this email to
+              launch their isolated workspace. The assessment also appears
+              immediately in their <code>/candidate</code> portal.
             </p>
           </div>
           <div className="hiring-slot-meter">

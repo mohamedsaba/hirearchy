@@ -2594,7 +2594,7 @@ BEGIN
     RAISE EXCEPTION 'Assigned reviewer must be an active organization member' USING ERRCODE = '42501';
   END IF;
 
-  v_idem_key := 'hiring-issue:' || v_request_id;
+  v_idem_key := 'hiring-issue-' || v_request_id;
   v_request_hash := pg_catalog.encode(
     pg_catalog.sha256(pg_catalog.convert_to(
       p_organization_id::pg_catalog.text || ':' || v_def_id::pg_catalog.text || ':' || v_version_id::pg_catalog.text || ':' || v_candidate_email || ':' || v_reviewer_id::pg_catalog.text,

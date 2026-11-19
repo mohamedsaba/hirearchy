@@ -5763,7 +5763,7 @@ export async function stagingOrganizationSettingsGet(
       }
 
       const inviteRoleFieldHtml = hiring
-        ? `<div><label for="inviteRole">Workspace role</label><select id="inviteRole" name="role"><option value="reviewer" selected>Evaluator (Reviews, problem authoring &amp; hiring decision)</option><option value="recruiter">Recruiter (Candidates, pipeline, problem authoring &amp; issuing)</option><option value="cto">CTO / Owner (Full workspace, plan &amp; team management)</option></select></div>`
+        ? `<div><label for="inviteRole">Workspace role</label><select id="inviteRole" name="role"><option value="reviewer" selected>Evaluator (Reviews &amp; hiring decision)</option><option value="recruiter">Recruiter (Pipeline &amp; invitations)</option><option value="cto">CTO / Owner (Full workspace &amp; plan)</option></select></div>`
         : '';
 
       const content = `
