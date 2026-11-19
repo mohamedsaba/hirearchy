@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
+import { NextRequest } from 'next/server';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { R27Evidence } from '../../database/postgres/r27/contract.mjs';
+import { proxy } from '../../apps/web/proxy';
 import { R27AiReviewPanel } from '../../apps/web/app/evaluator/sessions/[sessionId]/ai-review-panel';
 import { generateR27AiCandidateReview } from '../../apps/web/src/r27-evidence/ai-review';
 import { buildDeterministicEvidencePreviewReport } from '../../apps/web/src/r27-evidence/ai-review-contract';
@@ -202,6 +204,35 @@ describe('R27 AI Candidate Review', () => {
     root = null;
     container.remove();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('allows R27 ai-review GET and POST in staging/founder-uat proxy while keeping lockdown blocked', () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    const getRes = proxy(
+      new NextRequest(
+        'http://localhost/r27/api/organizations/3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a/sessions/sess_123/ai-review',
+        { method: 'GET' },
+      ),
+    );
+    const postRes = proxy(
+      new NextRequest(
+        'http://localhost/r27/api/organizations/3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a/sessions/sess_123/ai-review',
+        { method: 'POST' },
+      ),
+    );
+    expect(getRes.headers.get('x-middleware-next')).toBe('1');
+    expect(postRes.headers.get('x-middleware-next')).toBe('1');
+
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-lockdown');
+    expect(
+      proxy(
+        new NextRequest(
+          'http://localhost/r27/api/organizations/3d58ca5b-bba6-4ba8-b561-8d9802aa3b8a/sessions/sess_123/ai-review',
+          { method: 'POST' },
+        ),
+      ).status,
+    ).toBe(503);
   });
 
   it('produces an evidence-grounded Should Accept preview report for verified edits', () => {
