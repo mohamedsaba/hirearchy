@@ -1,5 +1,5 @@
 # Product thesis
 
-A candidate performs realistic engineering work in a controlled environment. The system captures observable events from that work. A chronological reconstruction makes the work legible and keeps the underlying evidence inspectable. A human evaluator—not the system—decides what the evidence means.
+A candidate performs realistic engineering work in an authentic IDE workspace. The system captures observable file revisions, workspace saves, execution outcomes, AI prompts, and session chronology without altering how an engineer expects their editor and tools to behave.
 
-Hirearchy Software exists to observe real work instead of inventing more proxies for it. It produces evidence, not a competence score or hiring verdict.
+For evaluators, chronological reconstruction, side-by-side/unified code diffs, and an optional advisory **AI Candidate Review** make real work immediately legible—while keeping raw source evidence inspectable and leaving the final hiring decision with the human evaluator.

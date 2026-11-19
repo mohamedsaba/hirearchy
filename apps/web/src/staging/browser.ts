@@ -38,6 +38,10 @@ import type {
   R27Evidence,
   R27EvidenceQuery,
 } from '../../../../database/postgres/r27/contract.mjs';
+import {
+  AI_REVIEW_MODEL_CATALOG,
+  generateR27AiCandidateReview,
+} from '../r27-evidence/ai-review';
 import type { R28CandidateRevision } from '../../../../database/postgres/r28/contract.mjs';
 import {
   buildScenarioSnapshotEnvelope,
@@ -3765,6 +3769,135 @@ export async function stagingEvidenceApiGet(
         'Content-Type': 'application/json; charset=utf-8',
       },
     });
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function stagingAiReviewApiGet(
+  request: Request,
+  organizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'GET',
+    headers: jsonHeaders,
+  });
+
+  try {
+    const params = new URL(request.url).searchParams;
+    const preset = params.get('preset') ?? undefined;
+    const customModelId = params.get('customModelId') ?? undefined;
+    const forcePreview = params.get('forcePreview') === 'true';
+
+    const evidence = await stagingLoadR27Evidence(
+      request,
+      organizationId,
+      sessionId,
+      { limit: 100 },
+    );
+    if (!evidence) {
+      return Response.json(
+        { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+        {
+          status: 404,
+          headers: {
+            'Cache-Control': 'private, no-store, max-age=0',
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        },
+      );
+    }
+
+    const report = await generateR27AiCandidateReview(evidence, {
+      preset,
+      customModelId,
+      forcePreview,
+    });
+    return Response.json(
+      { report, availablePresets: AI_REVIEW_MODEL_CATALOG },
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0',
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function stagingAiReviewApiPost(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, {
+    method: 'POST',
+    headers: jsonHeaders,
+  });
+
+  try {
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+    ) {
+      throw new StagingBadRequest();
+    }
+    const body = await parseBody(request, false, 16384);
+    allowedFields(body, ['csrf', 'preset', 'customModelId', 'forcePreview']);
+    requireOriginAndCsrf(request, body);
+
+    const preset =
+      typeof body.preset === 'string' && body.preset.length <= 120
+        ? body.preset
+        : undefined;
+    const customModelId =
+      typeof body.customModelId === 'string' && body.customModelId.length <= 160
+        ? body.customModelId
+        : undefined;
+    const forcePreview = body.forcePreview === true;
+
+    const evidence = await stagingLoadR27Evidence(
+      request,
+      targetOrganizationId,
+      sessionId,
+      { limit: 100 },
+    );
+    if (!evidence) {
+      return Response.json(
+        { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+        {
+          status: 404,
+          headers: {
+            'Cache-Control': 'private, no-store, max-age=0',
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        },
+      );
+    }
+
+    const report = await generateR27AiCandidateReview(evidence, {
+      preset,
+      customModelId,
+      forcePreview,
+    });
+    return Response.json(
+      { report, availablePresets: AI_REVIEW_MODEL_CATALOG },
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0',
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      },
+    );
   } catch (error) {
     return failureResponse(jsonRequest, error);
   }

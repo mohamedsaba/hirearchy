@@ -35,12 +35,18 @@ import {
 } from '../assessments/task-rubric';
 import { getApplicationDatabasePath } from '../database/database-path';
 import { r26IsEnabled } from '../r26-candidate/config';
+import {
+  AI_REVIEW_MODEL_CATALOG,
+  generateR27AiCandidateReview,
+} from '../r27-evidence/ai-review';
 import { r27IsEnabled } from '../r27-evidence/config';
 import { r29IsEnabled } from '../r29-observations/config';
 import { isAuthenticatedStaging } from '../runtime/profile';
 import { readFounderUatConfiguration } from '../runtime/founder-uat';
 import { hasFounderUatPendingInvitation } from './founder-uat-state';
 import {
+  stagingAiReviewApiGet,
+  stagingAiReviewApiPost,
   stagingAssessmentDraftApiGet,
   stagingAssessmentDraftApiPut,
   stagingAssessmentIssuanceApiPost,
@@ -1310,6 +1316,149 @@ export async function r27EvidenceApiGet(
         'Content-Type': 'application/json; charset=utf-8',
       },
     });
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function r27AiReviewApiGet(
+  request: Request,
+  organizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingAiReviewApiGet(request, organizationId, sessionId);
+  }
+  const jsonRequest = asR27JsonRequest(request);
+  if (!r27IsEnabled()) return disabledResponse(jsonRequest);
+
+  try {
+    const params = new URL(request.url).searchParams;
+    const preset = params.get('preset') ?? undefined;
+    const customModelId = params.get('customModelId') ?? undefined;
+    const forcePreview = params.get('forcePreview') === 'true';
+
+    const evidence = await loadAuthenticatedR27Evidence(
+      request,
+      organizationId,
+      sessionId,
+      { limit: 100 },
+    );
+    if (!evidence) {
+      return Response.json(
+        { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+        {
+          status: 404,
+          headers: {
+            'Cache-Control': 'private, no-store, max-age=0',
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        },
+      );
+    }
+
+    const report = await generateR27AiCandidateReview(evidence, {
+      preset,
+      customModelId,
+      forcePreview,
+    });
+    return Response.json(
+      { report, availablePresets: AI_REVIEW_MODEL_CATALOG },
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0',
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      },
+    );
+  } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+export async function r27AiReviewApiPost(
+  request: Request,
+  targetOrganizationId: string,
+  sessionId: string,
+): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingAiReviewApiPost(request, targetOrganizationId, sessionId);
+  }
+  const jsonRequest = asR27JsonRequest(request);
+  if (!r27IsEnabled()) return disabledResponse(jsonRequest);
+
+  try {
+    const active = getRuntime();
+    if (!active) throw new R23AuthUnavailable();
+    if (
+      !UUID.test(targetOrganizationId) ||
+      !/^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+    ) {
+      throw new R23BadRequest();
+    }
+
+    const handle = requiredCookie(request, R23_SESSION_COOKIE);
+    const csrfCookieVal = requiredCookie(request, R23_CSRF_COOKIE);
+    requireSameOrigin(request, active.config);
+    const body = await requestBody(request, 16384);
+    requireOriginAndCsrf(request, active.config, body);
+
+    const preset =
+      typeof body.preset === 'string' && body.preset.length <= 120
+        ? body.preset
+        : undefined;
+    const customModelId =
+      typeof body.customModelId === 'string' && body.customModelId.length <= 160
+        ? body.customModelId
+        : undefined;
+    const forcePreview = body.forcePreview === true;
+
+    return await withVerifiedSession(
+      active,
+      handle,
+      digest(csrfCookieVal),
+      async (session, identity, authz) => {
+        const organizationId = targetOrganizationId.toLowerCase();
+        if (session.selectedOrganizationId !== organizationId) {
+          throw new R23ScopeDenied();
+        }
+        const evidence = await authz.getSubmittedEvidence(
+          identity,
+          organizationId,
+          sessionId,
+          { limit: 100 },
+        );
+        if (!evidence) {
+          return Response.json(
+            { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+            {
+              status: 404,
+              headers: {
+                'Cache-Control': 'private, no-store, max-age=0',
+                'Content-Type': 'application/json; charset=utf-8',
+              },
+            },
+          );
+        }
+
+        const report = await generateR27AiCandidateReview(evidence, {
+          preset,
+          customModelId,
+          forcePreview,
+        });
+        return Response.json(
+          { report, availablePresets: AI_REVIEW_MODEL_CATALOG },
+          {
+            status: 200,
+            headers: {
+              'Cache-Control': 'private, no-store, max-age=0',
+              'Content-Type': 'application/json; charset=utf-8',
+            },
+          },
+        );
+      },
+    );
   } catch (error) {
     return failureResponse(jsonRequest, error);
   }

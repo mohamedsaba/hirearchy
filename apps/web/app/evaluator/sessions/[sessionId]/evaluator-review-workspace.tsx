@@ -29,7 +29,9 @@ import {
   buildR27Presentation,
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
+import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { R27AiReviewPanel } from './ai-review-panel';
 import { computeDiffStats } from './code-diff-viewer';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
@@ -253,6 +255,8 @@ const R27SummaryView = ({
   onLoadMore,
   loadingMore,
   pageError,
+  aiReviewReport,
+  onAiReviewReportChange,
 }: Readonly<{
   evidence: R27Evidence;
   presentation: R27Presentation;
@@ -261,6 +265,8 @@ const R27SummaryView = ({
   onLoadMore: () => void;
   loadingMore: boolean;
   pageError: string | null;
+  aiReviewReport: R27AiReviewReport | null;
+  onAiReviewReportChange: (report: R27AiReviewReport | null) => void;
 }>) => {
   const fileSources = [...sources]
     .filter((source) => source.r27?.kind === 'file')
@@ -298,6 +304,14 @@ const R27SummaryView = ({
   return (
     <div className="workbench-summary-grid">
       <div className="workbench-summary-content">
+        <R27AiReviewPanel
+          organizationId={evidence.organizationId}
+          sessionId={evidence.sessionId}
+          evidence={evidence}
+          report={aiReviewReport}
+          onReportChange={onAiReviewReportChange}
+        />
+
         <section
           className="evaluator-review-card workbench-session-timeline"
           aria-labelledby="r27-timeline-title"
@@ -1248,6 +1262,8 @@ export const EvaluatorReviewWorkspace = (
   );
   const [loadingMoreR27, setLoadingMoreR27] = useState(false);
   const [r27PageError, setR27PageError] = useState<string | null>(null);
+  const [aiReviewReport, setAiReviewReport] =
+    useState<R27AiReviewReport | null>(null);
   const evidence = 'evidence' in props ? props.evidence : null;
   const review = 'review' in props ? props.review : null;
   const projection = 'projection' in props ? props.projection : null;
@@ -1649,6 +1665,8 @@ export const EvaluatorReviewWorkspace = (
                   onLoadMore={loadMoreR27Events}
                   loadingMore={loadingMoreR27}
                   pageError={r27PageError}
+                  aiReviewReport={aiReviewReport}
+                  onAiReviewReportChange={setAiReviewReport}
                 />
               ) : evidence && review && projection ? (
                 <SummaryView
@@ -1712,15 +1730,27 @@ export const EvaluatorReviewWorkspace = (
               </p>
             ) : null}
             {mode === 'Review' && readOnly ? (
-              r27Evidence && r210IsEnabled() ? (
-                <R210ReviewPacketPanel
-                  organizationId={r27Evidence.organizationId}
-                  sessionId={r27Evidence.sessionId}
-                  reviewer={r27Evidence.reviewer}
-                  r27Evidence={r27Evidence}
-                  sources={sources}
-                  onOpenEvidence={openEvidence}
-                />
+              r27Evidence ? (
+                <div className="r27-review-stack">
+                  <R27AiReviewPanel
+                    organizationId={r27Evidence.organizationId}
+                    sessionId={r27Evidence.sessionId}
+                    evidence={r27Evidence}
+                    report={aiReviewReport}
+                    onReportChange={setAiReviewReport}
+                    compact
+                  />
+                  {r210IsEnabled() ? (
+                    <R210ReviewPacketPanel
+                      organizationId={r27Evidence.organizationId}
+                      sessionId={r27Evidence.sessionId}
+                      reviewer={r27Evidence.reviewer}
+                      r27Evidence={r27Evidence}
+                      sources={sources}
+                      onOpenEvidence={openEvidence}
+                    />
+                  ) : null}
+                </div>
               ) : (
                 <section
                   className="evaluator-review-card"

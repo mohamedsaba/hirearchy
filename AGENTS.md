@@ -4,6 +4,7 @@ Hirearchy Software is Hirearchy's engineering-evaluation prototype. A candidate 
 
 ## Read before changing the product
 
+- `docs/README.md` is the master index for backend, frontend, brand/UI, assets, and onboarding.
 - `docs/product/` defines the thesis, principles, non-goals, and requirements.
 - `docs/scenarios/constitution.md` governs scenario design.
 - `docs/architecture/` and `docs/decisions/` define technical and product boundaries.
@@ -11,10 +12,10 @@ Hirearchy Software is Hirearchy's engineering-evaluation prototype. A candidate 
 
 ## Non-negotiable rules
 
-- Evidence precedes judgment. Keep acceptance criteria, test outcome, task outcome, evaluator decision, and competence distinct.
-- AI use is neutral. Record observable AI interactions; never infer hidden mental state or the origin of manually typed code.
-- The evaluator owns the verdict. Do not add candidate scores, rankings, automatic competence labels, or pass/reject decisions.
-- The evaluator experience is one chronological reconstruction with expandable source evidence, not a generic analytics dashboard.
+- Evidence precedes judgment. Keep acceptance criteria, test outcome, task outcome, advisory AI review signals (`docs/decisions/0006-ai-assisted-candidate-review.md`), evaluator decision, and competence distinct.
+- AI use by candidates is neutral. Record observable AI interactions; never infer hidden mental state or the origin of manually typed code.
+- The human evaluator owns final review packets (`r210`) and final hiring judgment. Advisory AI Candidate Review reports (`R27AiReviewPanel`) sit strictly outside immutable evidence (`r27`) and finalized review packets (`r210`).
+- The evaluator experience centers on chronological evidence reconstruction, code diffs, and clear advisory insights—not a generic multi-metric analytics dashboard.
 - Keep the prototype a modular monolith. No premature microservices, speculative infrastructure, or generic SaaS expansion.
 - Fix root causes. No exception suppression, authorization bypasses, weakened tests, arbitrary defaults, duplicated shortcuts, or other cheap-tape fixes.
 
