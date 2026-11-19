@@ -515,15 +515,15 @@ body.software-document-body *::after {
 
 .software-document-panel .software-members-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 0;
   border-collapse: collapse;
   text-align: left;
 }
 
 .software-document-panel .software-members-table :is(th, td) {
-  padding: 16px 14px;
+  padding: 12px 10px;
   border-bottom: 1px solid var(--software-border);
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .software-document-purpose {
@@ -573,7 +573,7 @@ body.software-document-body *::after {
   text-transform: uppercase;
 }
 
-.software-workspace-identity > span:last-child,
+.software-workspace-identity > span:not([class]),
 .software-workspace-sidebar-footer > span {
   color: #c7bdd2;
   font-size: 12px;
@@ -711,11 +711,20 @@ body.software-document-body *::after {
 }
 
 .software-section-number {
-  flex: 0 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding-top: 0;
+  border: 1px solid var(--software-border);
+  border-radius: 7px;
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  font: 700 11.5px / 1 var(--software-mono);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  padding-top: 4px;
-  color: var(--software-muted);
-  font: 11px / 1.5 var(--software-mono);
 }
 
 .software-document-panel .software-section-intro h2 {
@@ -757,10 +766,15 @@ body.software-document-body *::after {
 
 .software-document-panel .software-invite-form {
   display: grid;
-  grid-template-columns: minmax(0, 420px) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
-  justify-content: start;
-  gap: 12px;
+  gap: 14px;
+}
+
+.software-document-panel .software-invite-form button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 4px;
 }
 
 .software-invite-form > div {
@@ -871,6 +885,8 @@ body.software-document-body *::after {
   margin-left: 6px;
   border-color: transparent;
   background: var(--software-mint);
+  color: #211426;
+  font-weight: 650;
 }
 
 .software-members-table {
@@ -898,8 +914,11 @@ body.software-document-body *::after {
 }
 
 .software-session-filters {
+  display: grid;
   grid-template-columns: minmax(200px, 1.5fr) repeat(2, minmax(150px, 1fr)) auto;
   align-items: end;
+  gap: 14px;
+  margin: 0;
   padding: 20px;
   border: 1px solid var(--software-border);
   border-bottom: 0;
@@ -999,10 +1018,10 @@ body.software-document-body *::after {
   font: 12px / 1 var(--software-mono);
 }
 
-.software-empty-state p {
-  max-width: 380px;
-  margin-inline: auto;
-  font-size: 13px;
+.software-document-panel .software-empty-state p {
+  max-width: 420px;
+  margin: 12px auto 0;
+  font-size: 13.5px;
 }
 
 @media (max-width: 1100px) {
@@ -1133,8 +1152,12 @@ body.software-document-body *::after {
   }
 }
 
-.software-document-panel .software-members-table :is(th, td) {
+.software-document-panel .software-members-table :is(th, td):nth-child(n + 3) {
   white-space: nowrap;
+}
+
+.software-document-panel .software-members-table :is(th, td):nth-child(2) {
+  overflow-wrap: anywhere;
 }
 
 .software-document-panel [role='alert'],
@@ -1207,7 +1230,7 @@ body.software-document-body *::after {
 }
 
 .software-document-panel .software-members-table td:first-child {
-  min-width: 150px;
+  min-width: 110px;
 }
 
 .software-table-hint {
@@ -1502,7 +1525,7 @@ html[data-theme='dark'].software-product {
 }
 
 .software-workspace-identity .software-eyebrow,
-.software-workspace-identity > span:last-child,
+.software-workspace-identity > span:not([class]),
 .software-workspace-sidebar-footer > span {
   color: var(--software-sidebar-muted);
 }
@@ -1654,19 +1677,13 @@ html[data-theme='dark'] .software-role-badge {
 }
 
 .software-product select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 36px;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--software-muted) 50%),
-    linear-gradient(135deg, var(--software-muted) 50%, transparent 50%);
-  background-repeat: no-repeat;
-  background-position:
-    calc(100% - 17px) center,
-    calc(100% - 12px) center;
-  background-size:
-    5px 5px,
-    5px 5px;
+  height: 42px;
+  padding: 8px 12px;
+  font-weight: 400;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
