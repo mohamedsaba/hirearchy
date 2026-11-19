@@ -9,7 +9,6 @@
 /* Keep the product workbench on the approved Software palette without
    changing the public homepage or shared app shell. */
 .workspace-shell,
-.evaluator-review-shell,
 .evaluator-access-shell {
   --software-plum: #291e36;
   --software-lilac: #ebe5f2;
@@ -923,7 +922,6 @@
 textarea {
   width: 100%;
   flex: 1;
-  min-height: 24rem;
   resize: vertical;
   padding: 1.25rem;
   border: 1px solid var(--line);

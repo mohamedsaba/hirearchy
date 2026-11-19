@@ -1372,7 +1372,7 @@ export async function stagingOrganizationsGet(
           .join('');
         let content = '';
         if (memberships.length > 0) {
-          content = `<p class="software-eyebrow">Your workspaces</p><h1>Where would you like to work?</h1><p>Select a workspace to continue.</p><ul class="software-organization-picker">${items}</ul>`;
+          content = `<h1>Choose a workspace</h1><ul class="software-organization-picker">${items}</ul>`;
         } else {
           if (
             statusResult.status === 'needs_team' &&
@@ -1380,7 +1380,6 @@ export async function stagingOrganizationsGet(
           ) {
             content = `
               <section aria-labelledby="create-org-title">
-                <p class="software-eyebrow">A place for your team</p>
                 <h1 id="create-org-title">Create your workspace</h1>
                 <p>Create your first organization, then prepare an assessment and invite your team.</p>
                 <div role="note" aria-label="Governance notice">
@@ -1788,11 +1787,9 @@ export async function stagingOrganizationGet(
       ${
         !isFounderUatEnabled()
           ? `
-      <section aria-labelledby="staging-boundaries-title" data-testid="staging-workspace-capability-notice">
-        <h2 id="staging-boundaries-title">Authenticated Staging Boundaries (R2.15)</h2>
-        <p><strong>Supported in this slice:</strong> Named GoTrue authentication, organization membership verification, assessment authoring, static validation, internal session issuance with evaluator assignment, and read-only inspection of submitted evidence and private review data.</p>
-        <p><strong>Unavailable in this slice:</strong> Candidate invitation tokens/links, candidate workspace execution, live AI-provider task generation or assistance, unsubmitted session evidence, and review observation/packet writes.</p>
-      </section>
+      <aside class="software-workspace-notice" aria-label="Staging workspace" data-testid="staging-workspace-capability-notice">
+        <strong>Staging workspace.</strong> Submitted work is visible to the assigned evaluator.
+      </aside>
       `
           : ''
       }
@@ -2061,11 +2058,11 @@ export async function stagingOrganizationSessionPageGet(
               )}" class="software-document-primary-link" data-testid="open-submitted-evidence-workbench-link">Review submitted work</a></div>`
             : isSubmittedSession
               ? `<section aria-labelledby="assigned-reviewer-scope-title" data-testid="staging-assigned-reviewer-scope">
-                  <h3 id="assigned-reviewer-scope-title">Evidence access scope</h3>
+                  <h2 id="assigned-reviewer-scope-title">Evidence access</h2>
                   <p role="status">This session has been submitted. Submitted evidence and reviewer notes are available only to the reviewer assigned to this session.</p>
                 </section>`
               : `<section aria-labelledby="unsubmitted-evidence-notice-title" data-testid="staging-unsubmitted-evidence-unavailable">
-                <h3 id="unsubmitted-evidence-notice-title">Candidate evidence &amp; review workbench status</h3>
+                <h2 id="unsubmitted-evidence-notice-title">Waiting for submitted work</h2>
                 <p role="status">Candidate evidence and review tools become available after the assessment is submitted.</p>
                 ${
                   membership.role === 'reviewer'
@@ -2128,9 +2125,7 @@ export async function stagingOrganizationSessionPageGet(
         )}</p></details>
 
         <section aria-labelledby="reviewer-assignments-title">
-          <h3 id="reviewer-assignments-title">Reviewer assignments</h3>
-          <p>The assigned evaluator can inspect submitted work and prepare a human review.</p>
-          <h4>Assigned reviewers</h4>
+          <h2 id="reviewer-assignments-title">Assigned reviewers</h2>
           ${
             context.assignments && context.assignments.length > 0
               ? `<ul class="software-reviewer-list" data-testid="assigned-reviewers-list">${context.assignments
@@ -2147,7 +2142,7 @@ export async function stagingOrganizationSessionPageGet(
         </section>
 
         <section aria-labelledby="candidate-token-recovery-title" data-testid="staging-candidate-invitation-management">
-          <h3 id="candidate-token-recovery-title">Candidate invitation</h3>
+          <h2 id="candidate-token-recovery-title">Candidate invitation</h2>
           ${
             isRecruiterIssuedSession
               ? `<p role="status">The issuing recruiter manages this candidate invitation, including recovery and revocation.</p>
@@ -5487,13 +5482,13 @@ export async function stagingOrganizationSettingsGet(
 
       const content = `
         <header class="software-page-heading">
-          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1><p>The people and details behind your hiring workspace.</p></div>
+          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1></div>
           <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
         </header>
 
         <div class="software-settings-grid">
           <section class="software-settings-section" aria-labelledby="account-profile-heading">
-            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">01</span><div><h2 id="account-profile-heading">Your profile</h2><p>How your name appears to your team.</p></div></div>
+            <header class="software-section-intro"><h2 id="account-profile-heading">Your profile</h2><p>How your name appears to your team.</p></header>
             <p class="software-account-email">${safeEmail}</p>
             <form action="/r23/organizations/${safeOrgId}/settings" method="post">
               <input type="hidden" name="csrf" value="${safeCsrf}">
@@ -5505,7 +5500,7 @@ export async function stagingOrganizationSettingsGet(
           </section>
 
           <section class="software-settings-section" aria-labelledby="org-profile-heading">
-            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">02</span><div><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></div></div>
+            <header class="software-section-intro"><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></header>
             ${
               orgContext.role === 'recruiter'
                 ? `
@@ -5523,7 +5518,7 @@ export async function stagingOrganizationSettingsGet(
         </div>
 
         <section class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
-          <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">03</span><div><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></div></div>
+          <header class="software-section-intro"><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></header>
           <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
             <table class="software-members-table">
               <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
@@ -5533,7 +5528,7 @@ export async function stagingOrganizationSettingsGet(
         </section>
 
         <section class="software-settings-section" aria-labelledby="invitations-heading">
-          <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">04</span><div><h2 id="invitations-heading">Invite an evaluator</h2><p>Bring the right person into the review.</p></div></div>
+          <header class="software-section-intro"><h2 id="invitations-heading">Invite an evaluator</h2><p>Bring the right person into the review.</p></header>
           ${
             orgContext.role === 'recruiter'
               ? `

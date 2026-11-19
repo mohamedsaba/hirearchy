@@ -60,6 +60,10 @@ export function renderSoftwareDocument(
     : '';
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/software-ui.css"><title>${safeTitle}</title></head><body class="software-product software-document-body${
-    workspace ? ' software-document-workspace' : ''
-  }"><header class="software-document-header"><a class="software-document-wordmark" href="${organizationPath}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a></header><div class="software-document-layout">${navigation}<main class="software-document-shell"><div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
+    workspace ? ' software-document-workspace' : ' software-document-access'
+  }"><header class="software-document-header"><a class="software-document-wordmark" href="${organizationPath}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a></header><div class="software-document-layout">${navigation}<main class="software-document-shell">${
+    workspace
+      ? ''
+      : '<p class="software-access-principle">Evidence informs.<br><span>People decide.</span></p>'
+  }<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
 }

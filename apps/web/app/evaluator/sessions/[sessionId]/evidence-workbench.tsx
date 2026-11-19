@@ -45,8 +45,6 @@ import {
   formatReviewPacketTimestamp,
   formatReferenceLabel,
   validatePacketReadinessForFinalization,
-  OBJECTIVE_EVIDENCE_LABEL as R210_OBJECTIVE_LABEL,
-  HUMAN_INTERPRETATION_LABEL as R210_HUMAN_LABEL,
   REVIEW_PACKET_FINALIZED_NOTICE,
   CONCURRENCY_CONFLICT_MESSAGE as R210_CONFLICT_MESSAGE,
   EVIDENCE_INTEGRITY_NOTICE as R210_INTEGRITY_NOTICE,
@@ -3656,7 +3654,6 @@ export const R210ReviewPacketPanel = ({
         border: '1px solid var(--software-border, #d1d5db)',
         borderRadius: '12px',
         backgroundColor: 'var(--software-surface, #ffffff)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         minWidth: 0,
         maxWidth: '100%',
         boxSizing: 'border-box',
@@ -3781,54 +3778,7 @@ export const R210ReviewPacketPanel = ({
         </div>
       </header>
 
-      {/* Non-negotiable boundary banner */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '8px',
-          alignItems: 'center',
-          padding: '8px 12px',
-          marginBottom: '16px',
-          borderRadius: '6px',
-          backgroundColor: 'var(--software-surface-elevated, #f9fafb)',
-          border: '1px solid var(--software-border, #e5e7eb)',
-          fontSize: '12px',
-          color: 'var(--software-muted, #4b5563)',
-        }}
-      >
-        <span
-          style={{
-            fontSize: '10px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            backgroundColor: '#efe7f5',
-            color: '#211426',
-          }}
-        >
-          {R210_OBJECTIVE_LABEL}
-        </span>
-        <span
-          style={{
-            fontSize: '10px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            backgroundColor: '#f7ecd8',
-            color: '#6b4407',
-          }}
-        >
-          {R210_HUMAN_LABEL}
-        </span>
-        <span style={{ flex: 1, minWidth: '200px' }}>
-          {R210_INTEGRITY_NOTICE}
-        </span>
-      </div>
+      <p className="evaluator-review-integrity">{R210_INTEGRITY_NOTICE}</p>
 
       {/* Optimistic Concurrency Conflict Banner */}
       {conflictError ? (
@@ -4309,7 +4259,7 @@ export const R210ReviewPacketPanel = ({
               rows={4}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
-              placeholder="Author objective evaluation narrative grounded in observed candidate behavior and execution..."
+              placeholder="Summarize your assessment and cite the recorded work."
               style={{
                 width: '100%',
                 padding: '10px 12px',

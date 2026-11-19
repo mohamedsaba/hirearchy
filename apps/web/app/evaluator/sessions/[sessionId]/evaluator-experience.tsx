@@ -34,7 +34,10 @@ type EvaluatorExperienceProps =
 export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
   if (props.readOnly) {
     return (
-      <div className="evaluator-v2-container" style={{ gap: 0 }}>
+      <div
+        className="evaluator-v2-container evaluator-evidence-product"
+        style={{ gap: 0 }}
+      >
         <SoftwareProductHeader
           active="reviews"
           stagingReview={{

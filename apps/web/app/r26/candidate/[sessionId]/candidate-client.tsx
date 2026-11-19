@@ -1180,7 +1180,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               <span>{node.name}</span>
             </button>
             {isOpen ? (
-              <ul className="r26-tree-list" role="group">
+              <ul className="r26-tree-list">
                 {renderTreeNodes(node.children, depth + 1)}
               </ul>
             ) : null}
@@ -1319,12 +1319,15 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
             <div
               className={`r26-timer ${timerLow ? 'is-low' : ''}`}
-              aria-label="Assessment timer"
+              role="timer"
+              aria-label="Time remaining"
               title={`Access ends no later than ${formatDateTime(activeAccessEndsAtMs)}`}
             >
               <div className="r26-timer-row">
                 <IconClock size={14} stroke={2} aria-hidden="true" />
-                <span className="r26-timer-label">Time remaining</span>
+                <span className="r26-timer-label" aria-hidden="true">
+                  Time left
+                </span>
                 <strong>{formatDuration(remainingMs)}</strong>
               </div>
               {remainingPercent !== null ? (
@@ -1342,6 +1345,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               type="button"
               className={`r26-header-tool ${showExecutionDrawer ? 'is-active' : ''}`}
               aria-expanded={showExecutionDrawer}
+              aria-controls="candidate-execution-panel"
               onClick={() => setShowExecutionDrawer((current) => !current)}
             >
               <IconTerminal2 size={15} stroke={1.9} aria-hidden="true" />
@@ -1353,13 +1357,19 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
               type="button"
               className={`r26-header-tool ${showAiDrawer ? 'is-active' : ''}`}
               aria-expanded={showAiDrawer}
+              aria-controls="candidate-assistant-panel"
               onClick={() => setShowAiDrawer((current) => !current)}
             >
               <IconSparkles size={15} stroke={1.9} aria-hidden="true" />
               <span>AI Assistant</span>
             </button>
           ) : null}
-          {view ? (
+          {view &&
+          (view.status !== 'ACTIVE' ||
+            remainingMs === null ||
+            accessUnavailable ||
+            invitationExpired ||
+            sessionTimeExpired) ? (
             <span
               className={`r26-status r26-status-${accessUnavailable || invitationExpired || sessionTimeExpired ? 'expired' : view.status.toLowerCase()}`}
             >
@@ -1407,9 +1417,9 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         </div>
       </header>
 
-      {view ? (
+      {view && showEditor ? (
         <nav className="r26-mobile-navigation" aria-label="Workspace sections">
-          {showEditor ? <a href="#candidate-code-editor">Workspace</a> : null}
+          <a href="#candidate-code-editor">Workspace</a>
           <a
             href="#candidate-brief-content"
             onClick={() => openSectionDisclosure('candidate-brief-content')}
@@ -1423,9 +1433,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         className="r26-workspace"
         data-session-state={view?.status.toLowerCase() ?? 'loading'}
         data-ai-enabled={
-          view?.capabilities.ai === true && aiView?.enabled && showAiDrawer
-            ? 'true'
-            : 'false'
+          view?.capabilities.ai === true && showAiDrawer ? 'true' : 'false'
         }
       >
         <aside
@@ -1500,8 +1508,18 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
 
               {view.status === 'CREATED' ? (
                 <>
-                  <p className="r26-eyebrow">Engineering assessment</p>
                   <h1>{scenarioTitle}</h1>
+                  {view.durationSeconds ? (
+                    <p className="r26-time-budget">
+                      <IconClock size={17} aria-hidden="true" />
+                      <span>
+                        Time limit{' '}
+                        <strong>
+                          {formatDuration(view.durationSeconds * 1000)}
+                        </strong>
+                      </span>
+                    </p>
+                  ) : null}
                 </>
               ) : null}
 
@@ -1881,6 +1899,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
           showExecutionDrawer ? (
             <section
               className="r26-execution-panel"
+              id="candidate-execution-panel"
               aria-label="Automated Checks"
               data-testid="candidate-execution-panel"
             >
@@ -2340,6 +2359,7 @@ export function R26CandidateClient({ sessionId }: CandidateClientProps) {
         {view?.capabilities.ai === true && showAiDrawer ? (
           <aside
             className={`r26-ai-panel ${view.capabilities.ai !== true || !aiView?.enabled ? 'r26-ai-panel-disabled' : ''}`}
+            id="candidate-assistant-panel"
             aria-label="AI assistance"
             data-testid="candidate-ai-panel"
           >

@@ -4,8 +4,8 @@ import { notFound } from 'next/navigation';
 import { isAuthenticatedStaging } from '../../../src/runtime/profile';
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
 import { r23IsEnabled } from '../../../src/r23-auth/config';
-import '../../evaluator/evaluator-product.css';
 
+export const metadata = { title: 'Sign in' };
 export const dynamic = 'force-dynamic';
 
 type SearchParams = {
@@ -34,84 +34,72 @@ export default async function R23LoginPage({
     params.error === 'credentials' || params.error === 'unavailable';
 
   return (
-    <main className="software-product evaluator-product-shell software-access-page">
-      <header className="software-product-header">
+    <div className="software-product software-document-access">
+      <header className="software-document-header">
         <Link
-          className="software-wordmark"
+          className="software-document-wordmark"
           href={founderUat ? '/' : '/r23/login'}
           prefetch={false}
-          aria-label="Hirearchy Software home"
+          aria-label="Hirearchy Software"
         >
           <span>Hirearchy</span>
-          <span className="software-product-capsule">Software</span>
+          <span className="software-document-product">Software</span>
         </Link>
       </header>
-      <div className="evaluator-product-content">
+      <main className="software-document-shell">
+        <p className="software-access-principle">
+          Evidence informs.
+          <br />
+          <span>People decide.</span>
+        </p>
         <section
-          className="evaluator-signin-panel"
+          className="software-document-panel"
           aria-labelledby="signin-title"
         >
-          <div className="evaluator-signin-copy">
-            <p className="software-eyebrow">Hirearchy Software</p>
-            <h1 id="signin-title">Sign in to your workspace</h1>
-            <p>Prepare an assessment or pick up an assigned review.</p>
-          </div>
-          <div className="evaluator-signin-form">
-            <form
-              action="/r23/auth/login"
-              method="post"
-              className="access-form"
-            >
-              {notice ? (
-                <p role={noticeIsError ? 'alert' : 'status'} aria-live="polite">
-                  {notice}
-                </p>
-              ) : null}
-              <label htmlFor="email">
-                Email
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="username"
-                  required
-                  maxLength={320}
-                />
-              </label>
-              <div className="software-password-field">
-                <div className="software-field-heading">
-                  <label htmlFor="password">Password</label>
-                  <Link href="/r23/recover" prefetch={false}>
-                    Reset your password
-                  </Link>
-                </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  maxLength={1024}
-                />
-              </div>
-              <button type="submit" className="button-primary">
-                Sign in
-              </button>
-            </form>
-            {founderUat ||
-            process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true' ? (
-              <nav aria-label="Account help">
-                <p>
-                  New to Hirearchy?{' '}
-                  <Link href="/r23/signup" prefetch={false}>
-                    Create an account
-                  </Link>
-                </p>
-              </nav>
-            ) : null}
-          </div>
+          <h1 id="signin-title">Sign in</h1>
+          <p>Access your assessments and assigned reviews.</p>
+          {notice ? (
+            <p role={noticeIsError ? 'alert' : 'status'}>{notice}</p>
+          ) : null}
+          <form action="/r23/auth/login" method="post">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              required
+              maxLength={320}
+            />
+            <div className="software-field-heading">
+              <label htmlFor="password">Password</label>
+              <Link href="/r23/recover" prefetch={false}>
+                Reset your password
+              </Link>
+            </div>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              maxLength={1024}
+            />
+            <button type="submit">Sign in</button>
+          </form>
+          {founderUat ||
+          process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true' ? (
+            <nav aria-label="Account help">
+              <p>
+                New to Hirearchy?{' '}
+                <Link href="/r23/signup" prefetch={false}>
+                  Create an account
+                </Link>
+              </p>
+            </nav>
+          ) : null}
         </section>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

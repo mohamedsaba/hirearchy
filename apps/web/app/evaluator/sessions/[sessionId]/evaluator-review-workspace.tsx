@@ -19,9 +19,10 @@ import type {
   BriefingDepthProfile,
   ProjectedBriefing,
 } from '../../../../src/evaluator/project-evaluator-briefing';
-import type {
-  EvaluatorReviewEvidence,
-  EvaluatorReviewPresentation,
+import {
+  formatElapsed,
+  type EvaluatorReviewEvidence,
+  type EvaluatorReviewPresentation,
 } from '../../../../src/evaluator/evaluator-review-presentation';
 import type { EvaluatorAiConversation } from '../../../../src/evaluator/evaluator-ai-conversations';
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
@@ -255,8 +256,6 @@ const R27SummaryView = ({
   onLoadMore,
   loadingMore,
   pageError,
-  aiReviewReport,
-  onAiReviewReportChange,
 }: Readonly<{
   evidence: R27Evidence;
   presentation: R27Presentation;
@@ -265,8 +264,6 @@ const R27SummaryView = ({
   onLoadMore: () => void;
   loadingMore: boolean;
   pageError: string | null;
-  aiReviewReport: R27AiReviewReport | null;
-  onAiReviewReportChange: (report: R27AiReviewReport | null) => void;
 }>) => {
   const fileSources = [...sources]
     .filter((source) => source.r27?.kind === 'file')
@@ -290,40 +287,19 @@ const R27SummaryView = ({
   const executionSources = sources.filter(
     (source) => source.r27?.kind === 'execution' || Boolean(source.execution),
   );
-  const elapsedMs =
-    Date.parse(evidence.submittedAt) - Date.parse(evidence.activatedAt);
-  const elapsedMinutes =
-    Number.isFinite(elapsedMs) && elapsedMs >= 0
-      ? Math.max(1, Math.round(elapsedMs / 60_000))
-      : null;
   const duration =
-    elapsedMinutes !== null
-      ? `${elapsedMinutes} ${elapsedMinutes === 1 ? 'minute' : 'minutes'}`
-      : 'Unavailable';
+    formatElapsed(evidence.activatedAt, evidence.submittedAt)?.slice(1) ??
+    'Unavailable';
 
   return (
     <div className="workbench-summary-grid">
       <div className="workbench-summary-content">
-        <R27AiReviewPanel
-          organizationId={evidence.organizationId}
-          sessionId={evidence.sessionId}
-          evidence={evidence}
-          report={aiReviewReport}
-          onReportChange={onAiReviewReportChange}
-        />
-
         <section
           className="evaluator-review-card workbench-session-timeline"
           aria-labelledby="r27-timeline-title"
         >
           <header className="evaluator-review-section-heading">
-            <span className="evaluator-review-title-icon" aria-hidden="true">
-              <IconListDetails size={21} stroke={1.8} />
-            </span>
-            <div>
-              <p className="section-kicker">Session chronology</p>
-              <h2 id="r27-timeline-title">Recorded timeline</h2>
-            </div>
+            <h2 id="r27-timeline-title">Recorded timeline</h2>
             <span>{eventSources.length} events available</span>
           </header>
           {eventSources.length ? (
@@ -651,7 +627,6 @@ const R27SummaryView = ({
           className="evaluator-review-card"
           aria-labelledby="r27-summary-title"
         >
-          <p className="section-kicker">Assigned reviewer · Read only</p>
           <h2 id="r27-summary-title">Submitted evidence</h2>
           <dl className="evaluator-source-metadata">
             <div>
@@ -719,7 +694,6 @@ const R27SummaryView = ({
         </section>
 
         <section className="evaluator-review-card">
-          <p className="section-kicker">Source availability</p>
           <h2>Evidence limits</h2>
           <dl className="evaluator-source-metadata">
             <div>
@@ -1098,10 +1072,7 @@ const EvidenceView = ({
           aria-label={`${filter} source list`}
         >
           <header>
-            <div>
-              <p className="section-kicker">Chronological records</p>
-              <h2>{filter}</h2>
-            </div>
+            <h2>{filter}</h2>
             <span>
               {visibleSources.length} source
               {visibleSources.length === 1 ? '' : 's'}
@@ -1665,8 +1636,6 @@ export const EvaluatorReviewWorkspace = (
                   onLoadMore={loadMoreR27Events}
                   loadingMore={loadingMoreR27}
                   pageError={r27PageError}
-                  aiReviewReport={aiReviewReport}
-                  onAiReviewReportChange={setAiReviewReport}
                 />
               ) : evidence && review && projection ? (
                 <SummaryView
@@ -1707,7 +1676,7 @@ export const EvaluatorReviewWorkspace = (
           <aside
             className={`evaluator-review-sidebar evaluator-workflow-slot${mode === 'Review' ? ' is-dedicated' : ' is-quick-note'}`}
             aria-label={
-              readOnly
+              readOnly && !r27Evidence
                 ? 'Read-only review boundary'
                 : mode === 'Review'
                   ? 'Review workflow'
@@ -1732,14 +1701,6 @@ export const EvaluatorReviewWorkspace = (
             {mode === 'Review' && readOnly ? (
               r27Evidence ? (
                 <div className="r27-review-stack">
-                  <R27AiReviewPanel
-                    organizationId={r27Evidence.organizationId}
-                    sessionId={r27Evidence.sessionId}
-                    evidence={r27Evidence}
-                    report={aiReviewReport}
-                    onReportChange={setAiReviewReport}
-                    compact
-                  />
                   {r210IsEnabled() ? (
                     <R210ReviewPacketPanel
                       organizationId={r27Evidence.organizationId}
@@ -1750,6 +1711,13 @@ export const EvaluatorReviewWorkspace = (
                       onOpenEvidence={openEvidence}
                     />
                   ) : null}
+                  <R27AiReviewPanel
+                    organizationId={r27Evidence.organizationId}
+                    sessionId={r27Evidence.sessionId}
+                    evidence={r27Evidence}
+                    report={aiReviewReport}
+                    onReportChange={setAiReviewReport}
+                  />
                 </div>
               ) : (
                 <section

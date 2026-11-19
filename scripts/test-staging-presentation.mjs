@@ -128,6 +128,20 @@ async function runReservationMovesBrowserFlow(presenter) {
     );
   };
 
+  const checkNarrowLayout = async (page, width, surface, inspect) => {
+    const previous = page.viewportSize();
+    await page.setViewportSize({ width, height: 900 });
+    try {
+      await inspect?.();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth + 1,
+      );
+      assert.equal(overflow, false, `${surface} overflows at ${width}px`);
+    } finally {
+      await page.setViewportSize(previous);
+    }
+  };
+
   try {
     stage = 'recruiter sign-in and organization entry';
     const recruiterContext = await browser.newContext({
@@ -137,6 +151,7 @@ async function runReservationMovesBrowserFlow(presenter) {
     trackErrors(recruiter);
     let response = await recruiter.goto(presenter.recruiter.loginUrl);
     assert.equal(response.status(), 200);
+    await checkNarrowLayout(recruiter, 320, 'Sign in');
     await recruiter
       .locator('input[name="email"]')
       .fill(presenter.recruiter.email);
@@ -208,9 +223,12 @@ async function runReservationMovesBrowserFlow(presenter) {
       recruiter.locator('[data-testid="issue-assessment-button"]').click(),
     ]);
     assert.equal(issueResponse.status(), 201);
-    await recruiter
-      .locator('[data-testid="candidate-invitation-create"]')
-      .click();
+    const createInvitation = recruiter.getByTestId(
+      'candidate-invitation-create',
+    );
+    await createInvitation.waitFor({ state: 'visible' });
+    await checkNarrowLayout(recruiter, 320, 'Candidate invitation');
+    await createInvitation.click();
     const invitation = await recruiter
       .locator('[data-testid="candidate-invitation-link"]')
       .inputValue();
@@ -237,6 +255,15 @@ async function runReservationMovesBrowserFlow(presenter) {
     await candidate
       .getByRole('button', { name: 'Activate assessment', exact: true })
       .waitFor({ state: 'visible' });
+    await checkNarrowLayout(candidate, 768, 'Candidate brief', async () => {
+      const bounds = await candidate
+        .locator('#candidate-brief-content')
+        .boundingBox();
+      assert.ok(
+        bounds && bounds.width >= 600,
+        'The tablet brief must use the content column',
+      );
+    });
     const consent = candidate.getByRole('checkbox', {
       name: 'I acknowledge and agree to this data-use notice.',
     });
@@ -255,6 +282,24 @@ async function runReservationMovesBrowserFlow(presenter) {
     assert.equal(activationResponse.status(), 200);
     const editor = candidate.locator('.cm-content[aria-label="Edit file"]');
     await editor.waitFor({ state: 'visible' });
+    await checkNarrowLayout(
+      candidate,
+      320,
+      'Active candidate workspace',
+      async () => {
+        assert.ok(
+          await candidate
+            .getByRole('combobox', { name: 'Workspace file' })
+            .isVisible(),
+        );
+        assert.equal(
+          await candidate
+            .getByRole('navigation', { name: 'Open file tabs' })
+            .isVisible(),
+          false,
+        );
+      },
+    );
     await editor.click();
     await candidate.keyboard.press('Control+End');
     await candidate.keyboard.type(
@@ -341,6 +386,7 @@ async function runReservationMovesBrowserFlow(presenter) {
       );
     };
     await assertNoLegacyEvaluatorLinks();
+    await checkNarrowLayout(evaluator, 320, 'Evaluator masthead');
     const sessionSummaryUrl = `/r23/organizations/${presenter.organizationId.toLowerCase()}/sessions/${sessionId}`;
     assert.equal(
       await evaluator
@@ -391,6 +437,22 @@ async function runReservationMovesBrowserFlow(presenter) {
       'button.evaluator-source-row:has-text("Session submitted")',
     );
     await submittedEvent.waitFor({ state: 'visible' });
+    await checkNarrowLayout(
+      evaluator,
+      320,
+      'Mobile evidence inspector',
+      async () => {
+        await submittedEvent.click();
+        const inspector = evaluator.getByRole('dialog', {
+          name: 'Focused source inspection',
+        });
+        await inspector.waitFor();
+        await inspector
+          .getByRole('button', { name: 'Back to evidence' })
+          .click();
+        await inspector.waitFor({ state: 'hidden' });
+      },
+    );
     await submittedEvent.click();
     const observations = evaluator.locator(
       'section[aria-label="Anchored Observations"]',
@@ -414,6 +476,20 @@ async function runReservationMovesBrowserFlow(presenter) {
       '[data-testid="evaluator-review-packet"]',
     );
     await reviewPacket.waitFor({ state: 'visible' });
+    const advisory = evaluator.getByTestId('r27-ai-review-panel');
+    const disclosure = advisory.locator('summary');
+    assert.equal(await advisory.getAttribute('open'), null);
+    await checkNarrowLayout(
+      evaluator,
+      320,
+      'Review packet and advisory report',
+      async () => {
+        await disclosure.press('Enter');
+        await advisory.getByRole('button', { name: 'Instant Preview' }).click();
+        await advisory.getByTestId('r27-ai-review-report').waitFor();
+      },
+    );
+    await disclosure.press('Enter');
     const citation = reviewPacket
       .locator('label')
       .filter({ hasText: /Event #/ })

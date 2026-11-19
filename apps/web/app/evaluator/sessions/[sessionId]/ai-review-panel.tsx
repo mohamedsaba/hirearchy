@@ -1,14 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  IconAlertCircle,
-  IconAlertTriangle,
-  IconCheck,
-  IconCircleCheck,
-  IconRefresh,
-  IconSparkles,
-} from '@tabler/icons-react';
+import { useEffect, useRef, useState } from 'react';
+import { IconRefresh } from '@tabler/icons-react';
 
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
 import {
@@ -25,19 +18,12 @@ export type R27AiReviewPanelProps = Readonly<{
   report?: R27AiReviewReport | null;
   onReportChange?: (report: R27AiReviewReport | null) => void;
   defaultPreset?: AiReviewPresetId;
-  compact?: boolean;
 }>;
 
 function readCsrfCookie(): string {
   if (typeof document === 'undefined') return '';
   const match = document.cookie.match(/(?:^|;\s*)__Host-r23-csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : '';
-}
-
-function scoreToneClass(report: R27AiReviewReport): string {
-  if (report.verdict === 'accept' && report.score >= 75) return 'is-accept';
-  if (report.score >= 55) return 'is-borderline';
-  return 'is-reject';
 }
 
 export const R27AiReviewPanel = ({
@@ -47,16 +33,25 @@ export const R27AiReviewPanel = ({
   report: controlledReport,
   onReportChange,
   defaultPreset = 'nvidia:kimi-k2',
-  compact = false,
 }: R27AiReviewPanelProps) => {
   const [internalReport, setInternalReport] =
     useState<R27AiReviewReport | null>(null);
   const report =
     controlledReport !== undefined ? controlledReport : internalReport;
-  const setReport = (next: R27AiReviewReport | null) => {
+  const reportHeading = useRef<HTMLHeadingElement>(null);
+  const shouldFocusReport = useRef(false);
+  const setReport = (next: R27AiReviewReport) => {
+    shouldFocusReport.current = true;
     setInternalReport(next);
     onReportChange?.(next);
   };
+
+  useEffect(() => {
+    if (report && shouldFocusReport.current) {
+      shouldFocusReport.current = false;
+      reportHeading.current?.focus();
+    }
+  }, [report]);
 
   const [selectedPreset, setSelectedPreset] =
     useState<AiReviewPresetId>(defaultPreset);
@@ -130,40 +125,17 @@ export const R27AiReviewPanel = ({
   };
 
   return (
-    <section
-      className={`evaluator-review-card r27-ai-review-card${compact ? ' is-compact' : ''}`}
-      aria-labelledby="r27-ai-review-heading"
+    <details
+      className="r27-ai-review-card"
       data-testid="r27-ai-review-panel"
+      open={Boolean(report)}
     >
-      <header className="r27-ai-review-header">
-        <div className="r27-ai-review-title-group">
-          <span className="evaluator-review-title-icon" aria-hidden="true">
-            <IconSparkles size={20} stroke={1.8} />
-          </span>
-          <div>
-            <p className="section-kicker">Hirearchy Platform Assistant</p>
-            <h2 id="r27-ai-review-heading">AI Candidate Review</h2>
-          </div>
-        </div>
-        {report ? (
-          <span
-            className={`r27-ai-review-mode-pill ${report.provider.mode === 'live_ai' ? 'is-live' : 'is-preview'}`}
-          >
-            {report.provider.label}
-          </span>
-        ) : (
-          <span className="r27-ai-review-mode-pill is-idle">
-            NVIDIA NIM &amp; OpenRouter Ready
-          </span>
-        )}
-      </header>
-
+      <summary>AI Candidate Review</summary>
       {!report ? (
         <div className="r27-ai-review-launcher">
           <p className="evaluator-muted-copy">
-            Synthesize submitted diffs, saved workspace milestones, and recorded
-            verification receipts into an AI review report with a 0–100 rating,
-            accept/reject recommendation, strengths, and risks.
+            Generate an advisory report from the submitted work and recorded
+            evidence. The evaluator owns the final review.
           </p>
 
           <div className="r27-ai-review-controls">
@@ -207,7 +179,6 @@ export const R27AiReviewPanel = ({
               onClick={() => void handleGenerate(false)}
               disabled={loading}
             >
-              <IconSparkles size={16} aria-hidden="true" />
               {loading ? 'Analyzing candidate evidence…' : 'Generate AI Review'}
             </button>
             <button
@@ -225,43 +196,30 @@ export const R27AiReviewPanel = ({
           className="r27-ai-review-report"
           data-testid="r27-ai-review-report"
         >
-          <div className="r27-ai-review-hero">
-            <div
-              className={`r27-ai-review-score-ring ${scoreToneClass(report)}`}
-              aria-label={`AI rating ${report.score} out of 100`}
-            >
-              <strong data-testid="r27-ai-review-score">{report.score}</strong>
-              <span>/ 100</span>
-            </div>
-
-            <div className="r27-ai-review-verdict-block">
-              <div className="r27-ai-review-badges">
-                <span
-                  className={`r27-ai-review-verdict-pill ${report.verdict === 'accept' ? 'is-accept' : 'is-reject'}`}
-                  data-testid="r27-ai-review-verdict"
-                >
-                  {report.verdict === 'accept' ? (
-                    <IconCircleCheck size={16} aria-hidden="true" />
-                  ) : (
-                    <IconAlertTriangle size={16} aria-hidden="true" />
-                  )}
-                  {report.verdictLabel}
-                </span>
-                <span className="r27-ai-review-confidence">
-                  {report.confidenceLabel}
-                </span>
-              </div>
-              <h3 className="r27-ai-review-headline">{report.headline}</h3>
-              <p className="r27-ai-review-rationale">{report.rationale}</p>
-            </div>
+          <h3
+            className="r27-ai-review-headline"
+            ref={reportHeading}
+            tabIndex={-1}
+          >
+            {report.headline}
+          </h3>
+          <p className="r27-ai-review-context">{report.provider.label}</p>
+          <div className="r27-ai-review-result">
+            <span>
+              AI rating{' '}
+              <strong data-testid="r27-ai-review-score">{report.score}</strong>{' '}
+              / 100
+            </span>
+            <span data-testid="r27-ai-review-verdict">
+              {report.verdictLabel}
+            </span>
+            <span>{report.confidenceLabel}</span>
           </div>
+          <p className="r27-ai-review-rationale">{report.rationale}</p>
 
           {report.provider.fallbackReason ? (
             <p className="r27-ai-review-fallback-note" role="status">
-              {report.provider.fallbackReason} Add an active key in{' '}
-              <code>.env</code> (<code>NVIDIA_API_KEY</code> or{' '}
-              <code>OPENROUTER_KEY</code>) to switch seamlessly to live model
-              inference.
+              {report.provider.fallbackReason}
             </p>
           ) : null}
 
@@ -290,11 +248,8 @@ export const R27AiReviewPanel = ({
           </dl>
 
           <div className="r27-ai-review-columns">
-            <div className="r27-ai-review-list-card is-strengths">
-              <h4>
-                <IconCheck size={16} aria-hidden="true" />
-                Observed Strengths
-              </h4>
+            <div className="r27-ai-review-list-card">
+              <h4>Observed Strengths</h4>
               <ul>
                 {report.strengths.map((item, index) => (
                   <li key={`${index}:${item}`}>{item}</li>
@@ -302,11 +257,8 @@ export const R27AiReviewPanel = ({
               </ul>
             </div>
 
-            <div className="r27-ai-review-list-card is-weaknesses">
-              <h4>
-                <IconAlertCircle size={16} aria-hidden="true" />
-                Weaknesses &amp; Verification Risks
-              </h4>
+            <div className="r27-ai-review-list-card">
+              <h4>Weaknesses &amp; Verification Risks</h4>
               <ul>
                 {report.weaknesses.map((item, index) => (
                   <li key={`${index}:${item}`}>{item}</li>
@@ -354,6 +306,6 @@ export const R27AiReviewPanel = ({
           {error}
         </p>
       ) : null}
-    </section>
+    </details>
   );
 };
