@@ -1419,6 +1419,7 @@ body.software-document-body *::after {
 
 .software-product {
   --software-ink-soft: #51465d;
+  --software-surface-elevated: var(--software-surface-subtle);
   --software-btn-primary-bg: #211426;
   --software-btn-primary-bg-hover: #3b2b4a;
   --software-btn-primary-fg: #ffffff;
@@ -1456,6 +1457,7 @@ html[data-theme='dark'].software-product {
   --software-canvas: #160f1d;
   --software-surface: #21172b;
   --software-surface-subtle: #1a1223;
+  --software-surface-elevated: #1a1223;
   --software-surface-note: #281d35;
   --software-border: #382a47;
   --software-border-subtle: #2c2039;
