@@ -253,3 +253,13 @@ Check `git diff --check`, review the full diff for tenant or role bypasses and u
 - **Type consistency:** `R211ReusableProblemContent` feeds create/update/reuse. `R211ReusableProblem` wraps `content` and a library `version`; reuse returns a normal `R211AssessmentDraft` with a new definition ID. Staging operations use the same public record and draft shapes.
 - **Review Focus:** Tenant/role access, concurrency, invalid content, and post-copy mutation/deletion are each attached to the owning persistence, staging, API, or browser task.
 - **Proportion:** Four tasks cover one integrated feature across the existing database, auth, staging, and UI boundaries; no dependency or general content-management layer is introduced.
+
+## Final review fix wave verification
+
+The final review fix wave ran after the verification table above:
+
+- The seven focused Vitest suites passed: 68 tests across Problems management, assessment builder, staging API, template, readiness, and observability.
+- Typechecking passed. Lint passed with 31 warnings and no errors. The host production build passed with four Turbopack tracing warnings; the sandbox attempt could not create the Windows pg junction.
+- The latest full Vitest run reported 17 failed files, 137 passed files, and 7 skipped files; 64 tests failed, 1,172 passed, and 42 were skipped. The failed files remain the same Windows filesystem and Docker-dependent suites recorded above.
+- On the final tree, npm run verify exited 1 at Prettier, reporting 679 files. The changed paths passed targeted Prettier checks.
+- R211 and staging Docker-backed integration commands still stopped during fixture setup because the Docker Desktop Linux engine pipe was unavailable. The final fix wave local PGlite authenticated and staging smoke checks passed, including fresh Save Draft/Validate preserving an unrelated prior draft and exact copied draft selection.
