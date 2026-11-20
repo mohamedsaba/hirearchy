@@ -27,3 +27,7 @@ Strong scenarios provide:
 - Allow candidates to surprise the author with valid approaches.
 
 A scenario succeeds when it is comprehensible, realistic, fair, and produces distinguishable work histories—not when every candidate follows the author's expected path.
+
+## Generated assessment style probe
+
+AI-generated assessments include one visible, platform-owned `Terms and Conditions` footer with coding-style instructions. [ADR 0007](../decisions/0007-generated-assessment-llm-style-probe.md) permits this narrow exception to the artificial-trap rule because a style match is a neutral observation. The probe cannot create hidden criteria, scores, penalties, or changes to task success or hiring decisions. Evaluator-facing copy must explain that a style match cannot establish external AI use, authorship, intent, or competence.

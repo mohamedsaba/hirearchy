@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SandboxAdapter } from '../sandbox/sandbox';
 import {
+  appendGeneratedTermsAndConditions,
   loadValidatedGeneratedAssessment,
   parseNewGeneratedAssessmentDraft,
   parseGeneratedAssessment,
@@ -103,6 +104,57 @@ describe('generated assessment boundary', () => {
     if (dataDirectory)
       await rm(dataDirectory, { recursive: true, force: true });
     dataDirectory = undefined;
+  });
+
+  it('appends the visible style instructions after the original task brief', () => {
+    const withFooter = appendGeneratedTermsAndConditions(assessment);
+    expect(withFooter).toEqual({
+      ...assessment,
+      brief: expect.stringMatching(
+        /\n\n## Terms and Conditions\n.*snake_case.*return a nested object/,
+      ),
+    });
+    expect(withFooter.brief.startsWith(assessment.brief + '\n\n')).toBe(true);
+    expect(withFooter.brief.match(/## Terms and Conditions/g)).toHaveLength(1);
+  });
+
+  it('keeps the same full brief when an already-footed assessment is reused', () => {
+    const withFooter = appendGeneratedTermsAndConditions(assessment);
+    const repaired = {
+      ...withFooter,
+      referenceFixFiles: [
+        {
+          path: 'src/greeting.py',
+          content: 'def greeting(name):\n    return name.strip()\n',
+        },
+      ],
+    };
+
+    expect(appendGeneratedTermsAndConditions(repaired)).toEqual(repaired);
+  });
+
+  it('validates the full brief at the 5,000-character limit without truncation', () => {
+    const withFooter = appendGeneratedTermsAndConditions(assessment);
+    const padding = 'a'.repeat(5000 - withFooter.brief.length);
+    const atLimit = { ...assessment, brief: assessment.brief + padding };
+
+    expect(appendGeneratedTermsAndConditions(atLimit).brief).toHaveLength(5000);
+    expect(() =>
+      appendGeneratedTermsAndConditions({
+        ...atLimit,
+        brief: atLimit.brief + 'a',
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        issues: [
+          expect.objectContaining({
+            code: 'too_big',
+            path: ['brief'],
+            maximum: 5000,
+          }),
+        ],
+      }),
+    );
   });
 
   it('rejects unsafe paths, leading slashes, and reference edits to test helpers', () => {
