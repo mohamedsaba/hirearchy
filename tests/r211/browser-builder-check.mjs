@@ -38,7 +38,7 @@ export async function runR211BrowserBuilderChecks({
   );
   const recruiterB = await signInAndSelectOrg(
     origin,
-    users.b,
+    users.recruiterB,
     FIXTURE_IDS.orgB,
   );
   const reviewerA = await signInAndSelectOrg(
@@ -473,6 +473,143 @@ export async function runR211BrowserBuilderChecks({
     await recruiterPage.setViewportSize({ width: 1280, height: 900 });
     await recruiterPage.waitForLoadState('networkidle');
     await screenshot(recruiterPage, '08-builder-desktop-viewport');
+
+    // Exercise the authenticated library HTTP interface before opening the builder.
+    const libraryPath = (orgId) => `/r23/api/organizations/${orgId}/problems`;
+    const problemContent = {
+      templateId: 'custom',
+      title: 'Booking Notification Retry',
+      brief: 'Implement retry handling for dispatching booking notifications.',
+      expectedBehavior: ['Lapsed requests are retried three times.'],
+      acceptanceCriteria: ['Temporary failures can be retried successfully.'],
+      primaryFilePath: 'booking.py',
+      starterFiles: [{ path: 'booking.py', content: 'def notify(): pass' }],
+      durationMinutes: 30,
+      terminalEnabled: true,
+      integratedAi: false,
+      rubric: [
+        {
+          id: 'correctness',
+          label: 'Correctness',
+          description: 'Evidence that retry behavior follows the brief.',
+          weight: 100,
+          applicability: { kind: 'always', rule: 'Applies to all attempts.' },
+        },
+      ],
+    };
+    const problems = libraryPath(FIXTURE_IDS.orgA);
+    const problemRequest = (
+      path,
+      method,
+      body,
+      cookies = recruiterA,
+      csrf = true,
+    ) =>
+      request(origin, path, {
+        method,
+        cookies,
+        ...(method === 'GET'
+          ? {}
+          : {
+              headers: {
+                Origin: origin,
+                ...(csrf ? { 'x-csrf-token': cookies[csrfCookieName] } : {}),
+              },
+            }),
+        ...(body === undefined ? {} : { body }),
+      });
+
+    const created = await problemRequest(problems, 'POST', {
+      content: problemContent,
+    });
+    assert.equal(
+      created.status,
+      201,
+      'Recruiter can create a reusable problem',
+    );
+    assert.match(created.headers['cache-control'], /private.*no-store/);
+    const { problem } = JSON.parse(created.text);
+    assert.deepEqual(problem.content, problemContent);
+    const detailPath = `${problems}/${problem.id}`;
+    const listed = await problemRequest(problems, 'GET');
+    assert.equal(listed.status, 200);
+    assert.deepEqual(JSON.parse(listed.text), { problems: [problem] });
+    const detail = await problemRequest(detailPath, 'GET');
+    assert.equal(detail.status, 200);
+    assert.deepEqual(JSON.parse(detail.text), { problem });
+    const wrongSelection = await problemRequest(
+      detailPath,
+      'GET',
+      undefined,
+      recruiterB,
+    );
+    assert.equal(wrongSelection.status, 404);
+    const invalid = await problemRequest(problems, 'POST', {
+      content: { ...problemContent, rubric: [null] },
+    });
+    assert.equal(invalid.status, 400);
+    const noCsrf = await problemRequest(
+      detailPath,
+      'DELETE',
+      { expectedVersion: 1 },
+      recruiterA,
+      false,
+    );
+    assert.equal(noCsrf.status, 403);
+    const reviewerList = await problemRequest(
+      problems,
+      'GET',
+      undefined,
+      reviewerA,
+    );
+    assert.equal(reviewerList.status, 403);
+    const reviewerReuse = await problemRequest(
+      `${detailPath}/reuse`,
+      'POST',
+      {},
+      reviewerA,
+    );
+    assert.equal(reviewerReuse.status, 403);
+    const foreignDetail = `${libraryPath(FIXTURE_IDS.orgB)}/${problem.id}`;
+    for (const [path, method, body] of [
+      [foreignDetail, 'GET'],
+      [foreignDetail, 'PATCH', { expectedVersion: 1, content: problemContent }],
+      [foreignDetail, 'DELETE', { expectedVersion: 1 }],
+      [`${foreignDetail}/reuse`, 'POST', {}],
+    ]) {
+      const foreign = await problemRequest(path, method, body, recruiterB);
+      assert.equal(foreign.status, 404);
+    }
+    const reused = await problemRequest(`${detailPath}/reuse`, 'POST', {});
+    assert.equal(reused.status, 201);
+    const { draft: copiedDraft } = JSON.parse(reused.text);
+    assert.equal(copiedDraft.title, problemContent.title);
+    assert.equal(copiedDraft.version, 1);
+
+    const updatedTitle = 'Revised Notification Retry Problem';
+    const updated = await problemRequest(detailPath, 'PATCH', {
+      expectedVersion: 1,
+      content: { ...problemContent, title: updatedTitle },
+    });
+    assert.equal(updated.status, 200);
+    assert.equal(JSON.parse(updated.text).problem.content.title, updatedTitle);
+    assert.equal(JSON.parse(updated.text).problem.version, 2);
+    const stale = await problemRequest(detailPath, 'PATCH', {
+      expectedVersion: 1,
+      content: problemContent,
+    });
+    assert.equal(stale.status, 409);
+    const removed = await problemRequest(detailPath, 'DELETE', {
+      expectedVersion: 2,
+    });
+    assert.equal(removed.status, 200);
+    assert.equal((await problemRequest(detailPath, 'GET')).status, 404);
+    const copied = await problemRequest(
+      `/r23/api/organizations/${FIXTURE_IDS.orgA}/assessments/draft?definitionId=${copiedDraft.definitionId}`,
+      'GET',
+    );
+    assert.equal(copied.status, 200);
+    assert.deepEqual(JSON.parse(copied.text).draft, copiedDraft);
 
     console.log('[R2.11 Browser] All 16 journey steps successfully passed!');
   } finally {

@@ -18,6 +18,7 @@ import {
   createValidatedVersion,
   getValidatedVersion,
   R211ConcurrencyConflict,
+  getReusableProblem,
 } from '../../database/postgres/r211/adapter.mjs';
 import { applyMigrations } from '../../database/postgres/migrate.mjs';
 
@@ -829,12 +830,177 @@ export async function runR211PostgresBuilderChecks({
       'Revoked reviewer cannot read draft',
     );
 
+    // A library record and its copies have independent lifecycles.
+    const forActor = (actor, operation) =>
+      authorization.withActiveSession(
+        { handleHash: actor.handleHash },
+        (_session, authz) => operation(authz, actor.identity),
+      );
+    const asRecruiter = (operation) => forActor(actors.recruiterA, operation);
+    const problemContent = { ...initialDraftInput, templateId: 'custom' };
+    assert.equal(
+      await asRecruiter(async (authz) => typeof authz.createReusableProblem),
+      'function',
+      'The authenticated adapter must expose reusable problem creation',
+    );
+    const savedProblem = await asRecruiter((authz, identity) =>
+      authz.createReusableProblem(identity, orgA, problemContent),
+    );
+    assert.equal(savedProblem.version, 1);
+    assert.equal(savedProblem.organizationId, orgA);
+    assert.equal(savedProblem.authorPrincipalId, actors.recruiterA.principalId);
+    assert.deepEqual(savedProblem.content, problemContent);
+    assert.deepEqual(
+      await asRecruiter((authz, identity) =>
+        authz.listReusableProblems(identity, orgA),
+      ),
+      [savedProblem],
+    );
+    const loadedProblem = await asRecruiter((authz, identity) =>
+      authz.getReusableProblem(identity, orgA, savedProblem.id),
+    );
+    assert.deepEqual(loadedProblem, savedProblem);
+    const copiedDraft = await asRecruiter((authz, identity) =>
+      authz.saveAssessmentDraft(identity, orgA, loadedProblem.content),
+    );
+    assert.notEqual(copiedDraft.definitionId, draft1.definitionId);
+    const copiedVersion = await asRecruiter((authz, identity) =>
+      authz.createValidatedVersion(
+        identity,
+        orgA,
+        copiedDraft.definitionId,
+        copiedDraft.version,
+      ),
+    );
+
+    const revision = { ...problemContent, title: 'Revised library problem' };
+    const updated = await asRecruiter((authz, identity) =>
+      authz.updateReusableProblem(identity, orgA, savedProblem.id, 1, revision),
+    );
+    assert.equal(updated.version, 2);
+    assert.deepEqual(updated.content, revision);
+    assert.equal(updated.createdAt, savedProblem.createdAt);
+    assert.equal(updated.authorPrincipalId, savedProblem.authorPrincipalId);
+    await assert.rejects(
+      asRecruiter((authz, identity) =>
+        authz.updateReusableProblem(
+          identity,
+          orgA,
+          savedProblem.id,
+          1,
+          problemContent,
+        ),
+      ),
+      { code: 'PROBLEM_CONCURRENCY_CONFLICT' },
+    );
+    await assert.rejects(
+      asRecruiter((authz, identity) =>
+        authz.deleteReusableProblem(identity, orgA, savedProblem.id, 1),
+      ),
+      { code: 'PROBLEM_CONCURRENCY_CONFLICT' },
+    );
+
+    for (const roleOperation of [
+      (authz, identity) => authz.listReusableProblems(identity, orgA),
+      (authz, identity) =>
+        authz.getReusableProblem(identity, orgA, savedProblem.id),
+      (authz, identity) =>
+        authz.createReusableProblem(identity, orgA, problemContent),
+      (authz, identity) =>
+        authz.updateReusableProblem(
+          identity,
+          orgA,
+          savedProblem.id,
+          2,
+          revision,
+        ),
+      (authz, identity) =>
+        authz.deleteReusableProblem(identity, orgA, savedProblem.id, 2),
+    ]) {
+      await assert.rejects(forActor(actors.reviewerA, roleOperation), {
+        name: 'R23ScopeDenied',
+      });
+    }
+    await assert.rejects(
+      forActor(actors.recruiterB, (authz, identity) =>
+        authz.listReusableProblems(identity, orgA),
+      ),
+      { name: 'R23ScopeDenied' },
+    );
+    for (const foreignIdOperation of [
+      (authz, identity) =>
+        authz.getReusableProblem(identity, orgB, savedProblem.id),
+      (authz, identity) =>
+        authz.updateReusableProblem(
+          identity,
+          orgB,
+          savedProblem.id,
+          2,
+          revision,
+        ),
+    ]) {
+      assert.equal(await forActor(actors.recruiterB, foreignIdOperation), null);
+    }
+    assert.equal(
+      await forActor(actors.recruiterB, (authz, identity) =>
+        authz.deleteReusableProblem(identity, orgB, savedProblem.id, 2),
+      ),
+      false,
+    );
+    await assert.rejects(
+      inSession(gatewayPool, actors.reviewerA, (client) =>
+        getReusableProblem(
+          client,
+          actors.reviewerA.identity,
+          orgA,
+          savedProblem.id,
+        ),
+      ),
+      { code: 'R2401' },
+      'The PostgreSQL function must enforce recruiter role independently of R23',
+    );
+    await assert.rejects(
+      gatewayPool.query('SELECT * FROM hirearchy.reusable_problems'),
+      { code: '42501' },
+    );
+    assert.equal(
+      await asRecruiter((authz, identity) =>
+        authz.deleteReusableProblem(identity, orgA, savedProblem.id, 2),
+      ),
+      true,
+    );
+    assert.deepEqual(
+      await asRecruiter((authz, identity) =>
+        authz.listReusableProblems(identity, orgA),
+      ),
+      [],
+    );
+    assert.deepEqual(
+      await asRecruiter((authz, identity) =>
+        authz.getAssessmentDraft(identity, orgA, copiedDraft.definitionId),
+      ),
+      copiedDraft,
+    );
+    assert.deepEqual(
+      await asRecruiter((authz, identity) =>
+        authz.getValidatedVersion(identity, orgA, copiedVersion.id),
+      ),
+      copiedVersion,
+    );
+
     // Revoke Recruiter A now
     await admin.query(
       `UPDATE hirearchy.organization_memberships
        SET revoked_at = pg_catalog.clock_timestamp(), status = 'revoked'
        WHERE organization_id = $1 AND principal_id = $2`,
       [orgA, actors.recruiterA.principalId],
+    );
+    await assert.rejects(
+      asRecruiter((authz, identity) =>
+        authz.listReusableProblems(identity, orgA),
+      ),
+      { name: 'R23ScopeDenied' },
+      'A revoked recruiter cannot list reusable problems',
     );
 
     await assert.rejects(

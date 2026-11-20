@@ -30,6 +30,21 @@ export interface R211AssessmentDraftInput {
   readonly expectedVersion?: number;
 }
 
+export type R211ReusableProblemContent = Omit<
+  R211AssessmentDraftInput,
+  'definitionId' | 'expectedVersion'
+>;
+
+export interface R211ReusableProblem {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly authorPrincipalId: string;
+  readonly version: number;
+  readonly content: R211ReusableProblemContent;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 export interface R211AssessmentDraft {
   readonly templateId: 'custom' | 'reservation-moves-v3';
   readonly definitionId: string;

@@ -25,6 +25,10 @@ import type {
   R27EvidenceQuery,
 } from '../../../../database/postgres/r27/contract.mjs';
 import type { R28CandidateRevision } from '../../../../database/postgres/r28/contract.mjs';
+import {
+  R211InvalidProblemContent,
+  R211ProblemConcurrencyConflict,
+} from '../../../../database/postgres/r211/adapter.mjs';
 import { normalizeAssessmentTemplate } from '../../../../database/postgres/r211/template.mjs';
 import { disabledAiCapabilitySnapshot } from '../ai/ai-interaction';
 import { defaultSyntheticAiSnapshot } from '../r212-ai/contract';
@@ -96,6 +100,7 @@ import {
 } from '../r210-review-packets/presentation';
 import type {
   R211AssessmentDraftInput,
+  R211ReusableProblemContent,
   R211ValidatedVersion,
 } from '../r211-builder/contract';
 import { validateAssessmentDraft } from '../r211-builder/validation';
@@ -4136,6 +4141,151 @@ export async function r210ReviewPacketFinalizeApiPost(
       },
     );
   } catch (error) {
+    return failureResponse(jsonRequest, error);
+  }
+}
+
+function reusableProblemJson(payload: object, status = 200): Response {
+  return Response.json(payload, {
+    status,
+    headers: { 'Cache-Control': 'private, no-store, max-age=0' },
+  });
+}
+
+function reusableProblemNotFound(): Response {
+  return reusableProblemJson(
+    { error: { code: 'NOT_FOUND', message: 'Problem not found.' } },
+    404,
+  );
+}
+
+type R211ProblemAction =
+  'list' | 'create' | 'get' | 'update' | 'delete' | 'reuse';
+
+export async function r211ReusableProblemApi(
+  request: Request,
+  targetOrganizationId: string,
+  action: R211ProblemAction,
+  problemId?: string,
+): Promise<Response> {
+  const jsonRequest = asR27JsonRequest(request);
+  try {
+    const active = getRuntime();
+    if (!active) throw new R23AuthUnavailable();
+    if (!UUID.test(targetOrganizationId)) throw new R23BadRequest();
+
+    const handle = requiredCookie(request, R23_SESSION_COOKIE);
+    const csrf = requiredCookie(request, R23_CSRF_COOKIE);
+    const organizationId = targetOrganizationId.toLowerCase();
+
+    let body: Record<string, unknown> = {};
+    if (action !== 'list' && action !== 'get') {
+      requireSameOrigin(request, active.config);
+      body =
+        action === 'reuse'
+          ? await optionalRequestBody(request)
+          : await requestBody(request, 262144);
+      requireOriginAndCsrf(request, active.config, body);
+    }
+
+    return await withVerifiedSession(
+      active,
+      handle,
+      digest(csrf),
+      async (session, identity, authz) => {
+        if (session.selectedOrganizationId !== organizationId) {
+          return reusableProblemNotFound();
+        }
+
+        if (action === 'list') {
+          const problems = await authz.listReusableProblems(
+            identity,
+            organizationId,
+          );
+          return reusableProblemJson({ problems });
+        }
+        if (action === 'create') {
+          allowedFields(body, ['content', 'csrf']);
+          const problem = await authz.createReusableProblem(
+            identity,
+            organizationId,
+            body.content as R211ReusableProblemContent,
+          );
+          return reusableProblemJson({ problem }, 201);
+        }
+        if (!problemId || !UUID.test(problemId)) {
+          return reusableProblemNotFound();
+        }
+
+        if (action === 'update' || action === 'delete') {
+          allowedFields(
+            body,
+            action === 'update'
+              ? ['content', 'expectedVersion', 'csrf']
+              : ['expectedVersion', 'csrf'],
+          );
+          const { expectedVersion } = body;
+          if (
+            typeof expectedVersion !== 'number' ||
+            !Number.isSafeInteger(expectedVersion) ||
+            expectedVersion < 1
+          ) {
+            throw new R23BadRequest();
+          }
+          if (action === 'delete') {
+            const deleted = await authz.deleteReusableProblem(
+              identity,
+              organizationId,
+              problemId,
+              expectedVersion,
+            );
+            return deleted
+              ? reusableProblemJson({ deleted })
+              : reusableProblemNotFound();
+          }
+          const problem = await authz.updateReusableProblem(
+            identity,
+            organizationId,
+            problemId,
+            expectedVersion,
+            body.content as R211ReusableProblemContent,
+          );
+          return problem
+            ? reusableProblemJson({ problem })
+            : reusableProblemNotFound();
+        }
+
+        const problem = await authz.getReusableProblem(
+          identity,
+          organizationId,
+          problemId,
+        );
+        if (!problem) return reusableProblemNotFound();
+        if (action === 'reuse') {
+          allowedFields(body, ['csrf']);
+          const draft = await authz.saveAssessmentDraft(
+            identity,
+            organizationId,
+            problem.content,
+          );
+          return reusableProblemJson({ draft }, 201);
+        }
+        return reusableProblemJson({ problem });
+      },
+    );
+  } catch (error) {
+    if (error instanceof R211ProblemConcurrencyConflict) {
+      return reusableProblemJson(
+        { error: { code: error.code, message: error.message } },
+        409,
+      );
+    }
+    if (error instanceof R211InvalidProblemContent) {
+      return reusableProblemJson(
+        { error: { code: error.code, message: error.message } },
+        400,
+      );
+    }
     return failureResponse(jsonRequest, error);
   }
 }
