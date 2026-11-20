@@ -728,6 +728,33 @@ export async function runR211BrowserBuilderChecks({
       0,
     );
 
+    const drafts = `/r23/api/organizations/${FIXTURE_IDS.orgA}/assessments/draft`;
+    for (const action of ['save-draft-button', 'continue-to-validate-button']) {
+      const before = JSON.parse(
+        (await problemRequest(drafts, 'GET')).text,
+      ).draft;
+      await recruiterPage.goto(origin + pages);
+      await recruiterPage
+        .getByRole('link', { name: 'Create a problem' })
+        .click();
+      await recruiterPage.getByTestId(action).click();
+      await recruiterPage.waitForURL('**/builder?definitionId=*');
+      const createdId = new URL(recruiterPage.url()).searchParams.get(
+        'definitionId',
+      );
+      assert.notEqual(createdId, before.definitionId);
+      const created = await problemRequest(
+        drafts + '?definitionId=' + createdId,
+        'GET',
+      );
+      assert.equal(JSON.parse(created.text).draft.version, 1);
+      const preserved = await problemRequest(
+        drafts + '?definitionId=' + before.definitionId,
+        'GET',
+      );
+      assert.deepEqual(JSON.parse(preserved.text).draft, before);
+    }
+
     console.log('[R2.11 Browser] Builder and problem library journeys passed.');
   } finally {
     await browser.close();

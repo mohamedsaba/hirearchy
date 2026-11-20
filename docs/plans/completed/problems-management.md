@@ -19,6 +19,8 @@ Tasks 1–4 are implemented. [ADR 0007](../../decisions/0007-reusable-problem-li
 - Task 3 (2804522, f0fc371) added the Problems pages and builder save/reuse actions, loaded the copied draft by ID, and delivered refreshed staging credentials during problem page loads.
 - Task 4 recorded the decision, updated the documentation indexes and migrations overview, and ran the repository and targeted verification commands.
 
+The final review fix wave gives “Create a problem” a fresh definition for its first save or validation. The staging builder reads the selected definition and reviewers in one authorized context and renews an expiring session through the browser. The problem editor displays the saved canonical fields when returning to an approved template.
+
 ### Verification
 
 - `node_modules/.bin/vitest.cmd run tests/unit/problems-management.test.tsx tests/unit/assessment-builder.test.tsx tests/unit/assessment-builder-reviewers.test.tsx tests/unit/staging-api.test.ts tests/unit/r211-template.test.ts tests/unit/staging-readiness-probe.test.mjs tests/unit/observability.test.ts` (exit 0). 61 tests passed across seven files.

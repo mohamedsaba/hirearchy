@@ -125,6 +125,61 @@ it('saves the current in-memory authoring content as a new library entry', async
   });
 });
 
+it('renews the browser session once before reloading the copied builder URL', async () => {
+  const { RefreshBuilderSession } =
+    await import('../../apps/web/app/r23/organizations/[organizationId]/builder/refresh-builder-session');
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetcher);
+  const reload = vi
+    .spyOn(window.location, 'reload')
+    .mockImplementation(() => {});
+  try {
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <RefreshBuilderSession csrfToken="token" />
+        </StrictMode>,
+      ),
+    );
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledWith(
+      '/r23/auth/refresh',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-csrf-token': 'token' }),
+      }),
+    );
+    expect(reload).toHaveBeenCalledOnce();
+  } finally {
+    reload.mockRestore();
+  }
+});
+
+it.each(['Save draft', 'Continue to Validate →'])(
+  'starts an independent definition on %s from Create a problem',
+  async (action) => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({}));
+    vi.stubGlobal('fetch', fetcher);
+    const view = await AssessmentBuilderPage({
+      params,
+      searchParams: Promise.resolve({ mode: 'new' }),
+    });
+    await act(async () => root.render(view));
+    await click(action);
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toMatch(action === 'Save draft' ? /draft$/ : /validate$/);
+    const body = JSON.parse(init.body);
+    expect(body.definitionId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(body.definitionId).not.toBe(problemId);
+    expect(body.title).not.toBe('Newer, unrelated draft');
+    expect(body.expectedVersion).toBeUndefined();
+    expect(body.expectedDraftVersion).toBeUndefined();
+    expect(apiGet).not.toHaveBeenCalled();
+  },
+);
+
 it('opens the reused definition even after another creation becomes latest', async () => {
   apiGet.mockImplementation(async (request: Request) =>
     Response.json({
@@ -167,7 +222,7 @@ it('lists organization problems with links to management details and authoring',
   );
   expect(
     container.querySelector(
-      `a[href="/r23/organizations/${organizationId}/builder"]`,
+      `a[href="/r23/organizations/${organizationId}/builder?mode=new"]`,
     ),
   ).toBeTruthy();
 });
@@ -252,6 +307,36 @@ it('starts a new draft from the selected problem and navigates to the returned I
   expect(routerPush).toHaveBeenCalledWith(
     `/r23/organizations/${organizationId}/builder?definitionId=${definitionId}`,
   );
+});
+
+it('shows the saved approved content after switching away, editing custom fields, and switching back', async () => {
+  const { default: detail } =
+    await import('../../apps/web/app/r23/organizations/[organizationId]/problems/[problemId]/page');
+  const approvedContent = {
+    ...problem.content,
+    templateId: 'reservation-moves-v3',
+    title: 'Reservation Moves',
+  };
+  problemApi.mockResolvedValue(
+    Response.json({ problem: { ...problem, content: approvedContent } }),
+  );
+  const view = await detail({ params });
+  await act(async () => root.render(view));
+  const template = container.querySelector('select')!;
+  const select = (value: string) =>
+    act(async () => {
+      template.value = value;
+      template.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  await select('custom');
+  await changeTitle(
+    container.querySelector('input[name="title"]')!,
+    'Unsaved custom title',
+  );
+  await select('reservation-moves-v3');
+  expect(
+    container.querySelector<HTMLInputElement>('input[name="title"]')?.value,
+  ).toBe('Reservation Moves');
 });
 
 it('uses the saved version for deletion and returns to the table', async () => {

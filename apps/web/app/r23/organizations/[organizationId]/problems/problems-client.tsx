@@ -265,6 +265,7 @@ export function ProblemEditor({
     }
   };
   const approved = content.templateId === 'reservation-moves-v3';
+  const task = approved ? saved.content : content;
   return (
     <>
       <header>
@@ -337,7 +338,7 @@ export function ProblemEditor({
               Title
               <input
                 name="title"
-                value={content.title}
+                value={task.title}
                 onChange={(e) => set('title', e.target.value)}
               />
             </label>
@@ -345,30 +346,30 @@ export function ProblemEditor({
               Brief
               <textarea
                 rows={6}
-                value={content.brief}
+                value={task.brief}
                 onChange={(e) => set('brief', e.target.value)}
               />
             </label>
             <TextList
               label="Expected behavior"
-              values={content.expectedBehavior}
+              values={task.expectedBehavior}
               onChange={(v) => set('expectedBehavior', v)}
             />
             <TextList
               label="Acceptance criteria"
-              values={content.acceptanceCriteria}
+              values={task.acceptanceCriteria}
               onChange={(v) => set('acceptanceCriteria', v)}
             />
             <label>
               Primary file path
               <input
-                value={content.primaryFilePath}
+                value={task.primaryFilePath}
                 onChange={(e) => set('primaryFilePath', e.target.value)}
               />
             </label>
             <fieldset>
               <legend>Starter files</legend>
-              {content.starterFiles.map((file, i) => (
+              {task.starterFiles.map((file, i) => (
                 <fieldset key={i}>
                   <legend>File {i + 1}</legend>
                   <label>
@@ -391,7 +392,7 @@ export function ProblemEditor({
                   </label>
                   <button
                     type="button"
-                    disabled={content.starterFiles.length === 1}
+                    disabled={task.starterFiles.length === 1}
                     onClick={() =>
                       set(
                         'starterFiles',
@@ -419,7 +420,7 @@ export function ProblemEditor({
             </fieldset>
             <fieldset>
               <legend>Rubric</legend>
-              {content.rubric.map((criterion, i) => (
+              {task.rubric.map((criterion, i) => (
                 <fieldset key={i}>
                   <legend>Criterion {i + 1}</legend>
                   <label>
@@ -495,7 +496,7 @@ export function ProblemEditor({
                   </label>
                   <button
                     type="button"
-                    disabled={content.rubric.length === 1}
+                    disabled={task.rubric.length === 1}
                     onClick={() =>
                       set(
                         'rubric',

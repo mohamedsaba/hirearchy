@@ -100,4 +100,4 @@ Saved library record  ──copy──> assessment draft ──validate──> i
 
 ## Approval state
 
-The user approved independent-copy reuse on 2026-11-20. A builder check found no important unanswered questions. The full design document awaits user review before implementation planning begins.
+The user approved this design on 2026-11-20. [ADR 0007](../../decisions/0007-reusable-problem-library.md) records the independent-copy decision. The [completed implementation plan](../../plans/completed/problems-management.md) records delivery and pending verification.

@@ -60,6 +60,7 @@ export interface AssessmentBuilderClientProps {
   organizationId: string;
   csrfToken: string;
   initialDraft: R211AssessmentDraft | null;
+  fresh?: boolean;
   initialIssuedSessionId?: string | null;
   reviewers?: AssessmentBuilderReviewerOption[];
   isAuthenticatedStaging?: boolean;
@@ -142,6 +143,7 @@ export function AssessmentBuilderClient({
   organizationId,
   csrfToken,
   initialDraft,
+  fresh = false,
   initialIssuedSessionId = null,
   reviewers = [],
   isAuthenticatedStaging = false,
@@ -151,11 +153,11 @@ export function AssessmentBuilderClient({
   );
 
   // Draft state
-  const [definitionId, setDefinitionId] = useState<string | undefined>(
-    initialDraft?.definitionId,
+  const [definitionId, setDefinitionId] = useState<string | undefined>(() =>
+    fresh ? crypto.randomUUID() : initialDraft?.definitionId,
   );
-  const [draftVersion, setDraftVersion] = useState<number>(
-    initialDraft?.version ?? 1,
+  const [draftVersion, setDraftVersion] = useState<number | undefined>(
+    initialDraft?.version ?? (fresh ? undefined : 1),
   );
   const [templateId, setTemplateId] = useState<
     'custom' | 'reservation-moves-v3'
@@ -535,6 +537,17 @@ export function AssessmentBuilderClient({
     rubric,
   };
 
+  function rememberSavedDraft(draft: R211AssessmentDraft) {
+    setDefinitionId(draft.definitionId);
+    setDraftVersion(draft.version);
+    if (fresh && draftVersion === undefined) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('mode');
+      url.searchParams.set('definitionId', draft.definitionId);
+      window.history.replaceState(window.history.state, '', url);
+    }
+  }
+
   // Save Draft Action
   const handleSaveDraft = async () => {
     setIsSaving(true);
@@ -580,8 +593,7 @@ export function AssessmentBuilderClient({
 
       const data = await response.json();
       if (data?.draft) {
-        setDefinitionId(data.draft.definitionId);
-        setDraftVersion(data.draft.version);
+        rememberSavedDraft(data.draft);
       }
       setSaveStatus('saved');
     } catch (err: unknown) {
@@ -644,8 +656,7 @@ export function AssessmentBuilderClient({
       // Validated successfully
       setValidatedVersion(data.version);
       if (data?.draft) {
-        setDefinitionId(data.draft.definitionId);
-        setDraftVersion(data.draft.version);
+        rememberSavedDraft(data.draft);
       }
       setSaveStatus('idle');
       setValidationIssues([]);

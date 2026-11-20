@@ -23,7 +23,10 @@ export default async function ProblemsPage({
       <Link href={workspace}>Organization workspace</Link>
       <header>
         <h1>Problems</h1>
-        <Link className="button button-primary" href={workspace + '/builder'}>
+        <Link
+          className="button button-primary"
+          href={workspace + '/builder?mode=new'}
+        >
           Create a problem
         </Link>
       </header>

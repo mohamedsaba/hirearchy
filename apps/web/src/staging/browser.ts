@@ -143,7 +143,7 @@ const RANDOM_VALUE = /^[A-Za-z0-9_-]{43}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const R27_MAX_SEQUENCE = 9223372036854775807n;
 
-class StagingBrowserRefreshRequired extends Error {}
+export class StagingBrowserRefreshRequired extends Error {}
 
 class StagingBadRequest extends Error {
   readonly code = 'INVALID_REQUEST';
@@ -1478,6 +1478,7 @@ export async function stagingLoadOrganizationSessionList(
     limit?: number;
     assessmentId?: string;
   },
+  refresh: 'automatic' | 'defer' = 'automatic',
 ): Promise<
   AuthenticatedSessionListContext & {
     reviewers: StagingReviewerItem[];
@@ -1553,6 +1554,7 @@ export async function stagingLoadOrganizationSessionList(
         refreshedSessionCookie,
       };
     },
+    refresh,
   );
 }
 

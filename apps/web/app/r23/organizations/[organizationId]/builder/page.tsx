@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import {
   loadAuthenticatedOrganizationSessionList,
@@ -13,6 +13,12 @@ import {
 import type { OrganizationMemberItem } from '../../../../../src/staging/onboarding';
 import { isFounderUatEnabled } from '../../../../../src/runtime/founder-uat';
 import { isAuthenticatedStaging } from '../../../../../src/runtime/profile';
+import {
+  StagingBrowserRefreshRequired,
+  stagingLoadOrganizationSessionList,
+} from '../../../../../src/staging/browser';
+import { R23_CSRF_COOKIE } from '../../../../../src/r23-auth/config';
+import { RefreshBuilderSession } from './refresh-builder-session';
 import { AssessmentBuilderClient } from './assessment-builder-client';
 import type { R211AssessmentDraft } from '../../../../../src/r211-builder/contract';
 
@@ -27,6 +33,7 @@ export default async function AssessmentBuilderPage({
 }: {
   params: Promise<{ organizationId: string }>;
   searchParams?: Promise<{
+    mode?: string | string[];
     issuedSession?: string | string[];
     definitionId?: string | string[];
   }>;
@@ -36,30 +43,46 @@ export default async function AssessmentBuilderPage({
   const initialIssuedSessionId =
     typeof query?.issuedSession === 'string' ? query.issuedSession : null;
   const requestedId = query?.definitionId;
+  const fresh = query?.mode === 'new';
+  if (query?.mode !== undefined && !fresh) notFound();
+  if (fresh && (requestedId !== undefined || initialIssuedSessionId))
+    notFound();
   if (
     requestedId !== undefined &&
-    (typeof requestedId !== 'string' || !requestedId)
+    (typeof requestedId !== 'string' ||
+      !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestedId))
   )
     notFound();
-  const incomingHeaders = await headers();
-  const cookie = incomingHeaders.get('cookie') ?? '';
+  const jar = await cookies();
+  const staging = isAuthenticatedStaging();
 
   const url = new URL('https://hirearchy-builder.invalid/');
   if (requestedId) url.searchParams.set('definitionId', requestedId);
   const request = new Request(url, {
     headers: {
       Accept: 'application/json',
-      Cookie: cookie,
+      Cookie: jar.toString(),
     },
   });
 
   let context;
   try {
-    context = await loadAuthenticatedOrganizationSessionList(
-      request,
-      organizationId,
-    );
-  } catch {
+    context = staging
+      ? await stagingLoadOrganizationSessionList(
+          request,
+          organizationId,
+          {
+            assessmentId: requestedId,
+          },
+          'defer',
+        )
+      : await loadAuthenticatedOrganizationSessionList(request, organizationId);
+  } catch (error) {
+    if (error instanceof StagingBrowserRefreshRequired) {
+      return (
+        <RefreshBuilderSession csrfToken={jar.get(R23_CSRF_COOKIE)!.value} />
+      );
+    }
     redirect('/r23/login');
   }
 
@@ -74,7 +97,7 @@ export default async function AssessmentBuilderPage({
   };
 
   let reviewers = contextWithStaging.reviewers ?? [];
-  if (reviewers.length === 0) {
+  if (!staging && reviewers.length === 0) {
     try {
       const reviewersRes = await r25OrganizationReviewersApiGet(
         request,
@@ -119,16 +142,16 @@ export default async function AssessmentBuilderPage({
     });
   }
 
-  let initialDraft: R211AssessmentDraft | null =
-    contextWithStaging.draft ?? null;
-  if (requestedId) {
+  let initialDraft: R211AssessmentDraft | null = fresh
+    ? null
+    : (contextWithStaging.draft ?? null);
+  if (!staging && requestedId) {
     const response = await r211AssessmentDraftApiGet(request, organizationId);
     if ([400, 403, 404].includes(response.status)) notFound();
     if (!response.ok)
       throw new Error('Could not load the requested assessment draft.');
     initialDraft = (await response.json()).draft;
-    if (initialDraft?.definitionId !== requestedId.toLowerCase()) notFound();
-  } else if (!initialDraft) {
+  } else if (!fresh && !staging && !initialDraft) {
     try {
       if (typeof r211AssessmentDraftApiGet === 'function') {
         const draftRes = await r211AssessmentDraftApiGet(
@@ -145,18 +168,23 @@ export default async function AssessmentBuilderPage({
     }
   }
 
+  if (requestedId && initialDraft?.definitionId !== requestedId.toLowerCase())
+    notFound();
+
   return (
     <AssessmentBuilderClient
       key={JSON.stringify([
         organizationId,
+        fresh,
         initialDraft?.definitionId ?? null,
         initialIssuedSessionId,
       ])}
       organizationId={organizationId}
       csrfToken={context.csrfToken}
+      fresh={fresh}
       initialDraft={initialDraft}
       reviewers={reviewers}
-      isAuthenticatedStaging={isAuthenticatedStaging()}
+      isAuthenticatedStaging={staging}
       initialIssuedSessionId={initialIssuedSessionId}
     />
   );
