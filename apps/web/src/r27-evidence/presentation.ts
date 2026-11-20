@@ -1,5 +1,10 @@
 import { pythonLanguage } from '@codemirror/lang-python';
-import { formatPatch, structuredPatch, type StructuredPatch } from 'diff';
+import {
+  diffWordsWithSpace,
+  formatPatch,
+  structuredPatch,
+  type StructuredPatch,
+} from 'diff';
 
 import type {
   R27Evidence,
@@ -93,6 +98,40 @@ export function formatExecutionProvenance(execution: {
     : 'Synthetic execution (simulation)';
 }
 
+function addedReturnTokenStarts(content: string, patch: StructuredPatch) {
+  const lineStarts = [0];
+  for (const newline of content.matchAll(/\n/g)) {
+    lineStarts.push(newline.index + 1);
+  }
+
+  const starts = new Set<number>();
+  for (const hunk of patch.hunks) {
+    const oldLines: string[] = [];
+    const newLines: string[] = [];
+    for (const line of hunk.lines) {
+      const prefix = line[0];
+      if (prefix === '-' || prefix === ' ') oldLines.push(line.slice(1));
+      if (prefix === '+' || prefix === ' ') newLines.push(line.slice(1));
+    }
+    if (hunk.newLines === 0) continue;
+
+    let offset = lineStarts[hunk.newStart - 1];
+    for (const change of diffWordsWithSpace(
+      oldLines.join('\n'),
+      newLines.join('\n'),
+    )) {
+      if (change.removed) continue;
+      if (change.added) {
+        for (const token of change.value.matchAll(/return|[{:]/g)) {
+          starts.add(offset + token.index);
+        }
+      }
+      offset += change.value.length;
+    }
+  }
+  return starts;
+}
+
 function observeAddedPythonPatterns(
   observation: TermsPatternObservation,
   content: string,
@@ -115,6 +154,7 @@ function observeAddedPythonPatterns(
   if (!addedLines.size) return;
 
   const addedSyntaxStarts = new Set<number>();
+  let addedReturnStarts: ReadonlySet<number> | undefined;
   const cursor = pythonLanguage.parser.parse(content).cursor();
   let lineNumber = 1;
   let lineEnd = content.indexOf('\n');
@@ -156,17 +196,24 @@ function observeAddedPythonPatterns(
           result = result.parent;
         }
 
-        // An added return, outer literal, or entry separator can nest an unchanged value.
         const statement = result.parent;
-        if (
-          statement?.name === 'ReturnStatement' &&
-          !statement.getChild(',') &&
-          (isAdded ||
-            addedSyntaxStarts.has(separator.from) ||
-            addedSyntaxStarts.has(outer.from) ||
-            addedSyntaxStarts.has(statement.from))
-        ) {
-          observation.nestedObjectReturnFound = true;
+        if (statement?.name === 'ReturnStatement' && !statement.getChild(',')) {
+          // A changed line can contain unchanged syntax alongside the actual edit.
+          const anchors = [
+            cursor.from,
+            separator.from,
+            outer.from,
+            statement.from,
+          ].filter((offset) => addedSyntaxStarts.has(offset));
+          if (anchors.length) {
+            const addedTokens = (addedReturnStarts ??= addedReturnTokenStarts(
+              content,
+              patch,
+            ));
+            observation.nestedObjectReturnFound = anchors.some((offset) =>
+              addedTokens.has(offset),
+            );
+          }
         }
       }
     }

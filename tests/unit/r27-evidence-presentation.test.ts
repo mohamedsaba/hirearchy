@@ -323,20 +323,35 @@ describe('R2.7 evidence presentation', () => {
     });
   });
 
-  it('ignores an unchanged nested return when only a sibling value is edited', () => {
-    const submitted =
-      'def book():\n    return {\n        "meta": {"sent": True},\n        "count": 2,\n    }\n';
-    expect(
-      styleObservation(
-        generatedBrief,
-        { 'booking.py': submitted.replace('"count": 2', '"count": 1') },
-        { 'booking.py': submitted },
-      ),
-    ).toEqual({
-      snakeCaseIdentifierFound: false,
-      nestedObjectReturnFound: false,
-    });
-  });
+  it.each([
+    [
+      'on a separate line',
+      'return {\n        "meta": {"sent": True},\n        "count": 2,\n    }',
+    ],
+    [
+      'on the return line',
+      'return {"count": 2,\n        "meta": {"sent": True},\n    }',
+    ],
+    [
+      'on the nested dictionary line',
+      'return {"meta": {"sent": True}, "count": 2}',
+    ],
+  ])(
+    'ignores a sibling value edit %s when the nested return is unchanged',
+    (_location, statement) => {
+      const submitted = 'def book():\n    ' + statement + '\n';
+      expect(
+        styleObservation(
+          generatedBrief,
+          { 'booking.py': submitted.replace('"count": 2', '"count": 1') },
+          { 'booking.py': submitted },
+        ),
+      ).toEqual({
+        snakeCaseIdentifierFound: false,
+        nestedObjectReturnFound: false,
+      });
+    },
+  );
 
   it('does not derive a diff when the starter baseline is unavailable', () => {
     const result = buildR27Presentation(
