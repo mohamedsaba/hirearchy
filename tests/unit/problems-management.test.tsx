@@ -125,6 +125,30 @@ it('saves the current in-memory authoring content as a new library entry', async
   });
 });
 
+it('sends the current draft version in the field used by authenticated storage when validating', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({ valid: false, issues: [] }, { status: 422 }),
+    );
+  vi.stubGlobal('fetch', fetcher);
+  await act(async () =>
+    root.render(
+      <AssessmentBuilderClient
+        organizationId={organizationId}
+        csrfToken="token"
+        initialDraft={{ ...draft, version: 7 }}
+      />,
+    ),
+  );
+
+  await click('Continue to Validate →');
+
+  const [url, init] = fetcher.mock.calls[0];
+  expect(url).toMatch(/assessments\/validate$/);
+  expect(JSON.parse(init.body)).toMatchObject({ expectedVersion: 7 });
+});
+
 it('renews the browser session once before reloading the copied builder URL', async () => {
   const { RefreshBuilderSession } =
     await import('../../apps/web/app/r23/organizations/[organizationId]/builder/refresh-builder-session');

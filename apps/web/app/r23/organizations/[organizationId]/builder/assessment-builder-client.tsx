@@ -617,7 +617,7 @@ export function AssessmentBuilderClient({
     const payload = {
       ...authoringContent,
       definitionId,
-      expectedDraftVersion: draftVersion,
+      expectedVersion: draftVersion,
       csrf: csrfToken,
     };
 
