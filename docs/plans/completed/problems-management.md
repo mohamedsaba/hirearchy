@@ -1,0 +1,226 @@
+# Problems Management Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Let organization recruiters save, manage, and reuse engineering problems while each interview keeps an independent draft and immutable validated snapshot.
+
+**Architecture:** Add an organization-scoped PostgreSQL problem library with recruiter-authorized operations exposed through the existing R211/R23 persistence boundary. Add equivalent verified staging operations, then connect the library table/detail pages and the assessment builder's save/reuse flows to the existing draft and validation lifecycle.
+
+**Tech Stack:** Next.js App Router, React, TypeScript/ESM, PostgreSQL numbered migrations and R23/R211 adapters, the authenticated staging dispatch SQL API, Vitest, Playwright integration checks.
+
+**Spec:** [Problems Management Design](../../superpowers/specs/2026-11-20-problems-management-design.md)
+
+## Completion — 2026-11-20
+
+Tasks 1–4 are implemented. [ADR 0007](../../decisions/0007-reusable-problem-library.md) records the accepted library and independent draft lifecycle. The task checkboxes record the work performed, with the verification limits below.
+
+- Task 1 (be8bbc3, 7496e6d) added the library and authenticated API, advanced readiness to migration 0018, and preserved the approved template bytes on Windows.
+- Task 2 (6feaf6d, 6c89d92) added signed Founder UAT/staging operations and preserved renewed sessions on problem API errors.
+- Task 3 (2804522, f0fc371) added the Problems pages and builder save/reuse actions, loaded the copied draft by ID, and delivered refreshed staging credentials during problem page loads.
+- Task 4 recorded the decision, updated the documentation indexes and migrations overview, and ran the repository and targeted verification commands.
+
+### Verification
+
+- The focused Vitest run passed 61 tests across seven files. Both local PostgreSQL smoke checks passed, exercising the library migration, authenticated operations, staging dispatch queries, recruiter and tenant isolation, stale writes, and independent draft and validated version content.
+- Lint passed with 31 warnings and typechecking passed. The production build passed after a host retry allowed Turbopack to create its Windows junction. The build emitted four tracing warnings.
+- The aggregate verification command exited 1 at Prettier, which reported 676 files, including the existing Windows CRLF checkout and ignored local tooling files that Prettier scans. The targeted documentation check passed.
+- The standalone Vitest rerun reported 1,165 passed, 64 failed, and 42 skipped across 161 files. Legacy Windows filesystem checks and the unavailable Docker engine accounted for the remaining failures. The initially unavailable native Better SQLite3 dependency now opens an in-memory database, while its candidate-token backup suite still requires POSIX file mode 0600. Other failing Windows checks cover POSIX artifact modes and directory fsync.
+- R211, staging, and executor integration commands exited 1 during Docker fixture setup. The Docker Desktop Linux engine pipe did not exist, so the official PostgreSQL, GoTrue, HTTPS, Chromium, and executor journeys remain pending.
+
+## Global Constraints
+
+- “Only active recruiters in the selected organization can list, view, create, edit, delete, or reuse library records.”
+- “Data must not be available to another organization.”
+- “The library record and resulting draft have independent lifecycles after the copy.”
+- “The candidate session is still issued only from a validated version, as it is today.”
+- “Keep the Next.js/PostgreSQL modular monolith and support both the authenticated application runtime and the Founder UAT/staging operation path.”
+- “Persist the complete authoring unit: template identifier, title, brief, expected behavior, acceptance criteria, primary file path, starter files, duration, terminal and integrated AI settings, and rubric.”
+- Add no new dependency; preserve recruiter/reviewer separation and immutable validated versions.
+
+## Review Focus
+
+1. A recruiter submits a problem ID from another organization; all read/write/reuse operations must deny it. Pin in Task 1's Postgres authorization checks and Task 2's staging security journey.
+2. A reviewer or inactive member reaches the problem routes directly; every operation must deny them. Pin in Task 1's API/adapter checks and Task 2's staging authorization checks.
+3. Two recruiters edit the same library version; the stale write must return a conflict and retain the newer content. Pin in Task 1's Postgres concurrency check and Task 3's UI conflict state.
+4. A saved problem has invalid or unsupported authoring content; the API must reject it without creating a library row or assessment draft. Pin in Task 1's route and validation checks.
+5. A library problem is edited or deleted after reuse or interview issuance; the copied draft and immutable validated version must remain unchanged. Pin in Task 1's copy/snapshot integration check and Task 3's browser journey.
+
+---
+
+## File Map
+
+- `database/postgres/migrations/0018_reusable_problems.sql` creates the durable organization-scoped library table and its constraints, privileges, and RLS boundary.
+- `database/postgres/r211/fixture.sql`, `adapter.mjs`, `adapter.d.mts`, and `contract.d.mts` provide disposable authoring-fixture operations and typed storage methods, matching existing R211 patterns.
+- `database/postgres/r23/adapter.mjs` and `adapter.d.mts` expose the library operations through authenticated organization authorization.
+- `apps/web/src/r211-builder/contract.ts` defines reusable problem content and library record contracts.
+- `apps/web/src/r23-auth/server.ts` provides authenticated and staging-backed problem APIs with recruiter checks, CSRF/origin enforcement, validation, and reuse-to-new-draft behavior.
+- `apps/web/app/r23/api/organizations/[organizationId]/problems/route.ts`, `[problemId]/route.ts`, and `[problemId]/reuse/route.ts` expose list/create, read/update/delete, and create-independent-draft endpoints.
+- `apps/web/src/staging/server.ts`, `browser.ts`, and `database/postgres/staging/install-api.sql` implement equivalent authenticated staging operations and browser page entry points.
+- `apps/web/app/r23/organizations/[organizationId]/problems/page.tsx`, `problems-client.tsx`, and `[problemId]/page.tsx` implement the focused table and management detail experience.
+- `apps/web/app/r23/organizations/[organizationId]/builder/page.tsx` and `builder/assessment-builder-client.tsx` add Save for reuse, library selection/reuse navigation, and loading of the newly copied draft.
+- `tests/r211/postgres-builder-check.mjs`, `tests/r211/browser-builder-check.mjs`, `tests/staging/journey.mjs`, and `tests/staging/security.mjs` pin persistence, authorization, reuse independence, and browser behavior.
+- `docs/decisions/0007-reusable-problem-library.md`, `docs/decisions/README.md`, and `docs/plans/{active,completed}/problems-management.md` record the rule and plan lifecycle.
+
+## Task 1: Durable Problem Library and Authenticated API
+
+**Files:**
+
+- Create: `database/postgres/migrations/0018_reusable_problems.sql`
+- Modify: `database/postgres/r211/fixture.sql`
+- Modify: `database/postgres/r211/adapter.mjs`
+- Modify: `database/postgres/r211/adapter.d.mts`
+- Modify: `database/postgres/r211/contract.d.mts`
+- Modify: `database/postgres/r23/adapter.mjs`
+- Modify: `database/postgres/r23/adapter.d.mts`
+- Modify: `apps/web/src/observability/readiness.mjs` and `readiness.d.mts`
+- Modify: `apps/web/src/r211-builder/contract.ts`
+- Modify: `apps/web/src/r23-auth/server.ts`
+- Create: `apps/web/app/r23/api/organizations/[organizationId]/problems/route.ts`
+- Create: `apps/web/app/r23/api/organizations/[organizationId]/problems/[problemId]/route.ts`
+- Create: `apps/web/app/r23/api/organizations/[organizationId]/problems/[problemId]/reuse/route.ts`
+- Test: `tests/r211/postgres-builder-check.mjs`
+- Test: `tests/r211/browser-builder-check.mjs`
+- Test: `tests/unit/staging-readiness-probe.test.mjs`
+- Test: `scripts/test-release-rollback.mjs`
+
+**Interfaces:**
+
+- Produces `R211ReusableProblemContent`, equivalent to a complete `R211AssessmentDraftInput` without `definitionId` or draft `expectedVersion`.
+- Produces `R211ReusableProblem`: `{ id, organizationId, authorPrincipalId, version, content, createdAt, updatedAt }`.
+- Adds R23 authorization methods `createReusableProblem(identity, organizationId, content)`, `listReusableProblems(identity, organizationId)`, `getReusableProblem(identity, organizationId, problemId)`, `updateReusableProblem(identity, organizationId, problemId, expectedVersion, content)`, and `deleteReusableProblem(identity, organizationId, problemId, expectedVersion)`.
+- Adds API methods: `GET|POST /problems`, `GET|PATCH|DELETE /problems/{problemId}`, and `POST /problems/{problemId}/reuse`; reuse returns the newly persisted `R211AssessmentDraft` created by saving the library content without a definition ID.
+
+- [x] **Step 1: Add failing Postgres checks**
+
+Extend `runR211PostgresBuilderChecks` to prove recruiter create/list/read/update/delete, stale update conflict, reviewer denial, cross-organization denial, and that deleting/updating a library record leaves a previously copied draft and validated version unchanged. Add a readiness regression check proving the current schema migration (`0018`) is accepted, not marked stale.
+
+- [x] **Step 2: Run the focused R211 integration and confirm the new assertions fail**
+
+Run: `node scripts/test-r211-integration.mjs`
+Expected: Existing checks pass until the new problem-library assertions fail because the library contract and storage operations do not exist.
+
+- [x] **Step 3: Add migration and R211 storage methods**
+
+Create an organization-scoped `hirearchy.reusable_problems` record with complete validated content, author, timestamps, and monotonically increasing version. Add RLS/privileges and narrowly scoped functions. Implement adapter methods with UUID validation and an explicit concurrency-conflict error; mirror fixture grants and policies in `database/postgres/r211/fixture.sql`.
+
+Update the operational readiness target and rollback/readiness fixtures to the latest numbered migration. Preserve the approved Reservation Moves template bytes across checkout platforms with a narrowly scoped `.gitattributes` rule; do not weaken its digest validation.
+
+- [x] **Step 4: Add R23 adapter contract and API handlers**
+
+Expose the storage methods through `R23Authorization`, checking active organization membership and recruiter role before writes. Validate content with `validateAssessmentDraft`, require same-origin and CSRF for mutations, use private no-store responses, return 409 for stale updates, and return 404 for identifiers outside the selected organization. Implement reuse by loading a library record and calling the existing `saveAssessmentDraft` without `definitionId` so it always creates a new assessment definition.
+
+- [x] **Step 5: Add failing authenticated browser/API checks, then pass them**
+
+In `tests/r211/browser-builder-check.mjs`, pin successful create/list/detail/update/delete/reuse, malformed content rejection, reviewer denial, CSRF denial, and cross-organization 404 behavior using the existing authenticated browser harness. Run `node scripts/test-r211-integration.mjs`; the Postgres and browser checks must pass.
+
+## Task 2: Equivalent Founder UAT/Staging Operations
+
+**Files:**
+
+- Modify: `apps/web/src/staging/server.ts`
+- Modify: `apps/web/src/staging/browser.ts`
+- Modify: `apps/web/src/r23-auth/server.ts` (delegate problem API requests to staging in this task)
+- Modify: `apps/web/proxy.ts` (allow only the new organization problem pages and API methods through authenticated staging)
+- Modify: `database/postgres/staging/install-api.sql`
+- Modify: `tests/staging/journey.mjs`
+- Modify: `tests/staging/security.mjs`
+- Modify: `tests/unit/staging-api.test.ts`
+
+**Interfaces:**
+
+- Consumes the Task 1 R23 endpoints and the `R211ReusableProblem` response shape.
+- Produces signed staging operations `problem.create`, `problem.list`, `problem.get`, `problem.update`, `problem.delete`, and `problem.reuse`, each restricted to the selected organization and active recruiter; `problem.reuse` returns a new assessment ID and full independent draft content.
+
+- [x] **Step 1: Add failing staging security and journey assertions**
+
+Extend staging security checks to deny reviewer and cross-organization operations. Extend `createJourney` checks to save a problem, list/get/update it, reuse into a different assessment ID, modify/delete the source, and assert the copied assessment content remains unchanged. Add proxy tests proving only the new authenticated problem pages and API methods pass the staging route boundary.
+
+- [x] **Step 2: Run the focused staging integration and confirm the new assertions fail**
+
+Run: `node scripts/test-staging-integration.mjs`
+Expected: The existing staging journey passes until the new problem operations fail as unsupported.
+
+- [x] **Step 3: Implement signed operation validation and SQL handlers**
+
+Add each operation to the staging server allowlist and to `install-api.sql`'s exact argument schema, role checks, organization-scoped queries, optimistic update version, and dispatch cases. Grant `staging_verifier_owner` only the required columns and apply organization RLS policies to the library table. Add explicit proxy allowances for the organization Problems pages and only the API methods needed for list/read/create/update/delete/reuse, following the existing recruiter staging authorization rules.
+
+- [x] **Step 4: Implement staging browser/API delegates and organization navigation**
+
+Delegate list/create/read/update/delete/reuse API methods through `dispatchVerifiedStagingOperation`, preserving shared response and error behavior. Add a Problems link to the recruiter organization workspace beside the assessment builder entry point. Run `npx vitest run tests/unit/staging-api.test.ts` and `node scripts/test-staging-integration.mjs`; all proxy, journey, and new isolation/copy assertions must pass.
+
+## Task 3: Problems Table, Detail Editor, and Builder Integration
+
+**Files:**
+
+- Create: `apps/web/app/r23/organizations/[organizationId]/problems/page.tsx`
+- Create: `apps/web/app/r23/organizations/[organizationId]/problems/problems-client.tsx`
+- Create: `apps/web/app/r23/organizations/[organizationId]/problems/[problemId]/page.tsx`
+- Modify: `apps/web/app/r23/organizations/[organizationId]/builder/page.tsx`
+- Modify: `apps/web/app/r23/organizations/[organizationId]/builder/assessment-builder-client.tsx`
+- Modify: `apps/web/src/r23-auth/server.ts` (load a requested draft definition ID)
+- Modify: `apps/web/src/staging/browser.ts` (load a requested staging assessment ID)
+- Test: `tests/r211/browser-builder-check.mjs`
+- Test: `tests/unit/problems-management.test.tsx`
+
+**Interfaces:**
+
+- Consumes the Task 1 API shapes and Task 2 staging parity.
+- Produces `/r23/organizations/{organizationId}/problems` and `/problems/{problemId}` for table/detail editing, a builder **Save for reuse** action, and a **Start from saved problem** flow that navigates to the builder with the independent new draft loaded by its returned definition ID in both runtimes.
+
+- [x] **Step 1: Add failing browser/component checks**
+
+Pin recruiter-only table and detail rendering, row navigation, edit with stale-version conflict feedback, delete confirmation/removal, save-for-reuse feedback, and reuse opening a draft with copied content and a new definition ID.
+
+- [x] **Step 2: Run focused UI checks and confirm they fail**
+
+Run: `npx vitest run tests/unit/problems-management.test.tsx`
+Expected: FAIL because the management UI and builder actions do not exist.
+
+- [x] **Step 3: Implement authenticated table and detail routes**
+
+Load data through the authenticated APIs, link each table row to its management detail route, display the full saved authoring content, allow edits, expose delete, and keep the page focused on problem management. Provide navigation back to the organization workspace and into assessment authoring.
+
+- [x] **Step 4: Add builder save and reuse actions**
+
+Add **Save for reuse** to the assessment authoring stage using the current in-memory draft content. Add a saved-problem picker/start action; call the reuse endpoint, then open the builder with the returned definition ID. Update standard and staging draft GET paths to honor an optional `definitionId` instead of returning whichever draft happens to be latest; the builder must display the copied draft even if another draft is created before it loads. Ensure the new draft ID replaces no currently edited definition and existing validate/issue controls remain unchanged.
+
+- [x] **Step 5: Verify browser behavior**
+
+Run: `npx vitest run tests/unit/problems-management.test.tsx tests/unit/assessment-builder.test.tsx tests/unit/assessment-builder-reviewers.test.tsx` and `node scripts/test-r211-integration.mjs`; all targeted UI and R211 browser assertions must pass.
+
+## Task 4: Decision Record, Documentation, and Full Verification
+
+**Files:**
+
+- Create: `docs/decisions/0007-reusable-problem-library.md`
+- Modify: `docs/decisions/README.md`
+- Modify: `docs/README.md`
+- Modify: `docs/architecture/system-overview.md`
+- Modify: `docs/plans/active/problems-management.md`
+- Create: `docs/plans/completed/problems-management.md`
+
+**Interfaces:**
+
+- Consumes completed persistence, API, staging, and UI behavior from Tasks 1–3.
+- Produces an append-only ADR describing mutable organization-owned library entries, independent copies into drafts, and immutable validated versions; keeps the active plan synchronized and preserves it in completed plans after implementation.
+
+- [x] **Step 1: Add ADR and update documentation indexes**
+
+Document status, context, decision, rationale, and consequences; link the ADR from the decisions index and describe the recruiter Problems page and reuse flow in the master documentation index.
+
+- [x] **Step 2: Run repository verification**
+
+Run: `npm run verify`
+Expected: all gates pass. If environment-specific existing failures persist, capture each command, exit status, and exact blocker in the completion notes; do not alter unrelated fixtures or test expectations merely to force a green run.
+
+- [x] **Step 3: Review diff and archive plan**
+
+Check `git diff --check`, review the full diff for tenant or role bypasses and unrelated complexity, move the completed plan from `docs/plans/active/` to `docs/plans/completed/`, then confirm `git status --short --branch` contains only intended feature changes.
+
+## Self-review
+
+- **Spec coverage:** Save for reuse and full content persistence: Task 1 and Task 3. Organization CRUD table and detail editor: Tasks 1 and 3. Independent reuse: Tasks 1 and 3. Recruiter/tenant security and staging parity: Tasks 1 and 2. Immutable validated versions and docs/ADR: Tasks 1 and 4.
+- **Step scan:** Each task begins with a failing behavior check, identifies an exact implementation boundary, and ends with its relevant command or verification.
+- **Type consistency:** `R211ReusableProblemContent` feeds create/update/reuse. `R211ReusableProblem` wraps `content` and a library `version`; reuse returns a normal `R211AssessmentDraft` with a new definition ID. Staging operations use the same public record and draft shapes.
+- **Review Focus:** Tenant/role access, concurrency, invalid content, and post-copy mutation/deletion are each attached to the owning persistence, staging, API, or browser task.
+- **Proportion:** Four tasks cover one integrated feature across the existing database, auth, staging, and UI boundaries; no dependency or general content-management layer is introduced.
