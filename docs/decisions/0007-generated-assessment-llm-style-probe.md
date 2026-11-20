@@ -10,6 +10,8 @@ The scenario constitution prohibits artificial traps. AI-generated assessments c
 
 Allow this footer as a narrow exception for AI-generated assessments. The platform appends the titled instructions to the task brief and validates the complete brief against the existing 5,000-character limit. The footer must fit without truncating the task text. The instructions are outside acceptance criteria, target tests, the reference solution, and the task rubric.
 
+The live AI Candidate Review provider receives the task brief with the exact platform footer removed. The stored brief remains the source for candidate and evaluator presentation.
+
 Treat a match as a neutral observation about visible submitted code. Evaluator-facing copy must state that the observation cannot establish external AI use, authorship, intent, or competence. The probe introduces no hidden criteria, scores, penalties, or changes to task success or hiring decisions.
 
 ## Rationale and consequences

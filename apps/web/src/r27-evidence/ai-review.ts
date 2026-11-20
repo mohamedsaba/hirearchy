@@ -3,6 +3,7 @@ import {
   resolveAiReviewProviderConfig,
   type ResolvedAiReviewProvider,
 } from '../ai/server-ai-configuration';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../scenarios/generated-terms-and-conditions';
 import {
   buildDeterministicEvidencePreviewReport,
   computeEvidenceMetricsAndDiffSummary,
@@ -138,6 +139,10 @@ function buildReviewPromptPayload(evidence: R27Evidence) {
     '- "evidenceHighlights": array of { "label": string, "detail": string } (up to 3 items)',
   ].join('\n');
 
+  const brief = summary.brief?.endsWith(GENERATED_TERMS_AND_CONDITIONS_FOOTER)
+    ? summary.brief.slice(0, -GENERATED_TERMS_AND_CONDITIONS_FOOTER.length)
+    : summary.brief;
+
   const userPrompt = [
     `Scenario: ${evidence.scenario.title} (v${evidence.scenario.version})`,
     `Session Status: ${evidence.status}, Closure: ${evidence.closureReason}, Elapsed: ${summary.elapsedMinutes ?? 'unknown'} minutes`,
@@ -145,7 +150,7 @@ function buildReviewPromptPayload(evidence: R27Evidence) {
     `Timeline Events: ${summary.timelineEventsCount}, Save Checkpoints: ${summary.saveEventsCount}`,
     '',
     'Scenario Brief:',
-    summary.brief ?? '(Not provided in snapshot)',
+    brief ?? '(Not provided in snapshot)',
     '',
     'Acceptance Criteria:',
     summary.acceptanceCriteria.length
