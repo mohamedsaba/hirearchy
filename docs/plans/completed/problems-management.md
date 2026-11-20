@@ -263,3 +263,11 @@ The final review fix wave ran after the verification table above:
 - The latest full Vitest run reported 17 failed files, 137 passed files, and 7 skipped files; 64 tests failed, 1,172 passed, and 42 were skipped. The failed files remain the same Windows filesystem and Docker-dependent suites recorded above.
 - On the final tree, npm run verify exited 1 at Prettier, reporting 679 files. The changed paths passed targeted Prettier checks.
 - R211 and staging Docker-backed integration commands still stopped during fixture setup because the Docker Desktop Linux engine pipe was unavailable. The final fix wave local PGlite authenticated and staging smoke checks passed, including fresh Save Draft/Validate preserving an unrelated prior draft and exact copied draft selection.
+
+## Validation version follow-up
+
+The final reviewer also identified that the standard Validate request used `expectedDraftVersion` while the authenticated draft adapter reads `expectedVersion`. The builder now sends the adapter contract field; staging accepts it through its existing compatibility mapping.
+
+- The regression test failed before the change because the request omitted `expectedVersion`, then passed after the fix.
+- `tests/unit/problems-management.test.tsx` and `tests/unit/staging-api.test.ts`: 32 tests passed. Typechecking passed. Lint had zero errors and 31 warnings. Changed-path Prettier and `git diff --check` passed.
+- The final full Vitest run reported 17 failed files, 137 passed files, and 7 skipped files; 64 tests failed, 1,173 passed, and 42 were skipped. Docker startup and Windows filesystem checks remain the recorded blockers.
