@@ -353,6 +353,16 @@ describe('R2.7 evidence presentation', () => {
     },
   );
 
+  it('ignores a scalar sibling edit when the enclosing function is renamed', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        { 'booking.py': 'def summary(): return {"meta": {}, "count": 1}\n' },
+        { 'booking.py': 'def detail(): return {"meta": {}, "count": 2}\n' },
+      )?.nestedObjectReturnFound,
+    ).toBe(false);
+  });
+
   it('ignores a copy of an unchanged nested entry inside a list-valued sibling', () => {
     expect(
       styleObservation(
@@ -370,6 +380,29 @@ describe('R2.7 evidence presentation', () => {
       snakeCaseIdentifierFound: false,
       nestedObjectReturnFound: false,
     });
+  });
+
+  it('withholds a nested return observation when repeated definitions change order', () => {
+    const smaller = 'def data(): return {"x": {}, "count": 1}\n';
+    const larger = 'def data(): return {"a": {}, "b": {}, "count": 1}\n';
+    expect(
+      styleObservation(
+        generatedBrief,
+        { 'booking.py': smaller + larger },
+        { 'booking.py': larger.replace('"count": 1', '"count": 2') + smaller },
+      )?.nestedObjectReturnFound,
+    ).toBe(false);
+  });
+
+  it('observes a new function in an existing file when all starter definitions remain', () => {
+    const starter = 'def summary(): return {"meta": {}}\n';
+    expect(
+      styleObservation(
+        generatedBrief,
+        { 'booking.py': starter },
+        { 'booking.py': starter + 'def detail(): return {"items": {}}\n' },
+      )?.nestedObjectReturnFound,
+    ).toBe(true);
   });
 
   it('observes a new direct nested value alongside an existing nested value', () => {

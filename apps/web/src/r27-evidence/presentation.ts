@@ -97,7 +97,7 @@ function pythonPatterns(content: string, addedLines?: ReadonlySet<number>) {
   type ReturnShape = { entries: number; added: boolean };
   const nestedReturns = new Map<string, Map<number, ReturnShape>>();
   const scopes: { key: string; end: number }[] = [];
-  const definitionCounts = new Map<string, number>();
+  const definitions = new Map<string, { parent: string; count: number }>();
   const addedSyntaxStarts = new Set<number>();
   let snakeCaseIdentifierFound = false;
   const cursor = pythonLanguage.parser.parse(content).cursor();
@@ -113,10 +113,31 @@ function pythonPatterns(content: string, addedLines?: ReadonlySet<number>) {
     ) {
       const name = cursor.node.getChild('VariableName');
       const identifier = name ? content.slice(name.from, name.to) : '';
-      const path = `${scopes.at(-1)?.key ?? ''}/${cursor.name}:${identifier}`;
-      const occurrence = (definitionCounts.get(path) ?? 0) + 1;
-      definitionCounts.set(path, occurrence);
-      scopes.push({ key: `${path}#${occurrence}`, end: cursor.to });
+      // Functions with the same name can belong to distinct conditional arms.
+      const qualifiers = [cursor.name, identifier];
+      for (let node = cursor.node.parent; node; node = node.parent) {
+        if (
+          node.name === 'ClassDefinition' ||
+          node.name === 'FunctionDefinition'
+        )
+          break;
+        if (node.name !== 'Body' || node.parent?.name !== 'IfStatement')
+          continue;
+        const firstArm = node.parent.getChild('Body');
+        const condition = node.prevSibling;
+        if (firstArm && condition)
+          qualifiers.push(
+            content.slice(node.parent.from, firstArm.from),
+            content.slice(condition.from, node.from),
+          );
+      }
+      const parent = scopes.at(-1)?.key ?? '';
+      const key = `${parent}/${JSON.stringify(qualifiers)}`;
+      definitions.set(key, {
+        parent,
+        count: (definitions.get(key)?.count ?? 0) + 1,
+      });
+      scopes.push({ key, end: cursor.to });
     }
     while (lineEnd !== -1 && lineEnd < cursor.from) {
       lineNumber++;
@@ -176,6 +197,7 @@ function pythonPatterns(content: string, addedLines?: ReadonlySet<number>) {
   return {
     snakeCaseIdentifierFound,
     nestedReturns,
+    definitions,
   };
 }
 
@@ -206,13 +228,26 @@ function observeAddedPythonPatterns(
   if (observation.nestedObjectReturnFound || !submitted.nestedReturns.size)
     return;
 
-  const starter = starterContent
-    ? pythonPatterns(starterContent).nestedReturns
-    : null;
+  const starter = starterContent ? pythonPatterns(starterContent) : null;
+  const unmatchedStarter = [...(starter?.definitions ?? [])].some(
+    ([key, { count }]) => count > (submitted.definitions.get(key)?.count ?? 0),
+  );
+  const ambiguousScopes = new Set<string>();
+  // Definitions are visited parent-first. A missing starter definition may
+  // have been renamed, and source order cannot identify repeated definitions.
+  for (const [key, { parent, count }] of submitted.definitions) {
+    const baseline = starter?.definitions.get(key);
+    if (
+      ambiguousScopes.has(parent) ||
+      (baseline ? baseline.count > 1 || count > 1 : unmatchedStarter)
+    )
+      ambiguousScopes.add(key);
+  }
   for (const [scope, returns] of submitted.nestedReturns) {
+    if (ambiguousScopes.has(scope)) continue;
     const shapes = [...returns.values()];
     if (!shapes.some(({ added }) => added)) continue;
-    const existing = [...(starter?.get(scope)?.values() ?? [])];
+    const existing = [...(starter?.nestedReturns.get(scope)?.values() ?? [])];
     existing.sort((a, b) => b.entries - a.entries);
     // Within a function, use larger shapes first and match unchanged ties first.
     shapes.sort(
