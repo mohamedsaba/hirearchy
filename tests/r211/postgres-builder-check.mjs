@@ -988,6 +988,37 @@ export async function runR211PostgresBuilderChecks({
       copiedVersion,
     );
 
+    const templateProblem = await asRecruiter((authz, identity) =>
+      authz.createReusableProblem(identity, orgA, {
+        ...problemContent,
+        templateId: 'reservation-moves-v3',
+        title: 'Untrusted title',
+      }),
+    );
+    assert.equal(templateProblem.content.title, 'Reservation Moves');
+    assert.deepEqual(
+      templateProblem.content.starterFiles,
+      templateDraft.starterFiles,
+    );
+    const reusedTemplateDraft = await asRecruiter(async (authz, identity) => {
+      const problem = await authz.getReusableProblem(
+        identity,
+        orgA,
+        templateProblem.id,
+      );
+      return authz.saveAssessmentDraft(identity, orgA, problem.content);
+    });
+    assert.notEqual(
+      reusedTemplateDraft.definitionId,
+      templateDraft.definitionId,
+    );
+    assert.equal(reusedTemplateDraft.templateId, 'reservation-moves-v3');
+    assert.equal(reusedTemplateDraft.brief, templateProblem.content.brief);
+    assert.deepEqual(
+      reusedTemplateDraft.starterFiles,
+      templateProblem.content.starterFiles,
+    );
+
     // Revoke Recruiter A now
     await admin.query(
       `UPDATE hirearchy.organization_memberships

@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { Client } from 'pg';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { checkOperationalReadiness } from '../../apps/web/src/observability/readiness.mjs';
 import { probeStagingReadiness } from '../../scripts/check-staging-readiness.mjs';
 
 const readyPayload = {
   status: 'ready',
   database: {
-    migrationVersion: '0017',
-    targetMigrationVersion: '0017',
+    migrationVersion: '0018',
+    targetMigrationVersion: '0018',
     markers: {
       candidateLifecycle: true,
       onboarding: true,
@@ -17,19 +19,46 @@ const readyPayload = {
 };
 
 describe('staging readiness operator probe', () => {
-  it('reports ready only for a valid 200 readiness response', async () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reports migration 0018 as ready when the database markers are present', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined);
+    vi.spyOn(Client.prototype, 'query')
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            readiness: {
+              migrationVersion: '0018',
+              markers: readyPayload.database.markers,
+            },
+          },
+        ],
+      });
+    vi.spyOn(Client.prototype, 'end').mockResolvedValue(undefined);
+    const readiness = await checkOperationalReadiness(
+      'postgres://probe@127.0.0.1:1/synthetic',
+    );
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(
-        new Response(JSON.stringify(readyPayload), { status: 200 }),
+        new Response(JSON.stringify(readiness), { status: 200 }),
       );
 
+    expect(readiness).toMatchObject({
+      status: 'ready',
+      database: {
+        migrationVersion: '0018',
+        targetMigrationVersion: '0018',
+        isMigrationCurrent: true,
+      },
+    });
     await expect(
       probeStagingReadiness({ appPort: 53000, fetchImpl }),
     ).resolves.toMatchObject({
       state: 'ready',
       httpStatus: 200,
-      migrationVersion: '0017',
+      migrationVersion: '0018',
       markers: { executionR214: true },
     });
     expect(fetchImpl.mock.calls[0][0].href).toBe(

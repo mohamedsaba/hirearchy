@@ -611,6 +611,34 @@ export async function runR211BrowserBuilderChecks({
     assert.equal(copied.status, 200);
     assert.deepEqual(JSON.parse(copied.text).draft, copiedDraft);
 
+    const approved = await problemRequest(problems, 'POST', {
+      content: { ...problemContent, templateId: 'reservation-moves-v3' },
+    });
+    assert.equal(
+      approved.status,
+      201,
+      'Recruiter can save the approved template',
+    );
+    const { problem: approvedProblem } = JSON.parse(approved.text);
+    assert.equal(approvedProblem.content.title, 'Reservation Moves');
+    const approvedReuse = await problemRequest(
+      `${problems}/${approvedProblem.id}/reuse`,
+      'POST',
+      {},
+    );
+    assert.equal(
+      approvedReuse.status,
+      201,
+      'Recruiter can reuse the approved template',
+    );
+    const { draft: approvedDraft } = JSON.parse(approvedReuse.text);
+    assert.equal(approvedDraft.templateId, 'reservation-moves-v3');
+    assert.equal(approvedDraft.brief, approvedProblem.content.brief);
+    assert.deepEqual(
+      approvedDraft.starterFiles,
+      approvedProblem.content.starterFiles,
+    );
+
     console.log('[R2.11 Browser] All 16 journey steps successfully passed!');
   } finally {
     await browser.close();
