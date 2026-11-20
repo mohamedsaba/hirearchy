@@ -186,6 +186,49 @@ describe('authenticated staging boundary', () => {
     }
   });
 
+  it('opens only the problem library routes and methods in authenticated staging', () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    const pages = '/r23/organizations/org-1/problems';
+    const api = '/r23/api/organizations/org-1/problems';
+    const problem = `${api}/problem-1`;
+    const reuse = `${problem}/reuse`;
+    for (const [method, path] of [
+      ['GET', pages],
+      ['HEAD', pages],
+      ['GET', `${pages}/problem-1`],
+      ['GET', api],
+      ['HEAD', problem],
+      ['GET', problem],
+      ['POST', api],
+      ['PATCH', problem],
+      ['DELETE', problem],
+      ['POST', reuse],
+    ]) {
+      const response = proxy(
+        new NextRequest(`http://localhost${path}`, { method }),
+      );
+      expect(
+        response.headers.get('x-middleware-next'),
+        `${method} ${path}`,
+      ).toBe('1');
+    }
+    for (const [method, path] of [
+      ['POST', pages],
+      ['DELETE', api],
+      ['POST', problem],
+      ['PUT', problem],
+      ['GET', reuse],
+      ['PATCH', reuse],
+      ['POST', `${problem}/unexpected`],
+      ['GET', `${api}/problem-1/unexpected`],
+    ]) {
+      const response = proxy(
+        new NextRequest(`http://localhost${path}`, { method }),
+      );
+      expect(response.status, `${method} ${path}`).toBe(503);
+    }
+  });
+
   it('verifies the bearer through GoTrue before dispatch and signs its exact arguments', async () => {
     vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');

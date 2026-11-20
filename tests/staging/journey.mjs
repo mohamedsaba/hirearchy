@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
-import {
-  normalizeAssessmentTemplate,
-  reservationMovesBinding,
-} from '../../database/postgres/r211/template.mjs';
+import { normalizeAssessmentTemplate } from '../../database/postgres/r211/template.mjs';
 
 export const content = {
   title: 'Durable notification retry assessment',
@@ -68,6 +65,98 @@ export async function createJourney({
     { ...args, reviewerPrincipalId: provisioned.users[1].principalId },
     403,
   );
+  await call(appUrl, reviewer, 'session.open', { organizationId });
+  const libraryContent = { templateId: 'custom', ...journeyContent };
+  const { problem } = await call(appUrl, recruiter, 'problem.create', {
+    organizationId,
+    content: libraryContent,
+  });
+  assert.match(problem.id, /^[0-9a-f-]{36}$/i);
+  assert.equal(problem.organizationId, organizationId);
+  assert.equal(problem.authorPrincipalId, provisioned.users[0].principalId);
+  assert.equal(problem.version, 1);
+  assert.deepEqual(problem.content, libraryContent);
+
+  const problemArgs = { organizationId, problemId: problem.id };
+  const update = {
+    ...problemArgs,
+    expectedVersion: 1,
+    content: { ...libraryContent, title: 'Updated reusable problem' },
+  };
+  for (const [operation, operationArgs] of [
+    ['problem.create', { organizationId, content: libraryContent }],
+    ['problem.list', { organizationId }],
+    ['problem.get', problemArgs],
+    ['problem.update', update],
+    ['problem.delete', { ...problemArgs, expectedVersion: 1 }],
+    ['problem.reuse', problemArgs],
+  ]) {
+    await call(appUrl, reviewer, operation, operationArgs, 403);
+  }
+
+  const { problems } = await call(appUrl, recruiter, 'problem.list', {
+    organizationId,
+  });
+  assert.ok(problems.some((entry) => entry.id === problem.id));
+  assert.deepEqual(await call(appUrl, recruiter, 'problem.get', problemArgs), {
+    problem,
+  });
+  const { problem: edited } = await call(
+    appUrl,
+    recruiter,
+    'problem.update',
+    update,
+  );
+  assert.equal(edited.version, 2);
+  assert.deepEqual(edited.content, update.content);
+  await call(appUrl, recruiter, 'problem.update', update, 409);
+  await call(
+    appUrl,
+    recruiter,
+    'problem.delete',
+    { ...problemArgs, expectedVersion: 1 },
+    409,
+  );
+
+  const { draft } = await call(appUrl, recruiter, 'problem.reuse', problemArgs);
+  assert.match(draft.definitionId, /^[0-9a-f-]{36}$/i);
+  assert.notEqual(draft.definitionId, assessmentId);
+  assert.notEqual(draft.definitionId, problem.id);
+  assert.equal(draft.version, 1);
+  assert.equal(draft.organizationId, organizationId);
+  assert.equal(draft.authorPrincipalId, provisioned.users[0].principalId);
+  for (const [key, value] of Object.entries(edited.content)) {
+    assert.deepEqual(draft[key], value, `copied draft field ${key}`);
+  }
+  const copiedArgs = { organizationId, assessmentId: draft.definitionId };
+  await call(
+    appUrl,
+    recruiter,
+    'assessment.issue',
+    { ...copiedArgs, reviewerPrincipalId: provisioned.users[1].principalId },
+    403,
+  );
+  const { problem: editedAgain } = await call(
+    appUrl,
+    recruiter,
+    'problem.update',
+    { ...update, expectedVersion: 2, content: libraryContent },
+  );
+  assert.equal(editedAgain.version, 3);
+  assert.deepEqual(
+    await call(appUrl, recruiter, 'problem.delete', {
+      ...problemArgs,
+      expectedVersion: 3,
+    }),
+    { deleted: true },
+  );
+  await call(appUrl, recruiter, 'problem.get', problemArgs, 404);
+  await call(appUrl, recruiter, 'problem.reuse', problemArgs, 404);
+  assert.deepEqual(
+    await call(appUrl, recruiter, 'assessment.get', copiedArgs),
+    { assessmentId: draft.definitionId, content: edited.content },
+  );
+
   const validation = await call(appUrl, recruiter, 'assessment.validate', args);
   assert.equal(validation.validation.valid, true);
   assert.equal(validation.validation.executionValidationAvailable, false);

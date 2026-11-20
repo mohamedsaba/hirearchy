@@ -81,6 +81,7 @@ import {
   stagingOrganizationSessionSummaryApiGet,
   stagingOrganizationsGet,
   stagingRefreshPost,
+  stagingReusableProblemApi,
   stagingReviewPacketApiGet,
   stagingReviewPacketApiPut,
   stagingReviewPacketFinalizeApiPost,
@@ -2008,7 +2009,8 @@ export async function r23OrganizationGet(
             </label>
             <button type="submit">Issue assessment</button>
           </form>
-          <p><a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder">Open Assessment Builder</a></p>
+          <p><a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder">Open Assessment Builder</a>
+          <a href="/r23/organizations/${safeOrgId}/problems">Problems</a></p>
         </section>
         `
             : ''
@@ -4145,21 +4147,21 @@ export async function r210ReviewPacketFinalizeApiPost(
   }
 }
 
-function reusableProblemJson(payload: object, status = 200): Response {
+export function reusableProblemJson(payload: object, status = 200): Response {
   return Response.json(payload, {
     status,
     headers: { 'Cache-Control': 'private, no-store, max-age=0' },
   });
 }
 
-function reusableProblemNotFound(): Response {
+export function reusableProblemNotFound(): Response {
   return reusableProblemJson(
     { error: { code: 'NOT_FOUND', message: 'Problem not found.' } },
     404,
   );
 }
 
-type R211ProblemAction =
+export type R211ProblemAction =
   'list' | 'create' | 'get' | 'update' | 'delete' | 'reuse';
 
 export async function r211ReusableProblemApi(
@@ -4168,6 +4170,14 @@ export async function r211ReusableProblemApi(
   action: R211ProblemAction,
   problemId?: string,
 ): Promise<Response> {
+  if (isAuthenticatedStaging()) {
+    return stagingReusableProblemApi(
+      request,
+      targetOrganizationId,
+      action,
+      problemId,
+    );
+  }
   const jsonRequest = asR27JsonRequest(request);
   try {
     const active = getRuntime();
@@ -4274,19 +4284,22 @@ export async function r211ReusableProblemApi(
       },
     );
   } catch (error) {
-    if (error instanceof R211ProblemConcurrencyConflict) {
-      return reusableProblemJson(
-        { error: { code: error.code, message: error.message } },
-        409,
-      );
-    }
-    if (error instanceof R211InvalidProblemContent) {
-      return reusableProblemJson(
-        { error: { code: error.code, message: error.message } },
-        400,
-      );
-    }
-    return failureResponse(jsonRequest, error);
+    return reusableProblemError(error) ?? failureResponse(jsonRequest, error);
+  }
+}
+
+export function reusableProblemError(error: unknown): Response | undefined {
+  if (error instanceof R211ProblemConcurrencyConflict) {
+    return reusableProblemJson(
+      { error: { code: error.code, message: error.message } },
+      409,
+    );
+  }
+  if (error instanceof R211InvalidProblemContent) {
+    return reusableProblemJson(
+      { error: { code: error.code, message: error.message } },
+      400,
+    );
   }
 }
 

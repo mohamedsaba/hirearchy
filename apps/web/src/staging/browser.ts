@@ -21,6 +21,7 @@ import {
   type AcceptInvitationResponse,
 } from './onboarding';
 
+import { R211ProblemConcurrencyConflict } from '../../../../database/postgres/r211/adapter.mjs';
 import type {
   R23Membership,
   R23Session,
@@ -79,6 +80,10 @@ import {
 } from '../r23-auth/founder-uat-state';
 import {
   resolveOrgDisplay,
+  reusableProblemError,
+  reusableProblemJson,
+  reusableProblemNotFound,
+  type R211ProblemAction,
   type AuthenticatedSessionListContext,
   type AuthenticatedSessionSummaryContext,
   type R24OrganizationSessionListResult,
@@ -1782,7 +1787,14 @@ export async function stagingOrganizationGet(
     const content = `
       <header class="software-page-heading">
         <div><p class="software-eyebrow">${safeOrgName}</p><h1>${membership.role === 'recruiter' ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
-        ${membership.role === 'recruiter' ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>` : ''}
+        ${
+          membership.role === 'recruiter'
+            ? `<div>
+                <a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>
+                <a href="/r23/organizations/${safeOrgId}/problems">Problems</a>
+              </div>`
+            : ''
+        }
       </header>
 
       ${
@@ -2504,6 +2516,85 @@ function buildStagingDraftContent(
   }
 
   return { content };
+}
+
+export async function stagingReusableProblemApi(
+  request: Request,
+  targetOrganizationId: string,
+  action: R211ProblemAction,
+  problemId?: string,
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, { headers: jsonHeaders });
+  try {
+    if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
+    const organizationId = targetOrganizationId.toLowerCase();
+    const csrf = requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+    let body: Record<string, unknown> = {};
+    if (action !== 'list' && action !== 'get') {
+      requireSameOrigin(request);
+      body = await parseBody(request, action === 'reuse', 262144);
+      requireOriginAndCsrf(request, body);
+    }
+
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ config, session, identity, refreshedSessionCookie }) => {
+        if (session.selectedOrganizationId !== organizationId) {
+          return reusableProblemNotFound();
+        }
+
+        const args: StagingProofArgs = { organizationId };
+        const bodyFields = ['csrf'];
+        if (action !== 'list' && action !== 'create') {
+          if (!problemId || !UUID.test(problemId)) {
+            return reusableProblemNotFound();
+          }
+          args.problemId = problemId.toLowerCase();
+        }
+        if (action === 'create' || action === 'update') {
+          bodyFields.push('content');
+          args.content = body.content as StagingProofArgs[string];
+        }
+        if (action === 'update' || action === 'delete') {
+          const { expectedVersion } = body;
+          if (
+            typeof expectedVersion !== 'number' ||
+            !Number.isSafeInteger(expectedVersion) ||
+            expectedVersion < 1
+          ) {
+            throw new StagingBadRequest();
+          }
+          bodyFields.push('expectedVersion');
+          args.expectedVersion = expectedVersion;
+        }
+        allowedFields(body, bodyFields);
+
+        const result = await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          `problem.${action}`,
+          args,
+        );
+        return attachRefreshedCookie(
+          reusableProblemJson(
+            result as object,
+            action === 'create' || action === 'reuse' ? 201 : 200,
+          ),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    const code = getSqlErrorCode(error);
+    if (code === 'P0002') return reusableProblemNotFound();
+    const problemError = reusableProblemError(
+      code === 'R2111' ? new R211ProblemConcurrencyConflict() : error,
+    );
+    return problemError ?? failureResponse(jsonRequest, error);
+  }
 }
 
 export async function stagingAssessmentDraftApiGet(
