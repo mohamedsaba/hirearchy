@@ -29,8 +29,8 @@ export function buildDeterministicPerformanceFitReport(
   const changedFiles = summary.files.filter((f) => f.changed);
   const clearlyDemonstrated = [
     changedFiles.length > 0
-      ? `Implemented code changes across ${changedFiles.map((f) => f.path).join(', ')} (+${summary.linesAdded} / -${summary.linesRemoved} lines).`
-      : 'Reviewed workspace structure during the session.',
+      ? `Submitted changes to ${changedFiles.map((f) => f.path).join(', ')} (+${summary.linesAdded} / -${summary.linesRemoved} lines).`
+      : 'No changes were recorded against the starter workspace.',
     `Recorded ${summary.saveEventsCount} save checkpoint${summary.saveEventsCount === 1 ? '' : 's'} across ${summary.elapsedMinutes ?? 'recorded'} minutes.`,
     ...input.evaluatorStrengths.slice(0, 3),
   ].filter(Boolean);
@@ -48,28 +48,23 @@ export function buildDeterministicPerformanceFitReport(
   ].filter(Boolean);
 
   const requirementAssessment = [
-    ...summary.acceptanceCriteria.slice(0, 4).map((req) => ({
-      requirement: req,
-      status: (changedFiles.length > 0 ? 'partial' : 'not_assessed') as
-        'demonstrated' | 'partial' | 'gap' | 'not_assessed',
+    ...summary.acceptanceCriteria.slice(0, 4).map((requirement) => ({
+      requirement,
+      status: 'not_assessed' as const,
       evidence:
-        changedFiles.length > 0
-          ? `Addressed in ${changedFiles.map((f) => f.path).join(', ')} and approved by evaluating reviewer.`
-          : 'No file diff recorded against baseline.',
+        'Inspect the submitted code and recorded checks to establish coverage.',
     })),
     ...input.skills.slice(0, 4).map((skill) => ({
       requirement: `Role skill: ${skill}`,
-      status: 'partial' as const,
-      evidence: `Reviewed alongside ${input.targetRole || 'target role'} submission (${input.experienceLevel}).`,
+      status: 'not_assessed' as const,
+      evidence: 'This was a target skill for the assessment.',
     })),
   ];
 
   return {
-    overallFitVerdict:
-      changedFiles.length > 0 ? 'good_fit_with_probes' : 'conditional_fit',
-    fitHeadline: `Accepted to ${input.nextStageLabel} for ${input.targetRole || input.evidence.scenario.title}`,
-    whyGoodOrBadFit:
-      `The evaluator accepted the candidate to ${input.nextStageLabel} based on ${changedFiles.length} modified workspace file(s) (+${summary.linesAdded}/-${summary.linesRemoved} lines) and ${summary.saveEventsCount} checkpoints. ${input.internalNotes ? `Reviewer notes: ${input.internalNotes.slice(0, 260)}` : ''}`.trim(),
+    overallFitVerdict: 'not_assessed',
+    fitHeadline: `Evidence summary for ${input.nextStageLabel}`,
+    whyGoodOrBadFit: `The evaluator selected ${input.nextStageLabel}. The submitted workspace has ${changedFiles.length} changed files and ${summary.saveEventsCount} recorded saves. Review the evidence and evaluator feedback before drawing conclusions about fit.`,
     requirementAssessment: requirementAssessment.slice(0, 8),
     strengths:
       input.evaluatorStrengths.length > 0
@@ -118,9 +113,9 @@ export async function generateAcceptancePerformanceReport(
     'You are preparing a Managerial & Second-Interview Handoff Performance Report for an ACCEPTED engineering candidate at Hirearchy.',
     'Synthesize ONLY the observed assessment evidence, evaluator notes, and target role requirements.',
     'Clearly distinguish what was decisively demonstrated in the assessment vs what remains unclear or was not assessed yet.',
-    'Explain thoughtfully WHY the candidate is a good fit (or where conditional risks exist) against the requested role, seniority, skills, and acceptance criteria.',
+    'Analyze role and requirement coverage. Cite recorded evidence for each judgment. Treat edit counts, timing gaps, and file size as context. Use not_assessed when the evidence is insufficient.',
     'Respond strictly with a single JSON object (no prose outside JSON) with keys:',
-    '- "overallFitVerdict": "strong_fit" | "good_fit_with_probes" | "conditional_fit"',
+    '- "overallFitVerdict": "strong_fit" | "good_fit_with_probes" | "conditional_fit" | "not_assessed"',
     '- "fitHeadline": crisp 1-sentence executive summary for the next-stage manager/interviewer',
     '- "whyGoodOrBadFit": 3-5 sentences analyzing role & requirements fit',
     '- "requirementAssessment": array of { "requirement": string, "status": "demonstrated" | "partial" | "gap" | "not_assessed", "evidence": string }',
@@ -140,7 +135,6 @@ export async function generateAcceptancePerformanceReport(
     `Evaluator Strengths:\n${input.evaluatorStrengths.join('\n') || '(none)'}`,
     `Evaluator Weaknesses / Watch-outs:\n${input.evaluatorWeaknesses.join('\n') || '(none)'}`,
     `Evaluator Candidate Feedback: ${input.evaluatorFeedbackNote || '(none)'}`,
-    `Evaluator Private Internal Notes: ${input.internalNotes || '(none)'}`,
     `Session Metrics: elapsed=${summary.elapsedMinutes ?? '?'}min, saves=${summary.saveEventsCount}, modifiedFiles=${summary.modifiedFilesCount}, +${summary.linesAdded}/-${summary.linesRemoved}`,
     `Submitted Diffs:\n${diffs || '(no diffs)'}`,
   ].join('\n\n');
@@ -167,6 +161,7 @@ export async function generateAcceptancePerformanceReport(
       'strong_fit',
       'good_fit_with_probes',
       'conditional_fit',
+      'not_assessed',
     ].includes(String(parsed.overallFitVerdict))
       ? (parsed.overallFitVerdict as PerformanceFitReport['overallFitVerdict'])
       : fallback.overallFitVerdict;

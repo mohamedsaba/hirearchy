@@ -3056,6 +3056,36 @@ BEGIN
 END
 $function$;
 
+CREATE OR REPLACE FUNCTION staging.hiring_can_publish_decision(
+  p_organization_id pg_catalog.uuid,
+  p_principal_id pg_catalog.uuid,
+  p_session_id pg_catalog.text
+)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM hirearchy.organizations o
+    JOIN hirearchy.organization_memberships m ON m.organization_id = o.id
+    JOIN hirearchy.assessment_sessions s ON s.organization_id = o.id
+    WHERE o.id = p_organization_id AND s.id = p_session_id
+      AND m.principal_id = p_principal_id AND m.status = 'active' AND m.revoked_at IS NULL
+      AND (
+        o.owner_principal_id = p_principal_id OR m.role = 'cto' OR EXISTS (
+          SELECT 1 FROM hirearchy.reviewer_assignments a
+          WHERE a.organization_id = o.id AND a.session_id = s.id
+            AND a.reviewer_principal_id = p_principal_id AND a.revoked_at IS NULL
+        )
+      )
+  );
+$function$;
+
+REVOKE ALL ON FUNCTION staging.hiring_can_publish_decision(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION staging.hiring_can_publish_decision(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+
 CREATE OR REPLACE FUNCTION staging.hiring_evidence_read(
   p_organization_id pg_catalog.uuid,
   p_caller_principal_id pg_catalog.uuid,
@@ -3297,6 +3327,7 @@ BEGIN
     'currentPrincipalId', p_caller_principal_id::pg_catalog.text,
     'currentRole', CASE WHEN v_owner_id = p_caller_principal_id THEN 'cto' ELSE v_role END,
     'isOwner', (v_owner_id = p_caller_principal_id),
+    'canPublishDecision', staging.hiring_can_publish_decision(p_organization_id, p_caller_principal_id, p_session_id),
     'plan', v_plan,
     'targetRole', COALESCE(v_meta.target_role, ''),
     'experienceLevel', COALESCE(v_meta.experience_level, 'mid'),
@@ -3446,7 +3477,7 @@ DECLARE
   v_handoff_status pg_catalog.text;
   v_report pg_catalog.jsonb;
 BEGIN
-  IF NOT staging.hiring_can_access_session(p_organization_id, p_caller_principal_id, p_session_id) THEN
+  IF NOT staging.hiring_can_publish_decision(p_organization_id, p_caller_principal_id, p_session_id) THEN
     RAISE EXCEPTION 'Session decision permission denied' USING ERRCODE = '42501';
   END IF;
 
@@ -3467,7 +3498,7 @@ BEGIN
   IF v_decision = 'accepted' THEN
     v_next_stage := COALESCE(NULLIF(trim(p_payload ->> 'nextStageLabel'), ''), 'Managerial Interview');
     v_recipient_id := NULLIF(trim(COALESCE(p_payload ->> 'handoffRecipientPrincipalId', '')), '')::pg_catalog.uuid;
-    IF v_recipient_id IS NOT NULL AND NOT EXISTS (
+    IF v_recipient_id IS NULL OR NOT EXISTS (
       SELECT 1 FROM hirearchy.organization_memberships
       WHERE organization_id = p_organization_id AND principal_id = v_recipient_id AND status = 'active' AND revoked_at IS NULL
     ) THEN
@@ -3676,6 +3707,10 @@ BEGIN
   SELECT role INTO v_role FROM hirearchy.organization_memberships
   WHERE organization_id = p_organization_id AND principal_id = p_caller_principal_id AND status = 'active' AND revoked_at IS NULL;
 
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
+  END IF;
+
   SELECT * INTO v_dec
   FROM hirearchy.hiring_decisions
   WHERE organization_id = p_organization_id AND session_id = p_session_id AND decision = 'accepted'
@@ -3683,6 +3718,11 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Handoff dossier not found' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_payload ? 'expectedUpdatedAt' AND
+     v_dec.updated_at IS DISTINCT FROM (p_payload ->> 'expectedUpdatedAt')::pg_catalog.timestamptz THEN
+    RAISE EXCEPTION 'Handoff has changed' USING ERRCODE = '40001';
   END IF;
 
   IF NOT (

@@ -2,6 +2,7 @@ import type { BriefingSessionDuration } from '../../../../src/evaluator/evaluato
 import type { SessionClosureReason } from '../../../../src/sessions/session';
 import { formatEvaluatorClosureReason } from '../../../../src/evaluator/evaluator-review-presentation';
 import Link from 'next/link';
+import { ThemeToggle } from '../../../_components/theme-toggle';
 
 type EvaluatorHeaderProps = Readonly<{
   sessionId: string;
@@ -11,6 +12,7 @@ type EvaluatorHeaderProps = Readonly<{
   closureReason: SessionClosureReason;
   backHref?: string;
   backLabel?: string;
+  showTheme?: boolean;
 }>;
 
 export const EvaluatorHeader = ({
@@ -21,11 +23,15 @@ export const EvaluatorHeader = ({
   closureReason,
   backHref = '/evaluator',
   backLabel = '← Back to reviews',
+  showTheme,
 }: EvaluatorHeaderProps) => (
   <header className="evaluator-report-heading">
-    <Link className="evaluator-back-link" href={backHref}>
-      {backLabel}
-    </Link>
+    <div className="evaluator-report-toolbar">
+      <Link className="evaluator-back-link" href={backHref}>
+        {backLabel}
+      </Link>
+      {showTheme ? <ThemeToggle /> : null}
+    </div>
     <h1>{scenarioTitle}</h1>
     <div className="evaluator-report-metadata">
       <span className="evaluator-report-status">Submitted</span>

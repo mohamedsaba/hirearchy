@@ -45,11 +45,11 @@ Loaded globally via `apps/web/app/layout.tsx` under `.software-product`:
 
 ### 2.1 Sign in, account recovery, and workspace
 
-The sign-in, signup, verification, recovery, and workspace picker share a plum canvas and a paper form. On small screens the form sits directly below the wordmark. Authenticated workspaces carry the same masthead over a paper work area, with the organization switch and sign-out in workspace navigation.
+The hiring team enters at `/r23/login` and candidates enter at `/candidate/login`. Each screen uses the plum canvas and a focused form, with the candidate’s invitation journey shown alongside. Authenticated workspaces preserve the same masthead and connected navigation in warm light and plum dark, including on narrow screens. Theme choice persists across screens. The entry animation respects reduced motion.
 
 ### 2.2 Assessment authoring
 
-Recruiters define, validate, and issue from one builder. The candidate invitation has its own space beneath the issued session details. Long references wrap, and copy, revoke, and reload remain reachable on narrow screens.
+The builder leads from template, AI generation, or saved problem selection into the candidate preview and invitation. The preview places the formatted brief, repository files, and rubric in adjacent panes. The file explorer, language highlighting, wrap and copy controls use the Software palette with a plum code surface. Long paths remain readable and the editor supports keyboard scrolling.
 
 ### 2.3 Candidate workspace
 

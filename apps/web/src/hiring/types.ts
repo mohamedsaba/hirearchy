@@ -123,7 +123,7 @@ export interface PerformanceFitRequirementItem {
 
 export interface PerformanceFitReport {
   readonly overallFitVerdict:
-    'strong_fit' | 'good_fit_with_probes' | 'conditional_fit';
+    'strong_fit' | 'good_fit_with_probes' | 'conditional_fit' | 'not_assessed';
   readonly fitHeadline: string;
   readonly whyGoodOrBadFit: string;
   readonly requirementAssessment: readonly PerformanceFitRequirementItem[];
@@ -220,6 +220,7 @@ export interface SessionHiringReviewContext {
   readonly currentPrincipalId: string;
   readonly currentRole: WorkspaceRoleKind;
   readonly isOwner: boolean;
+  readonly canPublishDecision: boolean;
   readonly plan: OrganizationPlanSummary;
   readonly targetRole: string;
   readonly experienceLevel: string;

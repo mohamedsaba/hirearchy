@@ -8,6 +8,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { isIP } from 'node:net';
+import { NVIDIA_MODEL_ID } from '../ai/server-ai-configuration';
 import {
   candidateConfirmationParams,
   candidateSignInPath,
@@ -3935,7 +3936,8 @@ export async function stagingAiReviewApiGet(
     const params = new URL(request.url).searchParams;
     const preset = params.get('preset') ?? undefined;
     const customModelId = params.get('customModelId') ?? undefined;
-    const forcePreview = params.get('forcePreview') === 'true';
+    const forcePreview =
+      isHiringPlatformEnabled() || params.get('forcePreview') === 'true';
 
     const { blockedResponse, hiringContext } =
       await loadHiringAiReviewGuardAndContext(
@@ -3965,8 +3967,9 @@ export async function stagingAiReviewApiGet(
     }
 
     const report = await generateR27AiCandidateReview(evidence, {
-      preset,
-      customModelId,
+      ...(isHiringPlatformEnabled()
+        ? { preset: 'nvidia:kimi-k2', customModelId: NVIDIA_MODEL_ID }
+        : { preset, customModelId }),
       forcePreview,
       hiringContext,
     });
@@ -4046,8 +4049,9 @@ export async function stagingAiReviewApiPost(
     }
 
     const report = await generateR27AiCandidateReview(evidence, {
-      preset,
-      customModelId,
+      ...(isHiringPlatformEnabled()
+        ? { preset: 'nvidia:kimi-k2', customModelId: NVIDIA_MODEL_ID }
+        : { preset, customModelId }),
       forcePreview,
       hiringContext,
     });
@@ -5838,7 +5842,7 @@ export async function stagingOrganizationSettingsGet(
 
         planSectionHtml = `
           <section class="software-settings-section software-team-section" aria-labelledby="plan-credits-heading">
-            <div class="software-section-intro"><span class="software-section-number" aria-hidden="true">00</span><div><h2 id="plan-credits-heading">Organization plan &amp; candidate credits</h2><p>Active tier: <strong>${safeHtml(currentPlanDef.name)}</strong> (${safeHtml(formatPlanBadge(planSummary))}).</p></div></div>
+            <div class="software-section-intro"><div><h2 id="plan-credits-heading">Organization plan &amp; candidate credits</h2><p>Active tier: <strong>${safeHtml(currentPlanDef.name)}</strong> (${safeHtml(formatPlanBadge(planSummary))}).</p></div></div>
             ${creditSummary}
             <div class="hiring-plan-grid">${planCardsHtml}</div>
             ${planManageFormHtml}
@@ -6489,7 +6493,7 @@ export async function loadHiringOrganizationWorkspaceFromCookie(
           csrfToken,
           organizationId: orgIdLower,
           organizationName: orgDisplay.name,
-          role: orgContext.role,
+          role: orgContext.isOwner ? 'cto' : orgContext.role,
           isOwner: Boolean(orgContext.isOwner),
           email: identity.email ?? '',
           orgContext,

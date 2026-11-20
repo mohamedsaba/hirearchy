@@ -113,6 +113,7 @@ export function HiringDecisionPanel({
     const data = (await res.json().catch(() => null)) as {
       reviewContext?: SessionHiringReviewContext;
       performanceReport?: PerformanceFitReport;
+      reportError?: string;
       error?: { message?: string };
     } | null;
     if (!res.ok) {
@@ -185,7 +186,10 @@ export function HiringDecisionPanel({
       if (data?.performanceReport) {
         setPerformanceReport(data.performanceReport);
         setStatusMsg(
-          'Generated Managerial Performance & Fit Report with Kimi K3.1 Pro.',
+          data.performanceReport.provider.mode === 'live_ai'
+            ? 'Fit report ready for the next interviewer.'
+            : 'Evidence summary ready. ' +
+                (data.performanceReport.provider.fallbackReason ?? ''),
         );
       }
     } catch (err) {
@@ -220,9 +224,10 @@ export function HiringDecisionPanel({
           setPerformanceReport(data.reviewContext.decision.performanceReport);
         }
       }
+      if (data?.reportError) setErrorMsg(data.reportError);
       setStatusMsg(
         decision === 'accepted'
-          ? 'Decision published! Candidate notified and Managerial Handoff Dossier opened.'
+          ? 'Acceptance published to the candidate’s account. The handoff is ready.'
           : 'Rejection decision and candidate feedback published to their Candidate Portal.',
       );
     } catch (err) {
@@ -381,6 +386,7 @@ export function HiringDecisionPanel({
                     <div className="hiring-stack-xs hiring-mt-xs">
                       <textarea
                         rows={2}
+                        aria-label="Second opinion response"
                         value={opinionResponses[op.id] ?? ''}
                         onChange={(e) =>
                           setOpinionResponses((prev) => ({
@@ -407,202 +413,202 @@ export function HiringDecisionPanel({
         ) : null}
       </section>
 
-      <section
-        className="hiring-card hiring-card-animated"
-        aria-labelledby="final-decision-heading"
-      >
-        <div className="hiring-candidate-name">
-          <IconCheck size={18} />
-          <h3 id="final-decision-heading">
-            Evaluator Decision, Feedback &amp; Managerial Handoff
-          </h3>
-        </div>
-        <p className="hiring-muted-copy">
-          The human evaluator owns the verdict. Choose whether to accept the
-          candidate to the next interview stage or send structured rejection
-          feedback.
-        </p>
-
-        <form
-          onSubmit={handlePublishDecision}
-          className="hiring-page-shell hiring-mt-md"
+      {ctx.canPublishDecision ? (
+        <section
+          className="hiring-card hiring-card-animated"
+          aria-labelledby="final-decision-heading"
         >
-          <div className="hiring-builder-tabs">
-            <button
-              type="button"
-              className={`hiring-builder-tab${decision === 'accepted' ? ' is-active' : ''}`}
-              onClick={() => setDecision('accepted')}
-            >
-              Accept Candidate (Move to Next Stage)
-            </button>
-            <button
-              type="button"
-              className={`hiring-builder-tab${decision === 'rejected' ? ' is-active' : ''}`}
-              onClick={() => setDecision('rejected')}
-            >
-              Reject Candidate (Send Feedback)
-            </button>
+          <div className="hiring-candidate-name">
+            <IconCheck size={18} />
+            <h3 id="final-decision-heading">Decision and feedback</h3>
           </div>
+          <p className="hiring-muted-copy">
+            Choose the next step and add the feedback the candidate will see.
+          </p>
 
-          <div className="hiring-two-col">
-            <div className="hiring-field">
-              <label htmlFor="decision-strengths">
-                Strengths shared with candidate (one per line)
-              </label>
-              <textarea
-                id="decision-strengths"
-                value={strengthsText}
-                onChange={(e) => setStrengthsText(e.target.value)}
-                placeholder="Clean decomposition of idempotency logic&#10;Verified edge cases methodically"
-              />
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="decision-weaknesses">
-                Weaknesses / growth areas shared with candidate (one per line)
-              </label>
-              <textarea
-                id="decision-weaknesses"
-                value={weaknessesText}
-                onChange={(e) => setWeaknessesText(e.target.value)}
-                placeholder="Missed negative capacity boundary check&#10;Did not run unit tests after final refactor"
-              />
-            </div>
-          </div>
-
-          <div className="hiring-field">
-            <label htmlFor="decision-candidate-note">
-              Feedback note visible to candidate in their Candidate Portal
-            </label>
-            <textarea
-              id="decision-candidate-note"
-              value={feedbackNote}
-              onChange={(e) => setFeedbackNote(e.target.value)}
-              placeholder="Summary feedback the candidate will see alongside strengths and growth areas."
-            />
-          </div>
-
-          <div className="hiring-field">
-            <label htmlFor="decision-internal-notes">
-              Private internal notes (hiring team only — NEVER shown to
-              candidate)
-            </label>
-            <textarea
-              id="decision-internal-notes"
-              value={internalNotes}
-              onChange={(e) => setInternalNotes(e.target.value)}
-              placeholder="Internal calibration notes, salary band notes, or probes for the next interviewer."
-            />
-          </div>
-
-          {decision === 'accepted' ? (
-            <div className="hiring-card-subtle">
-              <div className="hiring-two-col">
-                <div className="hiring-field">
-                  <label htmlFor="decision-next-stage">Next hiring stage</label>
-                  <select
-                    id="decision-next-stage"
-                    value={nextStageLabel}
-                    onChange={(e) => setNextStageLabel(e.target.value)}
-                  >
-                    {NEXT_STAGE_OPTIONS.map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="hiring-field">
-                  <label htmlFor="decision-handoff-recipient">
-                    Assign next-stage manager / interviewer
-                  </label>
-                  <select
-                    id="decision-handoff-recipient"
-                    value={handoffRecipientId}
-                    onChange={(e) => setHandoffRecipientId(e.target.value)}
-                  >
-                    {ctx.teamMembers.map((m) => (
-                      <option key={m.principalId} value={m.principalId}>
-                        {m.displayName || m.email} ({m.role})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="hiring-stack-sm hiring-mt-sm">
-                {canGenerateFitReport ? (
-                  <div className="hiring-header-actions">
-                    <button
-                      type="button"
-                      className="hiring-btn"
-                      disabled={busyAction !== null}
-                      onClick={() => void handleGeneratePerformanceReport()}
-                    >
-                      <IconSparkles size={15} />{' '}
-                      {busyAction === 'report'
-                        ? 'Generating Kimi K3.1 Pro Fit Report...'
-                        : performanceReport
-                          ? 'Regenerate Kimi K3.1 Pro Managerial Fit Report'
-                          : 'Generate Kimi K3.1 Pro Managerial Fit Report'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="hiring-banner hiring-banner-warning">
-                    <span>
-                      Automated Kimi K3.1 Pro Managerial Fit Reports require the{' '}
-                      <strong>Ultra</strong> plan. You can still publish the
-                      acceptance and handoff with your own notes.
-                    </span>
-                    <a
-                      className="hiring-btn hiring-btn-sm"
-                      href={`${orgBase}/settings`}
-                    >
-                      Upgrade to Ultra
-                    </a>
-                  </div>
-                )}
-
-                {performanceReport ? (
-                  <div className="hiring-card hiring-card-compact">
-                    <span className="hiring-eyebrow">
-                      Managerial Performance &amp; Fit Report ·{' '}
-                      {performanceReport.provider.modelId}
-                    </span>
-                    <h4>{performanceReport.fitHeadline}</h4>
-                    <p className="hiring-dossier-bio">
-                      {performanceReport.whyGoodOrBadFit}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="hiring-header-actions">
-            <button
-              type="submit"
-              className={`hiring-btn ${decision === 'accepted' ? 'hiring-btn-mint' : 'hiring-btn-danger'}`}
-              disabled={busyAction !== null}
-            >
-              {busyAction === 'publish'
-                ? 'Publishing decision...'
-                : decision === 'accepted'
-                  ? 'Publish Accepted Decision & Create Handoff'
-                  : 'Publish Rejected Decision & Send Feedback'}
-            </button>
-            {ctx.decision?.decision === 'accepted' ? (
-              <a
-                className="hiring-btn hiring-btn-primary"
-                href={`${orgBase}/handoffs/${encodeURIComponent(ctx.sessionId)}`}
+          <form
+            onSubmit={handlePublishDecision}
+            className="hiring-page-shell hiring-mt-md"
+          >
+            <div className="hiring-builder-tabs">
+              <button
+                type="button"
+                className={`hiring-builder-tab${decision === 'accepted' ? ' is-active' : ''}`}
+                onClick={() => setDecision('accepted')}
               >
-                Open Managerial Handoff Dossier →
-              </a>
+                Advance candidate
+              </button>
+              <button
+                type="button"
+                className={`hiring-builder-tab${decision === 'rejected' ? ' is-active' : ''}`}
+                onClick={() => setDecision('rejected')}
+              >
+                Reject candidate
+              </button>
+            </div>
+
+            <div className="hiring-two-col">
+              <div className="hiring-field">
+                <label htmlFor="decision-strengths">
+                  Strengths (one per line)
+                </label>
+                <textarea
+                  id="decision-strengths"
+                  value={strengthsText}
+                  onChange={(e) => setStrengthsText(e.target.value)}
+                  placeholder="Clean decomposition of idempotency logic&#10;Verified edge cases methodically"
+                />
+              </div>
+
+              <div className="hiring-field">
+                <label htmlFor="decision-weaknesses">
+                  Areas to improve (one per line)
+                </label>
+                <textarea
+                  id="decision-weaknesses"
+                  value={weaknessesText}
+                  onChange={(e) => setWeaknessesText(e.target.value)}
+                  placeholder="Missed negative capacity boundary check&#10;Did not run unit tests after final refactor"
+                />
+              </div>
+            </div>
+
+            <div className="hiring-field">
+              <label htmlFor="decision-candidate-note">
+                Message to candidate
+              </label>
+              <textarea
+                id="decision-candidate-note"
+                value={feedbackNote}
+                onChange={(e) => setFeedbackNote(e.target.value)}
+                placeholder="Summary feedback the candidate will see alongside strengths and growth areas."
+              />
+            </div>
+
+            <div className="hiring-field">
+              <label htmlFor="decision-internal-notes">
+                Private team notes
+              </label>
+              <textarea
+                id="decision-internal-notes"
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                placeholder="Internal calibration notes, salary band notes, or probes for the next interviewer."
+              />
+            </div>
+
+            {decision === 'accepted' ? (
+              <div className="hiring-card-subtle">
+                <div className="hiring-two-col">
+                  <div className="hiring-field">
+                    <label htmlFor="decision-next-stage">
+                      Next hiring stage
+                    </label>
+                    <select
+                      id="decision-next-stage"
+                      value={nextStageLabel}
+                      onChange={(e) => setNextStageLabel(e.target.value)}
+                    >
+                      {NEXT_STAGE_OPTIONS.map((stage) => (
+                        <option key={stage} value={stage}>
+                          {stage}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="hiring-field">
+                    <label htmlFor="decision-handoff-recipient">
+                      Assign next-stage manager / interviewer
+                    </label>
+                    <select
+                      id="decision-handoff-recipient"
+                      value={handoffRecipientId}
+                      onChange={(e) => setHandoffRecipientId(e.target.value)}
+                    >
+                      {ctx.teamMembers.map((m) => (
+                        <option key={m.principalId} value={m.principalId}>
+                          {m.displayName || m.email} ({m.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="hiring-stack-sm hiring-mt-sm">
+                  {canGenerateFitReport ? (
+                    <div className="hiring-header-actions">
+                      <button
+                        type="button"
+                        className="hiring-btn"
+                        disabled={busyAction !== null}
+                        onClick={() => void handleGeneratePerformanceReport()}
+                      >
+                        <IconSparkles size={15} />{' '}
+                        {busyAction === 'report'
+                          ? 'Generating Kimi K3.1 Pro Fit Report...'
+                          : performanceReport
+                            ? 'Regenerate Kimi K3.1 Pro Managerial Fit Report'
+                            : 'Generate Kimi K3.1 Pro Managerial Fit Report'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="hiring-banner hiring-banner-warning">
+                      <span>
+                        Automated Kimi K3.1 Pro Managerial Fit Reports require
+                        the <strong>Ultra</strong> plan. You can still publish
+                        the acceptance and handoff with your own notes.
+                      </span>
+                      <a
+                        className="hiring-btn hiring-btn-sm"
+                        href={`${orgBase}/settings`}
+                      >
+                        Upgrade to Ultra
+                      </a>
+                    </div>
+                  )}
+
+                  {performanceReport ? (
+                    <div className="hiring-card hiring-card-compact">
+                      <span className="hiring-eyebrow">
+                        {performanceReport.provider.mode === 'live_ai'
+                          ? 'AI advisory · Kimi K3.1 Pro'
+                          : 'Evidence summary'}
+                      </span>
+                      <h4>{performanceReport.fitHeadline}</h4>
+                      <p className="hiring-dossier-bio">
+                        {performanceReport.whyGoodOrBadFit}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             ) : null}
-          </div>
-        </form>
-      </section>
+
+            <div className="hiring-header-actions">
+              <button
+                type="submit"
+                className={`hiring-btn ${decision === 'accepted' ? 'hiring-btn-mint' : 'hiring-btn-danger'}`}
+                disabled={busyAction !== null}
+              >
+                {busyAction === 'publish'
+                  ? 'Publishing decision...'
+                  : decision === 'accepted'
+                    ? 'Publish acceptance'
+                    : 'Publish rejection'}
+              </button>
+              {ctx.decision?.decision === 'accepted' ? (
+                <a
+                  className="hiring-btn hiring-btn-primary"
+                  href={`${orgBase}/handoffs/${encodeURIComponent(ctx.sessionId)}`}
+                >
+                  Open handoff →
+                </a>
+              ) : null}
+            </div>
+          </form>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { generateAcceptancePerformanceReport } from '../../../../../../../../../src/hiring/ai-performance-report';
 import type {
+  HandoffDossierItem,
   PerformanceFitReport,
   SessionHiringReviewContext,
 } from '../../../../../../../../../src/hiring/types';
@@ -142,7 +143,7 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ dispatch, organizationId: orgId }) => {
+      async ({ dispatch, organizationId: orgId, plan }) => {
         if (action === 'request_second_opinion') {
           const reviewerPrincipalId = String(
             body.reviewerPrincipalId ?? '',
@@ -206,7 +207,7 @@ export async function POST(
                   .slice(0, 12)
               : [];
 
-          const reviewContext = (await dispatch('hiring.decision.publish', {
+          let reviewContext = (await dispatch('hiring.decision.publish', {
             organizationId: orgId,
             sessionId,
             input: {
@@ -235,8 +236,60 @@ export async function POST(
             },
           })) as SessionHiringReviewContext;
 
+          const published = reviewContext.decision;
+          let reportError: string | undefined;
+          if (
+            published?.decision === 'accepted' &&
+            !published.performanceReport &&
+            hasPlanFeature(plan.planTier, 'aiPerformanceReport')
+          ) {
+            try {
+              const evidence = await stagingLoadR27Evidence(
+                request,
+                orgId,
+                sessionId,
+                { limit: 100 },
+              );
+              if (!evidence)
+                throw new Error('Submitted evidence is unavailable.');
+              const performanceReport =
+                await generateAcceptancePerformanceReport({
+                  evidence,
+                  targetRole: reviewContext.targetRole,
+                  experienceLevel: reviewContext.experienceLevel,
+                  skills: reviewContext.skills,
+                  evaluatorStrengths: published.candidateStrengths,
+                  evaluatorWeaknesses: published.candidateWeaknesses,
+                  evaluatorFeedbackNote: published.candidateFeedbackNote,
+                  internalNotes: published.internalNotes,
+                  nextStageLabel:
+                    published.nextStageLabel ?? 'Managerial Interview',
+                  allowLiveAi: true,
+                });
+              const updated = (await dispatch('hiring.handoff.update', {
+                organizationId: orgId,
+                sessionId,
+                input: {
+                  performanceReport,
+                  expectedUpdatedAt: published.updatedAt,
+                },
+              })) as { handoffs: HandoffDossierItem[] };
+              const handoff = updated.handoffs.find(
+                (item) => item.sessionId === sessionId,
+              );
+              if (handoff)
+                reviewContext = {
+                  ...reviewContext,
+                  decision: handoff.decision,
+                };
+            } catch {
+              reportError =
+                'The acceptance is published. Open the handoff to retry the report.';
+            }
+          }
+
           return NextResponse.json(
-            { reviewContext },
+            { reviewContext, reportError },
             { headers: { 'Cache-Control': 'private, no-store' } },
           );
         }

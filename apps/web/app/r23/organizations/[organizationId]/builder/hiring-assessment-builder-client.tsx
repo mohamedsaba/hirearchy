@@ -46,7 +46,9 @@ export interface HiringAssessmentBuilderClientProps {
 }
 
 type BuilderMode = 'templates' | 'ai' | 'library';
-type PreviewTab = 'overview' | 'rubric';
+import { ScenarioBrief } from '../../../../../src/ui/scenario-brief';
+
+type PreviewTab = 'overview' | 'repository' | 'rubric';
 
 function readCsrfCookie(): string {
   if (typeof document === 'undefined') return '';
@@ -540,51 +542,33 @@ export function HiringAssessmentBuilderClient({
 
   return (
     <div className="hiring-page-shell hiring-builder-shell">
-      <ol
-        className="hiring-journey-bar"
-        aria-label="Assessment builder workflow steps"
-      >
-        <li className="hiring-journey-step is-done">
-          <span className="hiring-journey-num">01</span>
-          <div>
-            <strong>Author or Select</strong>
-            <span>{step1Summary}</span>
-          </div>
-        </li>
-        <li
-          className={`hiring-journey-step${savedIds ? ' is-done' : ' is-active'}`}
-        >
-          <span className="hiring-journey-num">02</span>
-          <div>
-            <strong>Inspect Repository &amp; Rubric</strong>
-            <span>
-              {activeDraft.starterFiles.length} files ·{' '}
-              {activeDraft.durationMinutes} min
-            </span>
-          </div>
-        </li>
-        <li
-          className={`hiring-journey-step${
-            issuedResult ? ' is-done' : creditsBlocked ? ' is-blocked' : ''
-          }`}
-        >
-          <span className="hiring-journey-num">03</span>
-          <div>
-            <strong>Issue to Candidate</strong>
-            <span>
-              {issuedResult
-                ? 'Sent to candidate'
-                : alreadyCreditedCandidate
-                  ? '0 slots (re-issue)'
-                  : plan.planTier === 'per_candidate'
-                    ? `${plan.candidateCreditsRemaining ?? 0} slots left`
-                    : plan.planTier === 'none'
-                      ? 'Plan required'
-                      : 'Unlimited capacity'}
-            </span>
-          </div>
-        </li>
-      </ol>
+      <nav aria-label="Assessment builder steps">
+        <ol className="hiring-journey-bar">
+          <li>
+            <a className="hiring-journey-step is-active" href="#problem-source">
+              <strong>Choose a problem</strong>
+              <span>{step1Summary}</span>
+            </a>
+          </li>
+          <li>
+            <a className="hiring-journey-step" href="#candidate-preview">
+              <strong>Preview the workspace</strong>
+              <span>
+                {activeDraft.starterFiles.length} files ·{' '}
+                {activeDraft.durationMinutes} min
+              </span>
+            </a>
+          </li>
+          <li>
+            <a className="hiring-journey-step" href="#issue-invitation">
+              <strong>Issue the invitation</strong>
+              <span>
+                {issuedResult ? 'Invitation created' : formatPlanBadge(plan)}
+              </span>
+            </a>
+          </li>
+        </ol>
+      </nav>
 
       {creditsBlocked ? (
         <div className="hiring-banner hiring-banner-warning" role="alert">
@@ -599,16 +583,15 @@ export function HiringAssessmentBuilderClient({
               : `Used ${plan.candidateCreditsUsed}/${plan.candidateCreditsPurchased} purchased candidate slots. Add slots or upgrade to Pro/Ultra.`}
           </div>
           <a className="hiring-btn hiring-btn-sm" href={`${orgBase}/settings`}>
-            Manage Plan &amp; Credits
+            View organization plan
           </a>
         </div>
       ) : null}
 
-      <section className="hiring-card hiring-card-animated">
+      <section id="problem-source" className="hiring-card hiring-card-animated">
         <div className="hiring-builder-head">
           <div>
-            <span className="hiring-eyebrow">Step 01 · Problem Source</span>
-            <h2>Choose, Generate, or Reuse</h2>
+            <h2>Problem source</h2>
           </div>
           <div
             className="hiring-builder-tabs"
@@ -1060,12 +1043,13 @@ export function HiringAssessmentBuilderClient({
         </div>
       ) : null}
 
-      <section className="hiring-card hiring-card-animated">
+      <section
+        id="candidate-preview"
+        className="hiring-card hiring-card-animated"
+      >
         <header className="hiring-preview-header">
           <div className="hiring-stack-xs">
-            <span className="hiring-eyebrow">
-              Step 02 · Candidate Workspace Preview
-            </span>
+            <span className="hiring-eyebrow">Candidate workspace</span>
             <h2>{activeDraft.title}</h2>
             <div className="hiring-chip-group">
               <span className="hiring-pill hiring-pill-plum">
@@ -1117,8 +1101,16 @@ export function HiringAssessmentBuilderClient({
             className={`hiring-preview-subtab${previewTab === 'overview' ? ' is-active' : ''}`}
             onClick={() => setPreviewTab('overview')}
           >
-            Brief &amp; Acceptance Criteria (
-            {activeDraft.acceptanceCriteria.length})
+            Brief &amp; criteria
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={previewTab === 'repository'}
+            className={`hiring-preview-subtab${previewTab === 'repository' ? ' is-active' : ''}`}
+            onClick={() => setPreviewTab('repository')}
+          >
+            Repository files
           </button>
           <button
             type="button"
@@ -1127,13 +1119,13 @@ export function HiringAssessmentBuilderClient({
             className={`hiring-preview-subtab${previewTab === 'rubric' ? ' is-active' : ''}`}
             onClick={() => setPreviewTab('rubric')}
           >
-            Rubric &amp; Signal Weights ({activeDraft.rubric.length})
+            Rubric
           </button>
         </div>
 
         {previewTab === 'overview' ? (
           <div className="hiring-preview-panel">
-            <p className="hiring-brief-copy">{activeDraft.brief}</p>
+            <ScenarioBrief markdown={activeDraft.brief} />
             <div className="hiring-card-subtle">
               <strong>Acceptance Criteria</strong>
               <ul className="hiring-bullet-list">
@@ -1143,7 +1135,7 @@ export function HiringAssessmentBuilderClient({
               </ul>
             </div>
           </div>
-        ) : (
+        ) : previewTab === 'rubric' ? (
           <div className="hiring-preview-panel">
             <div className="hiring-rubric-list">
               {activeDraft.rubric.map((item) => (
@@ -1165,35 +1157,34 @@ export function HiringAssessmentBuilderClient({
               ))}
             </div>
           </div>
-        )}
-
-        <div className="hiring-vsc-wrap">
-          <div className="hiring-vsc-heading">
-            <span className="hiring-eyebrow">Starter Repository</span>
-            <span className="hiring-muted-copy">
-              Read-only view of files provisioned inside the candidate IDE.
-            </span>
+        ) : (
+          <div className="hiring-vsc-wrap">
+            <div className="hiring-vsc-heading">
+              <span className="hiring-eyebrow">Starter Repository</span>
+              <span className="hiring-muted-copy">
+                Files the candidate receives
+              </span>
+            </div>
+            <VsCodeFileInspector
+              files={activeDraft.starterFiles}
+              workspaceName={activeDraft.templateId || 'candidate-repo'}
+              activePath={previewFilePath}
+              onSelectPath={setPreviewFilePath}
+            />
           </div>
-          <VsCodeFileInspector
-            files={activeDraft.starterFiles}
-            workspaceName={activeDraft.templateId || 'candidate-repo'}
-            activePath={previewFilePath}
-            onSelectPath={setPreviewFilePath}
-          />
-        </div>
+        )}
       </section>
 
-      <section className="hiring-card hiring-card-animated">
+      <section
+        id="issue-invitation"
+        className="hiring-card hiring-card-animated"
+      >
         <header className="hiring-preview-header">
           <div className="hiring-stack-xs">
-            <span className="hiring-eyebrow">
-              Step 03 · Issue to Candidate · {formatPlanBadge(plan)}
-            </span>
-            <h2>Send Assessment Invitation</h2>
+            <h2>Issue the invitation</h2>
             <p className="hiring-muted-copy">
-              Candidates must sign in to Hirearchy Software with this email to
-              launch their isolated workspace. The assessment also appears
-              immediately in their <code>/candidate</code> portal.
+              The invitation appears in the candidate’s account. They can also
+              open the link you share.
             </p>
           </div>
           <div className="hiring-slot-meter">
@@ -1215,7 +1206,7 @@ export function HiringAssessmentBuilderClient({
                 <span className="hiring-slot-note">
                   {alreadyCreditedCandidate
                     ? 'Candidate already credited — 0 extra slots'
-                    : `${plan.candidateCreditsRemaining ?? 0} slots remaining`}
+                    : `${plan.candidateCreditsRemaining ?? 0} remaining`}
                 </span>
               </>
             ) : plan.planTier === 'none' ? (

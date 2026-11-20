@@ -182,8 +182,8 @@ export async function generateHiringAssessmentWithKimi(
     systemPrompt,
     userPrompt,
     temperature: 0.35,
-    maxTokens: 3200,
-    timeoutMs: 55_000,
+    maxTokens: input.problemStructure === 'multi_file' ? 4800 : 3200,
+    timeoutMs: 90_000,
     fetchImpl: options?.fetchImpl,
   });
 

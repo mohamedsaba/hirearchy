@@ -19,6 +19,7 @@ export type R27AiReviewPanelProps = Readonly<{
   onReportChange?: (report: R27AiReviewReport | null) => void;
   defaultPreset?: AiReviewPresetId;
   planLocked?: boolean;
+  hiring?: boolean;
   planSettingsHref?: string;
 }>;
 
@@ -36,12 +37,15 @@ export const R27AiReviewPanel = ({
   onReportChange,
   defaultPreset = 'nvidia:kimi-k2',
   planLocked = false,
+  hiring = false,
   planSettingsHref,
 }: R27AiReviewPanelProps) => {
   const [internalReport, setInternalReport] =
     useState<R27AiReviewReport | null>(null);
   const report =
     controlledReport !== undefined ? controlledReport : internalReport;
+  const evidenceSummary =
+    hiring && report?.provider.mode === 'evidence_preview';
   const reportHeading = useRef<HTMLHeadingElement>(null);
   const shouldFocusReport = useRef(false);
   const setReport = (next: R27AiReviewReport) => {
@@ -148,48 +152,48 @@ export const R27AiReviewPanel = ({
             evidence. The evaluator owns the final review.
           </p>
 
-          <div className="r27-ai-review-controls">
-            <label className="r27-ai-review-field">
-              <span>AI model preset</span>
-              <select
-                aria-label="AI review model"
-                value={selectedPreset}
-                onChange={(event) =>
-                  setSelectedPreset(event.target.value as AiReviewPresetId)
-                }
-                disabled={loading}
-              >
-                {AI_REVIEW_MODEL_CATALOG.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedOption.providerId !== 'preview' ? (
+          {hiring ? (
+            <p className="r27-ai-review-context">Kimi K3.1 Pro · NVIDIA</p>
+          ) : (
+            <div className="r27-ai-review-controls">
               <label className="r27-ai-review-field">
-                <span>Custom model slug (optional)</span>
-                <input
-                  type="text"
-                  aria-label="Custom model slug"
-                  placeholder={selectedOption.modelId}
-                  value={customModelId}
-                  onChange={(event) => setCustomModelId(event.target.value)}
+                <span>AI model preset</span>
+                <select
+                  aria-label="AI review model"
+                  value={selectedPreset}
+                  onChange={(event) =>
+                    setSelectedPreset(event.target.value as AiReviewPresetId)
+                  }
                   disabled={loading}
-                />
+                >
+                  {AI_REVIEW_MODEL_CATALOG.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
-            ) : null}
-          </div>
+
+              {selectedOption.providerId !== 'preview' ? (
+                <label className="r27-ai-review-field">
+                  <span>Custom model slug (optional)</span>
+                  <input
+                    type="text"
+                    aria-label="Custom model slug"
+                    placeholder={selectedOption.modelId}
+                    value={customModelId}
+                    onChange={(event) => setCustomModelId(event.target.value)}
+                    disabled={loading}
+                  />
+                </label>
+              ) : null}
+            </div>
+          )}
 
           {planLocked ? (
             <div className="hiring-banner hiring-banner-warning" role="status">
               <div>
-                <strong>
-                  Ultra plan required for Kimi K3.1 Pro AI Review:
-                </strong>{' '}
-                Your organization can upgrade in Team &amp; Plan to unlock
-                automated timing-delta &amp; evidence analysis.
+                <strong>AI Candidate Review is available on Ultra.</strong>
               </div>
               {planSettingsHref ? (
                 <a className="hiring-btn hiring-btn-sm" href={planSettingsHref}>
@@ -214,7 +218,7 @@ export const R27AiReviewPanel = ({
               onClick={() => void handleGenerate(true)}
               disabled={loading || planLocked}
             >
-              Instant Preview
+              {hiring ? 'Show evidence summary' : 'Instant Preview'}
             </button>
           </div>
         </div>
@@ -228,21 +232,27 @@ export const R27AiReviewPanel = ({
             ref={reportHeading}
             tabIndex={-1}
           >
-            {report.headline}
+            {evidenceSummary ? 'Recorded evidence summary' : report.headline}
           </h3>
           <p className="r27-ai-review-context">{report.provider.label}</p>
-          <div className="r27-ai-review-result">
-            <span>
-              AI rating{' '}
-              <strong data-testid="r27-ai-review-score">{report.score}</strong>{' '}
-              / 100
-            </span>
-            <span data-testid="r27-ai-review-verdict">
-              {report.verdictLabel}
-            </span>
-            <span>{report.confidenceLabel}</span>
-          </div>
-          <p className="r27-ai-review-rationale">{report.rationale}</p>
+          {evidenceSummary ? null : (
+            <>
+              <div className="r27-ai-review-result">
+                <span>
+                  AI rating{' '}
+                  <strong data-testid="r27-ai-review-score">
+                    {report.score}
+                  </strong>{' '}
+                  / 100
+                </span>
+                <span data-testid="r27-ai-review-verdict">
+                  {report.verdictLabel}
+                </span>
+                <span>{report.confidenceLabel}</span>
+              </div>
+              <p className="r27-ai-review-rationale">{report.rationale}</p>
+            </>
+          )}
 
           {report.provider.fallbackReason ? (
             <p className="r27-ai-review-fallback-note" role="status">
@@ -274,25 +284,27 @@ export const R27AiReviewPanel = ({
             </div>
           </dl>
 
-          <div className="r27-ai-review-columns">
-            <div className="r27-ai-review-list-card">
-              <h4>Observed Strengths</h4>
-              <ul>
-                {report.strengths.map((item, index) => (
-                  <li key={`${index}:${item}`}>{item}</li>
-                ))}
-              </ul>
-            </div>
+          {evidenceSummary ? null : (
+            <div className="r27-ai-review-columns">
+              <div className="r27-ai-review-list-card">
+                <h4>Observed Strengths</h4>
+                <ul>
+                  {report.strengths.map((item, index) => (
+                    <li key={`${index}:${item}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
 
-            <div className="r27-ai-review-list-card">
-              <h4>Weaknesses &amp; Verification Risks</h4>
-              <ul>
-                {report.weaknesses.map((item, index) => (
-                  <li key={`${index}:${item}`}>{item}</li>
-                ))}
-              </ul>
+              <div className="r27-ai-review-list-card">
+                <h4>Weaknesses &amp; Verification Risks</h4>
+                <ul>
+                  {report.weaknesses.map((item, index) => (
+                    <li key={`${index}:${item}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
-          </div>
+          )}
 
           {report.timingInsights && report.timingInsights.length > 0 ? (
             <div className="hiring-card-subtle">
@@ -331,20 +343,22 @@ export const R27AiReviewPanel = ({
 
           <div className="r27-ai-review-footer">
             <div className="r27-ai-review-footer-controls">
-              <select
-                aria-label="Switch AI review model"
-                value={selectedPreset}
-                onChange={(event) =>
-                  setSelectedPreset(event.target.value as AiReviewPresetId)
-                }
-                disabled={loading}
-              >
-                {AI_REVIEW_MODEL_CATALOG.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              {hiring ? null : (
+                <select
+                  aria-label="Switch AI review model"
+                  value={selectedPreset}
+                  onChange={(event) =>
+                    setSelectedPreset(event.target.value as AiReviewPresetId)
+                  }
+                  disabled={loading}
+                >
+                  {AI_REVIEW_MODEL_CATALOG.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 className="r27-ai-review-secondary-btn"

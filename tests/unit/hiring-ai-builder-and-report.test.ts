@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { R27Evidence } from '../../database/postgres/r27/contract.mjs';
+import { callNvidiaKimiChat } from '../../apps/web/src/ai/kimi-client';
 import { generateHiringAssessmentWithKimi } from '../../apps/web/src/hiring/ai-builder';
 import {
   buildDeterministicPerformanceFitReport,
@@ -108,6 +109,31 @@ function makeEvidence(): R27Evidence {
 }
 
 describe('Kimi K3.1 Pro AI Builder, Evidence Timing Deltas & Fit Report', () => {
+  it('polls an accepted NVIDIA request without sending another prompt', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 202,
+          headers: { 'nvcf-reqid': 'demo-request' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ choices: [{ message: { content: 'READY' } }] }),
+      );
+    expect(
+      await callNvidiaKimiChat({
+        systemPrompt: 'Local test',
+        userPrompt: 'Reply READY',
+        fetchImpl,
+      }),
+    ).toMatchObject({ content: 'READY' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(String(fetchImpl.mock.calls[1][0])).toEqual(
+      'https://integrate.api.nvidia.com/v1/status/demo-request',
+    );
+    expect(fetchImpl.mock.calls[1][1]?.body).toBeUndefined();
+  });
   const prevNvidia = process.env.NVIDIA_API_KEY;
 
   beforeEach(() => {
@@ -329,6 +355,12 @@ describe('Kimi K3.1 Pro AI Builder, Evidence Timing Deltas & Fit Report', () => 
       'Plan preview',
     );
     expect(offline.provider.mode).toBe('evidence_summary');
+    expect(offline.overallFitVerdict).toBe('not_assessed');
+    expect(
+      offline.requirementAssessment.every(
+        (item) => item.status === 'not_assessed',
+      ),
+    ).toBe(true);
     expect(offline.clearlyDemonstrated.length).toBeGreaterThan(0);
   });
 });

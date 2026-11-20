@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { IconCode } from '@tabler/icons-react';
 import {
   detectSyntaxLanguage,
   formatSyntaxLanguageLabel,
@@ -275,14 +276,9 @@ export function VsCodeFileInspector({
       aria-label="Repository file inspector"
     >
       <div className="hiring-vsc-titlebar">
-        <div className="hiring-vsc-window-dots" aria-hidden="true">
-          <span className="dot-rose" />
-          <span className="dot-amber" />
-          <span className="dot-mint" />
-        </div>
         <span className="hiring-vsc-title">
-          {workspaceName} — {files.length}{' '}
-          {files.length === 1 ? 'file' : 'files'}
+          <IconCode size={16} aria-hidden="true" />
+          {workspaceName}
         </span>
         <div className="hiring-vsc-toolbar">
           <button
@@ -334,14 +330,12 @@ export function VsCodeFileInspector({
                 />
               </div>
             ) : null}
-            <div className="hiring-vsc-tree" role="tree">
-              {renderTreeNodes(tree)}
-            </div>
+            <div className="hiring-vsc-tree">{renderTreeNodes(tree)}</div>
           </aside>
         ) : null}
 
         <div className="hiring-vsc-editor-col">
-          <div className="hiring-vsc-tabs" role="tablist">
+          <div className="hiring-vsc-tabs" role="group" aria-label="Open files">
             {effectiveTabs.map((tabPath) => {
               const name = tabPath.split('/').pop() ?? tabPath;
               const lang = detectSyntaxLanguage(tabPath);
@@ -350,25 +344,23 @@ export function VsCodeFileInspector({
               return (
                 <div
                   key={tabPath}
-                  role="tab"
-                  aria-selected={isActive}
-                  tabIndex={0}
                   className={`hiring-vsc-tab${isActive ? ' is-active' : ''}`}
-                  onClick={() => selectFile(tabPath)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      selectFile(tabPath);
-                    }
-                  }}
                 >
-                  <span
-                    className={`hiring-vsc-ext-badge is-${badge.tone}`}
-                    aria-hidden="true"
+                  <button
+                    type="button"
+                    className="hiring-vsc-tab-select"
+                    aria-current={isActive ? 'true' : undefined}
+                    title={tabPath}
+                    onClick={() => selectFile(tabPath)}
                   >
-                    {badge.code}
-                  </span>
-                  <span className="hiring-vsc-tab-label">{name}</span>
+                    <span
+                      className={`hiring-vsc-ext-badge is-${badge.tone}`}
+                      aria-hidden="true"
+                    >
+                      {badge.code}
+                    </span>
+                    {name}
+                  </button>
                   {effectiveTabs.length > 1 ? (
                     <button
                       type="button"
@@ -404,6 +396,9 @@ export function VsCodeFileInspector({
 
           <div
             className={`hiring-vsc-code-scroll${wordWrap ? ' is-wrapped' : ''}`}
+            role="region"
+            aria-label={`Contents of ${selectedFile.path}`}
+            tabIndex={0}
           >
             <div className="hiring-vsc-code-lines" role="presentation">
               {tokenizedLines.map((lineTokens, lineIdx) => {

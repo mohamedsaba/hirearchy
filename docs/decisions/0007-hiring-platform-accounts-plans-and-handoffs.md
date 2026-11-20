@@ -10,9 +10,9 @@ Earlier Hirearchy milestones established isolated workspace sessions, immutable 
 ## Decisions
 
 1. **Candidate Account Gate & Multi-Company Portal (`/candidate`, `/r26/candidate/[sessionId]`)**:
-   - Candidates must authenticate with a verified email and complete a portable identity profile (name, birth year/age, location, seniority, skills, and masked ID verification document) before launching an assessment workspace.
-   - Fragment tokens (`#token=...`) are preserved in `sessionStorage` across auth and profile gates, and the dedicated `/candidate` portal lists assessments across all issuing companies, including published outcomes.
-   - Internal evaluator notes and AI Managerial Fit Reports are strictly withheld from candidate-facing responses and views.
+   - Candidates enter at `/candidate/login` and confirm the invited email before opening an assessment. The portable profile has a Hirearchy ID. Birth year is optional and private. Government identity verification requires a separate provider and custody decision.
+   - The `/candidate` portal lists assessments across companies and their published outcomes. The invited verified account can resume the same assessment after completing its profile.
+   - Hiring teams enter separately at `/r23/login`. Internal evaluator notes and AI Managerial Fit Reports are strictly withheld from candidate-facing responses and views.
 
 2. **Commercial Organization Plans (No Free Tier)**:
    - `none`: Team onboarding allowed; assessment issuance and AI capabilities blocked (`402`).
@@ -21,7 +21,7 @@ Earlier Hirearchy milestones established isolated workspace sessions, immutable 
    - `ultra`: Includes `pro` plus Kimi K3.1 Pro deep AI Candidate Reviews (with chronological event timing deltas `Δ`) and automated Managerial Performance & Fit Reports upon acceptance.
 
 3. **Workspace Roles (`cto`, `recruiter`, `reviewer`)**:
-   - `cto` / workspace owner manages plan tiers, credits, team invitations, and views all candidates and handoffs.
+   - The workspace owner or CTO manages team invitations and views all candidates and handoffs. Founder UAT includes local plan and credit controls for test organizations.
    - `recruiter` manages org-wide candidates, problem authoring/library, issuance, and handoff visibility.
    - `reviewer` (Evaluator) builds/saves/reuses problems, issues assessments, collaborates via peer Second Opinions, and publishes human Accept/Reject decisions.
 
@@ -29,7 +29,7 @@ Earlier Hirearchy milestones established isolated workspace sessions, immutable 
    - Manual ad-hoc raw code editing is replaced with three structured paths: **Platform Templates**, **Kimi K3.1 Pro AI Problem Generation** from curated hiring criteria, and the **Saved Problem Library**.
 
 5. **Unified NVIDIA NIM `moonshotai/kimi-k3.1-pro` Model**:
-   - All live AI features — AI Candidate Review (including timing deltas `Δ`), AI Assessment Builder, Candidate Workspace AI (`r212`), and Managerial Fit Reports — target NVIDIA NIM `moonshotai/kimi-k3.1-pro` and surface explicit errors or upgrade gates rather than fabricating live outputs when disabled or unconfigured.
+   - All live AI features — AI Candidate Review (including timing deltas `Δ`), AI Assessment Builder, Candidate Workspace AI (`r212`), and Managerial Fit Reports — target NVIDIA NIM `moonshotai/kimi-k3.1-pro` and surface provider failures and plan requirements. Where a report can summarize existing evidence, the interface identifies the evidence summary and leaves coverage judgments open.
 
 ## Consequences
 

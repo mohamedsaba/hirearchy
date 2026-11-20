@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   detectSyntaxLanguage,
@@ -7,15 +7,7 @@ import {
 } from '../../apps/web/src/hiring/syntax-highlight';
 import { renderSoftwareDocument } from '../../apps/web/src/ui/software-document';
 
-const ORIGINAL_HIRING_FLAG = process.env.HIREARCHY_HIRING_PLATFORM_ENABLED;
-
-afterEach(() => {
-  if (ORIGINAL_HIRING_FLAG === undefined) {
-    delete process.env.HIREARCHY_HIRING_PLATFORM_ENABLED;
-  } else {
-    process.env.HIREARCHY_HIRING_PLATFORM_ENABLED = ORIGINAL_HIRING_FLAG;
-  }
-});
+afterEach(() => vi.unstubAllEnvs());
 
 describe('VS Code syntax highlighter', () => {
   it('detects languages from file paths and returns readable labels', () => {
@@ -96,7 +88,7 @@ describe('VS Code syntax highlighter', () => {
 
 describe('renderSoftwareDocument dual-theme and CSP compliance', () => {
   it('defaults to clean light document and emits data-theme="dark" when dark', () => {
-    delete process.env.HIREARCHY_HIRING_PLATFORM_ENABLED;
+    vi.stubEnv('HIREARCHY_HIRING_PLATFORM_ENABLED', undefined);
     const lightHtml = renderSoftwareDocument(
       'Workspace',
       '<h1>Assessments</h1>',
@@ -114,7 +106,8 @@ describe('renderSoftwareDocument dual-theme and CSP compliance', () => {
   });
 
   it('renders a CSP-safe /api/theme POST toggle form without inline script or style', () => {
-    process.env.HIREARCHY_HIRING_PLATFORM_ENABLED = 'true';
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    vi.stubEnv('HIREARCHY_HIRING_PLATFORM_ENABLED', 'true');
     const html = renderSoftwareDocument('Team & Plan', '<h1>Team</h1>', {
       organizationId: 'org-1',
       organizationName: 'Acme Corp',

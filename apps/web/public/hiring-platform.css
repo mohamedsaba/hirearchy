@@ -702,141 +702,45 @@ html[data-theme='dark']
   letter-spacing: -0.02em;
 }
 
-/* Editorial Auth Portals (Candidate & Evaluator — Minimal Flat Brand Cards)
-   ========================================================================== */
-
-.hiring-auth-page {
-  min-height: 100vh;
-}
-
-.hiring-evaluator-auth-content {
-  max-width: 940px;
-}
-
-.hiring-evaluator-signin-panel {
-  max-width: 900px !important;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr) !important;
-}
-
-.hiring-evaluator-copy-inner {
-  display: grid;
-  gap: 14px;
-}
-
-.hiring-evaluator-copy-inner > h1 {
-  margin: 0;
-  color: #f5efe6;
-}
-
-.hiring-evaluator-copy-inner > p:not(.software-eyebrow) {
-  margin: 0;
-  color: #d6c8e0;
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-.hiring-auth-card-head {
-  display: grid;
-  gap: 6px;
-}
-
-.hiring-auth-card-head h2 {
-  margin: 0;
-  color: var(--software-plum);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
-}
-
-.hiring-auth-card-head p {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--software-muted);
-}
-
-.hiring-evaluator-signin-form .hiring-auth-card-head {
-  margin-bottom: 18px;
-}
-
-.hiring-evaluator-signin-form .access-form label,
-.hiring-evaluator-signin-form .hiring-field label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--software-ink);
-}
-
 /* Assessment Builder — Journey Steps, Studio, Rubric & Slot Meter
    ========================================================================== */
 
 .hiring-journey-bar {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 0.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-
 .hiring-journey-step {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 16px;
-  border: 1px solid var(--software-border);
-  border-radius: 12px;
-  background: var(--software-surface);
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  min-height: 100%;
+  padding: 0.75rem 0.625rem;
+  border-top: 2px solid var(--software-border-strong);
+  color: var(--software-ink);
+  text-decoration: none;
   transition:
-    border-color 160ms ease,
-    background-color 160ms ease;
+    border-color var(--software-transition),
+    background-color var(--software-transition);
 }
-
-.hiring-journey-step.is-done {
-  border-color: var(--software-status-success-border);
-  background: var(--software-surface);
+.hiring-journey-step.is-active,
+.hiring-journey-step:hover {
+  border-top-color: var(--software-status-success);
+  background: var(--software-surface-note);
 }
-
-.hiring-journey-step.is-active {
-  border-color: var(--software-border-strong);
-  box-shadow: 0 0 0 2px var(--software-glow-mint);
-}
-
-.hiring-journey-step.is-blocked {
-  border-color: var(--software-status-warning-border);
-}
-
 .hiring-journey-step strong {
-  display: block;
-  font-size: 13.5px;
-  color: var(--software-plum);
+  font-size: 0.875rem;
+  line-height: 1.35;
 }
-
-.hiring-journey-step > div > span {
-  display: block;
-  font-size: 12px;
+.hiring-journey-step span {
+  font-size: 0.75rem;
   color: var(--software-muted);
 }
-
-.hiring-journey-step > .hiring-journey-num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--software-lilac);
-  color: var(--software-plum);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.hiring-journey-step.is-done > .hiring-journey-num {
-  background: var(--software-mint);
-  color: #160f1d;
+.hiring-builder-shell > section[id] {
+  scroll-margin-top: calc(var(--software-header-height, 4rem) + 1rem);
 }
 
 .hiring-builder-head {
@@ -1141,11 +1045,12 @@ html[data-theme='dark']
   border-radius: 14px;
   background: #160e1f;
   color: #efe7f4;
-  box-shadow: 0 18px 46px rgba(13, 7, 20, 0.34);
+  box-shadow: none;
 }
 
 .hiring-vsc-titlebar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1154,31 +1059,12 @@ html[data-theme='dark']
   background: #100918;
 }
 
-.hiring-vsc-window-dots {
+.hiring-vsc-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-
-.hiring-vsc-window-dots span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.hiring-vsc-window-dots .dot-rose {
-  background: #e56b7d;
-}
-
-.hiring-vsc-window-dots .dot-amber {
-  background: #e4b45e;
-}
-
-.hiring-vsc-window-dots .dot-mint {
-  background: #8ee3b8;
-}
-
-.hiring-vsc-title {
+  min-width: 0;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
   font-family: var(--software-mono);
   font-size: 12px;
   font-weight: 600;
@@ -1187,6 +1073,7 @@ html[data-theme='dark']
 
 .hiring-vsc-toolbar {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
@@ -1382,7 +1269,7 @@ html[data-theme='dark']
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 9px;
+  padding: 0 0.375rem 0 0.125rem;
   border-right: 1px solid #261935;
   border-bottom: 2px solid transparent;
   color: #a998be;
@@ -1392,6 +1279,23 @@ html[data-theme='dark']
   transition:
     background-color 120ms ease,
     color 120ms ease;
+}
+
+.hiring-vsc-tab-select {
+  display: inline-flex;
+  gap: 0.375rem;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.hiring-vsc-shell :is(button, [tabindex]):focus-visible {
+  outline: 2px solid #8ee3b8;
+  outline-offset: -2px;
 }
 
 .hiring-vsc-tab:hover {
@@ -1606,52 +1510,24 @@ html[data-theme='dark']
   color: #d2c4e3;
 }
 
-/* KPI Strip, Candidate Directory, Avatars, Handoffs & Decisions
-   ========================================================================== */
-
-.hiring-kpi-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+/* Candidate directory, handoffs and decisions */
+.hiring-filter-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
-
-.hiring-kpi-card {
-  display: grid;
-  gap: 4px;
-  padding: 14px 16px;
-  border: 1px solid var(--software-border);
-  border-radius: 12px;
-  background: var(--software-surface);
-  box-shadow: var(--software-shadow-card);
-  transition:
-    transform 160ms ease,
-    border-color 160ms ease;
+.hiring-filter-heading h2 {
+  margin: 0;
+  font-size: 1rem;
 }
-
-.hiring-kpi-card:hover {
-  transform: translateY(-1px);
-  border-color: var(--software-border-strong);
-}
-
-.hiring-kpi-label {
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.hiring-filter-result {
   color: var(--software-muted);
+  font-size: 0.875rem;
 }
-
-.hiring-kpi-value {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--software-plum);
-  font-variant-numeric: tabular-nums;
-}
-
-.hiring-kpi-note {
-  font-size: 12px;
-  color: var(--software-muted);
+.hiring-filter-grid > * {
+  min-width: 0;
 }
 
 .hiring-candidate-list {
@@ -1958,7 +1834,6 @@ html[data-theme='dark']
    ========================================================================== */
 
 @media (max-width: 960px) {
-  .hiring-kpi-strip,
   .hiring-ai-studio .hiring-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1971,11 +1846,6 @@ html[data-theme='dark']
 }
 
 @media (max-width: 900px) {
-  .hiring-evaluator-signin-panel {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .hiring-journey-bar,
   .hiring-two-col {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1986,14 +1856,27 @@ html[data-theme='dark']
   }
 
   .hiring-vsc-explorer {
-    max-height: 180px;
+    max-height: 12rem;
     border-right: 0;
     border-bottom: 1px solid #2b1d3b;
   }
 }
 
 @media (max-width: 560px) {
-  .hiring-kpi-strip,
+  .hiring-builder-shell .hiring-preview-subtabs {
+    display: flex;
+    width: 100%;
+  }
+  .hiring-vsc-toolbtn {
+    min-height: 2.25rem;
+  }
+  .hiring-vsc-body {
+    min-height: 0;
+  }
+  .hiring-builder-shell .hiring-card {
+    padding: 1rem;
+  }
+
   .hiring-ai-studio .hiring-filter-grid {
     grid-template-columns: minmax(0, 1fr);
   }

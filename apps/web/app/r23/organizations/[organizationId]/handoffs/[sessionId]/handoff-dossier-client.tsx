@@ -323,9 +323,16 @@ export function HandoffDossierClient({
           <div className="hiring-page-shell hiring-mt-md">
             <div className="hiring-card-subtle">
               <span className="hiring-pill hiring-pill-plum">
-                {report.overallFitVerdict}
+                {report.provider.mode === 'live_ai'
+                  ? 'AI advisory · Kimi K3.1 Pro'
+                  : 'Evidence summary'}
               </span>
               <h3 className="hiring-mt-sm">{report.fitHeadline}</h3>
+              {report.provider.fallbackReason ? (
+                <p className="hiring-muted-copy">
+                  {report.provider.fallbackReason}
+                </p>
+              ) : null}
               <p className="hiring-dossier-bio hiring-mt-xs">
                 {report.whyGoodOrBadFit}
               </p>
@@ -333,7 +340,7 @@ export function HandoffDossierClient({
 
             <div className="hiring-two-col">
               <div className="hiring-card-subtle">
-                <strong>Clearly Demonstrated in Evidence</strong>
+                <strong>Observed evidence</strong>
                 <ul className="hiring-bullet-list">
                   {report.clearlyDemonstrated.map((item, i) => (
                     <li key={i}>{item}</li>
@@ -341,7 +348,7 @@ export function HandoffDossierClient({
                 </ul>
               </div>
               <div className="hiring-card-subtle">
-                <strong>Unclear / Not Yet Assessed (Probe Next Round)</strong>
+                <strong>Questions for the next interview</strong>
                 <ul className="hiring-bullet-list">
                   {report.unclearOrNotAssessed.map((item, i) => (
                     <li key={i}>{item}</li>

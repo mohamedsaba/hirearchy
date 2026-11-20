@@ -2946,6 +2946,14 @@
   padding: 20px 0 18px;
 }
 
+.evaluator-report-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
 .evaluator-workbench h2,
 .evaluator-workbench h3 {
   letter-spacing: normal;

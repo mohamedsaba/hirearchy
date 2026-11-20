@@ -1,6 +1,7 @@
 import type { R27Evidence } from '../../../../database/postgres/r27/contract.mjs';
-import { extractJsonFromLlmText } from '../ai/kimi-client';
+import { callNvidiaKimiChat, extractJsonFromLlmText } from '../ai/kimi-client';
 import {
+  NVIDIA_MODEL_ID,
   resolveAiReviewProviderConfig,
   type ResolvedAiReviewProvider,
 } from '../ai/server-ai-configuration';
@@ -242,42 +243,57 @@ export async function generateR27AiCandidateReview(
   );
 
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${resolved.apiKey}`,
-    };
-    if (resolved.providerId === 'openrouter') {
-      headers['HTTP-Referer'] = 'https://hirearchy.io';
-      headers['X-Title'] = 'Hirearchy Software AI Candidate Review';
-    }
-
-    const response = await fetchImpl(resolved.endpoint, {
-      method: 'POST',
-      headers,
-      signal: AbortSignal.timeout(35_000),
-      body: JSON.stringify({
-        model: resolved.modelId,
-        temperature: 0.2,
-        max_tokens: 1800,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      return buildDeterministicEvidencePreviewReport(evidence, {
+    let content: string | null | undefined;
+    if (
+      resolved.providerId === 'nvidia' &&
+      resolved.modelId === NVIDIA_MODEL_ID
+    ) {
+      ({ content } = await callNvidiaKimiChat({
+        systemPrompt,
+        userPrompt,
         modelId: resolved.modelId,
-        label: `Evidence-Grounded Preview (${resolved.label} HTTP ${response.status})`,
-        fallbackReason: `Provider ${resolved.providerId} returned HTTP ${response.status}; showing evidence-grounded preview.`,
-      });
-    }
+        maxTokens: 2800,
+        timeoutMs: 65_000,
+        fetchImpl,
+      }));
+    } else {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resolved.apiKey}`,
+      };
+      if (resolved.providerId === 'openrouter') {
+        headers['HTTP-Referer'] = 'https://hirearchy.io';
+        headers['X-Title'] = 'Hirearchy Software AI Candidate Review';
+      }
 
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string | null } }>;
-    };
-    const content = payload.choices?.[0]?.message?.content;
+      const response = await fetchImpl(resolved.endpoint, {
+        method: 'POST',
+        headers,
+        signal: AbortSignal.timeout(35_000),
+        body: JSON.stringify({
+          model: resolved.modelId,
+          temperature: 0.2,
+          max_tokens: 1800,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        return buildDeterministicEvidencePreviewReport(evidence, {
+          modelId: resolved.modelId,
+          label: `Evidence-Grounded Preview (${resolved.label} HTTP ${response.status})`,
+          fallbackReason: `Provider ${resolved.providerId} returned HTTP ${response.status}; showing evidence-grounded preview.`,
+        });
+      }
+
+      const payload = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string | null } }>;
+      };
+      content = payload.choices?.[0]?.message?.content;
+    }
     if (typeof content !== 'string' || !content.trim()) {
       return buildDeterministicEvidencePreviewReport(evidence, {
         modelId: resolved.modelId,

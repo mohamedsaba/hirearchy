@@ -1582,6 +1582,7 @@ export const EvaluatorReviewWorkspace = (
               : undefined
           }
           backLabel={r27Evidence ? '← Back to session summary' : undefined}
+          showTheme={Boolean(hiringReviewContext)}
         />
         <div className="evaluator-workbench-topline">
           <nav
@@ -1735,6 +1736,7 @@ export const EvaluatorReviewWorkspace = (
                     report={aiReviewReport}
                     onReportChange={setAiReviewReport}
                     planLocked={aiReviewPlanLocked}
+                    hiring={Boolean(hiringReviewContext)}
                     planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
                   />
                 </div>

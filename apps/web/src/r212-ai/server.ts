@@ -10,7 +10,6 @@ import {
   type R212RecordedInteraction,
 } from '../../../../database/postgres/r212/adapter.mjs';
 import { callNvidiaKimiChat } from '../ai/kimi-client';
-import { getNvidiaApiKey, isUsableApiKey } from '../ai/server-ai-configuration';
 import { readR26Config, r26IsEnabled } from '../r26-candidate/config';
 import { isHiringPlatformEnabled, isStagingLockdown } from '../runtime/profile';
 import {
@@ -461,11 +460,7 @@ export async function r212CandidateAiAction(
     const startTime = Date.now();
     try {
       let assistantText: string;
-      if (
-        hiringActive &&
-        process.env.NODE_ENV !== 'test' &&
-        isUsableApiKey(getNvidiaApiKey())
-      ) {
+      if (hiringActive) {
         const kimi = await callNvidiaKimiChat({
           systemPrompt:
             'You are a concise, thoughtful software engineering pair-programming assistant embedded inside the Hirearchy candidate assessment IDE. Answer questions clearly, explain bugs and Python patterns accurately, and help the candidate reason through edge cases without fabricating test results.',

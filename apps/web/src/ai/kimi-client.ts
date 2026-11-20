@@ -4,6 +4,7 @@ import {
   NVIDIA_CHAT_COMPLETIONS_ENDPOINT,
   NVIDIA_MODEL_ID,
 } from './server-ai-configuration';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export interface NvidiaKimiChatOptions {
   readonly systemPrompt: string;
@@ -73,15 +74,19 @@ export async function callNvidiaKimiChat(
   const modelId = options.modelId?.trim() || resolveKimiModelId();
   const fetchImpl = options.fetchImpl ?? fetch;
 
-  const response = await fetchImpl(NVIDIA_CHAT_COMPLETIONS_ENDPOINT, {
+  const signal = AbortSignal.timeout(options.timeoutMs ?? 45_000);
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey.trim()}`,
+  };
+  let response = await fetchImpl(NVIDIA_CHAT_COMPLETIONS_ENDPOINT, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey.trim()}`,
-    },
-    signal: AbortSignal.timeout(options.timeoutMs ?? 45_000),
+    headers,
+    signal,
     body: JSON.stringify({
       model: modelId,
+      stream: false,
+      reasoning_effort: 'low',
       temperature: options.temperature ?? 0.2,
       max_tokens: options.maxTokens ?? 2400,
       messages: [
@@ -91,10 +96,28 @@ export async function callNvidiaKimiChat(
     }),
   });
 
+  if (response.status === 202) {
+    const requestId = response.headers.get('nvcf-reqid');
+    if (!requestId || !/^[a-z0-9-]{1,128}$/i.test(requestId)) {
+      throw new KimiProviderUnavailableError(
+        'NVIDIA did not return a request reference.',
+      );
+    }
+    const statusUrl = new URL(
+      `../status/${requestId}`,
+      NVIDIA_CHAT_COMPLETIONS_ENDPOINT,
+    );
+    while (response.status === 202) {
+      await response.body?.cancel();
+      await delay(750, undefined, { signal });
+      response = await fetchImpl(statusUrl, { headers, signal });
+    }
+  }
+
   if (!response.ok) {
-    const detail = await response.text().catch(() => '');
+    await response.body?.cancel();
     throw new KimiProviderUnavailableError(
-      `NVIDIA NIM returned HTTP ${response.status}${detail ? `: ${detail.slice(0, 220)}` : ''}`,
+      `NVIDIA could not complete this request (HTTP ${response.status}). Try again shortly.`,
       'NVIDIA_HTTP_ERROR',
     );
   }

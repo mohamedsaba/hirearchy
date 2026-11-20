@@ -17,6 +17,7 @@ body.software-document-body *::after {
      shared selectors should not need to invent a second token vocabulary. */
   --software-plum: #211426;
   --software-brand-plum: #211426;
+  --software-auth-surface: #f5efe6;
   --software-lilac: #ebe5f2;
   --software-mint: #8ee3b8;
   --software-ink: #291d2c;
@@ -364,7 +365,7 @@ body.software-document-body *::after {
   padding: clamp(1.5rem, 4vw, 2.75rem);
   border: 1px solid var(--software-border);
   border-radius: var(--software-radius-surface);
-  background: var(--software-surface);
+  background: var(--software-auth-surface);
 }
 
 .software-document-access .software-document-panel button[type='submit'] {
@@ -1295,20 +1296,20 @@ body.software-document-body *::after {
     display: none;
   }
   .software-workspace-sidebar nav {
-    display: flex;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.375rem;
+    overflow: visible;
   }
   .software-workspace-sidebar nav a {
-    padding: 12px 0;
+    display: flex;
+    min-height: var(--software-touch-target);
+    align-items: center;
+    padding: 0.5rem;
     border: 0;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    color: var(--software-muted);
-  }
-  .software-workspace-sidebar nav a[aria-current='page'] {
-    border-bottom-color: var(--software-plum);
-    background: var(--software-surface);
-    color: var(--software-plum);
+    border-radius: var(--software-radius-control);
+    font-size: 0.8125rem;
+    line-height: 1.25;
   }
   .software-workspace-sidebar-footer {
     display: flex;
@@ -1657,6 +1658,7 @@ html[data-theme='dark'].software-product {
   color-scheme: dark;
   --software-plum: #f5efe6;
   --software-brand-plum: #251a30;
+  --software-auth-surface: #21172b;
   --software-lilac: #281d35;
   --software-mint: #8ee3b8;
   --software-ink: #f2ecf6;

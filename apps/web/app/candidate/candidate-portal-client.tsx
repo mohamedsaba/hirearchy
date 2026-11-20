@@ -14,7 +14,6 @@ import {
   CURATED_SKILLS,
   EXPERIENCE_LEVELS,
   HIRING_ROLES,
-  PIPELINE_STATUS_OPTIONS,
   WORK_MODES,
   YEARS_EXPERIENCE_OPTIONS,
   computeAgeFromBirthYear,
@@ -59,11 +58,15 @@ function portalStatusBadgeClass(status: PipelineStatusId): string {
   }
 }
 
-function portalStatusLabel(status: PipelineStatusId): string {
-  return (
-    PIPELINE_STATUS_OPTIONS.find((opt) => opt.id === status)?.label ?? status
-  );
-}
+const candidateStatusLabels: Record<PipelineStatusId, string> = {
+  all: 'All statuses',
+  invited: 'Invited',
+  in_progress: 'In progress',
+  ready_for_review: 'Awaiting feedback',
+  second_opinion: 'Awaiting feedback',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+};
 
 export function CandidatePortalClient({
   email,
@@ -98,26 +101,26 @@ export function CandidatePortalClient({
     initialProfile?.birthYear ? String(initialProfile.birthYear) : '',
   );
   const [locationCountry, setLocationCountry] = useState(
-    initialProfile?.locationCountry ?? CURATED_COUNTRIES[0],
+    initialProfile?.locationCountry ?? '',
   );
   const [locationCity, setLocationCity] = useState(
     initialProfile?.locationCity ?? '',
   );
   const [workMode, setWorkMode] = useState<WorkModeId>(
-    initialProfile?.workMode ?? 'remote',
+    initialProfile?.workMode ?? 'any',
   );
   const [headlineRole, setHeadlineRole] = useState(
-    initialProfile?.headlineRole ?? HIRING_ROLES[0],
+    initialProfile?.headlineRole ?? '',
   );
-  const [yearsExperience, setYearsExperience] = useState<number>(
-    initialProfile?.yearsExperience ?? 3,
+  const [yearsExperience, setYearsExperience] = useState(
+    initialProfile?.yearsExperience?.toString() ?? '',
   );
-  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevelId>(
-    initialProfile?.experienceLevel ?? 'mid',
-  );
-  const [skills, setSkills] = useState<string[]>(
-    initialProfile?.skills ? [...initialProfile.skills] : ['Python', 'SQL'],
-  );
+  const [experienceLevel, setExperienceLevel] = useState<
+    ExperienceLevelId | ''
+  >(initialProfile?.experienceLevel ?? '');
+  const [skills, setSkills] = useState<string[]>([
+    ...(initialProfile?.skills ?? []),
+  ]);
   const [linkedinUrl, setLinkedinUrl] = useState(
     initialProfile?.linkedinUrl ?? '',
   );
@@ -132,7 +135,11 @@ export function CandidatePortalClient({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const companies = useMemo(() => {
-    return [...new Set(assessments.map((a) => a.organizationName))];
+    return [
+      ...new Map(
+        assessments.map((a) => [a.organizationId, a.organizationName]),
+      ),
+    ];
   }, [assessments]);
 
   const roles = useMemo(() => {
@@ -144,7 +151,7 @@ export function CandidatePortalClient({
       if (statusFilter !== 'all' && a.pipelineStatus !== statusFilter) {
         return false;
       }
-      if (companyFilter !== 'all' && a.organizationName !== companyFilter) {
+      if (companyFilter !== 'all' && a.organizationId !== companyFilter) {
         return false;
       }
       if (roleFilter !== 'all' && a.targetRole !== roleFilter) {
@@ -207,7 +214,7 @@ export function CandidatePortalClient({
           locationCity,
           workMode,
           headlineRole,
-          yearsExperience,
+          yearsExperience: Number(yearsExperience),
           experienceLevel,
           skills,
           linkedinUrl,
@@ -230,7 +237,7 @@ export function CandidatePortalClient({
       setProfile(data.profile);
       setStatusMsg('Profile saved.');
       if (setupMode && nextPath) {
-        window.location.assign(nextPath);
+        await handleLaunchAssessment(nextPath.split('/').at(-1) ?? '');
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Save failed.');
@@ -294,12 +301,6 @@ export function CandidatePortalClient({
         <div className="hiring-portal-brand">
           <strong>Hirearchy</strong>
           <span className="software-product-capsule">Software</span>
-          <span className="hiring-pill">Candidate Portal</span>
-          {profile?.candidateCode ? (
-            <span className="hiring-pill hiring-pill-plum">
-              {profile.candidateCode}
-            </span>
-          ) : null}
         </div>
         <div className="hiring-header-actions">
           <span className="hiring-portal-email">{email}</span>
@@ -315,25 +316,30 @@ export function CandidatePortalClient({
       </header>
 
       <main className="hiring-portal-main">
+        <div className="hiring-page-header">
+          <div>
+            <h1>{tab === 'assessments' ? 'My assessments' : 'My profile'}</h1>
+            <p>
+              {tab === 'assessments'
+                ? 'Open invitations and read published feedback from your hiring teams.'
+                : 'Use one profile for assessments across companies.'}
+            </p>
+          </div>
+        </div>
         {setupMode || !profile?.profileCompletedAt ? (
           <div className="hiring-banner hiring-banner-warning" role="status">
-            <div>
-              <strong>Complete your candidate profile first:</strong> Companies
-              use your profile details (name, location, experience, and ID
-              verification) before unlocking assessment workspaces.
-            </div>
+            <div>Complete your profile to start your first assessment.</div>
           </div>
         ) : null}
 
         <div
           className="hiring-builder-tabs"
-          role="tablist"
+          role="group"
           aria-label="Candidate sections"
         >
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === 'assessments'}
+            aria-pressed={tab === 'assessments'}
             className={`hiring-builder-tab${tab === 'assessments' ? ' is-active' : ''}`}
             onClick={() => setTab('assessments')}
           >
@@ -341,12 +347,11 @@ export function CandidatePortalClient({
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === 'profile'}
+            aria-pressed={tab === 'profile'}
             className={`hiring-builder-tab${tab === 'profile' ? ' is-active' : ''}`}
             onClick={() => setTab('profile')}
           >
-            <IconUser size={16} /> My Profile &amp; Identity Verification
+            <IconUser size={16} /> Profile
           </button>
         </div>
 
@@ -377,11 +382,13 @@ export function CandidatePortalClient({
                       setStatusFilter(e.target.value as PipelineStatusId)
                     }
                   >
-                    {PIPELINE_STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
+                    {Object.entries(candidateStatusLabels)
+                      .filter(([id]) => id !== 'second_opinion')
+                      .map(([id, label]) => (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -393,9 +400,9 @@ export function CandidatePortalClient({
                     onChange={(e) => setCompanyFilter(e.target.value)}
                   >
                     <option value="all">All companies</option>
-                    {companies.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
+                    {companies.map(([id, name]) => (
+                      <option key={id} value={id}>
+                        {name}
                       </option>
                     ))}
                   </select>
@@ -438,11 +445,15 @@ export function CandidatePortalClient({
 
             {filteredAssessments.length === 0 ? (
               <div className="hiring-card">
-                <h2>No assessments issued to {email} yet</h2>
+                <h2>
+                  {assessments.length
+                    ? 'No assessments match these filters'
+                    : 'No invitations yet'}
+                </h2>
                 <p>
-                  When any hiring organization issues an assessment to your
-                  email address, it will appear here alongside published
-                  feedback and next steps.
+                  {assessments.length
+                    ? 'Choose another status, company, or role.'
+                    : 'Invitations sent to your verified email will appear here.'}
                 </p>
               </div>
             ) : (
@@ -463,7 +474,7 @@ export function CandidatePortalClient({
                               item.pipelineStatus,
                             )}
                           >
-                            {portalStatusLabel(item.pipelineStatus)}
+                            {candidateStatusLabels[item.pipelineStatus]}
                           </span>
                         </div>
                         <h2 className="hiring-portal-card-title">
@@ -515,13 +526,17 @@ export function CandidatePortalClient({
                         <div className="hiring-candidate-name">
                           <strong>
                             {item.publishedOutcome.decision === 'accepted'
-                              ? `Moved Forward: ${item.publishedOutcome.nextStageLabel ?? 'Next Stage'}`
-                              : 'Evaluation Outcome & Feedback'}
+                              ? `Next step · ${item.publishedOutcome.nextStageLabel ?? 'Next interview'}`
+                              : 'Feedback'}
                           </strong>
                           <span
                             className={`hiring-pill ${item.publishedOutcome.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
                           >
-                            {item.publishedOutcome.decision}
+                            {
+                              candidateStatusLabels[
+                                item.publishedOutcome.decision
+                              ]
+                            }
                           </span>
                         </div>
 
@@ -568,23 +583,20 @@ export function CandidatePortalClient({
             className="hiring-card hiring-card-animated hiring-page-shell"
           >
             <div>
-              <span className="hiring-eyebrow">
-                Verified Candidate Identity
-              </span>
-              <h2>Profile &amp; Legitimacy Details</h2>
+              <h2>Professional details</h2>
               <p className="hiring-muted-copy hiring-mt-xs">
-                Complete these details once. Every hiring team assessing your
-                can identify work you share and filter by experience, skills,
-                and location.
+                Your hiring teams can see the experience, skills, and location
+                you add.
               </p>
             </div>
 
             <div className="hiring-two-col">
               <div className="hiring-field">
-                <label htmlFor="prof-name">Full legal name</label>
+                <label htmlFor="prof-name">Full name</label>
                 <input
                   id="prof-name"
                   type="text"
+                  autoComplete="name"
                   required
                   minLength={2}
                   maxLength={120}
@@ -607,20 +619,23 @@ export function CandidatePortalClient({
               </div>
 
               <div className="hiring-field">
-                <label htmlFor="prof-birthyear">
-                  Birth year{' '}
-                  {computedAge !== null ? `(Age ${computedAge})` : ''}
-                </label>
+                <label htmlFor="prof-birthyear">Birth year (optional)</label>
                 <input
                   id="prof-birthyear"
                   type="number"
-                  required
+                  aria-describedby="prof-birthyear-help"
                   min={1940}
                   max={2012}
                   value={birthYear}
                   onChange={(e) => setBirthYear(e.target.value)}
                   placeholder="1997"
                 />
+                <p id="prof-birthyear-help" className="hiring-muted-copy">
+                  {computedAge !== null
+                    ? `Approximate age ${computedAge}. `
+                    : ''}
+                  Visible only to you.
+                </p>
               </div>
 
               <div className="hiring-field">
@@ -630,6 +645,7 @@ export function CandidatePortalClient({
                   value={locationCountry}
                   onChange={(e) => setLocationCountry(e.target.value)}
                 >
+                  <option value="">Choose a country or region</option>
                   {CURATED_COUNTRIES.map((c) => (
                     <option key={c} value={c}>
                       {c}
@@ -669,9 +685,11 @@ export function CandidatePortalClient({
                 <label htmlFor="prof-role">Primary engineering role</label>
                 <select
                   id="prof-role"
+                  required
                   value={headlineRole}
                   onChange={(e) => setHeadlineRole(e.target.value)}
                 >
+                  <option value="">Choose a role</option>
                   {HIRING_ROLES.map((r) => (
                     <option key={r} value={r}>
                       {r}
@@ -684,11 +702,13 @@ export function CandidatePortalClient({
                 <label htmlFor="prof-level">Seniority level</label>
                 <select
                   id="prof-level"
+                  required
                   value={experienceLevel}
                   onChange={(e) =>
-                    setExperienceLevel(e.target.value as ExperienceLevelId)
+                    setExperienceLevel(e.target.value as ExperienceLevelId | '')
                   }
                 >
+                  <option value="">Choose an experience level</option>
                   {EXPERIENCE_LEVELS.map((lvl) => (
                     <option key={lvl.id} value={lvl.id}>
                       {lvl.label}
@@ -701,9 +721,11 @@ export function CandidatePortalClient({
                 <label htmlFor="prof-years">Years of experience</label>
                 <select
                   id="prof-years"
+                  required
                   value={yearsExperience}
-                  onChange={(e) => setYearsExperience(Number(e.target.value))}
+                  onChange={(e) => setYearsExperience(e.target.value)}
                 >
+                  <option value="">Choose years of experience</option>
                   {YEARS_EXPERIENCE_OPTIONS.map((y) => (
                     <option key={y.value} value={y.value}>
                       {y.label}
@@ -800,10 +822,10 @@ export function CandidatePortalClient({
                 disabled={busy !== null}
               >
                 {busy === 'save'
-                  ? 'Saving profile...'
+                  ? 'Saving…'
                   : setupMode && nextPath
-                    ? 'Save Profile & Continue to Assessment →'
-                    : 'Save Candidate Profile'}
+                    ? 'Save and continue'
+                    : 'Save profile'}
               </button>
             </div>
           </form>

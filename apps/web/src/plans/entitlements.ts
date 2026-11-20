@@ -173,7 +173,8 @@ export interface OrganizationPlanSummary {
 export function formatPlanBadge(plan: OrganizationPlanSummary): string {
   const def = getPlanDefinition(plan.planTier);
   if (plan.planTier === 'per_candidate') {
-    return `${def.badgeLabel} · ${plan.candidateCreditsRemaining ?? 0} slots left`;
+    const remaining = plan.candidateCreditsRemaining ?? 0;
+    return `${def.badgeLabel} · ${remaining} ${remaining === 1 ? 'slot' : 'slots'} left`;
   }
   return def.badgeLabel;
 }
