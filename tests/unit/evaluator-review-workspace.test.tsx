@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { R27Evidence } from '../../database/postgres/r27/contract.mjs';
 import { EvaluatorReviewWorkspace } from '../../apps/web/app/evaluator/sessions/[sessionId]/evaluator-review-workspace';
 import type { AiInteraction } from '../../apps/web/src/ai/ai-interaction';
 import { buildEvaluatorBriefing } from '../../apps/web/src/evaluator/build-evaluator-briefing';
@@ -13,6 +14,7 @@ import {
 } from '../../apps/web/src/evaluator/project-evaluator-briefing';
 import type { SessionEvent } from '../../apps/web/src/events/session-event';
 import type { EvidenceCatalogEntry } from '../../apps/web/src/reconstruction/evidence-reference-catalog';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../../apps/web/src/scenarios/generated-terms-and-conditions';
 import {
   commandEvents,
   noReconstruction,
@@ -184,6 +186,103 @@ describe('evaluator evidence workbench', () => {
     );
     await flush();
   };
+
+  const renderR27Workspace = async (brief: string) => {
+    const evidence: R27Evidence = {
+      permission: 'assigned_reviewer',
+      reviewer: { subjectId: 'reviewer', principalId: 'principal' },
+      organizationId: 'organization',
+      sessionId,
+      assignment: {
+        id: 'assignment',
+        version: '1',
+        assignedAt: '2026-09-17T00:00:00Z',
+      },
+      scenario: {
+        id: 'booking',
+        version: '1',
+        title: 'Booking confirmations',
+        snapshotText: JSON.stringify({ scenario: { brief } }),
+        snapshotDigest: 'scenario-digest',
+        starterFiles: {},
+      },
+      status: 'SUBMITTED',
+      createdAt: '2026-09-17T00:00:00Z',
+      activatedAt: '2026-09-17T00:00:00Z',
+      submittedAt: '2026-09-17T00:05:00Z',
+      closureReason: 'candidate_submission',
+      submission: {
+        submittedAt: '2026-09-17T00:05:00Z',
+        closureReason: 'candidate_submission',
+        workspaceDigest: 'workspace-digest',
+        manifestDigest: 'manifest-digest',
+        files: [
+          {
+            path: 'booking.py',
+            content: 'def book_once():\n    return True\n',
+            version: '1',
+            digest: 'file-digest',
+          },
+        ],
+      },
+      revisions: [],
+      events: [],
+      pagination: { limit: 50, nextAfterSequence: null },
+      availability: {
+        terminal: 'unavailable',
+        ai: 'unavailable',
+        verification: 'unavailable',
+        history: 'metadata_only',
+        limitations: [],
+      },
+    };
+    await act(async () =>
+      root.render(
+        <EvaluatorReviewWorkspace
+          sessionId={sessionId}
+          readOnly
+          r27Evidence={evidence}
+        />,
+      ),
+    );
+    await flush();
+  };
+
+  it('shows neutral Python pattern observations in the R27 generated task context', async () => {
+    await renderR27Workspace(
+      'Repair booking confirmations.' + GENERATED_TERMS_AND_CONDITIONS_FOOTER,
+    );
+
+    const taskContext = container.querySelector(
+      '[aria-labelledby="r27-snapshot-title"]',
+    );
+    const advisory = taskContext?.querySelector(
+      'section[aria-labelledby="r27-terms-pattern-title"]',
+    );
+    expect(advisory).toBeTruthy();
+    expect(advisory?.textContent).toContain(
+      'snake_case identifier was observed',
+    );
+    expect(advisory?.textContent).toContain(
+      'Nested object return was not observed',
+    );
+    expect(advisory?.textContent).toContain('added Python lines');
+    expect(advisory?.textContent).toContain(
+      'These observations cannot establish external AI use, authorship, intent, or competence.',
+    );
+    expect(advisory?.textContent).not.toMatch(
+      /\b(score|verdict|cheat(?:ing|ed)?|should (accept|reject))\b/i,
+    );
+  });
+
+  it('omits the pattern advisory from curated R27 tasks', async () => {
+    await renderR27Workspace('Repair booking confirmations.');
+
+    expect(
+      container.querySelector('[aria-labelledby="r27-snapshot-title"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('#r27-terms-pattern-title')).toBeNull();
+  });
 
   it.each(briefingDepthProfiles)(
     '%s keeps full recorded AI text and unsaved notes across workspace modes',

@@ -1,9 +1,11 @@
-import { createTwoFilesPatch } from 'diff';
+import { pythonLanguage } from '@codemirror/lang-python';
+import { formatPatch, structuredPatch, type StructuredPatch } from 'diff';
 
 import type {
   R27Evidence,
   R27EvidenceAiInteraction,
 } from '../../../../database/postgres/r27/contract.mjs';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../scenarios/generated-terms-and-conditions';
 
 export type R27FileComparison = Readonly<{
   path: string;
@@ -16,8 +18,14 @@ export type R27FileComparison = Readonly<{
   diff: string | null;
 }>;
 
+type TermsPatternObservation = {
+  snakeCaseIdentifierFound: boolean;
+  nestedObjectReturnFound: boolean;
+};
+
 export type R27Presentation = Readonly<{
   files: readonly R27FileComparison[];
+  termsPatternObservation: Readonly<TermsPatternObservation> | null;
   scenarioContext: Readonly<{
     brief: string | null;
     acceptanceCriteria: readonly string[];
@@ -85,7 +93,75 @@ export function formatExecutionProvenance(execution: {
     : 'Synthetic execution (simulation)';
 }
 
+function observeAddedPythonPatterns(
+  observation: TermsPatternObservation,
+  content: string,
+  patch: StructuredPatch,
+) {
+  if (
+    observation.snakeCaseIdentifierFound &&
+    observation.nestedObjectReturnFound
+  )
+    return;
+
+  const addedLines = new Set<number>();
+  for (const hunk of patch.hunks) {
+    let lineNumber = hunk.newStart;
+    for (const line of hunk.lines) {
+      if (line.startsWith('+')) addedLines.add(lineNumber);
+      if (line.startsWith('+') || line.startsWith(' ')) lineNumber++;
+    }
+  }
+  if (!addedLines.size) return;
+
+  // Whole-file syntax provides context. Only nodes starting on added lines can count.
+  const cursor = pythonLanguage.parser.parse(content).cursor();
+  let lineNumber = 1;
+  let lineEnd = content.indexOf('\n');
+  do {
+    while (lineEnd !== -1 && lineEnd < cursor.from) {
+      lineNumber++;
+      lineEnd = content.indexOf('\n', lineEnd + 1);
+    }
+    if (!addedLines.has(lineNumber)) continue;
+
+    if (
+      cursor.name === 'VariableName' &&
+      /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(
+        content.slice(cursor.from, cursor.to),
+      )
+    ) {
+      observation.snakeCaseIdentifierFound = true;
+    }
+
+    if (cursor.name === 'DictionaryExpression') {
+      const mapping = cursor.node;
+      if (
+        mapping.prevSibling?.name === ':' &&
+        mapping.parent?.name === 'DictionaryExpression' &&
+        mapping.parent.parent?.name === 'ReturnStatement'
+      ) {
+        observation.nestedObjectReturnFound = true;
+      }
+    }
+
+    if (
+      observation.snakeCaseIdentifierFound &&
+      observation.nestedObjectReturnFound
+    )
+      return;
+  } while (cursor.next());
+}
+
 export function buildR27Presentation(evidence: R27Evidence): R27Presentation {
+  const scenarioContext = scenarioContextFromSnapshot(
+    evidence.scenario.snapshotText,
+  );
+  const termsPatternObservation = scenarioContext.brief?.endsWith(
+    GENERATED_TERMS_AND_CONDITIONS_FOOTER,
+  )
+    ? { snakeCaseIdentifierFound: false, nestedObjectReturnFound: false }
+    : null;
   const starterRevisions = new Map(
     evidence.revisions
       .filter(
@@ -118,6 +194,26 @@ export function buildR27Presentation(evidence: R27Evidence): R27Presentation {
     const starterContent =
       starterRevision?.content ?? starterFiles?.[path] ?? null;
     const submittedContent = submittedFile?.content ?? null;
+    const patch = hasStarterBaseline
+      ? structuredPatch(
+          `a/${path}`,
+          `b/${path}`,
+          starterContent ?? '',
+          submittedContent ?? '',
+        )
+      : null;
+    if (
+      termsPatternObservation &&
+      patch &&
+      submittedContent !== null &&
+      path.endsWith('.py')
+    ) {
+      observeAddedPythonPatterns(
+        termsPatternObservation,
+        submittedContent,
+        patch,
+      );
+    }
 
     return {
       path,
@@ -129,22 +225,14 @@ export function buildR27Presentation(evidence: R27Evidence): R27Presentation {
         submittedRevision?.version ?? submittedFile?.version ?? null,
       submittedDigest:
         submittedRevision?.digest ?? submittedFile?.digest ?? null,
-      diff: hasStarterBaseline
-        ? createTwoFilesPatch(
-            `a/${path}`,
-            `b/${path}`,
-            starterContent ?? '',
-            submittedContent ?? '',
-          )
-        : null,
+      diff: patch ? formatPatch(patch) : null,
     };
   });
 
   return {
     files,
-    scenarioContext: scenarioContextFromSnapshot(
-      evidence.scenario.snapshotText,
-    ),
+    scenarioContext,
+    termsPatternObservation,
     revisionMetadata: evidence.revisions
       .filter((revision) => revision.source === 'event_metadata')
       .map(({ path, version, digest }) => ({ path, version, digest })),

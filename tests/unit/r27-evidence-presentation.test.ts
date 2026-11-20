@@ -5,6 +5,7 @@ import {
   buildR27Presentation,
   buildR27PresentationSources,
 } from '../../apps/web/src/r27-evidence/presentation';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../../apps/web/src/scenarios/generated-terms-and-conditions';
 
 const evidence = (overrides: Partial<R27Evidence> = {}): R27Evidence => ({
   permission: 'assigned_reviewer',
@@ -95,6 +96,35 @@ const evidence = (overrides: Partial<R27Evidence> = {}): R27Evidence => ({
   ...overrides,
 });
 
+function styleObservation(
+  brief: string,
+  starterFiles: Record<string, string> | null,
+  submittedFiles: Record<string, string>,
+) {
+  const base = evidence();
+  return buildR27Presentation({
+    ...base,
+    scenario: {
+      ...base.scenario,
+      snapshotText: JSON.stringify({ scenario: { brief } }),
+      starterFiles,
+    },
+    submission: {
+      ...base.submission,
+      files: Object.entries(submittedFiles).map(([path, content]) => ({
+        path,
+        content,
+        version: '1',
+        digest: 'submitted-file-digest',
+      })),
+    },
+    revisions: [],
+  }).termsPatternObservation;
+}
+
+const generatedBrief =
+  'Repair booking confirmations.' + GENERATED_TERMS_AND_CONDITIONS_FOOTER;
+
 describe('R2.7 evidence presentation', () => {
   it('derives the file diff from the immutable starter and submitted contents', () => {
     const result = buildR27Presentation(evidence());
@@ -120,6 +150,105 @@ describe('R2.7 evidence presentation', () => {
         digest: 'intermediate-digest',
       },
     ]);
+  });
+
+  it.each([
+    'Repair booking confirmations.',
+    generatedBrief + '\nFurther notes.',
+  ])('requires the exact platform footer at the end of the brief', (brief) => {
+    expect(
+      styleObservation(
+        brief,
+        {},
+        {
+          'booking.py':
+            'def book_once():\n    return {"meta": {"sent": True}}\n',
+        },
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    ['def book_once():\n    return {"sent": True}\n', true, false],
+    [
+      'def book():\n    return {\n        "sent": True,\n        "meta": {"count": 1},\n    }\n',
+      false,
+      true,
+    ],
+  ])(
+    'observes the two patterns independently in added Python',
+    (content, snakeCaseIdentifierFound, nestedObjectReturnFound) => {
+      expect(
+        styleObservation(generatedBrief, {}, { 'booking.py': content }),
+      ).toEqual({
+        snakeCaseIdentifierFound,
+        nestedObjectReturnFound,
+      });
+    },
+  );
+
+  it('ignores unchanged and removed Python, and added text in non-Python files', () => {
+    const unchanged = 'def book_once():\n    return {"meta": {"sent": True}}\n';
+    expect(
+      styleObservation(
+        generatedBrief,
+        { 'booking.py': unchanged + 'remove_this = 1\n' },
+        { 'booking.py': unchanged + 'count = 2\n', 'notes.txt': unchanged },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: false,
+    });
+  });
+
+  it('does not count patterns shown in Python comments and string literals', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        {},
+        {
+          'booking.py': [
+            'def book():',
+            '    # return {"meta": {"was_sent": True}}',
+            '    return {"was_sent": "saved_once", "example": \'return {"meta": {"sent": True}}\'}',
+            '',
+          ].join('\n'),
+        },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: false,
+    });
+  });
+
+  it('only reports additions where a starter baseline is available', () => {
+    expect(
+      styleObservation(generatedBrief, null, {
+        'booking.py': 'def book_once():\n    return {"meta": {"sent": True}}\n',
+      }),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: false,
+    });
+  });
+
+  it('detects a nested mapping introduced into an existing return', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        {
+          'booking.py':
+            'def book():\n    return {\n        "meta": None,\n    }\n',
+        },
+        {
+          'booking.py':
+            'def book():\n    return {\n        "meta": {"sent": True},\n    }\n',
+        },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: true,
+    });
   });
 
   it('does not derive a diff when the starter baseline is unavailable', () => {
