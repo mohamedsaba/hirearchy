@@ -10,9 +10,9 @@
 
 **Spec:** [Problems Management Design](../../superpowers/specs/2026-11-20-problems-management-design.md)
 
-## Completion — 2026-11-20
+## Implementation complete — 2026-11-20
 
-Tasks 1–4 are implemented. [ADR 0007](../../decisions/0007-reusable-problem-library.md) records the accepted library and independent draft lifecycle. The task checkboxes record the work performed, with the verification limits below.
+Tasks 1–4 are implemented. [ADR 0007](../../decisions/0007-reusable-problem-library.md) records the accepted library and independent draft lifecycle. The checkboxes record completed implementation and executed behavior checks. Pending checks remain open where fixture setup stopped the official integration runs.
 
 - Task 1 (be8bbc3, 7496e6d) added the library and authenticated API, advanced readiness to migration 0018, and preserved the approved template bytes on Windows.
 - Task 2 (6feaf6d, 6c89d92) added signed Founder UAT/staging operations and preserved renewed sessions on problem API errors.
@@ -21,11 +21,21 @@ Tasks 1–4 are implemented. [ADR 0007](../../decisions/0007-reusable-problem-li
 
 ### Verification
 
-- The focused Vitest run passed 61 tests across seven files. Both local PostgreSQL smoke checks passed, exercising the library migration, authenticated operations, staging dispatch queries, recruiter and tenant isolation, stale writes, and independent draft and validated version content.
-- Lint passed with 31 warnings and typechecking passed. The production build passed after a host retry allowed Turbopack to create its Windows junction. The build emitted four tracing warnings.
-- The aggregate verification command exited 1 at Prettier, which reported 676 files, including the existing Windows CRLF checkout and ignored local tooling files that Prettier scans. The targeted documentation check passed.
-- The standalone Vitest rerun reported 1,165 passed, 64 failed, and 42 skipped across 161 files. Legacy Windows filesystem checks and the unavailable Docker engine accounted for the remaining failures. The initially unavailable native Better SQLite3 dependency now opens an in-memory database, while its candidate-token backup suite still requires POSIX file mode 0600. Other failing Windows checks cover POSIX artifact modes and directory fsync.
-- R211, staging, and executor integration commands exited 1 during Docker fixture setup. The Docker Desktop Linux engine pipe did not exist, so the official PostgreSQL, GoTrue, HTTPS, Chromium, and executor journeys remain pending.
+- `node_modules/.bin/vitest.cmd run tests/unit/problems-management.test.tsx tests/unit/assessment-builder.test.tsx tests/unit/assessment-builder-reviewers.test.tsx tests/unit/staging-api.test.ts tests/unit/r211-template.test.ts tests/unit/staging-readiness-probe.test.mjs tests/unit/observability.test.ts` (exit 0). 61 tests passed across seven files.
+- `node .superpowers/sdd/problems-management/verification/task-3-auth-smoke.mjs` (exit 0). The local PGlite harness ran the migration and exercised the authenticated adapter, including recruiter and tenant checks, stale writes, and preservation of copied draft and validated version content.
+- `node .superpowers/sdd/problems-management/verification/task-3-staging-smoke.mjs` (exit 0). The local PGlite harness applied the staging privileges and RLS and tested role and tenant checks, stale writes, and copy independence. A local Python bridge, `task-2-dispatch-bridge.py`, extracted the PL/Python body from the staging installer and called its internal `dispatch(...)` entry point directly with test identity and session arguments. The bridge ran the handler queries against PGlite. The official journey exercises the signed SQL function `staging.dispatch(bytea, bytea)` with in-server PL/Python, GoTrue, and Chromium.
+- `npm run lint` (exit 0). 0 errors and 31 warnings.
+- `npm run typecheck` (exit 0). Route types generated and TypeScript completed.
+- `npm run build` (exit 1 in the sandbox, exit 0 on the host). Turbopack initially failed to create its Windows `pg` junction with “Access is denied. (os error 5)”. The host retry generated 22 of 22 static pages and emitted four tracing warnings.
+- `npm run verify` (exit 1). Stopped at `npm run format:check` with “Code style issues found in 676 files.” The worktree contains CRLF conversions and ignored local tooling that Prettier scans. The changed-file Prettier checks passed separately.
+- `npm test` (exit 1). 1,165 passed, 64 failed, and 42 skipped across 161 files on the standalone rerun. The native Better SQLite3 module opens a database, while candidate-token backups fail with “The staged backup permissions are not private” at the POSIX mode 0600 check. Other failures include POSIX artifact mode checks, `EPERM: operation not permitted, fsync` on directory sync, and Docker-dependent cases.
+- `docker version --format '{{.Server.Version}}'` (exit 1). `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.`
+- `node scripts/test-r211-integration.mjs` (exit 1). “R2.11 failed during startup (fixture/protocol)” at Docker image inspection, line 74. The PostgreSQL, GoTrue, and HTTPS/Chromium behavior checks did not run.
+- `node scripts/test-staging-integration.mjs` (exit 1). “Staging integration failed at setup (Error; source=scripts/test-staging-integration.mjs:71:3)” at the Docker server check. The signed entry point and staging journey checks did not run.
+- `node scripts/test-release-rollback.mjs` (exit 1). The rollback rehearsal stopped when the unavailable Docker engine prevented creation of the fixture network.
+- `npm run test:executor` (exit 1). The first stage reported “Disposable PostgreSQL fixture setup failed during container startup.” The dispatch and service stages did not run.
+
+The two PGlite harnesses and their Python bridge were worktree-local verification tools. The R211, staging, rollback, and executor commands above use Docker fixtures.
 
 ## Global Constraints
 
@@ -90,14 +100,13 @@ Tasks 1–4 are implemented. [ADR 0007](../../decisions/0007-reusable-problem-li
 - Adds R23 authorization methods `createReusableProblem(identity, organizationId, content)`, `listReusableProblems(identity, organizationId)`, `getReusableProblem(identity, organizationId, problemId)`, `updateReusableProblem(identity, organizationId, problemId, expectedVersion, content)`, and `deleteReusableProblem(identity, organizationId, problemId, expectedVersion)`.
 - Adds API methods: `GET|POST /problems`, `GET|PATCH|DELETE /problems/{problemId}`, and `POST /problems/{problemId}/reuse`; reuse returns the newly persisted `R211AssessmentDraft` created by saving the library content without a definition ID.
 
-- [x] **Step 1: Add failing Postgres checks**
+- [x] **Step 1: Add PostgreSQL behavior assertions**
 
 Extend `runR211PostgresBuilderChecks` to prove recruiter create/list/read/update/delete, stale update conflict, reviewer denial, cross-organization denial, and that deleting/updating a library record leaves a previously copied draft and validated version unchanged. Add a readiness regression check proving the current schema migration (`0018`) is accepted, not marked stale.
 
-- [x] **Step 2: Run the focused R211 integration and confirm the new assertions fail**
+- [x] **Step 2: Check the pre-change storage boundary with PGlite**
 
-Run: `node scripts/test-r211-integration.mjs`
-Expected: Existing checks pass until the new problem-library assertions fail because the library contract and storage operations do not exist.
+The local `node .superpowers/sdd/problems-management/verification/problem-smoke.mjs --baseline` run exited 1 with SQLSTATE `42883` for the missing library operation. The official pre-implementation R211 attempt exited 1 at Docker image inspection before the behavior assertions.
 
 - [x] **Step 3: Add migration and R211 storage methods**
 
@@ -109,9 +118,13 @@ Update the operational readiness target and rollback/readiness fixtures to the l
 
 Expose the storage methods through `R23Authorization`, checking active organization membership and recruiter role before writes. Validate content with `validateAssessmentDraft`, require same-origin and CSRF for mutations, use private no-store responses, return 409 for stale updates, and return 404 for identifiers outside the selected organization. Implement reuse by loading a library record and calling the existing `saveAssessmentDraft` without `definitionId` so it always creates a new assessment definition.
 
-- [x] **Step 5: Add failing authenticated browser/API checks, then pass them**
+- [x] **Step 5: Add authenticated browser and API assertions and run the local persistence check**
 
-In `tests/r211/browser-builder-check.mjs`, pin successful create/list/detail/update/delete/reuse, malformed content rejection, reviewer denial, CSRF denial, and cross-organization 404 behavior using the existing authenticated browser harness. Run `node scripts/test-r211-integration.mjs`; the Postgres and browser checks must pass.
+The browser harness contains create/list/detail/update/delete/reuse, malformed content, reviewer denial, CSRF denial, and cross-organization 404 assertions. The local PGlite adapter check passed for storage and authorization.
+
+- [ ] **Pending: Verify Docker-backed R211 persistence and authenticated browser/API behavior**
+
+`node scripts/test-r211-integration.mjs` exited 1 at Docker image inspection before the assertions.
 
 ## Task 2: Equivalent Founder UAT/Staging Operations
 
@@ -131,14 +144,13 @@ In `tests/r211/browser-builder-check.mjs`, pin successful create/list/detail/upd
 - Consumes the Task 1 R23 endpoints and the `R211ReusableProblem` response shape.
 - Produces signed staging operations `problem.create`, `problem.list`, `problem.get`, `problem.update`, `problem.delete`, and `problem.reuse`, each restricted to the selected organization and active recruiter; `problem.reuse` returns a new assessment ID and full independent draft content.
 
-- [x] **Step 1: Add failing staging security and journey assertions**
+- [x] **Step 1: Add staging security and journey assertions**
 
 Extend staging security checks to deny reviewer and cross-organization operations. Extend `createJourney` checks to save a problem, list/get/update it, reuse into a different assessment ID, modify/delete the source, and assert the copied assessment content remains unchanged. Add proxy tests proving only the new authenticated problem pages and API methods pass the staging route boundary.
 
-- [x] **Step 2: Run the focused staging integration and confirm the new assertions fail**
+- [x] **Step 2: Reproduce the missing proxy route in the focused tests**
 
-Run: `node scripts/test-staging-integration.mjs`
-Expected: The existing staging journey passes until the new problem operations fail as unsupported.
+`npm test -- tests/unit/staging-api.test.ts -t 'opens only the problem library routes and methods'` exited 1 before the proxy implementation. The assertion failed on the organization Problems page GET. The Docker-backed pre-implementation staging command exited 1 during fixture setup before the journey assertions.
 
 - [x] **Step 3: Implement signed operation validation and SQL handlers**
 
@@ -146,7 +158,15 @@ Add each operation to the staging server allowlist and to `install-api.sql`'s ex
 
 - [x] **Step 4: Implement staging browser/API delegates and organization navigation**
 
-Delegate list/create/read/update/delete/reuse API methods through `dispatchVerifiedStagingOperation`, preserving shared response and error behavior. Add a Problems link to the recruiter organization workspace beside the assessment builder entry point. Run `npx vitest run tests/unit/staging-api.test.ts` and `node scripts/test-staging-integration.mjs`; all proxy, journey, and new isolation/copy assertions must pass.
+Delegate list/create/read/update/delete/reuse API methods through `dispatchVerifiedStagingOperation`, preserving shared response and error behavior. Add a Problems link to the recruiter organization workspace beside the assessment builder entry point.
+
+- [x] **Step 5: Verify focused staging behavior**
+
+The staging boundary tests and the PGlite check using the local Python bridge passed.
+
+- [ ] **Pending: Verify Docker-backed staging security and copy isolation**
+
+`node scripts/test-staging-integration.mjs` exited 1 in setup before the signed SQL entry point and journey assertions.
 
 ## Task 3: Problems Table, Detail Editor, and Builder Integration
 
@@ -184,9 +204,13 @@ Load data through the authenticated APIs, link each table row to its management 
 
 Add **Save for reuse** to the assessment authoring stage using the current in-memory draft content. Add a saved-problem picker/start action; call the reuse endpoint, then open the builder with the returned definition ID. Update standard and staging draft GET paths to honor an optional `definitionId` instead of returning whichever draft happens to be latest; the builder must display the copied draft even if another draft is created before it loads. Ensure the new draft ID replaces no currently edited definition and existing validate/issue controls remain unchanged.
 
-- [x] **Step 5: Verify browser behavior**
+- [x] **Step 5: Verify focused UI behavior**
 
-Run: `npx vitest run tests/unit/problems-management.test.tsx tests/unit/assessment-builder.test.tsx tests/unit/assessment-builder-reviewers.test.tsx` and `node scripts/test-r211-integration.mjs`; all targeted UI and R211 browser assertions must pass.
+`npx vitest run tests/unit/problems-management.test.tsx tests/unit/assessment-builder.test.tsx tests/unit/assessment-builder-reviewers.test.tsx` exited 0 with 25 tests passed. The later focused run above also covered the staging session renewal and deferred UI reads.
+
+- [ ] **Pending: Verify the copy and editor flow in the authenticated browser journey**
+
+`node scripts/test-r211-integration.mjs` exited 1 at Docker image inspection before the Chromium assertions.
 
 ## Task 4: Decision Record, Documentation, and Full Verification
 
@@ -208,10 +232,13 @@ Run: `npx vitest run tests/unit/problems-management.test.tsx tests/unit/assessme
 
 Document status, context, decision, rationale, and consequences; link the ADR from the decisions index and describe the recruiter Problems page and reuse flow in the master documentation index.
 
-- [x] **Step 2: Run repository verification**
+- [x] **Step 2: Attempt repository verification and record the results**
 
-Run: `npm run verify`
-Expected: all gates pass. If environment-specific existing failures persist, capture each command, exit status, and exact blocker in the completion notes; do not alter unrelated fixtures or test expectations merely to force a green run.
+`npm run verify` exited 1 at the format check. The verification table records the standalone gates and Docker fixture blockers.
+
+- [ ] **Pending: Pass the full repository gate**
+
+`npm run verify` still needs a run that reaches and passes every gate. The Docker-backed executor checks are pending.
 
 - [x] **Step 3: Review diff and archive plan**
 
@@ -220,7 +247,7 @@ Check `git diff --check`, review the full diff for tenant or role bypasses and u
 ## Self-review
 
 - **Spec coverage:** Save for reuse and full content persistence: Task 1 and Task 3. Organization CRUD table and detail editor: Tasks 1 and 3. Independent reuse: Tasks 1 and 3. Recruiter/tenant security and staging parity: Tasks 1 and 2. Immutable validated versions and docs/ADR: Tasks 1 and 4.
-- **Step scan:** Each task begins with a failing behavior check, identifies an exact implementation boundary, and ends with its relevant command or verification.
+- **Step scan:** Tasks 1–3 record completed implementation and focused verification. The official Docker-backed behavior checks remain open.
 - **Type consistency:** `R211ReusableProblemContent` feeds create/update/reuse. `R211ReusableProblem` wraps `content` and a library `version`; reuse returns a normal `R211AssessmentDraft` with a new definition ID. Staging operations use the same public record and draft shapes.
 - **Review Focus:** Tenant/role access, concurrency, invalid content, and post-copy mutation/deletion are each attached to the owning persistence, staging, API, or browser task.
 - **Proportion:** Four tasks cover one integrated feature across the existing database, auth, staging, and UI boundaries; no dependency or general content-management layer is introduced.
