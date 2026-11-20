@@ -13,9 +13,12 @@ export async function loadProblems(organizationId: string, problemId?: string) {
     organizationId,
     problemId ? 'get' : 'list',
     problemId,
+    'defer',
   );
+  const csrfToken = jar.get(R23_CSRF_COOKIE)?.value ?? '';
+  if (response.status === 428) return { response: null, csrfToken };
   if (response.status === 401) redirect('/r23/login');
   if ([403, 404].includes(response.status)) notFound();
   if (!response.ok) throw new Error('Could not load the saved problems.');
-  return { response, csrfToken: jar.get(R23_CSRF_COOKIE)?.value ?? '' };
+  return { response, csrfToken };
 }

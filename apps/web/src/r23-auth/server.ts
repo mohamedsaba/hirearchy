@@ -4169,6 +4169,7 @@ export async function r211ReusableProblemApi(
   targetOrganizationId: string,
   action: R211ProblemAction,
   problemId?: string,
+  refresh: 'automatic' | 'defer' = 'automatic',
 ): Promise<Response> {
   if (isAuthenticatedStaging()) {
     return stagingReusableProblemApi(
@@ -4176,6 +4177,7 @@ export async function r211ReusableProblemApi(
       targetOrganizationId,
       action,
       problemId,
+      refresh,
     );
   }
   const jsonRequest = asR27JsonRequest(request);

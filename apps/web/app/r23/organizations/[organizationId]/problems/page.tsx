@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import type { R211ReusableProblem } from '../../../../../src/r211-builder/contract';
+import { DeferredProblemRead } from './deferred-problem-read';
+import { ProblemsTable } from './problems-table';
 import { loadProblems } from './load-problems';
 import './problems.css';
 
@@ -12,9 +14,10 @@ export default async function ProblemsPage({
 }) {
   const { organizationId } = await params;
   const workspace = `/r23/organizations/${encodeURIComponent(organizationId)}`;
-  const { response } = await loadProblems(organizationId);
-  const { problems }: { problems: R211ReusableProblem[] } =
-    await response.json();
+  const { response, csrfToken } = await loadProblems(organizationId);
+  const data: { problems: R211ReusableProblem[] } | null = response
+    ? await response.json()
+    : null;
   return (
     <main className="problems-page">
       <Link href={workspace}>Organization workspace</Link>
@@ -24,42 +27,14 @@ export default async function ProblemsPage({
           Create a problem
         </Link>
       </header>
-      {problems.length ? (
-        <table aria-label="Saved problems">
-          <thead>
-            <tr>
-              <th scope="col">Problem</th>
-              <th scope="col">Duration</th>
-              <th scope="col">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {problems.map((problem) => (
-              <tr key={problem.id}>
-                <th scope="row">
-                  <Link
-                    href={
-                      workspace + '/problems/' + encodeURIComponent(problem.id)
-                    }
-                  >
-                    {problem.content.title}
-                  </Link>
-                </th>
-                <td>{problem.content.durationMinutes} min</td>
-                <td>
-                  <time dateTime={problem.updatedAt}>
-                    {problem.updatedAt.slice(0, 10)}
-                  </time>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {data ? (
+        <ProblemsTable workspace={workspace} problems={data.problems} />
       ) : (
-        <p>
-          No saved problems yet. Choose <strong>Save for reuse</strong> when
-          authoring an assessment to add one here.
-        </p>
+        <DeferredProblemRead
+          key={organizationId}
+          organizationId={organizationId}
+          csrfToken={csrfToken}
+        />
       )}
     </main>
   );

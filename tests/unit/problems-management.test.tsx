@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { AssessmentBuilderClient } from '../../apps/web/app/r23/organizations/[organizationId]/builder/assessment-builder-client';
@@ -296,3 +296,39 @@ it('uses the saved version for deletion and returns to the table', async () => {
     replace.mockRestore();
   }
 });
+
+it.each(['detail', 'list'])(
+  'loads deferred staging %s data through the browser before showing problem content',
+  async (mode) => {
+    const { default: list } =
+      await import('../../apps/web/app/r23/organizations/[organizationId]/problems/page');
+    const { default: detail } =
+      await import('../../apps/web/app/r23/organizations/[organizationId]/problems/[problemId]/page');
+    problemApi.mockResolvedValue(new Response(null, { status: 428 }));
+    let finishRead!: (r: Response) => void;
+    const fetcher = vi.fn<typeof fetch>(
+      () =>
+        new Promise<Response>((resolve) => {
+          finishRead = resolve;
+        }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const view = await (mode === 'list' ? list : detail)({ params });
+    await act(async () => root.render(<StrictMode>{view}</StrictMode>));
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(container.textContent).not.toContain(fixture.title);
+    expect(container.querySelector('form')).toBeNull();
+    expect(fetcher.mock.calls[0][0]).toBe(
+      `/r23/api/organizations/${organizationId}/problems` +
+        (mode === 'detail' ? '/' + problemId : ''),
+    );
+    await act(async () =>
+      finishRead(
+        Response.json(
+          mode === 'detail' ? { problem } : { problems: [problem] },
+        ),
+      ),
+    );
+    expect(container.textContent).toContain(fixture.title);
+  },
+);

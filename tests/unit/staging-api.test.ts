@@ -16,6 +16,9 @@ import {
   stagingOrganizationsGet,
 } from '../../apps/web/src/staging/browser';
 import { stagingPost } from '../../apps/web/src/staging/server';
+import { loadProblems } from '../../apps/web/app/r23/organizations/[organizationId]/problems/load-problems';
+const pageCookies = vi.hoisted(() => vi.fn());
+vi.mock('next/headers', () => ({ cookies: pageCookies }));
 import { proxy } from '../../apps/web/proxy';
 import {
   R23_CSRF_COOKIE,
@@ -725,6 +728,110 @@ describe('authenticated staging boundary', () => {
       }
     },
   );
+
+  it('delivers the refreshed HttpOnly cookie during problem loading before an edit across token expiry', async () => {
+    const startedAt = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(startedAt);
+    try {
+      const { cookies, mergeResponseCookies } = await stagingBrowserLogin();
+      pageCookies.mockResolvedValue({
+        toString: () => [...cookies.values()].join('; '),
+        get: (key: string) => ({ value: cookies.get(key)?.split('=')[1] }),
+      });
+      const api = `http://localhost/r23/api/organizations/${organizationId}/problems/${problemId}`;
+      const request = (url: string, method = 'GET', body?: object) =>
+        new Request(url, {
+          method,
+          headers: {
+            cookie: [...cookies.values()].join('; '),
+            origin: 'http://localhost',
+            accept: 'application/json',
+            'content-type': 'application/json',
+            'x-csrf-token': cookies.get(R23_CSRF_COOKIE)!.split('=')[1],
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      const selected = await stagingOrganizationPost(
+        request('http://localhost/r23/organization', 'POST', {
+          organizationId,
+        }),
+      );
+      expect(selected.status).toBe(303);
+      mergeResponseCookies(selected);
+      const oldCookie = cookies.get(R23_SESSION_COOKIE);
+      let grants = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | Request | URL) => {
+          if (String(input).includes('/token?grant_type=refresh_token')) {
+            if (grants++)
+              return Response.json(
+                { error: 'refresh token already rotated' },
+                { status: 401 },
+              );
+            return Response.json({
+              access_token: `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: 'https://auth.example.test', aud: 'authenticated', exp: Math.floor(startedAt / 1000) + 600, amr: [{ method: 'password', timestamp: 1 }] })}.signature`,
+              refresh_token: 'rotated-secret',
+              expires_in: 320,
+            });
+          }
+          return Response.json({ id: subject });
+        }),
+      );
+      const problem = {
+        id: problemId,
+        organizationId,
+        authorPrincipalId: subject,
+        version: 1,
+        content: problemContent,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+      vi.mocked(dispatchStagingProof).mockResolvedValue({ problem });
+      clock.mockReturnValue(startedAt + 280_000);
+      const page = await loadProblems(organizationId, problemId);
+      expect(page.response === null).toBe(true);
+      expect(grants).toBe(0);
+      const browserRead = await r211ReusableProblemApi(
+        request(api),
+        organizationId,
+        'get',
+        problemId,
+      );
+      expect(browserRead.status).toBe(200);
+      expect(await browserRead.json()).toEqual({ problem });
+      expect(browserRead.headers.getSetCookie()).toEqual([
+        expect.stringMatching(/__Host-r23-session=.*HttpOnly/i),
+      ]);
+      expect(browserRead.headers.getSetCookie()[0]).toMatch(/; Secure/i);
+      mergeResponseCookies(browserRead);
+      expect(cookies.get(R23_SESSION_COOKIE)).not.toBe(oldCookie);
+      clock.mockReturnValue(startedAt + 310_000);
+      const content = {
+        ...problemContent,
+        title: 'Updated after original access token expired',
+      };
+      vi.mocked(dispatchStagingProof).mockResolvedValueOnce({
+        problem: { ...problem, content, version: 2 },
+      });
+      const edited = await r211ReusableProblemApi(
+        request(api, 'PATCH', { expectedVersion: 1, content }),
+        organizationId,
+        'update',
+        problemId,
+      );
+      expect(edited.status).toBe(200);
+      expect(await edited.json()).toMatchObject({
+        problem: { content, version: 2 },
+      });
+      expect(grants).toBe(1);
+    } finally {
+      clock.mockRestore();
+      vi.mocked(dispatchStagingProof).mockImplementation(async () => ({
+        ok: true,
+      }));
+    }
+  });
 
   it.each(['get', 'save', 'validate'] as const)(
     'keeps the reused draft selected during staging %s when another definition becomes latest',

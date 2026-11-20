@@ -143,6 +143,8 @@ const RANDOM_VALUE = /^[A-Za-z0-9_-]{43}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const R27_MAX_SEQUENCE = 9223372036854775807n;
 
+class StagingBrowserRefreshRequired extends Error {}
+
 class StagingBadRequest extends Error {
   readonly code = 'INVALID_REQUEST';
 }
@@ -990,7 +992,7 @@ async function withStagingBrowserSession<T>(
     csrfToken: string;
     refreshedSessionCookie: string | null;
   }) => Promise<T>,
-  forceRefresh = false,
+  refresh: 'automatic' | 'force' | 'defer' = 'automatic',
 ): Promise<T> {
   if (!isAuthenticatedStaging()) throw new StagingUnavailable();
   let config: StagingConfiguration;
@@ -1015,8 +1017,11 @@ async function withStagingBrowserSession<T>(
 
   const storedClaims = readR23Claims(session.accessToken, config.auth);
   const needsRefresh =
-    forceRefresh ||
+    refresh === 'force' ||
     storedClaims.exp <= Date.now() / 1000 + REFRESH_AHEAD_SECONDS;
+  // A server component cannot deliver the rotated HttpOnly cookie.
+  if (needsRefresh && refresh === 'defer')
+    throw new StagingBrowserRefreshRequired();
   const grant: R23TokenGrant | undefined = needsRefresh
     ? await refreshGrant(config.auth, session.refreshToken)
     : undefined;
@@ -2226,7 +2231,7 @@ export async function stagingRefreshPost(request: Request): Promise<Response> {
         });
         return attachRefreshedCookie(response, refreshedSessionCookie);
       },
-      true,
+      'force',
     );
   } catch (error) {
     return failureResponse(request, error);
@@ -2531,6 +2536,7 @@ export async function stagingReusableProblemApi(
   targetOrganizationId: string,
   action: R211ProblemAction,
   problemId?: string,
+  refresh: 'automatic' | 'defer' = 'automatic',
 ): Promise<Response> {
   const jsonHeaders = new Headers(request.headers);
   jsonHeaders.set('Accept', 'application/json');
@@ -2599,8 +2605,11 @@ export async function stagingReusableProblemApi(
           action === 'create' || action === 'reuse' ? 201 : 200,
         );
       },
+      refresh,
     );
   } catch (error) {
+    if (error instanceof StagingBrowserRefreshRequired)
+      return new Response(null, { status: 428 });
     const code = getSqlErrorCode(error);
     if (code === 'P0002') {
       response = reusableProblemNotFound();

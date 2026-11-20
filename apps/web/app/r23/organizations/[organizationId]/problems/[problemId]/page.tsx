@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { R211ReusableProblem } from '../../../../../../src/r211-builder/contract';
+import { DeferredProblemRead } from '../deferred-problem-read';
 import { loadProblems } from '../load-problems';
 import { ProblemEditor } from '../problems-client';
 import '../problems.css';
@@ -13,7 +14,9 @@ export default async function ProblemDetailPage({
 }) {
   const { organizationId, problemId } = await params;
   const { response, csrfToken } = await loadProblems(organizationId, problemId);
-  const { problem }: { problem: R211ReusableProblem } = await response.json();
+  const data: { problem: R211ReusableProblem } | null = response
+    ? await response.json()
+    : null;
   const workspace = `/r23/organizations/${encodeURIComponent(organizationId)}`;
   return (
     <main className="problems-page">
@@ -22,7 +25,20 @@ export default async function ProblemDetailPage({
         <Link href={workspace + '/problems'}>All problems</Link>
         <Link href={workspace + '/builder'}>Assessment builder</Link>
       </nav>
-      <ProblemEditor key={problem.id} problem={problem} csrfToken={csrfToken} />
+      {data ? (
+        <ProblemEditor
+          key={data.problem.id}
+          problem={data.problem}
+          csrfToken={csrfToken}
+        />
+      ) : (
+        <DeferredProblemRead
+          key={organizationId + '/' + problemId}
+          organizationId={organizationId}
+          problemId={problemId}
+          csrfToken={csrfToken}
+        />
+      )}
     </main>
   );
 }
