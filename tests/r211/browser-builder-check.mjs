@@ -639,7 +639,96 @@ export async function runR211BrowserBuilderChecks({
       approvedProblem.content.starterFiles,
     );
 
-    console.log('[R2.11 Browser] All 16 journey steps successfully passed!');
+    // Select the saved source using the real authoring UI. Create a newer
+    // independent draft between reuse and the navigation to its returned ID.
+    const restored = await problemRequest(problems, 'POST', {
+      content: problemContent,
+    });
+    assert.equal(restored.status, 201);
+    const customProblem = JSON.parse(restored.text).problem;
+    await recruiterPage.goto(builderUrl);
+    await recruiterPage
+      .getByRole('button', { name: 'Start from saved problem' })
+      .click();
+    await recruiterPage
+      .getByLabel('Saved problem', { exact: true })
+      .selectOption(customProblem.id);
+    let reusedId;
+    await recruiterPage.route(
+      `**/problems/${customProblem.id}/reuse`,
+      async (route) => {
+        const response = await route.fetch();
+        assert.equal(response.status(), 201);
+        reusedId = (await response.json()).draft.definitionId;
+        const later = await problemRequest(
+          `${problems}/${approvedProblem.id}/reuse`,
+          'POST',
+          {},
+        );
+        assert.equal(later.status, 201);
+        assert.notEqual(JSON.parse(later.text).draft.definitionId, reusedId);
+        await route.fulfill({ response });
+      },
+    );
+    await Promise.all([
+      recruiterPage.waitForURL('**/builder?definitionId=*'),
+      recruiterPage
+        .getByRole('button', { name: 'Create draft', exact: true })
+        .click(),
+    ]);
+    assert.equal(
+      new URL(recruiterPage.url()).searchParams.get('definitionId'),
+      reusedId,
+    );
+    assert.equal(
+      await recruiterPage.getByTestId('assessment-title-input').inputValue(),
+      problemContent.title,
+    );
+    const reopened = await problemRequest(
+      `/r23/api/organizations/${FIXTURE_IDS.orgA}/assessments/draft?definitionId=${reusedId}`,
+      'GET',
+    );
+    assert.equal(JSON.parse(reopened.text).draft.definitionId, reusedId);
+    await recruiterPage
+      .getByTestId('assessment-title-input')
+      .fill('Saved through the builder');
+    await recruiterPage.getByRole('button', { name: 'Save for reuse' }).click();
+    await recruiterPage
+      .getByText('Problem saved for reuse.', { exact: true })
+      .waitFor();
+    const pages = `/r23/organizations/${FIXTURE_IDS.orgA}/problems`;
+    await recruiterPage.goto(origin + pages);
+    await recruiterPage
+      .getByRole('link', { name: 'Saved through the builder' })
+      .click();
+    await recruiterPage
+      .getByLabel('Title', { exact: true })
+      .fill('Edited in Problems');
+    await recruiterPage.getByRole('button', { name: 'Save changes' }).click();
+    await recruiterPage.getByText('Changes saved.', { exact: true }).waitFor();
+    const editorUrl = recruiterPage.url();
+    await recruiterPage.reload();
+    assert.equal(
+      await recruiterPage.getByLabel('Title', { exact: true }).inputValue(),
+      'Edited in Problems',
+    );
+    for (const path of [pages, new URL(editorUrl).pathname]) {
+      const denied = await request(origin, path, { cookies: reviewerA });
+      assert.equal(denied.status, 404);
+    }
+    await recruiterPage.getByRole('button', { name: 'Delete problem' }).click();
+    await recruiterPage
+      .getByRole('button', { name: 'Confirm deletion' })
+      .click();
+    await recruiterPage.waitForURL(origin + pages);
+    assert.equal(
+      await recruiterPage
+        .getByRole('link', { name: 'Edited in Problems' })
+        .count(),
+      0,
+    );
+
+    console.log('[R2.11 Browser] Builder and problem library journeys passed.');
   } finally {
     await browser.close();
   }

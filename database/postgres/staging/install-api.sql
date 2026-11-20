@@ -2030,7 +2030,7 @@ def require_open_session(auth_session_id, subject_id, principal_id, organization
 def validate_operation_args(operation, args):
     schemas = {
         'membership.list': ((), ()),
-        'organization.context': (('organizationId',), ()),
+        'organization.context': (('organizationId',), ('assessmentId',)),
         'session.open': (('organizationId',), ()),
         'session.revoke': (('organizationId',), ()),
         'assessment.create': (('organizationId', 'content'), ('assessmentId',)),
@@ -2668,11 +2668,12 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                  AND draft.version = def.draft_version
                 WHERE def.organization_id = $1::pg_catalog.uuid
                   AND def.author_principal_id = $2::pg_catalog.uuid
+                  AND ($3::pg_catalog.uuid IS NULL OR def.id = $3::pg_catalog.uuid)
                 ORDER BY def.updated_at DESC, def.id DESC
                 LIMIT 1
                 """,
-                ['uuid', 'uuid'],
-                [organization_id, principal_id],
+                ['uuid', 'uuid', 'uuid'],
+                [organization_id, principal_id, require_uuid(args['assessmentId'], 'assessment ID') if 'assessmentId' in args else None],
             )
             if draft_rows:
                 d = draft_rows[0]

@@ -26,16 +26,27 @@ export default async function AssessmentBuilderPage({
   searchParams,
 }: {
   params: Promise<{ organizationId: string }>;
-  searchParams?: Promise<{ issuedSession?: string | string[] }>;
+  searchParams?: Promise<{
+    issuedSession?: string | string[];
+    definitionId?: string | string[];
+  }>;
 }) {
   const { organizationId } = await params;
   const query = await searchParams;
   const initialIssuedSessionId =
     typeof query?.issuedSession === 'string' ? query.issuedSession : null;
+  const requestedId = query?.definitionId;
+  if (
+    requestedId !== undefined &&
+    (typeof requestedId !== 'string' || !requestedId)
+  )
+    notFound();
   const incomingHeaders = await headers();
   const cookie = incomingHeaders.get('cookie') ?? '';
 
-  const request = new Request('https://hirearchy-builder.invalid/', {
+  const url = new URL('https://hirearchy-builder.invalid/');
+  if (requestedId) url.searchParams.set('definitionId', requestedId);
+  const request = new Request(url, {
     headers: {
       Accept: 'application/json',
       Cookie: cookie,
@@ -110,7 +121,14 @@ export default async function AssessmentBuilderPage({
 
   let initialDraft: R211AssessmentDraft | null =
     contextWithStaging.draft ?? null;
-  if (!initialDraft) {
+  if (requestedId) {
+    const response = await r211AssessmentDraftApiGet(request, organizationId);
+    if ([400, 403, 404].includes(response.status)) notFound();
+    if (!response.ok)
+      throw new Error('Could not load the requested assessment draft.');
+    initialDraft = (await response.json()).draft;
+    if (initialDraft?.definitionId !== requestedId.toLowerCase()) notFound();
+  } else if (!initialDraft) {
     try {
       if (typeof r211AssessmentDraftApiGet === 'function') {
         const draftRes = await r211AssessmentDraftApiGet(

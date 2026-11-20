@@ -129,6 +129,30 @@ export async function createJourney({
     assert.deepEqual(draft[key], value, `copied draft field ${key}`);
   }
   const copiedArgs = { organizationId, assessmentId: draft.definitionId };
+  const later = await call(appUrl, recruiter, 'problem.reuse', problemArgs);
+  assert.notEqual(later.draft.definitionId, draft.definitionId);
+  const latest = await call(appUrl, recruiter, 'organization.context', {
+    organizationId,
+  });
+  assert.equal(latest.draft.definitionId, later.draft.definitionId);
+  const exact = await call(
+    appUrl,
+    recruiter,
+    'organization.context',
+    copiedArgs,
+  );
+  assert.deepEqual(
+    {
+      ...exact.draft,
+      createdAt: Date.parse(exact.draft.createdAt),
+      updatedAt: Date.parse(exact.draft.updatedAt),
+    },
+    {
+      ...draft,
+      createdAt: Date.parse(draft.createdAt),
+      updatedAt: Date.parse(draft.updatedAt),
+    },
+  );
   await call(
     appUrl,
     recruiter,

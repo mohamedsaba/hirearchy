@@ -7,6 +7,9 @@ vi.mock('../../apps/web/src/staging/dispatch.mjs', () => ({
 }));
 import { dispatchStagingProof } from '../../apps/web/src/staging/dispatch.mjs';
 import {
+  stagingAssessmentDraftApiGet,
+  stagingAssessmentDraftApiPut,
+  stagingAssessmentValidateApiPost,
   stagingCallbackGet,
   stagingLoginPost,
   stagingOrganizationPost,
@@ -38,6 +41,87 @@ const request = (
     headers: { authorization: `Bearer ${token}` },
     body,
   });
+
+async function stagingBrowserLogin() {
+  vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+  const { privateKey } = generateKeyPairSync('ed25519');
+  const env = {
+    STAGING_AUTH_URL: 'http://127.0.0.1:54321',
+    STAGING_AUTH_ISSUER: 'https://auth.example.test',
+    STAGING_AUTH_AUDIENCE: 'authenticated',
+    STAGING_DATABASE_URL:
+      'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
+    STAGING_PROOF_PRIVATE_KEY: privateKey
+      .export({ format: 'der', type: 'pkcs8' })
+      .toString('base64'),
+    STAGING_PROOF_ISSUER: 'hirearchy',
+    STAGING_PROOF_AUDIENCE: 'database',
+    STAGING_PROOF_KEY_ID: 'key-1',
+  };
+  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+
+  const token = `${encode({ alg: 'HS256' })}.${encode({
+    sub: subject,
+    session_id: session,
+    aal: 'aal1',
+    iss: env.STAGING_AUTH_ISSUER,
+    aud: env.STAGING_AUTH_AUDIENCE,
+    exp: Math.floor(Date.now() / 1000) + 300,
+    amr: [{ method: 'password', timestamp: 1 }],
+  })}.signature`;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes('/token?grant_type=password')) {
+        return Response.json({
+          access_token: token,
+          refresh_token: 'synthetic-refresh-token',
+          expires_in: 300,
+        });
+      }
+      return Response.json({ id: subject });
+    }),
+  );
+
+  const login = await stagingLoginPost(
+    new Request('http://localhost/r23/auth/login', {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        email: 'evaluator@example.test',
+        password: 'synthetic-password',
+      }),
+    }),
+  );
+  expect(login.status).toBe(303);
+
+  const cookies = new Map<string, string>();
+  const mergeResponseCookies = (response: Response) => {
+    const raw = response.headers.get('set-cookie') ?? '';
+    for (const match of raw.matchAll(
+      /(?:^|,\s*)(__Host-r23-[^=;, ]+=[^;,]*)/g,
+    )) {
+      const pair = match[1].trim();
+      const separator = pair.indexOf('=');
+      const name = pair.slice(0, separator);
+      if (pair.slice(separator + 1) === '') cookies.delete(name);
+      else cookies.set(name, pair);
+    }
+  };
+  mergeResponseCookies(login);
+  const callback = await stagingCallbackGet(
+    new Request('http://localhost/r23/auth/callback', {
+      headers: { cookie: [...cookies.values()].join('; ') },
+    }),
+  );
+  expect(callback.status).toBe(303);
+  mergeResponseCookies(callback);
+  return { cookies, mergeResponseCookies };
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -642,84 +726,135 @@ describe('authenticated staging boundary', () => {
     },
   );
 
-  it('surfaces organization database failures and renders persisted names', async () => {
-    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
-    const { privateKey } = generateKeyPairSync('ed25519');
-    const env = {
-      STAGING_AUTH_URL: 'http://127.0.0.1:54321',
-      STAGING_AUTH_ISSUER: 'https://auth.example.test',
-      STAGING_AUTH_AUDIENCE: 'authenticated',
-      STAGING_DATABASE_URL:
-        'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
-      STAGING_PROOF_PRIVATE_KEY: privateKey
-        .export({ format: 'der', type: 'pkcs8' })
-        .toString('base64'),
-      STAGING_PROOF_ISSUER: 'hirearchy',
-      STAGING_PROOF_AUDIENCE: 'database',
-      STAGING_PROOF_KEY_ID: 'key-1',
-    };
-    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
-
-    const token = `${encode({ alg: 'HS256' })}.${encode({
-      sub: subject,
-      session_id: session,
-      aal: 'aal1',
-      iss: env.STAGING_AUTH_ISSUER,
-      aud: env.STAGING_AUTH_AUDIENCE,
-      exp: Math.floor(Date.now() / 1000) + 300,
-      amr: [{ method: 'password', timestamp: 1 }],
-    })}.signature`;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        if (String(input).includes('/token?grant_type=password')) {
-          return Response.json({
-            access_token: token,
-            refresh_token: 'synthetic-refresh-token',
-            expires_in: 300,
-          });
-        }
-        return Response.json({ id: subject });
-      }),
-    );
-
-    const login = await stagingLoginPost(
-      new Request('http://localhost/r23/auth/login', {
-        method: 'POST',
-        headers: {
-          origin: 'http://localhost',
-          'content-type': 'application/json',
-          accept: 'application/json',
+  it.each(['get', 'save', 'validate'] as const)(
+    'keeps the reused draft selected during staging %s when another definition becomes latest',
+    async (action) => {
+      const { cookies, mergeResponseCookies } = await stagingBrowserLogin();
+      const organizationId = '11111111-1111-4111-8111-111111111111';
+      const definitionId = '22222222-2222-4222-8222-222222222222';
+      const latestId = '33333333-3333-4333-8333-333333333333';
+      const input = {
+        ...problemContent,
+        templateId: 'custom',
+        rubric: problemContent.rubric.map((c) => ({
+          ...c,
+          applicability: {
+            kind: 'recorded_integrated_ai_interaction',
+            rule: 'When recorded',
+          },
+        })),
+      };
+      const draft = {
+        ...input,
+        definitionId,
+        organizationId,
+        authorPrincipalId: subject,
+        version: 2,
+        createdAt: '2026-11-19T00:00:00Z',
+        updatedAt: '2026-11-19T00:00:00Z',
+      };
+      const latest = {
+        ...draft,
+        title: 'Another draft',
+        definitionId: latestId,
+        version: 9,
+      };
+      const req = (path: string, method = 'GET', body?: object) =>
+        new Request('http://localhost' + path, {
+          method,
+          headers: {
+            cookie: [...cookies.values()].join('; '),
+            origin: 'http://localhost',
+            'content-type': 'application/json',
+            accept: 'application/json',
+            'x-csrf-token': cookies.get(R23_CSRF_COOKIE)!.split('=')[1],
+          },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+      vi.mocked(dispatchStagingProof).mockResolvedValueOnce({});
+      const selection = await stagingOrganizationPost(
+        req('/r23/organization', 'POST', { organizationId }),
+      );
+      expect(selection.status).toBe(303);
+      mergeResponseCookies(selection);
+      let stored = draft;
+      vi.mocked(dispatchStagingProof).mockImplementation(
+        async (_url, payload) => {
+          const { op, args } = JSON.parse(payload.toString());
+          switch (op) {
+            case 'organization.context':
+              return {
+                role: 'recruiter',
+                principalId: subject,
+                sessions: [],
+                reviewers: [],
+                draft: args.assessmentId === definitionId ? stored : latest,
+                validatedVersions: [{ id: 'validated', definitionId }],
+              };
+            case 'assessment.create': {
+              if (
+                args.assessmentId !== definitionId ||
+                args.content.expectedVersion !== draft.version
+              )
+                throw Object.assign(new Error('stale draft'), {
+                  code: '23505',
+                });
+              stored = {
+                ...stored,
+                ...args.content,
+                version: stored.version + 1,
+              };
+              return { assessmentId: definitionId };
+            }
+            case 'assessment.get':
+              return { content: input, assessmentId: definitionId };
+            case 'assessment.validate':
+              return { validatedVersionId: 'validated' };
+            default:
+              throw new Error('Unexpected staging operation');
+          }
         },
-        body: JSON.stringify({
-          email: 'evaluator@example.test',
-          password: 'synthetic-password',
-        }),
-      }),
-    );
-    expect(login.status).toBe(303);
-
-    const cookies = new Map<string, string>();
-    const mergeResponseCookies = (response: Response) => {
-      const raw = response.headers.get('set-cookie') ?? '';
-      for (const match of raw.matchAll(
-        /(?:^|,\s*)(__Host-r23-[^=;, ]+=[^;,]*)/g,
-      )) {
-        const pair = match[1].trim();
-        const separator = pair.indexOf('=');
-        const name = pair.slice(0, separator);
-        if (pair.slice(separator + 1) === '') cookies.delete(name);
-        else cookies.set(name, pair);
+      );
+      try {
+        const endpoint = `/r23/api/organizations/${organizationId}/assessments`;
+        const response =
+          action === 'get'
+            ? await stagingAssessmentDraftApiGet(
+                req(endpoint + '/draft?definitionId=' + definitionId),
+                organizationId,
+              )
+            : action === 'save'
+              ? await stagingAssessmentDraftApiPut(
+                  req(endpoint + '/draft', 'PUT', {
+                    ...input,
+                    definitionId,
+                    expectedVersion: 2,
+                  }),
+                  organizationId,
+                )
+              : await stagingAssessmentValidateApiPost(
+                  req(endpoint + '/validate', 'POST', {
+                    ...input,
+                    definitionId,
+                    expectedDraftVersion: 2,
+                  }),
+                  organizationId,
+                );
+        expect(response.status).toBe(200);
+        expect((await response.json()).draft).toMatchObject({
+          ...input,
+          definitionId,
+          version: action === 'get' ? 2 : 3,
+        });
+      } finally {
+        vi.mocked(dispatchStagingProof).mockImplementation(async () => ({
+          ok: true,
+        }));
       }
-    };
-    mergeResponseCookies(login);
-    const callback = await stagingCallbackGet(
-      new Request('http://localhost/r23/auth/callback', {
-        headers: { cookie: [...cookies.values()].join('; ') },
-      }),
-    );
-    expect(callback.status).toBe(303);
-    mergeResponseCookies(callback);
+    },
+  );
+  it('surfaces organization database failures and renders persisted names', async () => {
+    const { cookies } = await stagingBrowserLogin();
     const browserCookies = [...cookies.values()].join('; ');
     const organizationsRequest = () =>
       new Request('http://localhost/r23/organizations', {

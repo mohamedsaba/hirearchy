@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { BuilderProblemActions } from '../problems/problems-client';
 import {
   useCallback,
   useEffect,
@@ -520,6 +521,20 @@ export function AssessmentBuilderClient({
     return validationIssues.find((issue) => issue.field === fieldName)?.message;
   };
 
+  const authoringContent = {
+    templateId,
+    title,
+    brief,
+    expectedBehavior,
+    acceptanceCriteria,
+    primaryFilePath,
+    starterFiles,
+    durationMinutes,
+    terminalEnabled,
+    integratedAi,
+    rubric,
+  };
+
   // Save Draft Action
   const handleSaveDraft = async () => {
     setIsSaving(true);
@@ -527,18 +542,8 @@ export function AssessmentBuilderClient({
     setSaveErrorMessage(null);
 
     const payload = {
-      templateId,
+      ...authoringContent,
       definitionId,
-      title,
-      brief,
-      expectedBehavior,
-      acceptanceCriteria,
-      primaryFilePath,
-      starterFiles,
-      durationMinutes,
-      terminalEnabled,
-      integratedAi,
-      rubric,
       expectedVersion: draftVersion,
       csrf: csrfToken,
     };
@@ -598,18 +603,8 @@ export function AssessmentBuilderClient({
     setValidationErrorMessage(null);
 
     const payload = {
-      templateId,
+      ...authoringContent,
       definitionId,
-      title,
-      brief,
-      expectedBehavior,
-      acceptanceCriteria,
-      primaryFilePath,
-      starterFiles,
-      durationMinutes,
-      terminalEnabled,
-      integratedAi,
-      rubric,
       expectedDraftVersion: draftVersion,
       csrf: csrfToken,
     };
@@ -1516,6 +1511,11 @@ export function AssessmentBuilderClient({
                   </div>
                 )}
 
+                <BuilderProblemActions
+                  organizationId={organizationId}
+                  csrfToken={csrfToken}
+                  content={authoringContent}
+                />
                 <div className="assessment-template-choice">
                   <label htmlFor="assessment-template">
                     Assessment template

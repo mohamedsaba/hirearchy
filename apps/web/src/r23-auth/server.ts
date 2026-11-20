@@ -4329,7 +4329,16 @@ export async function r211AssessmentDraftApiGet(
           throw new R23ScopeDenied();
         }
 
-        const draft = await authz.getAssessmentDraft(identity, organizationId);
+        const definitionId = new URL(request.url).searchParams.get(
+          'definitionId',
+        );
+        if (definitionId !== null && !UUID.test(definitionId))
+          throw new R23BadRequest();
+        const draft = await authz.getAssessmentDraft(
+          identity,
+          organizationId,
+          definitionId ?? undefined,
+        );
         return Response.json(
           { draft: draft ?? null },
           {

@@ -1068,12 +1068,13 @@ async function fetchOrganizationContext(
   config: StagingConfiguration,
   identity: R23VerifiedIdentity,
   organizationId: string,
+  assessmentId?: string,
 ): Promise<StagingOrganizationContextResponse> {
   const raw = await dispatchVerifiedStagingOperation(
     config,
     identity,
     'organization.context',
-    { organizationId },
+    { organizationId, ...(assessmentId ? { assessmentId } : {}) },
   );
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new StagingUnavailable();
@@ -1470,6 +1471,7 @@ export async function stagingLoadOrganizationSessionList(
     search?: string;
     cursor?: string | null;
     limit?: number;
+    assessmentId?: string;
   },
 ): Promise<
   AuthenticatedSessionListContext & {
@@ -1501,6 +1503,7 @@ export async function stagingLoadOrganizationSessionList(
         config,
         identity,
         orgIdLower,
+        queryParams?.assessmentId,
       );
       const { filtered, totalAuthorizedCount, filteredAuthorizedCount } =
         filterStagingSessions(orgContext.sessions ?? [], queryParams);
@@ -2365,6 +2368,13 @@ export async function stagingSessionAssignmentsApiGet(
   }
 }
 
+function requestedStagingDefinitionId(input: Record<string, unknown>) {
+  if (input.definitionId === undefined) return undefined;
+  if (typeof input.definitionId !== 'string' || !UUID.test(input.definitionId))
+    throw new StagingBadRequest();
+  return input.definitionId.toLowerCase();
+}
+
 function buildStagingDraftContent(
   input: Record<string, unknown>,
   existingDraft: R211AssessmentDraft | null,
@@ -2442,8 +2452,9 @@ function buildStagingDraftContent(
                   : 0,
               applicability: {
                 kind:
+                  app.kind === 'recorded_integrated_ai_interaction' ||
                   app.kind === 'conditional'
-                    ? ('conditional' as const)
+                    ? app.kind
                     : ('always' as const),
                 rule: typeof app.rule === 'string' ? app.rule : 'always',
               },
@@ -2453,10 +2464,7 @@ function buildStagingDraftContent(
   };
 
   const normalized = normalizeAssessmentTemplate(rawDraft);
-  const requestedDefinitionId =
-    typeof input.definitionId === 'string' && UUID.test(input.definitionId)
-      ? input.definitionId.toLowerCase()
-      : undefined;
+  const requestedDefinitionId = requestedStagingDefinitionId(input);
   const requestedExpectedVersion =
     typeof input.expectedVersion === 'number' &&
     Number.isInteger(input.expectedVersion)
@@ -2618,9 +2626,13 @@ export async function stagingAssessmentDraftApiGet(
   });
 
   try {
+    const definitionId = new URL(request.url).searchParams.get('definitionId');
+    if (definitionId !== null && !UUID.test(definitionId))
+      throw new StagingBadRequest();
     const context = await stagingLoadOrganizationSessionList(
       request,
       targetOrganizationId,
+      { assessmentId: definitionId ?? undefined },
     );
     if (context.membership.role !== 'recruiter') {
       throw new StagingForbidden();
@@ -2671,6 +2683,7 @@ export async function stagingAssessmentDraftApiPut(
           config,
           identity,
           organizationId,
+          requestedStagingDefinitionId(body),
         );
         if (beforeContext.role !== 'recruiter') {
           throw new StagingForbidden();
@@ -2680,7 +2693,7 @@ export async function stagingAssessmentDraftApiPut(
           body,
           beforeContext.draft,
         );
-        await dispatchVerifiedStagingOperation(
+        const created = (await dispatchVerifiedStagingOperation(
           config,
           identity,
           'assessment.create',
@@ -2689,12 +2702,13 @@ export async function stagingAssessmentDraftApiPut(
             ...(assessmentId ? { assessmentId } : {}),
             content: content as unknown as StagingProofArgs,
           },
-        );
+        )) as { assessmentId: string };
 
         const afterContext = await fetchOrganizationContext(
           config,
           identity,
           organizationId,
+          created.assessmentId,
         );
         return attachRefreshedCookie(
           Response.json(
@@ -2744,13 +2758,21 @@ export async function stagingAssessmentValidateApiPost(
           config,
           identity,
           organizationId,
+          requestedStagingDefinitionId(body),
         );
         if (beforeContext.role !== 'recruiter') {
           throw new StagingForbidden();
         }
 
         const { assessmentId: existingOrRequestedId, content } =
-          buildStagingDraftContent(body, beforeContext.draft);
+          buildStagingDraftContent(
+            {
+              ...body,
+              expectedVersion:
+                body.expectedDraftVersion ?? body.expectedVersion,
+            },
+            beforeContext.draft,
+          );
 
         if (content.integratedAi === true) {
           return attachRefreshedCookie(
@@ -2879,11 +2901,12 @@ export async function stagingAssessmentValidateApiPost(
           config,
           identity,
           organizationId,
+          assessmentId,
         );
-        const createdVersion =
-          afterContext.validatedVersions.find(
-            (v) => v.id === validatedResult.validatedVersionId,
-          ) ?? afterContext.validatedVersions[0];
+        const createdVersion = afterContext.validatedVersions.find(
+          (v) => v.id === validatedResult.validatedVersionId,
+        );
+        if (!createdVersion) throw new StagingUnavailable();
 
         return attachRefreshedCookie(
           Response.json(
