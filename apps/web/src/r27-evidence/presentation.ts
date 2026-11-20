@@ -94,13 +94,30 @@ export function formatExecutionProvenance(execution: {
 }
 
 function pythonPatterns(content: string, addedLines?: ReadonlySet<number>) {
-  const nestedReturns = new Map<number, { entries: number; added: boolean }>();
+  type ReturnShape = { entries: number; added: boolean };
+  const nestedReturns = new Map<string, Map<number, ReturnShape>>();
+  const scopes: { key: string; end: number }[] = [];
+  const definitionCounts = new Map<string, number>();
   const addedSyntaxStarts = new Set<number>();
   let snakeCaseIdentifierFound = false;
   const cursor = pythonLanguage.parser.parse(content).cursor();
   let lineNumber = 1;
   let lineEnd = addedLines ? content.indexOf('\n') : -1;
   do {
+    while (scopes.length && scopes[scopes.length - 1].end <= cursor.from) {
+      scopes.pop();
+    }
+    if (
+      cursor.name === 'FunctionDefinition' ||
+      cursor.name === 'ClassDefinition'
+    ) {
+      const name = cursor.node.getChild('VariableName');
+      const identifier = name ? content.slice(name.from, name.to) : '';
+      const path = `${scopes.at(-1)?.key ?? ''}/${cursor.name}:${identifier}`;
+      const occurrence = (definitionCounts.get(path) ?? 0) + 1;
+      definitionCounts.set(path, occurrence);
+      scopes.push({ key: `${path}#${occurrence}`, end: cursor.to });
+    }
     while (lineEnd !== -1 && lineEnd < cursor.from) {
       lineNumber++;
       lineEnd = content.indexOf('\n', lineEnd + 1);
@@ -139,8 +156,14 @@ function pythonPatterns(content: string, addedLines?: ReadonlySet<number>) {
     if (statement?.name !== 'ReturnStatement' || statement.getChild(','))
       continue;
 
-    const existing = nestedReturns.get(statement.from);
-    nestedReturns.set(statement.from, {
+    const scope = scopes.at(-1)?.key ?? '';
+    let returns = nestedReturns.get(scope);
+    if (!returns) {
+      returns = new Map();
+      nestedReturns.set(scope, returns);
+    }
+    const existing = returns.get(statement.from);
+    returns.set(statement.from, {
       entries: (existing?.entries ?? 0) + 1,
       added:
         existing?.added === true ||
@@ -152,7 +175,7 @@ function pythonPatterns(content: string, addedLines?: ReadonlySet<number>) {
 
   return {
     snakeCaseIdentifierFound,
-    nestedReturns: [...nestedReturns.values()],
+    nestedReturns,
   };
 }
 
@@ -180,24 +203,31 @@ function observeAddedPythonPatterns(
 
   const submitted = pythonPatterns(content, addedLines);
   observation.snakeCaseIdentifierFound ||= submitted.snakeCaseIdentifierFound;
-  if (
-    observation.nestedObjectReturnFound ||
-    !submitted.nestedReturns.some(({ added }) => added)
-  )
+  if (observation.nestedObjectReturnFound || !submitted.nestedReturns.size)
     return;
 
   const starter = starterContent
     ? pythonPatterns(starterContent).nestedReturns
-    : [];
-  starter.sort((a, b) => b.entries - a.entries);
-  // Existing shapes can account for returns with at most the same number of direct
-  // dictionary values. For equal shapes, account for unchanged returns first.
-  submitted.nestedReturns.sort(
-    (a, b) => b.entries - a.entries || Number(a.added) - Number(b.added),
-  );
-  observation.nestedObjectReturnFound = submitted.nestedReturns.some(
-    ({ entries, added }, i) => added && entries > (starter[i]?.entries ?? 0),
-  );
+    : null;
+  for (const [scope, returns] of submitted.nestedReturns) {
+    const shapes = [...returns.values()];
+    if (!shapes.some(({ added }) => added)) continue;
+    const existing = [...(starter?.get(scope)?.values() ?? [])];
+    existing.sort((a, b) => b.entries - a.entries);
+    // Within a function, use larger shapes first and match unchanged ties first.
+    shapes.sort(
+      (a, b) => b.entries - a.entries || Number(a.added) - Number(b.added),
+    );
+    if (
+      shapes.some(
+        ({ entries, added }, i) =>
+          added && entries > (existing[i]?.entries ?? 0),
+      )
+    ) {
+      observation.nestedObjectReturnFound = true;
+      return;
+    }
+  }
 }
 
 export function buildR27Presentation(evidence: R27Evidence): R27Presentation {

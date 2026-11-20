@@ -391,6 +391,43 @@ describe('R2.7 evidence presentation', () => {
     });
   });
 
+  it.each([
+    [
+      'separate functions',
+      'def summary():\n    return FIRST\n\ndef detail():\n    return SECOND\n',
+      true,
+    ],
+    [
+      'methods with the same name in separate classes',
+      'class Summary:\n    def data(self):\n        return FIRST\n\nclass Detail:\n    def data(self):\n        return SECOND\n',
+      true,
+    ],
+    [
+      'successive definitions with the same name',
+      'if enabled:\n    def data():\n        return FIRST\nelse:\n    def data():\n        return SECOND\n',
+      true,
+    ],
+    [
+      'separate branches in one function',
+      'def data():\n    if summary:\n        return FIRST\n    return SECOND\n',
+      false,
+    ],
+  ])('compares nested return shapes across %s', (_case, template, expected) => {
+    const starter = template
+      .replace('FIRST', '{"a": {}, "b": {}, "c": {}}')
+      .replace('SECOND', '{"x": {}}');
+    const submitted = template
+      .replace('FIRST', '{"a": {}}')
+      .replace('SECOND', '{"x": {}, "y": {}}');
+    expect(
+      styleObservation(
+        generatedBrief,
+        { 'booking.py': starter },
+        { 'booking.py': submitted },
+      )?.nestedObjectReturnFound,
+    ).toBe(expected);
+  });
+
   it('does not derive a diff when the starter baseline is unavailable', () => {
     const result = buildR27Presentation(
       evidence({
