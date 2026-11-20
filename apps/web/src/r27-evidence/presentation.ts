@@ -1,10 +1,5 @@
 import { pythonLanguage } from '@codemirror/lang-python';
-import {
-  diffWordsWithSpace,
-  formatPatch,
-  structuredPatch,
-  type StructuredPatch,
-} from 'diff';
+import { formatPatch, structuredPatch, type StructuredPatch } from 'diff';
 
 import type {
   R27Evidence,
@@ -98,42 +93,72 @@ export function formatExecutionProvenance(execution: {
     : 'Synthetic execution (simulation)';
 }
 
-function addedReturnTokenStarts(content: string, patch: StructuredPatch) {
-  const lineStarts = [0];
-  for (const newline of content.matchAll(/\n/g)) {
-    lineStarts.push(newline.index + 1);
-  }
-
-  const starts = new Set<number>();
-  for (const hunk of patch.hunks) {
-    const oldLines: string[] = [];
-    const newLines: string[] = [];
-    for (const line of hunk.lines) {
-      const prefix = line[0];
-      if (prefix === '-' || prefix === ' ') oldLines.push(line.slice(1));
-      if (prefix === '+' || prefix === ' ') newLines.push(line.slice(1));
+function pythonPatterns(content: string, addedLines?: ReadonlySet<number>) {
+  const nestedReturns = new Map<number, { entries: number; added: boolean }>();
+  const addedSyntaxStarts = new Set<number>();
+  let snakeCaseIdentifierFound = false;
+  const cursor = pythonLanguage.parser.parse(content).cursor();
+  let lineNumber = 1;
+  let lineEnd = addedLines ? content.indexOf('\n') : -1;
+  do {
+    while (lineEnd !== -1 && lineEnd < cursor.from) {
+      lineNumber++;
+      lineEnd = content.indexOf('\n', lineEnd + 1);
     }
-    if (hunk.newLines === 0) continue;
-
-    let offset = lineStarts[hunk.newStart - 1];
-    for (const change of diffWordsWithSpace(
-      oldLines.join('\n'),
-      newLines.join('\n'),
-    )) {
-      if (change.removed) continue;
-      if (change.added) {
-        for (const token of change.value.matchAll(/return|[{:]/g)) {
-          starts.add(offset + token.index);
-        }
+    if (addedLines?.has(lineNumber)) {
+      addedSyntaxStarts.add(cursor.from);
+      if (
+        cursor.name === 'VariableName' &&
+        /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(
+          content.slice(cursor.from, cursor.to),
+        )
+      ) {
+        snakeCaseIdentifierFound = true;
       }
-      offset += change.value.length;
     }
-  }
-  return starts;
+    if (cursor.name !== 'DictionaryExpression') continue;
+
+    let value = cursor.node;
+    while (value.parent?.name === 'ParenthesizedExpression') {
+      value = value.parent;
+    }
+
+    let separator = value.prevSibling;
+    while (separator?.name === 'Comment') {
+      separator = separator.prevSibling;
+    }
+    const outer = value.parent;
+    if (separator?.name !== ':' || outer?.name !== 'DictionaryExpression')
+      continue;
+
+    let result = outer;
+    while (result.parent?.name === 'ParenthesizedExpression') {
+      result = result.parent;
+    }
+    const statement = result.parent;
+    if (statement?.name !== 'ReturnStatement' || statement.getChild(','))
+      continue;
+
+    const existing = nestedReturns.get(statement.from);
+    nestedReturns.set(statement.from, {
+      entries: (existing?.entries ?? 0) + 1,
+      added:
+        existing?.added === true ||
+        [cursor.from, separator.from, outer.from, statement.from].some(
+          (offset) => addedSyntaxStarts.has(offset),
+        ),
+    });
+  } while (cursor.next());
+
+  return {
+    snakeCaseIdentifierFound,
+    nestedReturns: [...nestedReturns.values()],
+  };
 }
 
 function observeAddedPythonPatterns(
   observation: TermsPatternObservation,
+  starterContent: string | null,
   content: string,
   patch: StructuredPatch,
 ) {
@@ -153,77 +178,26 @@ function observeAddedPythonPatterns(
   }
   if (!addedLines.size) return;
 
-  const addedSyntaxStarts = new Set<number>();
-  let addedReturnStarts: ReadonlySet<number> | undefined;
-  const cursor = pythonLanguage.parser.parse(content).cursor();
-  let lineNumber = 1;
-  let lineEnd = content.indexOf('\n');
-  do {
-    while (lineEnd !== -1 && lineEnd < cursor.from) {
-      lineNumber++;
-      lineEnd = content.indexOf('\n', lineEnd + 1);
-    }
-    const isAdded = addedLines.has(lineNumber);
-    if (isAdded) addedSyntaxStarts.add(cursor.from);
+  const submitted = pythonPatterns(content, addedLines);
+  observation.snakeCaseIdentifierFound ||= submitted.snakeCaseIdentifierFound;
+  if (
+    observation.nestedObjectReturnFound ||
+    !submitted.nestedReturns.some(({ added }) => added)
+  )
+    return;
 
-    if (
-      isAdded &&
-      cursor.name === 'VariableName' &&
-      /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(
-        content.slice(cursor.from, cursor.to),
-      )
-    ) {
-      observation.snakeCaseIdentifierFound = true;
-    }
-
-    if (
-      !observation.nestedObjectReturnFound &&
-      cursor.name === 'DictionaryExpression'
-    ) {
-      let value = cursor.node;
-      while (value.parent?.name === 'ParenthesizedExpression') {
-        value = value.parent;
-      }
-
-      let separator = value.prevSibling;
-      while (separator?.name === 'Comment') {
-        separator = separator.prevSibling;
-      }
-      const outer = value.parent;
-      if (separator?.name === ':' && outer?.name === 'DictionaryExpression') {
-        let result = outer;
-        while (result.parent?.name === 'ParenthesizedExpression') {
-          result = result.parent;
-        }
-
-        const statement = result.parent;
-        if (statement?.name === 'ReturnStatement' && !statement.getChild(',')) {
-          // A changed line can contain unchanged syntax alongside the actual edit.
-          const anchors = [
-            cursor.from,
-            separator.from,
-            outer.from,
-            statement.from,
-          ].filter((offset) => addedSyntaxStarts.has(offset));
-          if (anchors.length) {
-            const addedTokens = (addedReturnStarts ??= addedReturnTokenStarts(
-              content,
-              patch,
-            ));
-            observation.nestedObjectReturnFound = anchors.some((offset) =>
-              addedTokens.has(offset),
-            );
-          }
-        }
-      }
-    }
-
-    if (
-      observation.snakeCaseIdentifierFound &&
-      observation.nestedObjectReturnFound
-    )
-      return;
-  } while (cursor.next());
+  const starter = starterContent
+    ? pythonPatterns(starterContent).nestedReturns
+    : [];
+  starter.sort((a, b) => b.entries - a.entries);
+  // Existing shapes can account for returns with at most the same number of direct
+  // dictionary values. For equal shapes, account for unchanged returns first.
+  submitted.nestedReturns.sort(
+    (a, b) => b.entries - a.entries || Number(a.added) - Number(b.added),
+  );
+  observation.nestedObjectReturnFound = submitted.nestedReturns.some(
+    ({ entries, added }, i) => added && entries > (starter[i]?.entries ?? 0),
+  );
 }
 
 export function buildR27Presentation(evidence: R27Evidence): R27Presentation {
@@ -283,6 +257,7 @@ export function buildR27Presentation(evidence: R27Evidence): R27Presentation {
     ) {
       observeAddedPythonPatterns(
         termsPatternObservation,
+        starterContent,
         submittedContent,
         patch,
       );

@@ -353,6 +353,44 @@ describe('R2.7 evidence presentation', () => {
     },
   );
 
+  it('ignores a copy of an unchanged nested entry inside a list-valued sibling', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        {
+          'booking.py':
+            'def book():\n    return {"count": 1, "meta": {"sent": True}}\n',
+        },
+        {
+          'booking.py':
+            'def book():\n    return {"count": [1, {"meta": {"sent": True}}], "meta": {"sent": True}}\n',
+        },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: false,
+    });
+  });
+
+  it('observes a new direct nested value alongside an existing nested value', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        {
+          'booking.py':
+            'def book():\n    return {"meta": {"sent": True}, "details": None}\n',
+        },
+        {
+          'booking.py':
+            'def book():\n    return {"meta": {"sent": True}, "details": {"count": 1}}\n',
+        },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: true,
+    });
+  });
+
   it('does not derive a diff when the starter baseline is unavailable', () => {
     const result = buildR27Presentation(
       evidence({
