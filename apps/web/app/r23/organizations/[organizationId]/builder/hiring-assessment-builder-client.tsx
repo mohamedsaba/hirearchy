@@ -324,9 +324,12 @@ export function HiringAssessmentBuilderClient({
       } | null;
 
       if (!response.ok || !data?.draft) {
+        const message = data?.error?.message;
         throw new Error(
-          data?.error?.message ??
-            `Unable to generate assessment (HTTP ${response.status}).`,
+          response.status === 503 && /timeout|timed out/i.test(message ?? '')
+            ? 'Kimi took too long to respond. Try again or choose a template.'
+            : (message ??
+                `Unable to generate assessment (HTTP ${response.status}).`),
         );
       }
 

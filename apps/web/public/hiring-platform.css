@@ -516,6 +516,10 @@
   min-inline-size: 0;
 }
 
+.software-document-panel .software-builder-stages {
+  margin: 0;
+}
+
 .software-builder-stages ol {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1239,6 +1243,9 @@
   }
   .software-directory .hiring-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .software-directory .hiring-field:has(#candidate-sort) {
+    grid-column: 1 / -1;
   }
   .software-repo-mobile-file {
     display: grid;

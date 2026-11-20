@@ -333,7 +333,9 @@ export function CandidatesPipelineClient({
           <div className="hiring-filter-result" role="status">
             {filtered.length}{' '}
             {filtered.length === 1 ? 'candidate' : 'candidates'}
-            {isFiltered ? ` of ${candidates.length}` : ''}
+            {filtered.length !== candidates.length
+              ? ` of ${candidates.length}`
+              : ''}
           </div>
 
           {filtered.length === 0 ? (
