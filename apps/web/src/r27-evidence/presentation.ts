@@ -114,7 +114,7 @@ function observeAddedPythonPatterns(
   }
   if (!addedLines.size) return;
 
-  // Whole-file syntax provides context. Only nodes starting on added lines can count.
+  const addedSyntaxStarts = new Set<number>();
   const cursor = pythonLanguage.parser.parse(content).cursor();
   let lineNumber = 1;
   let lineEnd = content.indexOf('\n');
@@ -123,9 +123,11 @@ function observeAddedPythonPatterns(
       lineNumber++;
       lineEnd = content.indexOf('\n', lineEnd + 1);
     }
-    if (!addedLines.has(lineNumber)) continue;
+    const isAdded = addedLines.has(lineNumber);
+    if (isAdded) addedSyntaxStarts.add(cursor.from);
 
     if (
+      isAdded &&
       cursor.name === 'VariableName' &&
       /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(
         content.slice(cursor.from, cursor.to),
@@ -134,14 +136,38 @@ function observeAddedPythonPatterns(
       observation.snakeCaseIdentifierFound = true;
     }
 
-    if (cursor.name === 'DictionaryExpression') {
-      const mapping = cursor.node;
-      if (
-        mapping.prevSibling?.name === ':' &&
-        mapping.parent?.name === 'DictionaryExpression' &&
-        mapping.parent.parent?.name === 'ReturnStatement'
-      ) {
-        observation.nestedObjectReturnFound = true;
+    if (
+      !observation.nestedObjectReturnFound &&
+      cursor.name === 'DictionaryExpression'
+    ) {
+      let value = cursor.node;
+      while (value.parent?.name === 'ParenthesizedExpression') {
+        value = value.parent;
+      }
+
+      let separator = value.prevSibling;
+      while (separator?.name === 'Comment') {
+        separator = separator.prevSibling;
+      }
+      const outer = value.parent;
+      if (separator?.name === ':' && outer?.name === 'DictionaryExpression') {
+        let result = outer;
+        while (result.parent?.name === 'ParenthesizedExpression') {
+          result = result.parent;
+        }
+
+        // An added return, outer literal, or entry separator can nest an unchanged value.
+        const statement = result.parent;
+        if (
+          statement?.name === 'ReturnStatement' &&
+          !statement.getChild(',') &&
+          (isAdded ||
+            addedSyntaxStarts.has(separator.from) ||
+            addedSyntaxStarts.has(outer.from) ||
+            addedSyntaxStarts.has(statement.from))
+        ) {
+          observation.nestedObjectReturnFound = true;
+        }
       }
     }
 

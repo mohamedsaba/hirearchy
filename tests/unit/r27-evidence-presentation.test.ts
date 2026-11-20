@@ -251,6 +251,93 @@ describe('R2.7 evidence presentation', () => {
     });
   });
 
+  it('observes a new nested return built around an unchanged dictionary', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        {
+          'booking.py':
+            'def book():\n    return (\n        {"sent": True}\n    )\n',
+        },
+        {
+          'booking.py':
+            'def book():\n    return {"meta":\n        {"sent": True}\n    }\n',
+        },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: true,
+    });
+  });
+
+  it.each([
+    ['return ({"meta": {"sent": True}})'],
+    ['return {"meta": ({"sent": True})}'],
+  ])(
+    'observes a nested dictionary return with parentheses in %s',
+    (statement) => {
+      expect(
+        styleObservation(
+          generatedBrief,
+          {},
+          {
+            'booking.py': 'def book():\n    ' + statement + '\n',
+          },
+        ),
+      ).toEqual({
+        snakeCaseIdentifierFound: false,
+        nestedObjectReturnFound: true,
+      });
+    },
+  );
+
+  it('observes a nested dictionary value after a comment', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        {},
+        {
+          'booking.py':
+            'def book():\n    return {"meta":  # booking metadata\n        {"sent": True}\n    }\n',
+        },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: true,
+    });
+  });
+
+  it('does not count a dictionary returned as one element of a tuple', () => {
+    expect(
+      styleObservation(
+        generatedBrief,
+        {},
+        {
+          'booking.py':
+            'def book():\n    return {"meta": {"sent": True}}, True\n',
+        },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: false,
+    });
+  });
+
+  it('ignores an unchanged nested return when only a sibling value is edited', () => {
+    const submitted =
+      'def book():\n    return {\n        "meta": {"sent": True},\n        "count": 2,\n    }\n';
+    expect(
+      styleObservation(
+        generatedBrief,
+        { 'booking.py': submitted.replace('"count": 2', '"count": 1') },
+        { 'booking.py': submitted },
+      ),
+    ).toEqual({
+      snakeCaseIdentifierFound: false,
+      nestedObjectReturnFound: false,
+    });
+  });
+
   it('does not derive a diff when the starter baseline is unavailable', () => {
     const result = buildR27Presentation(
       evidence({
