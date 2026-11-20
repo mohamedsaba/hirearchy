@@ -297,10 +297,16 @@ export function CandidatePortalClient({
 
   return (
     <div className="hiring-candidate-portal software-product">
-      <header className="hiring-portal-header">
+      <header className="software-document-header hiring-portal-header">
         <div className="hiring-portal-brand">
-          <strong>Hirearchy</strong>
-          <span className="software-product-capsule">Software</span>
+          <a
+            href="/candidate"
+            className="software-document-wordmark"
+            aria-label="Hirearchy Software assessments"
+          >
+            <span>Hirearchy</span>
+            <span className="software-document-product">Software</span>
+          </a>
         </div>
         <div className="hiring-header-actions">
           <span className="hiring-portal-email">{email}</span>
@@ -315,7 +321,7 @@ export function CandidatePortalClient({
         </div>
       </header>
 
-      <main className="hiring-portal-main">
+      <main className="hiring-portal-main software-portal-document">
         <div className="hiring-page-header">
           <div>
             <h1>{tab === 'assessments' ? 'My assessments' : 'My profile'}</h1>
@@ -367,7 +373,7 @@ export function CandidatePortalClient({
         ) : null}
 
         {tab === 'assessments' ? (
-          <div className="hiring-page-shell">
+          <div className="software-directory">
             <section
               className="hiring-filter-bar"
               aria-label="Filter your assessments"
@@ -443,139 +449,147 @@ export function CandidatePortalClient({
               </div>
             </section>
 
-            {filteredAssessments.length === 0 ? (
-              <div className="hiring-card">
-                <h2>
-                  {assessments.length
-                    ? 'No assessments match these filters'
-                    : 'No invitations yet'}
-                </h2>
-                <p>
-                  {assessments.length
-                    ? 'Choose another status, company, or role.'
-                    : 'Invitations sent to your verified email will appear here.'}
-                </p>
-              </div>
-            ) : (
-              <div className="hiring-candidate-list">
-                {filteredAssessments.map((item) => (
-                  <article
-                    key={item.sessionId}
-                    className="hiring-card hiring-card-animated"
-                  >
-                    <div className="hiring-portal-card-head">
-                      <div>
-                        <div className="hiring-candidate-name">
-                          <span className="hiring-pill hiring-pill-plum">
-                            {item.organizationName}
-                          </span>
-                          <span
-                            className={portalStatusBadgeClass(
-                              item.pipelineStatus,
-                            )}
-                          >
-                            {candidateStatusLabels[item.pipelineStatus]}
-                          </span>
+            <section
+              className="software-directory-results"
+              aria-label="Assessment results"
+            >
+              {filteredAssessments.length === 0 ? (
+                <div className="hiring-card">
+                  <h2>
+                    {assessments.length
+                      ? 'No assessments match these filters'
+                      : 'No invitations yet'}
+                  </h2>
+                  <p>
+                    {assessments.length
+                      ? 'Choose another status, company, or role.'
+                      : 'Invitations sent to your verified email will appear here.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="hiring-candidate-list">
+                  {filteredAssessments.map((item) => (
+                    <article
+                      key={item.sessionId}
+                      className="hiring-card hiring-card-animated"
+                    >
+                      <div className="hiring-portal-card-head">
+                        <div>
+                          <div className="hiring-candidate-name">
+                            <span className="hiring-eyebrow">
+                              {item.organizationName}
+                            </span>
+                            <span
+                              className={portalStatusBadgeClass(
+                                item.pipelineStatus,
+                              )}
+                            >
+                              {candidateStatusLabels[item.pipelineStatus]}
+                            </span>
+                          </div>
+                          <h2 className="hiring-portal-card-title">
+                            {item.scenarioTitle}
+                          </h2>
+                          <div className="hiring-candidate-meta">
+                            <span>Role: {item.targetRole}</span>
+                            <span>
+                              Level:{' '}
+                              {experienceLevelLabel(item.experienceLevel)}
+                            </span>
+                            <span>
+                              Time limit:{' '}
+                              {item.durationSeconds
+                                ? `${Math.round(item.durationSeconds / 60)} min`
+                                : 'Untimed'}
+                            </span>
+                          </div>
                         </div>
-                        <h2 className="hiring-portal-card-title">
-                          {item.scenarioTitle}
-                        </h2>
-                        <div className="hiring-candidate-meta">
-                          <span>Role: {item.targetRole}</span>
-                          <span>
-                            Level: {experienceLevelLabel(item.experienceLevel)}
-                          </span>
-                          <span>
-                            Time limit:{' '}
-                            {item.durationSeconds
-                              ? `${Math.round(item.durationSeconds / 60)} min`
-                              : 'Untimed'}
-                          </span>
-                        </div>
-                      </div>
 
-                      {item.canLaunch ? (
-                        <button
-                          type="button"
-                          className="hiring-btn hiring-btn-primary"
-                          disabled={busy !== null}
-                          onClick={() =>
-                            void handleLaunchAssessment(item.sessionId)
-                          }
-                        >
-                          <IconPlayerPlay size={15} />{' '}
-                          {busy === `launch:${item.sessionId}`
-                            ? 'Launching...'
-                            : item.status === 'ACTIVE'
-                              ? 'Resume Assessment'
-                              : 'Start Assessment'}
-                        </button>
-                      ) : item.status === 'SUBMITTED' ? (
-                        <span className="hiring-pill hiring-pill-success">
-                          <IconCheck size={13} /> Submitted
-                        </span>
-                      ) : (
-                        <span className="hiring-pill hiring-pill-danger">
-                          Invitation inactive or expired
-                        </span>
-                      )}
-                    </div>
-
-                    {item.publishedOutcome ? (
-                      <div className="hiring-outcome-box hiring-mt-md">
-                        <div className="hiring-candidate-name">
-                          <strong>
-                            {item.publishedOutcome.decision === 'accepted'
-                              ? `Next step · ${item.publishedOutcome.nextStageLabel ?? 'Next interview'}`
-                              : 'Feedback'}
-                          </strong>
-                          <span
-                            className={`hiring-pill ${item.publishedOutcome.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
-                          >
-                            {
-                              candidateStatusLabels[
-                                item.publishedOutcome.decision
-                              ]
+                        {item.canLaunch ? (
+                          <button
+                            type="button"
+                            className="hiring-btn hiring-btn-primary"
+                            disabled={busy !== null}
+                            onClick={() =>
+                              void handleLaunchAssessment(item.sessionId)
                             }
+                          >
+                            <IconPlayerPlay size={15} />{' '}
+                            {busy === `launch:${item.sessionId}`
+                              ? 'Launching...'
+                              : item.status === 'ACTIVE'
+                                ? 'Resume Assessment'
+                                : 'Start Assessment'}
+                          </button>
+                        ) : item.status === 'SUBMITTED' ? (
+                          <span className="hiring-pill hiring-pill-success">
+                            <IconCheck size={13} /> Submitted
                           </span>
-                        </div>
-
-                        {item.publishedOutcome.feedbackNote ? (
-                          <p className="hiring-outcome-note">
-                            {item.publishedOutcome.feedbackNote}
-                          </p>
-                        ) : null}
-
-                        <div className="hiring-two-col">
-                          {item.publishedOutcome.strengths.length > 0 ? (
-                            <div>
-                              <strong>Strengths noted</strong>
-                              <ul className="hiring-bullet-list">
-                                {item.publishedOutcome.strengths.map((s, i) => (
-                                  <li key={i}>{s}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
-                          {item.publishedOutcome.weaknesses.length > 0 ? (
-                            <div>
-                              <strong>Areas for growth</strong>
-                              <ul className="hiring-bullet-list">
-                                {item.publishedOutcome.weaknesses.map(
-                                  (w, i) => (
-                                    <li key={i}>{w}</li>
-                                  ),
-                                )}
-                              </ul>
-                            </div>
-                          ) : null}
-                        </div>
+                        ) : (
+                          <span className="hiring-pill hiring-pill-danger">
+                            Invitation inactive or expired
+                          </span>
+                        )}
                       </div>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            )}
+
+                      {item.publishedOutcome ? (
+                        <div className="hiring-outcome-box hiring-mt-md">
+                          <div className="hiring-candidate-name">
+                            <strong>
+                              {item.publishedOutcome.decision === 'accepted'
+                                ? `Next step · ${item.publishedOutcome.nextStageLabel ?? 'Next interview'}`
+                                : 'Feedback'}
+                            </strong>
+                            <span
+                              className={`hiring-pill ${item.publishedOutcome.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
+                            >
+                              {
+                                candidateStatusLabels[
+                                  item.publishedOutcome.decision
+                                ]
+                              }
+                            </span>
+                          </div>
+
+                          {item.publishedOutcome.feedbackNote ? (
+                            <p className="hiring-outcome-note">
+                              {item.publishedOutcome.feedbackNote}
+                            </p>
+                          ) : null}
+
+                          <div className="hiring-two-col">
+                            {item.publishedOutcome.strengths.length > 0 ? (
+                              <div>
+                                <strong>Strengths noted</strong>
+                                <ul className="hiring-bullet-list">
+                                  {item.publishedOutcome.strengths.map(
+                                    (s, i) => (
+                                      <li key={i}>{s}</li>
+                                    ),
+                                  )}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {item.publishedOutcome.weaknesses.length > 0 ? (
+                              <div>
+                                <strong>Areas for growth</strong>
+                                <ul className="hiring-bullet-list">
+                                  {item.publishedOutcome.weaknesses.map(
+                                    (w, i) => (
+                                      <li key={i}>{w}</li>
+                                    ),
+                                  )}
+                                </ul>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
         ) : (
           <form

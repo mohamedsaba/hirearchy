@@ -49,7 +49,9 @@ The hiring team enters at `/r23/login` and candidates enter at `/candidate/login
 
 ### 2.2 Assessment authoring
 
-The builder leads from template, AI generation, or saved problem selection into the candidate preview and invitation. The preview places the formatted brief, repository files, and rubric in adjacent panes. The file explorer, language highlighting, wrap and copy controls use the Software palette with a plum code surface. Long paths remain readable and the editor supports keyboard scrolling.
+The builder gives the problem, candidate preview, and invitation separate stages. The problem stage lists templates, AI generation, and saved problems. The preview groups the formatted brief, repository files, and rubric. Its editor has a desktop file tree, a narrow-screen file selector, open tabs, language highlighting, and wrap and copy controls. Long paths remain readable and the code area supports keyboard scrolling.
+
+The candidate directory places filters beside results on wide screens and above them on small screens. The candidate portal uses the Software masthead and highlights published feedback within each assessment. The reviewer can expand second opinions to inspect the conversation. The handoff gives the recipient and interview stage their own column on wide screens.
 
 ### 2.3 Candidate workspace
 

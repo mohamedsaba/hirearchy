@@ -292,16 +292,17 @@ export function HiringDecisionPanel({
         </div>
       ) : null}
 
-      <section
-        className="hiring-card hiring-card-animated"
-        aria-labelledby="second-opinion-heading"
+      <details
+        className="hiring-card software-review-consult"
+        open={ctx.secondOpinions.length > 0 || undefined}
       >
-        <div className="hiring-candidate-name">
-          <IconUsers size={18} />
-          <h3 id="second-opinion-heading">
-            Second Opinion (Team Collaboration)
-          </h3>
-        </div>
+        <summary>
+          <IconUsers size={17} aria-hidden="true" />
+          <strong>Second opinion</strong>
+          {ctx.secondOpinions.length > 0 ? (
+            <span>{ctx.secondOpinions.length}</span>
+          ) : null}
+        </summary>
         <p className="hiring-muted-copy">
           Ask another evaluator, CTO, or engineering manager on your team to
           inspect this candidate&apos;s evidence before publishing a final
@@ -411,11 +412,11 @@ export function HiringDecisionPanel({
             })}
           </div>
         ) : null}
-      </section>
+      </details>
 
       {ctx.canPublishDecision ? (
         <section
-          className="hiring-card hiring-card-animated"
+          className="hiring-card software-review-decision"
           aria-labelledby="final-decision-heading"
         >
           <div className="hiring-candidate-name">
@@ -430,9 +431,14 @@ export function HiringDecisionPanel({
             onSubmit={handlePublishDecision}
             className="hiring-page-shell hiring-mt-md"
           >
-            <div className="hiring-builder-tabs">
+            <div
+              className="hiring-builder-tabs"
+              role="group"
+              aria-label="Hiring decision"
+            >
               <button
                 type="button"
+                aria-pressed={decision === 'accepted'}
                 className={`hiring-builder-tab${decision === 'accepted' ? ' is-active' : ''}`}
                 onClick={() => setDecision('accepted')}
               >
@@ -440,6 +446,7 @@ export function HiringDecisionPanel({
               </button>
               <button
                 type="button"
+                aria-pressed={decision === 'rejected'}
                 className={`hiring-builder-tab${decision === 'rejected' ? ' is-active' : ''}`}
                 onClick={() => setDecision('rejected')}
               >

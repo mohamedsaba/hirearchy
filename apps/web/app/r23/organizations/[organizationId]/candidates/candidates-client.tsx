@@ -172,338 +172,352 @@ export function CandidatesPipelineClient({
         </div>
       ) : null}
 
-      <section className="hiring-filter-bar" aria-label="Filter candidates">
-        <div className="hiring-filter-heading">
-          <h2>Candidate filters</h2>
-          {isFiltered ? (
-            <button
-              type="button"
-              className="hiring-btn hiring-btn-sm"
-              onClick={clearFilters}
-            >
-              Clear filters
-            </button>
-          ) : null}
-        </div>
-        <div className="hiring-filter-grid">
-          <div className="hiring-field">
-            <label htmlFor="candidate-role">Role</label>
-            <select
-              id="candidate-role"
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-            >
-              <option value="all">All roles</option>
-              {choices.roles.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
+      <div className="software-directory">
+        <aside className="hiring-filter-bar" aria-label="Filter candidates">
+          <div className="hiring-filter-heading">
+            <h2>Candidate filters</h2>
+            {isFiltered ? (
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            ) : null}
           </div>
-
-          <div className="hiring-field">
-            <label htmlFor="candidate-status">Pipeline stage</label>
-            <select
-              id="candidate-status"
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as PipelineStatusId)
-              }
-            >
-              {PIPELINE_STATUS_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="hiring-field">
-            <label htmlFor="candidate-experience">Experience level</label>
-            <select
-              id="candidate-experience"
-              value={experienceFilter}
-              onChange={(e) => setExperienceFilter(e.target.value)}
-            >
-              <option value="all">All levels</option>
-              {EXPERIENCE_LEVELS.map((lvl) => (
-                <option key={lvl.id} value={lvl.id}>
-                  {lvl.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="hiring-field">
-            <label htmlFor="candidate-location">Location</label>
-            <select
-              id="candidate-location"
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-            >
-              <option value="all">All locations</option>
-              {choices.locations.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="hiring-field">
-            <label htmlFor="candidate-years">Years of experience</label>
-            <select
-              id="candidate-years"
-              value={yearsFilter}
-              onChange={(e) => setYearsFilter(e.target.value)}
-            >
-              <option value="all">Any experience</option>
-              {choices.years.map((years) => (
-                <option key={years} value={years}>
-                  {years}+ {years === 1 ? 'year' : 'years'}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="hiring-field">
-            <label htmlFor="candidate-skills">Skills</label>
-            <select
-              id="candidate-skills"
-              value=""
-              onChange={(e) =>
-                setSelectedSkills([...selectedSkills, e.target.value])
-              }
-            >
-              <option value="" disabled>
-                {choices.skills.length > 0 ? 'Add a skill' : 'No skills yet'}
-              </option>
-              {choices.skills
-                .filter((skill) => !selectedSkills.includes(skill))
-                .map((skill) => (
-                  <option key={skill} value={skill}>
-                    {skill}
+          <div className="hiring-filter-grid">
+            <div className="hiring-field">
+              <label htmlFor="candidate-role">Role</label>
+              <select
+                id="candidate-role"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+              >
+                <option value="all">All roles</option>
+                {choices.roles.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
                   </option>
                 ))}
-            </select>
-          </div>
+              </select>
+            </div>
 
-          <div className="hiring-field">
-            <label htmlFor="candidate-sort">Sort by</label>
-            <select
-              id="candidate-sort"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as CandidateSortId)}
-            >
-              {CANDIDATE_SORT_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {selectedSkills.length > 0 ? (
-          <div className="hiring-chip-group" aria-label="Selected skills">
-            {selectedSkills.map((skill) => (
-              <button
-                key={skill}
-                className="hiring-chip is-active"
-                type="button"
-                aria-label={`Remove ${skill} filter`}
-                onClick={() =>
-                  setSelectedSkills(
-                    selectedSkills.filter((item) => item !== skill),
-                  )
+            <div className="hiring-field">
+              <label htmlFor="candidate-status">Pipeline stage</label>
+              <select
+                id="candidate-status"
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as PipelineStatusId)
                 }
               >
-                {skill} <IconX size={14} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </section>
+                {PIPELINE_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <div className="hiring-filter-result" role="status">
-        {filtered.length} {filtered.length === 1 ? 'candidate' : 'candidates'}
-        {isFiltered ? ` of ${candidates.length}` : ''}
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="hiring-card">
-          <h2>
-            {candidates.length === 0
-              ? 'No candidates yet'
-              : 'No candidates match these filters'}
-          </h2>
-          <p>
-            {candidates.length === 0
-              ? 'Issue your first assessment from the Assessment Builder to start your candidate pipeline.'
-              : 'Try broadening your role, skills, location, or stage filters.'}
-          </p>
-        </div>
-      ) : (
-        <div className="hiring-candidate-list">
-          {filtered.map((candidate) => {
-            const expanded = expandedKeys.has(candidate.candidateKey);
-            const locationLabel = [
-              candidate.locationCity,
-              candidate.locationCountry,
-            ]
-              .filter(Boolean)
-              .join(', ');
-
-            return (
-              <article
-                key={candidate.candidateKey}
-                className="hiring-candidate-card"
+            <div className="hiring-field">
+              <label htmlFor="candidate-experience">Experience level</label>
+              <select
+                id="candidate-experience"
+                value={experienceFilter}
+                onChange={(e) => setExperienceFilter(e.target.value)}
               >
-                <div className="hiring-candidate-header">
-                  <div className="hiring-candidate-identity">
-                    <span className="hiring-avatar" aria-hidden="true">
-                      {getInitials(candidate.fullName)}
-                    </span>
-                    <div>
-                      <div className="hiring-candidate-name">
-                        <h2>{candidate.fullName}</h2>
-                        <span
-                          className={statusPillClass(
-                            candidate.latestPipelineStatus,
-                          )}
-                        >
-                          {statusLabel(candidate.latestPipelineStatus)}
-                        </span>
-                      </div>
-                      <div className="hiring-candidate-meta">
-                        <span>{candidate.email || 'Unassigned email'}</span>
-                        <span>{candidate.headlineRole}</span>
-                        <span>
-                          {candidate.experienceLevel
-                            ? experienceLevelLabel(candidate.experienceLevel)
-                            : 'Level unspecified'}
-                          {candidate.yearsExperience !== null
-                            ? ` · ${candidate.yearsExperience} yrs`
-                            : ''}
-                        </span>
-                        {candidate.hasAccount ? null : (
-                          <span>Awaiting signup</span>
-                        )}
-                        {locationLabel ? (
-                          <span>
-                            <IconMapPin size={12} /> {locationLabel}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
+                <option value="all">All levels</option>
+                {EXPERIENCE_LEVELS.map((lvl) => (
+                  <option key={lvl.id} value={lvl.id}>
+                    {lvl.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                  <div className="hiring-chip-group">
-                    {candidate.skills.map((skill) => (
-                      <span key={skill} className="hiring-pill">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
+            <div className="hiring-field">
+              <label htmlFor="candidate-location">Location</label>
+              <select
+                id="candidate-location"
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+              >
+                <option value="all">All locations</option>
+                {choices.locations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                  <button
-                    type="button"
-                    className="hiring-btn hiring-btn-sm"
-                    onClick={() => toggleExpanded(candidate.candidateKey)}
-                    aria-expanded={expanded}
+            <div className="hiring-field">
+              <label htmlFor="candidate-years">Years of experience</label>
+              <select
+                id="candidate-years"
+                value={yearsFilter}
+                onChange={(e) => setYearsFilter(e.target.value)}
+              >
+                <option value="all">Any experience</option>
+                {choices.years.map((years) => (
+                  <option key={years} value={years}>
+                    {years}+ {years === 1 ? 'year' : 'years'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="hiring-field">
+              <label htmlFor="candidate-skills">Skills</label>
+              <select
+                id="candidate-skills"
+                value=""
+                onChange={(e) =>
+                  setSelectedSkills([...selectedSkills, e.target.value])
+                }
+              >
+                <option value="" disabled>
+                  {choices.skills.length > 0 ? 'Add a skill' : 'No skills yet'}
+                </option>
+                {choices.skills
+                  .filter((skill) => !selectedSkills.includes(skill))
+                  .map((skill) => (
+                    <option key={skill} value={skill}>
+                      {skill}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="hiring-field">
+              <label htmlFor="candidate-sort">Sort by</label>
+              <select
+                id="candidate-sort"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as CandidateSortId)}
+              >
+                {CANDIDATE_SORT_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {selectedSkills.length > 0 ? (
+            <div className="hiring-chip-group" aria-label="Selected skills">
+              {selectedSkills.map((skill) => (
+                <button
+                  key={skill}
+                  className="hiring-chip is-active"
+                  type="button"
+                  aria-label={`Remove ${skill} filter`}
+                  onClick={() =>
+                    setSelectedSkills(
+                      selectedSkills.filter((item) => item !== skill),
+                    )
+                  }
+                >
+                  {skill} <IconX size={14} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </aside>
+        <section
+          className="software-directory-results"
+          aria-label="Matching candidates"
+        >
+          <div className="hiring-filter-result" role="status">
+            {filtered.length}{' '}
+            {filtered.length === 1 ? 'candidate' : 'candidates'}
+            {isFiltered ? ` of ${candidates.length}` : ''}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="hiring-card">
+              <h2>
+                {candidates.length === 0
+                  ? 'No candidates yet'
+                  : 'No candidates match these filters'}
+              </h2>
+              <p>
+                {candidates.length === 0
+                  ? 'Issue your first assessment from the Assessment Builder to start your candidate pipeline.'
+                  : 'Try broadening your role, skills, location, or stage filters.'}
+              </p>
+            </div>
+          ) : (
+            <div className="hiring-candidate-list">
+              {filtered.map((candidate) => {
+                const expanded = expandedKeys.has(candidate.candidateKey);
+                const locationLabel = [
+                  candidate.locationCity,
+                  candidate.locationCountry,
+                ]
+                  .filter(Boolean)
+                  .join(', ');
+
+                return (
+                  <article
+                    key={candidate.candidateKey}
+                    className="hiring-candidate-card"
                   >
-                    {expanded ? (
-                      <>
-                        <IconChevronDown size={15} /> Hide{' '}
-                        {candidate.sessions.length} assessment
-                        {candidate.sessions.length === 1 ? '' : 's'}
-                      </>
-                    ) : (
-                      <>
-                        <IconChevronRight size={15} />{' '}
-                        {candidate.sessions.length} assessment
-                        {candidate.sessions.length === 1 ? '' : 's'}
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {expanded ? (
-                  <div className="hiring-session-sublist">
-                    {candidate.sessions.map((sess) => {
-                      const canReviewEvidence =
-                        sess.lifecycleStatus === 'SUBMITTED';
-                      const reviewHref = canReviewEvidence
-                        ? `/r27/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sess.sessionId)}`
-                        : `${orgBase}/sessions/${encodeURIComponent(sess.sessionId)}`;
-                      return (
-                        <div
-                          key={sess.sessionId}
-                          className="hiring-session-subrow"
-                        >
-                          <div>
-                            <strong>{sess.scenarioTitle}</strong>
-                            <div className="hiring-candidate-meta">
-                              <span>Role: {sess.targetRole}</span>
-                              <span>
-                                Issued {formatDateShort(sess.createdAt)}
-                              </span>
-                              {sess.submittedAt ? (
-                                <span>
-                                  Submitted {formatDateShort(sess.submittedAt)}
-                                </span>
-                              ) : null}
-                              <span>
-                                Reviewer:{' '}
-                                {sess.assignedReviewerName ?? 'Unassigned'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="hiring-chip-group">
+                    <div className="hiring-candidate-header">
+                      <div className="hiring-candidate-identity">
+                        <span className="hiring-avatar" aria-hidden="true">
+                          {getInitials(candidate.fullName)}
+                        </span>
+                        <div>
+                          <div className="hiring-candidate-name">
+                            <h2>{candidate.fullName}</h2>
                             <span
-                              className={statusPillClass(sess.pipelineStatus)}
+                              className={statusPillClass(
+                                candidate.latestPipelineStatus,
+                              )}
                             >
-                              {statusLabel(sess.pipelineStatus)}
+                              {statusLabel(candidate.latestPipelineStatus)}
                             </span>
-                            {sess.secondOpinions.length > 0 ? (
-                              <span className="hiring-pill">
-                                <IconUserCheck size={12} />{' '}
-                                {sess.secondOpinions.length} 2nd opinion
-                                {sess.secondOpinions.length === 1 ? '' : 's'}
+                          </div>
+                          <div className="hiring-candidate-meta">
+                            <span>{candidate.email || 'Unassigned email'}</span>
+                            <span>{candidate.headlineRole}</span>
+                            <span>
+                              {candidate.experienceLevel
+                                ? experienceLevelLabel(
+                                    candidate.experienceLevel,
+                                  )
+                                : 'Level unspecified'}
+                              {candidate.yearsExperience !== null
+                                ? ` · ${candidate.yearsExperience} yrs`
+                                : ''}
+                            </span>
+                            {candidate.hasAccount ? null : (
+                              <span>Awaiting signup</span>
+                            )}
+                            {locationLabel ? (
+                              <span>
+                                <IconMapPin size={12} /> {locationLabel}
                               </span>
                             ) : null}
-                          </div>
-
-                          <div className="hiring-header-actions">
-                            {sess.decision?.decision === 'accepted' ? (
-                              <Link
-                                className="hiring-btn hiring-btn-sm hiring-btn-mint"
-                                href={`${orgBase}/handoffs/${encodeURIComponent(sess.sessionId)}`}
-                              >
-                                Open Handoff
-                              </Link>
-                            ) : null}
-                            <a
-                              className="hiring-btn hiring-btn-sm hiring-btn-primary"
-                              href={reviewHref}
-                            >
-                              {canReviewEvidence
-                                ? 'Review & Decide'
-                                : 'Inspect Session'}
-                            </a>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      )}
+                      </div>
+
+                      <div className="hiring-chip-group">
+                        {candidate.skills.map((skill) => (
+                          <span key={skill} className="hiring-pill">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="hiring-btn hiring-btn-sm"
+                        onClick={() => toggleExpanded(candidate.candidateKey)}
+                        aria-expanded={expanded}
+                      >
+                        {expanded ? (
+                          <>
+                            <IconChevronDown size={15} /> Hide{' '}
+                            {candidate.sessions.length} assessment
+                            {candidate.sessions.length === 1 ? '' : 's'}
+                          </>
+                        ) : (
+                          <>
+                            <IconChevronRight size={15} />{' '}
+                            {candidate.sessions.length} assessment
+                            {candidate.sessions.length === 1 ? '' : 's'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {expanded ? (
+                      <div className="hiring-session-sublist">
+                        {candidate.sessions.map((sess) => {
+                          const canReviewEvidence =
+                            sess.lifecycleStatus === 'SUBMITTED';
+                          const reviewHref = canReviewEvidence
+                            ? `/r27/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sess.sessionId)}`
+                            : `${orgBase}/sessions/${encodeURIComponent(sess.sessionId)}`;
+                          return (
+                            <div
+                              key={sess.sessionId}
+                              className="hiring-session-subrow"
+                            >
+                              <div>
+                                <strong>{sess.scenarioTitle}</strong>
+                                <div className="hiring-candidate-meta">
+                                  <span>Role: {sess.targetRole}</span>
+                                  <span>
+                                    Issued {formatDateShort(sess.createdAt)}
+                                  </span>
+                                  {sess.submittedAt ? (
+                                    <span>
+                                      Submitted{' '}
+                                      {formatDateShort(sess.submittedAt)}
+                                    </span>
+                                  ) : null}
+                                  <span>
+                                    Reviewer:{' '}
+                                    {sess.assignedReviewerName ?? 'Unassigned'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="hiring-chip-group">
+                                <span
+                                  className={statusPillClass(
+                                    sess.pipelineStatus,
+                                  )}
+                                >
+                                  {statusLabel(sess.pipelineStatus)}
+                                </span>
+                                {sess.secondOpinions.length > 0 ? (
+                                  <span className="hiring-pill">
+                                    <IconUserCheck size={12} />{' '}
+                                    {sess.secondOpinions.length} 2nd opinion
+                                    {sess.secondOpinions.length === 1
+                                      ? ''
+                                      : 's'}
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              <div className="hiring-header-actions">
+                                {sess.decision?.decision === 'accepted' ? (
+                                  <Link
+                                    className="hiring-btn hiring-btn-sm hiring-btn-mint"
+                                    href={`${orgBase}/handoffs/${encodeURIComponent(sess.sessionId)}`}
+                                  >
+                                    Open Handoff
+                                  </Link>
+                                ) : null}
+                                <a
+                                  className="hiring-btn hiring-btn-sm hiring-btn-primary"
+                                  href={reviewHref}
+                                >
+                                  {canReviewEvidence
+                                    ? 'Review & Decide'
+                                    : 'Inspect Session'}
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,10 @@
 # Hirearchy hiring experience
 
-Start at the current GitHub main and retain the reviewed Hirearchy Software UI. Integrate the separate hiring implementation as a source of working routes, migrations and adapters, then exercise the combined product and correct failures at their owning layer.
+Start at the current GitHub main and retain the reviewed Hirearchy Software UI. Use the existing hiring routes, migrations and adapters for product behavior. Build the presentation from Hirearchy’s Common Thread brand and the reviewed Software UI.
+
+## Interface direction
+
+Use a compact three-stage builder, with a source catalog, candidate preview and invitation form. Rebuild the repository view and feature styles around the shared Software controls. Use a candidate directory with a dedicated filter column, a shared masthead for the candidate portal, and focused sections for the reviewer’s decision and manager’s handoff.
 
 ## Acceptance
 
