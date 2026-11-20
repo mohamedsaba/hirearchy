@@ -9,11 +9,18 @@ import { dispatchStagingProof } from '../../apps/web/src/staging/dispatch.mjs';
 import {
   stagingCallbackGet,
   stagingLoginPost,
+  stagingOrganizationPost,
   stagingOrganizationsGet,
 } from '../../apps/web/src/staging/browser';
 import { stagingPost } from '../../apps/web/src/staging/server';
 import { proxy } from '../../apps/web/proxy';
-import { r23IsEnabled } from '../../apps/web/src/r23-auth/config';
+import {
+  R23_CSRF_COOKIE,
+  R23_SESSION_COOKIE,
+  r23IsEnabled,
+} from '../../apps/web/src/r23-auth/config';
+import { r211ReusableProblemApi } from '../../apps/web/src/r23-auth/server';
+import { content as problemContent } from '../staging/journey.mjs';
 
 const subject = '10000000-0000-4000-8000-0000000000a1';
 const session = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -454,6 +461,186 @@ describe('authenticated staging boundary', () => {
       expect(dispatchStagingProof).not.toHaveBeenCalled();
     }
   });
+
+  const organizationId = '11111111-1111-4111-8111-111111111111';
+  const otherOrganizationId = '22222222-2222-4222-8222-222222222222';
+  const problemId = '33333333-3333-4333-8333-333333333333';
+
+  it.each([
+    {
+      description: 'stale PATCH',
+      method: 'PATCH',
+      action: 'update',
+      body: { content: problemContent, expectedVersion: 1 },
+      sqlState: 'R2111',
+      status: 409,
+    },
+    {
+      description: 'stale DELETE',
+      method: 'DELETE',
+      action: 'delete',
+      body: { expectedVersion: 1 },
+      sqlState: 'R2111',
+      status: 409,
+    },
+    {
+      description: 'unselected organization',
+      method: 'GET',
+      action: 'get',
+      targetOrganizationId: otherOrganizationId,
+      status: 404,
+    },
+    {
+      description: 'invalid problem identifier',
+      method: 'GET',
+      action: 'get',
+      targetProblemId: 'invalid-id',
+      status: 404,
+    },
+    {
+      description: 'missing problem',
+      method: 'GET',
+      action: 'get',
+      sqlState: 'P0002',
+      status: 404,
+    },
+  ] as const)(
+    'retains refreshed credentials after a problem error ($description)',
+    async (entry) => {
+      vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+      const { privateKey } = generateKeyPairSync('ed25519');
+      const env = {
+        STAGING_AUTH_URL: 'http://127.0.0.1:54321',
+        STAGING_AUTH_ISSUER: 'https://auth.example.test',
+        STAGING_AUTH_AUDIENCE: 'authenticated',
+        STAGING_DATABASE_URL:
+          'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
+        STAGING_PROOF_PRIVATE_KEY: privateKey
+          .export({ format: 'der', type: 'pkcs8' })
+          .toString('base64'),
+        STAGING_PROOF_ISSUER: 'hirearchy',
+        STAGING_PROOF_AUDIENCE: 'database',
+        STAGING_PROOF_KEY_ID: 'key-1',
+      };
+      for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+
+      const startedAt = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(startedAt);
+      const grant = (expiresIn: number) => ({
+        access_token: `${encode({ alg: 'HS256' })}.${encode({
+          sub: subject,
+          session_id: session,
+          aal: 'aal1',
+          iss: env.STAGING_AUTH_ISSUER,
+          aud: env.STAGING_AUTH_AUDIENCE,
+          exp: Math.floor(Date.now() / 1000) + expiresIn,
+          amr: [{ method: 'password', timestamp: 1 }],
+        })}.signature`,
+        refresh_token: `test-refresh-${expiresIn}`,
+        expires_in: expiresIn,
+      });
+      const refresh = vi.fn(() => Response.json(grant(300)));
+      vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes('/token?grant_type=password')) {
+          return Response.json(grant(60));
+        }
+        if (url.includes('/token?grant_type=refresh_token')) {
+          return refresh();
+        }
+        return Response.json({ id: subject });
+      });
+
+      try {
+        const cookies = new Map<string, string>();
+        const storeCookies = (response: Response) => {
+          for (const header of response.headers.getSetCookie()) {
+            const [pair] = header.split(';', 1);
+            const [name, value] = pair.split('=', 2);
+            if (value) cookies.set(name, value);
+            else cookies.delete(name);
+          }
+        };
+        const cookieHeader = () =>
+          Array.from(cookies, ([name, value]) => `${name}=${value}`).join('; ');
+        const browserRequest = (path: string, method = 'GET', body?: object) =>
+          new Request(`http://localhost${path}`, {
+            method,
+            headers: {
+              cookie: cookieHeader(),
+              origin: 'http://localhost',
+              'content-type': 'application/json',
+              'x-csrf-token': cookies.get(R23_CSRF_COOKIE) ?? '',
+            },
+            body: body ? JSON.stringify(body) : undefined,
+          });
+
+        const login = await stagingLoginPost(
+          browserRequest('/r23/auth/login', 'POST', {
+            email: 'recruiter@example.test',
+            password: 'synthetic-password',
+          }),
+        );
+        expect(login.status).toBe(303);
+        storeCookies(login);
+        const callback = await stagingCallbackGet(
+          browserRequest('/r23/auth/callback'),
+        );
+        expect(callback.status).toBe(303);
+        storeCookies(callback);
+        const selected = await stagingOrganizationPost(
+          browserRequest('/r23/organization', 'POST', { organizationId }),
+        );
+        expect(selected.status).toBe(303);
+        storeCookies(selected);
+        const previousSession = cookies.get(R23_SESSION_COOKIE);
+        expect(previousSession).toBeDefined();
+        expect(refresh).not.toHaveBeenCalled();
+
+        clock.mockReturnValue(startedAt + 40_000);
+        if ('sqlState' in entry) {
+          vi.mocked(dispatchStagingProof).mockRejectedValueOnce(
+            Object.assign(new Error('Problem operation failed'), {
+              code: entry.sqlState,
+            }),
+          );
+        }
+        const targetOrganization =
+          'targetOrganizationId' in entry
+            ? entry.targetOrganizationId
+            : organizationId;
+        const targetProblem =
+          'targetProblemId' in entry ? entry.targetProblemId : problemId;
+        const response = await r211ReusableProblemApi(
+          browserRequest(
+            `/r23/api/organizations/${targetOrganization}/problems/${targetProblem}`,
+            entry.method,
+            'body' in entry ? entry.body : undefined,
+          ),
+          targetOrganization,
+          entry.action,
+          targetProblem,
+        );
+        expect(refresh).toHaveBeenCalledOnce();
+        expect(response.status).toBe(entry.status);
+        expect(await response.json()).toMatchObject({
+          error: {
+            code:
+              entry.status === 409
+                ? 'PROBLEM_CONCURRENCY_CONFLICT'
+                : 'NOT_FOUND',
+          },
+        });
+        expect(response.headers.getSetCookie()).toEqual([
+          expect.stringContaining(`${R23_SESSION_COOKIE}=`),
+        ]);
+        storeCookies(response);
+        expect(cookies.get(R23_SESSION_COOKIE)).not.toBe(previousSession);
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
 
   it('surfaces organization database failures and renders persisted names', async () => {
     vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');

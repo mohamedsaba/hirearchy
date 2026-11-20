@@ -2527,6 +2527,8 @@ export async function stagingReusableProblemApi(
   const jsonHeaders = new Headers(request.headers);
   jsonHeaders.set('Accept', 'application/json');
   const jsonRequest = new Request(request.url, { headers: jsonHeaders });
+  let refreshedSessionCookie: string | null = null;
+  let response: Response;
   try {
     if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
     const organizationId = targetOrganizationId.toLowerCase();
@@ -2538,10 +2540,16 @@ export async function stagingReusableProblemApi(
       requireOriginAndCsrf(request, body);
     }
 
-    return await withStagingBrowserSession(
+    response = await withStagingBrowserSession(
       request,
       digest(csrf),
-      async ({ config, session, identity, refreshedSessionCookie }) => {
+      async ({
+        config,
+        session,
+        identity,
+        refreshedSessionCookie: sessionCookie,
+      }) => {
+        refreshedSessionCookie = sessionCookie;
         if (session.selectedOrganizationId !== organizationId) {
           return reusableProblemNotFound();
         }
@@ -2578,23 +2586,24 @@ export async function stagingReusableProblemApi(
           `problem.${action}`,
           args,
         );
-        return attachRefreshedCookie(
-          reusableProblemJson(
-            result as object,
-            action === 'create' || action === 'reuse' ? 201 : 200,
-          ),
-          refreshedSessionCookie,
+        return reusableProblemJson(
+          result as object,
+          action === 'create' || action === 'reuse' ? 201 : 200,
         );
       },
     );
   } catch (error) {
     const code = getSqlErrorCode(error);
-    if (code === 'P0002') return reusableProblemNotFound();
-    const problemError = reusableProblemError(
-      code === 'R2111' ? new R211ProblemConcurrencyConflict() : error,
-    );
-    return problemError ?? failureResponse(jsonRequest, error);
+    if (code === 'P0002') {
+      response = reusableProblemNotFound();
+    } else {
+      response =
+        reusableProblemError(
+          code === 'R2111' ? new R211ProblemConcurrencyConflict() : error,
+        ) ?? failureResponse(jsonRequest, error);
+    }
   }
+  return attachRefreshedCookie(response, refreshedSessionCookie);
 }
 
 export async function stagingAssessmentDraftApiGet(
