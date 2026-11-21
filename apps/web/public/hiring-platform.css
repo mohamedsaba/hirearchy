@@ -429,7 +429,7 @@
   padding: 0;
   border: 0;
   border-radius: var(--software-radius-control);
-  background: transparent;
+  background: var(--software-surface);
   color: var(--software-muted);
   cursor: pointer;
 }
