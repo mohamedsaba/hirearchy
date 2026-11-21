@@ -1908,6 +1908,18 @@
   color: var(--software-btn-primary-fg, #ffffff);
 }
 
+.r26-candidate .r26-header .r26-button-primary {
+  background: var(--software-mint);
+  border-color: var(--software-mint);
+  color: #211426;
+}
+
+.r26-candidate .r26-header .r26-button-primary:hover:not(:disabled) {
+  background: #abe8c7;
+  border-color: #abe8c7;
+  color: #211426;
+}
+
 .r26-candidate .r26-button-secondary {
   background: var(--software-surface);
   border-color: var(--software-border);

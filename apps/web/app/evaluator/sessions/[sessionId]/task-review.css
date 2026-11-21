@@ -854,6 +854,9 @@
 }
 
 .evaluator-back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
   color: var(--software-plum);
   font-size: 13px;
   text-decoration: none;

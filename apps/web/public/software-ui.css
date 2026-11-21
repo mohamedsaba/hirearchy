@@ -146,13 +146,23 @@ body.software-document-body *::after {
   color: #f5efe6;
   font: 650 0.875rem / 1 var(--software-sans);
   text-decoration: none;
-  transform: translateY(-200%);
-  transition: transform 140ms ease;
+}
+
+.software-skip-link:not(:focus):not(:focus-visible) {
+  width: 1px;
+  height: 1px;
+  min-block-size: 0;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .software-skip-link:focus,
 .software-skip-link:focus-visible {
-  transform: translateY(0);
   outline: 2px solid var(--software-mint);
   outline-offset: 2px;
 }
