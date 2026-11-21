@@ -2,10 +2,11 @@ import '../../../../../evaluator/sessions/[sessionId]/task-review.css';
 
 import { headers } from 'next/headers';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import { EvaluatorExperience } from '../../../../../evaluator/sessions/[sessionId]/evaluator-experience';
 import type { SessionHiringReviewContext } from '../../../../../../src/hiring/types';
+import { R23AuthenticationDenied } from '../../../../../../src/r23-auth/identity';
 import { r27EvidenceApiGet } from '../../../../../../src/r23-auth/server';
 import { r27IsEnabled } from '../../../../../../src/r27-evidence/config';
 import {
@@ -21,13 +22,41 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseInitialTab(
+  rawTab: string | undefined,
+  hasPeerReview: boolean,
+): 'Summary' | 'Evidence' | 'Review' | undefined {
+  const normalized = rawTab?.trim().toLowerCase();
+  if (normalized === 'review') return 'Review';
+  if (normalized === 'evidence') return 'Evidence';
+  if (normalized === 'summary') return 'Summary';
+  return hasPeerReview ? 'Review' : undefined;
+}
+
 export default async function R27EvidencePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ organizationId: string; sessionId: string }>;
+  searchParams: Promise<{ tab?: string; peerReview?: string }>;
 }) {
   if (!r27IsEnabled() && !isAuthenticatedStaging()) notFound();
-  const { organizationId, sessionId } = await params;
+  const [{ organizationId, sessionId }, query] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  const initialPeerReviewId =
+    typeof query.peerReview === 'string' &&
+    UUID_PATTERN.test(query.peerReview.trim())
+      ? query.peerReview.trim().toLowerCase()
+      : null;
+  const initialTab = parseInitialTab(
+    typeof query.tab === 'string' ? query.tab : undefined,
+    Boolean(initialPeerReviewId),
+  );
   const incomingHeaders = await headers();
   const request = new Request('https://r27-page.invalid/', {
     headers: {
@@ -38,16 +67,39 @@ export default async function R27EvidencePage({
 
   if (isAuthenticatedStaging()) {
     let pageState;
+    let shouldRedirectToLogin = false;
     try {
       pageState = await stagingLoadR27EvidencePage(
         request,
         organizationId,
         sessionId,
       );
-    } catch {
-      notFound();
+    } catch (error) {
+      if (
+        isHiringPlatformEnabled() &&
+        error instanceof R23AuthenticationDenied &&
+        UUID_PATTERN.test(organizationId) &&
+        /^sess_[A-Za-z0-9_-]{1,128}$/.test(sessionId)
+      ) {
+        shouldRedirectToLogin = true;
+      } else {
+        notFound();
+      }
     }
-    if (pageState.kind === 'unavailable') notFound();
+    if (shouldRedirectToLogin) {
+      const nextParams = new URLSearchParams();
+      if (initialTab) nextParams.set('tab', initialTab.toLowerCase());
+      if (initialPeerReviewId)
+        nextParams.set('peerReview', initialPeerReviewId);
+      const nextQuery = nextParams.toString();
+      const targetPath = `/r27/organizations/${encodeURIComponent(
+        organizationId.toLowerCase(),
+      )}/sessions/${encodeURIComponent(sessionId)}${
+        nextQuery ? `?${nextQuery}` : ''
+      }`;
+      redirect(`/r23/login?next=${encodeURIComponent(targetPath)}`);
+    }
+    if (!pageState || pageState.kind === 'unavailable') notFound();
     if (pageState.kind === 'unsubmitted') {
       const s = pageState.session;
       return (
@@ -133,6 +185,8 @@ export default async function R27EvidencePage({
           readOnly
           r27Evidence={pageState.evidence}
           hiringReviewContext={hiringReviewContext}
+          initialTab={initialTab}
+          initialPeerReviewId={initialPeerReviewId}
         />
       </main>
     );

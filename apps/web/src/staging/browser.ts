@@ -199,6 +199,7 @@ type StagingBrowserSessionPayload = Readonly<{
   csrfHash: string;
   callbackHash: string | null;
   selectedOrganizationId: string | null;
+  postLoginPath?: string | null;
   expiresAt: number;
 }>;
 
@@ -309,6 +310,42 @@ function isLoopbackHost(hostname: string): boolean {
   if (host === '::1' || host === 'localhost') return true;
   if (isIP(host) !== 4) return false;
   return Number(host.split('.')[0]) === 127;
+}
+
+const POST_LOGIN_ORG_PATH =
+  /^\/(?:r23|r27)\/organizations\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/[A-Za-z0-9_./-]*)?(?:\?[A-Za-z0-9_=&%.-]*)?$/i;
+
+export function sanitizePostLoginPath(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.length > 512 ||
+    !trimmed.startsWith('/') ||
+    trimmed.startsWith('//') ||
+    trimmed.includes('\\') ||
+    trimmed.includes('..') ||
+    /[\r\n\0]/.test(trimmed)
+  ) {
+    return null;
+  }
+  if (!POST_LOGIN_ORG_PATH.test(trimmed)) return null;
+  try {
+    const parsed = new URL(trimmed, 'https://hirearchy.invalid');
+    if (parsed.origin !== 'https://hirearchy.invalid') return null;
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
+function extractOrganizationIdFromPath(path: string): string | null {
+  const match = POST_LOGIN_ORG_PATH.exec(path);
+  return match?.[1] ? match[1].toLowerCase() : null;
+}
+
+export function resolveStagingPublicOrigin(request: Request): string {
+  return resolvePublicOrigin(request);
 }
 
 function resolvePublicOrigin(request: Request): string {
@@ -491,11 +528,15 @@ function decryptSessionPayload(
       (obj.selectedOrganizationId !== null &&
         (typeof obj.selectedOrganizationId !== 'string' ||
           !UUID.test(obj.selectedOrganizationId))) ||
+      (obj.postLoginPath !== undefined &&
+        obj.postLoginPath !== null &&
+        sanitizePostLoginPath(obj.postLoginPath) === null) ||
       typeof obj.expiresAt !== 'number' ||
       !Number.isSafeInteger(obj.expiresAt)
     ) {
       throw new R23AuthenticationDenied();
     }
+    const postLoginPath = sanitizePostLoginPath(obj.postLoginPath);
     return Object.freeze({
       v: 1,
       sub: obj.sub.toLowerCase(),
@@ -508,6 +549,7 @@ function decryptSessionPayload(
       selectedOrganizationId: obj.selectedOrganizationId
         ? obj.selectedOrganizationId.toLowerCase()
         : null,
+      ...(postLoginPath ? { postLoginPath } : {}),
       expiresAt: obj.expiresAt,
     });
   } catch {
@@ -601,10 +643,15 @@ function htmlResponse(
   );
 }
 
-function loginForm(message = ''): string {
+function loginForm(message = '', nextPath: string | null = null): string {
+  const safeNext = sanitizePostLoginPath(nextPath);
   return `${
     message ? `<p role="alert">${safeHtml(message)}</p>` : ''
-  }<form action="/r23/auth/login" method="post"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options">${
+  }<form action="/r23/auth/login" method="post">${
+    safeNext
+      ? `<input type="hidden" name="next" value="${safeHtml(safeNext)}">`
+      : ''
+  }<label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="320"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"><button type="submit">Sign in</button></form><nav aria-label="Account access options">${
     isFounderUatEnabled() ||
     process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true'
       ? '<p><a href="/r23/signup">Create an account</a></p>'
@@ -1234,13 +1281,15 @@ export async function stagingLoginPost(request: Request): Promise<Response> {
   if (!isAuthenticatedStaging()) {
     return htmlResponse('Not found', '<p>Not found.</p>', 404);
   }
+  let requestedNextPath: string | null = null;
   try {
     const config = loadStagingConfiguration();
     const origin = requireSameOrigin(request);
     const body = await parseBody(request, false);
-    allowedFields(body, ['email', 'password']);
+    allowedFields(body, ['email', 'password', 'next']);
     const email = requiredText(body, 'email', 320);
     const password = requiredText(body, 'password', 1024);
+    requestedNextPath = sanitizePostLoginPath(body.next);
 
     let pair: R23TokenGrant;
     try {
@@ -1274,6 +1323,7 @@ export async function stagingLoginPost(request: Request): Promise<Response> {
       csrfHash: digest(csrf),
       callbackHash: digest(callback),
       selectedOrganizationId: null,
+      ...(requestedNextPath ? { postLoginPath: requestedNextPath } : {}),
       expiresAt: now + APP_SESSION_TTL_SECONDS,
     });
     const encodedSession = encryptSessionPayload(payload, sessionKey);
@@ -1300,6 +1350,7 @@ export async function stagingLoginPost(request: Request): Promise<Response> {
         'Evaluator sign in',
         loginForm(
           'Invalid email or password. Check credentials and try again.',
+          requestedNextPath,
         ),
         401,
       );
@@ -1341,12 +1392,42 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
     );
     sameIdentity(identity, session);
 
+    let destination = '/r23/organizations';
+    let selectedOrganizationId = session.selectedOrganizationId;
+    const requestedPath = sanitizePostLoginPath(session.postLoginPath);
+    if (requestedPath && isHiringPlatformEnabled()) {
+      const targetOrgId = extractOrganizationIdFromPath(requestedPath);
+      if (targetOrgId) {
+        try {
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'session.open',
+            { organizationId: targetOrgId },
+          );
+          selectedOrganizationId = targetOrgId;
+          destination = requestedPath;
+        } catch {
+          selectedOrganizationId = null;
+          destination = '/r23/organizations';
+        }
+      }
+    }
+
     const updatedSession: StagingBrowserSessionPayload = Object.freeze({
-      ...session,
+      v: session.v,
+      sub: session.sub,
+      sid: session.sid,
+      aal: session.aal,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      csrfHash: session.csrfHash,
       callbackHash: null,
+      selectedOrganizationId,
+      expiresAt: session.expiresAt,
     });
 
-    return redirect(origin, '/r23/organizations', [
+    return redirect(origin, destination, [
       cookieHeader(
         R23_SESSION_COOKIE,
         encryptSessionPayload(updatedSession, sessionKey),

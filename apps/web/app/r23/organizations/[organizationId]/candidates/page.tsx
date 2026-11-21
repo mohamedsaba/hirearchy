@@ -74,6 +74,7 @@ export default async function OrganizationCandidatesPage({
           initialCandidates={initialCandidates}
           plan={workspace.plan}
           currentRole={workspace.role}
+          currentPrincipalId={workspace.orgContext.principalId}
         />
       </div>
     </OrganizationWorkspaceShell>

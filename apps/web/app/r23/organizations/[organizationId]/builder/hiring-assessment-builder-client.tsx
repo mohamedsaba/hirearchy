@@ -36,6 +36,7 @@ import {
 } from '../../../../../src/plans/entitlements';
 import type { R211AssessmentDraftInput } from '../../../../../src/r211-builder/contract';
 import { ScenarioBrief } from '../../../../../src/ui/scenario-brief';
+import { playHirearchySound } from '../../../../../src/ui/sound';
 import { RepositoryInspector } from './repository-inspector';
 
 export interface HiringAssessmentBuilderClientProps {
@@ -353,10 +354,12 @@ export function HiringAssessmentBuilderClient({
       setSavedIds(null);
       setPreviewFilePath(data.draft.primaryFilePath);
       setStage('preview');
+      playHirearchySound('complete');
       setStatusBanner(
         `Generated "${data.draft.title}" with ${data.modelId ?? 'Kimi K3.1 Pro'}. Save to Library or issue directly below.`,
       );
     } catch (err) {
+      playHirearchySound('error');
       setErrorBanner(
         err instanceof Error
           ? err.message
@@ -426,10 +429,12 @@ export function HiringAssessmentBuilderClient({
     setSavingLibrary(true);
     try {
       await ensureSavedToLibrary();
+      playHirearchySound('confirm');
       setStatusBanner(
         `Saved "${activeDraft.title}" to your organization's Problem Library.`,
       );
     } catch (err) {
+      playHirearchySound('error');
       setErrorBanner(
         err instanceof Error ? err.message : 'Unable to save to library.',
       );
@@ -521,6 +526,7 @@ export function HiringAssessmentBuilderClient({
         }));
       }
 
+      playHirearchySound('dispatch');
       setStatusBanner(
         `Assessment issued to ${trimmedEmail}. It is now visible in their Candidate Portal and ready via direct link.`,
       );

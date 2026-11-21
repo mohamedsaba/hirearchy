@@ -116,6 +116,55 @@ body.software-document-body *::after {
 }
 
 .software-product
+  :where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    section,
+    article,
+    [tabindex],
+    [id]
+  ) {
+  scroll-margin-top: calc(var(--software-header-height, 4rem) + 1.5rem);
+}
+
+.software-skip-link {
+  position: fixed;
+  inset-block-start: 0.75rem;
+  inset-inline-start: 0.75rem;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  padding: 0 1rem;
+  border: 2px solid var(--software-mint);
+  border-radius: var(--software-radius-control);
+  background: #211426;
+  color: #f5efe6;
+  font: 650 0.875rem / 1 var(--software-sans);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 140ms ease;
+}
+
+.software-skip-link:focus,
+.software-skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--software-mint);
+  outline-offset: 2px;
+}
+
+.software-header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.software-product
   :where(button, a, input, textarea, select, summary):focus-visible {
   outline: 2px solid var(--software-focus);
   outline-offset: 2px;
@@ -146,9 +195,9 @@ body.software-document-body *::after {
 
 .software-product
   :where(.button-primary, .software-button-primary, .software-action-primary) {
-  border-color: var(--software-plum);
-  background: var(--software-plum);
-  color: var(--software-surface);
+  border-color: var(--software-btn-primary-bg, var(--software-plum));
+  background: var(--software-btn-primary-bg, var(--software-plum));
+  color: var(--software-btn-primary-fg, var(--software-surface));
 }
 
 .software-product
@@ -1874,9 +1923,20 @@ html[data-theme='dark'] .software-role-badge {
     textarea,
     select
   ):focus {
-  outline: none;
   border-color: var(--software-border-strong);
-  box-shadow: 0 0 0 3px var(--software-glow-mint);
+}
+
+.software-product
+  :where(
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not(
+        [type='submit']
+      ):not([type='button']):not([type='range']),
+    textarea,
+    select
+  ):focus-visible {
+  outline: 2px solid var(--software-focus);
+  outline-offset: 2px;
+  border-color: var(--software-focus);
 }
 
 .software-product
@@ -1902,9 +1962,9 @@ html[data-theme='dark'] .software-role-badge {
   appearance: none;
   -webkit-appearance: none;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  min-height: 18px;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
   margin: 0;
   padding: 0;
   border: 1.5px solid var(--software-border-strong);
@@ -1926,10 +1986,10 @@ html[data-theme='dark'] .software-role-badge {
   input[type='checkbox']:not(.hiring-switch-input):checked::after {
   content: '';
   position: absolute;
-  left: 5px;
-  top: 2px;
-  width: 4.5px;
-  height: 8.5px;
+  left: 6px;
+  top: 2.5px;
+  width: 5px;
+  height: 9px;
   border: solid var(--software-btn-primary-fg);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);

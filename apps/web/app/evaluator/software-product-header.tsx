@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SoundToggle } from '../_components/sound-toggle';
 import { ThemeToggle } from '../_components/theme-toggle';
 import './software-product-header.css';
 
@@ -127,7 +128,10 @@ export const SoftwareProductHeader = ({
         ) : null}
         {allowIssuance ? null : null}
       </nav>
-      <ThemeToggle variant="header" />
+      <div className="software-header-controls">
+        <SoundToggle variant="header" />
+        <ThemeToggle variant="header" />
+      </div>
     </header>
   );
 };

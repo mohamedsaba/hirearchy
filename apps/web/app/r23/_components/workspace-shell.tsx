@@ -5,6 +5,7 @@ import {
   type OrganizationPlanSummary,
 } from '../../../src/plans/entitlements';
 import type { SoftwareWorkspaceActiveSection } from '../../../src/ui/software-document';
+import { SoundToggle } from '../../_components/sound-toggle';
 import { ThemeToggle } from '../../_components/theme-toggle';
 
 function resolveRoleLabel(role: string): string {
@@ -46,6 +47,9 @@ export function OrganizationWorkspaceShell({
 
   return (
     <div className="software-product software-document-body software-document-workspace">
+      <a className="software-skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <header className="software-document-header">
         <a
           className="software-document-wordmark"
@@ -55,7 +59,10 @@ export function OrganizationWorkspaceShell({
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </a>
-        <ThemeToggle variant="header" />
+        <div className="software-header-controls">
+          <SoundToggle variant="header" />
+          <ThemeToggle variant="header" />
+        </div>
       </header>
       <div className="software-document-layout">
         <aside className="software-workspace-sidebar">
@@ -113,7 +120,11 @@ export function OrganizationWorkspaceShell({
             </form>
           </div>
         </aside>
-        <main className="software-document-shell">
+        <main
+          className="software-document-shell"
+          id="main-content"
+          tabIndex={-1}
+        >
           <div className="software-document-panel">{children}</div>
         </main>
       </div>

@@ -28,6 +28,8 @@ type R27EvaluatorExperienceProps = Readonly<{
   readOnly: true;
   r27Evidence: R27Evidence;
   hiringReviewContext?: SessionHiringReviewContext | null;
+  initialTab?: 'Summary' | 'Evidence' | 'Review';
+  initialPeerReviewId?: string | null;
 }>;
 
 type EvaluatorExperienceProps =
@@ -40,6 +42,9 @@ export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
         className="evaluator-v2-container evaluator-evidence-product"
         style={{ gap: 0 }}
       >
+        <a className="software-skip-link" href="#evidence-workbench-panel">
+          Skip to review workspace
+        </a>
         <SoftwareProductHeader
           active="reviews"
           stagingReview={{
@@ -54,6 +59,8 @@ export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
             readOnly
             r27Evidence={props.r27Evidence}
             hiringReviewContext={props.hiringReviewContext}
+            initialTab={props.initialTab}
+            initialPeerReviewId={props.initialPeerReviewId}
           />
         </div>
       </div>

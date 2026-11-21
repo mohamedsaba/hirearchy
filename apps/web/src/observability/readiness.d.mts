@@ -5,7 +5,7 @@ export interface OperationalReadinessReport {
   database: {
     connected: boolean;
     migrationVersion: string | null;
-    targetMigrationVersion: '0019';
+    targetMigrationVersion: '0020';
     isMigrationCurrent: boolean;
     markers: {
       candidateLifecycle: boolean;

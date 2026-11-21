@@ -1,3 +1,7 @@
+import {
+  PEER_REVIEW_REQUEST_SUBJECT_PREFIX,
+  PEER_REVIEW_RESPONSE_SUBJECT_PREFIX,
+} from '../hiring/mail';
 import type { FounderUatConfiguration } from './founder-uat';
 import {
   FOUNDER_UAT_CONFIRMATION_SUBJECT,
@@ -9,7 +13,8 @@ const MAX_SEARCH_RESPONSE_BYTES = 256 * 1024;
 const MAX_MESSAGE_RESPONSE_BYTES = 512 * 1024;
 const MAX_MESSAGES = 25;
 
-export type FounderUatMailKind = 'confirmation' | 'recovery';
+export type FounderUatMailKind =
+  'confirmation' | 'recovery' | 'peer_review_request' | 'peer_review_response';
 
 export type FounderUatMailSummary = Readonly<{
   id: string;
@@ -55,6 +60,14 @@ function mailKind(subject: unknown): FounderUatMailKind | null {
   }
   if (normalized === FOUNDER_UAT_RECOVERY_SUBJECT.toLowerCase()) {
     return 'recovery';
+  }
+  if (normalized.startsWith(PEER_REVIEW_REQUEST_SUBJECT_PREFIX.toLowerCase())) {
+    return 'peer_review_request';
+  }
+  if (
+    normalized.startsWith(PEER_REVIEW_RESPONSE_SUBJECT_PREFIX.toLowerCase())
+  ) {
+    return 'peer_review_response';
   }
   return null;
 }
@@ -161,11 +174,17 @@ export async function listFounderUatMessages(
   });
 }
 
-export async function readFounderUatMessageOtp(
+export async function readFounderUatMessageAction(
   config: FounderUatConfiguration,
   emailValue: string,
   messageId: string,
-): Promise<{ kind: FounderUatMailKind; otp: string }> {
+): Promise<
+  | { kind: 'confirmation' | 'recovery'; otp: string }
+  | {
+      kind: 'peer_review_request' | 'peer_review_response';
+      reviewPath: string;
+    }
+> {
   if (
     !isValidFounderUatEmail(emailValue) ||
     !/^[A-Za-z0-9_-]{1,128}$/.test(messageId)
@@ -191,7 +210,41 @@ export async function readFounderUatMessageOtp(
     throw new FounderUatMailMessageDenied();
   }
 
+  if (kind === 'peer_review_request' || kind === 'peer_review_response') {
+    const expectedOrigin = config.appOrigin.origin;
+    const match = message.Text.match(
+      /https?:\/\/[^\s"'<>]+\/r27\/organizations\/[0-9a-f-]{36}\/sessions\/sess_[A-Za-z0-9_-]+(?:\?[^\s"'<>]*)?/i,
+    );
+    if (!match) throw new FounderUatMailMessageDenied();
+    let parsed: URL;
+    try {
+      parsed = new URL(match[0]);
+    } catch {
+      throw new FounderUatMailMessageDenied();
+    }
+    if (parsed.origin !== expectedOrigin) {
+      throw new FounderUatMailMessageDenied();
+    }
+    return { kind, reviewPath: `${parsed.pathname}${parsed.search}` };
+  }
+
   const codes = message.Text.match(/(?<!\d)\d{6}(?!\d)/g) ?? [];
   if (codes.length !== 1) throw new FounderUatMailMessageDenied();
   return { kind, otp: codes[0] };
+}
+
+export async function readFounderUatMessageOtp(
+  config: FounderUatConfiguration,
+  emailValue: string,
+  messageId: string,
+): Promise<{ kind: 'confirmation' | 'recovery'; otp: string }> {
+  const action = await readFounderUatMessageAction(
+    config,
+    emailValue,
+    messageId,
+  );
+  if (action.kind !== 'confirmation' && action.kind !== 'recovery') {
+    throw new FounderUatMailMessageDenied();
+  }
+  return action;
 }

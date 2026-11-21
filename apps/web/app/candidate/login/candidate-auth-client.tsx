@@ -104,6 +104,9 @@ export function CandidateAuthClient({
 
   return (
     <div className="software-product software-document-access software-candidate-access">
+      <a className="software-skip-link" href="#main-content">
+        Skip to sign in
+      </a>
       <header className="software-document-header">
         <Link
           className="software-document-wordmark"
@@ -116,7 +119,7 @@ export function CandidateAuthClient({
         <ThemeToggle variant="header" />
       </header>
 
-      <main className="software-document-shell">
+      <main className="software-document-shell" id="main-content" tabIndex={-1}>
         <div className="software-candidate-intro">
           <p className="software-access-principle">
             Work worth

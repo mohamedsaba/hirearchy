@@ -35,7 +35,7 @@ Hirearchy Software is a **Next.js 16 + PostgreSQL modular monolith** written in 
 │       ├── r213-execution/ # Restricted code execution contracts
 │       └── staging/        # Staging & Founder UAT runtime dispatch (`browser.ts`, `onboarding.ts`)
 ├── database/postgres/
-│   ├── migrations/         # Sequential SQL migrations (`0001` .. `0019`)
+│   ├── migrations/         # Sequential SQL migrations (`0001` .. `0020`)
 │   ├── r23/ .. r214/       # PostgreSQL adapter modules & SQL fixtures per vertical slice
 │   └── staging/            # Staging SQL verifier / dispatch installer
 ├── packages/restricted-executor/ # Sandbox runner daemon & container definition for Python test execution
@@ -48,7 +48,7 @@ Hirearchy Software is a **Next.js 16 + PostgreSQL modular monolith** written in 
 
 ## 2. Database & Authorization Architecture (`R2.3 – R2.15`)
 
-PostgreSQL is the durable system of record (`database/postgres/migrations/0001_tenant_foundation.sql` through `0019_hiring_platform.sql`):
+PostgreSQL is the durable system of record (`database/postgres/migrations/0001_tenant_foundation.sql` through `0020_peer_review_verdicts.sql`):
 
 - **Identity & Organizations (`R2.3`):**
   - GoTrue issues JWTs verified server-side (`apps/web/src/r23-auth/identity.ts`).
@@ -60,8 +60,8 @@ PostgreSQL is the durable system of record (`database/postgres/migrations/0001_t
 - **Reusable Problem Library (`R2.11`)**
   - Migration `0018_reusable_problems.sql` adds the organization-scoped `hirearchy.reusable_problems` table with row-level security. Active recruiters can manage the library through the authenticated application and verified Founder UAT/staging operations.
   - Reuse copies the complete authoring content into a new assessment draft. Library edits and deletions affect the source record, while the draft proceeds independently through validation and issuance. See [ADR 0007](../decisions/0007-reusable-problem-library.md).
-- **Hiring Platform & Commercial Plans (`0019_hiring_platform.sql`):**
-  - Feature-gated via `isHiringPlatformEnabled()` (`HIREARCHY_HIRING_PLATFORM_ENABLED=true`). Adds multi-company candidate accounts (`/candidate`), commercial plans and per-candidate slot ledgers (`organization_plans`, `organization_candidate_credits`), role-tagged validated library entries (`assessment_library_entries`), peer second opinions (`hiring_second_opinions`), published human hiring decisions (`hiring_decisions`), and managerial handoffs. See [ADR 0009](../decisions/0009-hiring-platform-accounts-plans-and-handoffs.md).
+- **Hiring Platform, Commercial Plans & Team Peer Review (`0019_hiring_platform.sql`, `0020_peer_review_verdicts.sql`):**
+  - Feature-gated via `isHiringPlatformEnabled()` (`HIREARCHY_HIRING_PLATFORM_ENABLED=true`). Adds multi-company candidate accounts (`/candidate`), commercial plans and per-candidate slot ledgers (`organization_plans`, `organization_candidate_credits`), role-tagged validated library entries (`assessment_library_entries`), GitHub-PR-style team peer reviews with structured verdicts (`approve`, `comment`, `request_changes`), shared requester context, and direct-link email notifications (`hiring_second_opinions`, `apps/web/src/hiring/mail.ts`), published human hiring decisions (`hiring_decisions`), and managerial handoffs. See [ADR 0009](../decisions/0009-hiring-platform-accounts-plans-and-handoffs.md).
 - **Generated Assessment Style Probe (`ADR 0008`):**
   - Both `/api/evaluator/assessments/generate` and the Hiring Platform Kimi AI Assessment Builder (`apps/web/src/hiring/ai-builder.ts`) append the platform-owned `Terms and Conditions` footer (`apps/web/src/scenarios/generated-terms-and-conditions.ts`) under the existing 5,000-character brief ceiling without truncating task content.
   - Evaluator presentation (`apps/web/src/r27-evidence/presentation.ts`) surfaces neutral Python AST coding-pattern observations when present, while live AI Candidate Review (`apps/web/src/r27-evidence/ai-review.ts`) strips the footer from outbound prompts. See [ADR 0008](../decisions/0008-generated-assessment-llm-style-probe.md).

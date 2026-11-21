@@ -30,6 +30,7 @@ export interface CandidatesPipelineClientProps {
   readonly initialCandidates: readonly OrgCandidateRecord[];
   readonly plan: OrganizationPlanSummary;
   readonly currentRole: WorkspaceRoleKind;
+  readonly currentPrincipalId?: string;
 }
 
 function statusPillClass(status: PipelineStatusId): string {
@@ -78,6 +79,7 @@ export function CandidatesPipelineClient({
   initialCandidates: candidates,
   plan,
   currentRole,
+  currentPrincipalId,
 }: CandidatesPipelineClientProps) {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<PipelineStatusId>('all');
@@ -156,8 +158,91 @@ export function CandidatesPipelineClient({
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
 
+  const myPendingPeerReviews = useMemo(() => {
+    if (!currentPrincipalId) return [];
+    const items: Array<{
+      opinionId: string;
+      sessionId: string;
+      candidateName: string;
+      targetRole: string;
+      scenarioTitle: string;
+      requestedByName: string;
+      requestNote: string;
+      createdAt: string;
+    }> = [];
+    for (const candidate of candidates) {
+      for (const sess of candidate.sessions) {
+        for (const op of sess.secondOpinions) {
+          if (
+            op.status === 'pending' &&
+            op.requestedReviewerPrincipalId === currentPrincipalId
+          ) {
+            items.push({
+              opinionId: op.id,
+              sessionId: sess.sessionId,
+              candidateName: candidate.fullName,
+              targetRole: sess.targetRole,
+              scenarioTitle: sess.scenarioTitle,
+              requestedByName: op.requestedByName,
+              requestNote: op.requestNote,
+              createdAt: op.createdAt,
+            });
+          }
+        }
+      }
+    }
+    return items;
+  }, [candidates, currentPrincipalId]);
+
   return (
     <div className="hiring-page-shell">
+      {myPendingPeerReviews.length > 0 ? (
+        <section
+          className="hiring-card hiring-peer-queue-card"
+          aria-labelledby="pending-peer-reviews-title"
+          data-testid="pending-peer-reviews-queue"
+        >
+          <div className="hiring-peer-section-head">
+            <div>
+              <span className="hiring-eyebrow">Assigned to you</span>
+              <h2 id="pending-peer-reviews-title">
+                Peer reviews requested from you ({myPendingPeerReviews.length})
+              </h2>
+            </div>
+          </div>
+          <div className="hiring-peer-queue-list">
+            {myPendingPeerReviews.map((item) => (
+              <div key={item.opinionId} className="hiring-peer-queue-row">
+                <div>
+                  <div className="hiring-candidate-name">
+                    <strong>{item.candidateName}</strong>
+                    <span className="hiring-pill hiring-pill-warning">
+                      Peer review pending
+                    </span>
+                  </div>
+                  <div className="hiring-candidate-meta">
+                    <span>Requested by {item.requestedByName}</span>
+                    <span>{item.targetRole}</span>
+                    <span>{item.scenarioTitle}</span>
+                  </div>
+                  {item.requestNote ? (
+                    <p className="hiring-peer-queue-note">
+                      “{item.requestNote}”
+                    </p>
+                  ) : null}
+                </div>
+                <a
+                  className="hiring-btn hiring-btn-sm hiring-btn-primary"
+                  href={`/r27/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(item.sessionId)}?tab=review&peerReview=${encodeURIComponent(item.opinionId)}`}
+                >
+                  Open peer review →
+                </a>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {plan.planTier === 'none' ? (
         <div className="hiring-banner hiring-banner-warning" role="status">
           <span>Activate an organization plan to issue assessments.</span>
@@ -479,15 +564,52 @@ export function CandidatesPipelineClient({
                                 >
                                   {statusLabel(sess.pipelineStatus)}
                                 </span>
-                                {sess.secondOpinions.length > 0 ? (
-                                  <span className="hiring-pill">
-                                    <IconUserCheck size={12} />{' '}
-                                    {sess.secondOpinions.length} 2nd opinion
-                                    {sess.secondOpinions.length === 1
-                                      ? ''
-                                      : 's'}
-                                  </span>
-                                ) : null}
+                                {sess.secondOpinions.length > 0
+                                  ? (() => {
+                                      const pending =
+                                        sess.secondOpinions.filter(
+                                          (o) => o.status === 'pending',
+                                        );
+                                      const approved =
+                                        sess.secondOpinions.filter(
+                                          (o) =>
+                                            o.status === 'completed' &&
+                                            o.verdict === 'approve',
+                                        );
+                                      const flagged =
+                                        sess.secondOpinions.filter(
+                                          (o) =>
+                                            o.status === 'completed' &&
+                                            o.verdict === 'request_changes',
+                                        );
+                                      const pillClass =
+                                        flagged.length > 0
+                                          ? 'hiring-pill hiring-pill-danger'
+                                          : approved.length > 0 &&
+                                              pending.length === 0
+                                            ? 'hiring-pill hiring-pill-success'
+                                            : pending.length > 0
+                                              ? 'hiring-pill hiring-pill-warning'
+                                              : 'hiring-pill';
+                                      const label =
+                                        flagged.length > 0
+                                          ? `${flagged.length} concern${flagged.length === 1 ? '' : 's'} flagged`
+                                          : pending.length > 0
+                                            ? `${pending.length} peer review${pending.length === 1 ? '' : 's'} pending`
+                                            : approved.length > 0
+                                              ? `${approved.length} peer approved`
+                                              : `${sess.secondOpinions.length} peer review${sess.secondOpinions.length === 1 ? '' : 's'}`;
+                                      return (
+                                        <span className={pillClass}>
+                                          <IconUserCheck
+                                            size={12}
+                                            aria-hidden="true"
+                                          />{' '}
+                                          {label}
+                                        </span>
+                                      );
+                                    })()
+                                  : null}
                               </div>
 
                               <div className="hiring-header-actions">

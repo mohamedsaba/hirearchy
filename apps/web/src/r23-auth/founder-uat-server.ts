@@ -48,7 +48,8 @@ export function founderUatRedirect(
     | '/r23/reset-password?error=expired'
     | '/r23/reset-password?error=password'
     | '/r23/reset-password?error=unavailable'
-    | '/r23/invitations/accept?pending=1',
+    | '/r23/invitations/accept?pending=1'
+    | `/r27/organizations/${string}`,
   cookies: string[] = [],
 ): Response {
   const headers = new Headers({

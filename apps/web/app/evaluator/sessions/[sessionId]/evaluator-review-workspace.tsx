@@ -1256,6 +1256,8 @@ type R27EvaluatorReviewWorkspaceProps = Readonly<{
   readOnly: true;
   r27Evidence: R27Evidence;
   hiringReviewContext?: SessionHiringReviewContext | null;
+  initialTab?: WorkbenchMode;
+  initialPeerReviewId?: string | null;
 }>;
 
 export const EvaluatorReviewWorkspace = (
@@ -1264,6 +1266,20 @@ export const EvaluatorReviewWorkspace = (
   const { sessionId } = props;
   const hiringReviewContext =
     'hiringReviewContext' in props ? (props.hiringReviewContext ?? null) : null;
+  const initialTab: WorkbenchMode =
+    'initialTab' in props && props.initialTab ? props.initialTab : 'Summary';
+  const initialPeerReviewId =
+    'initialPeerReviewId' in props ? (props.initialPeerReviewId ?? null) : null;
+  const pendingPeerReviewsForMeCount = useMemo(
+    () =>
+      (hiringReviewContext?.secondOpinions ?? []).filter(
+        (opinion) =>
+          opinion.status === 'pending' &&
+          opinion.requestedReviewerPrincipalId ===
+            hiringReviewContext?.currentPrincipalId,
+      ).length,
+    [hiringReviewContext],
+  );
   const aiReviewPlanLocked = Boolean(
     hiringReviewContext &&
     !hasPlanFeature(hiringReviewContext.plan.planTier, 'aiCandidateReview'),
@@ -1294,7 +1310,7 @@ export const EvaluatorReviewWorkspace = (
         : buildEvidenceSources(review!, projection!, aiConversations),
     [aiConversations, projection, r27Evidence, r27Presentation, review],
   );
-  const [mode, setMode] = useState<WorkbenchMode>('Summary');
+  const [mode, setMode] = useState<WorkbenchMode>(initialTab);
   const [filter, setFilter] = useState<EvidenceFilter>('Chronology');
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(
     () => preferredEvidenceSource(sources)?.key ?? null,
@@ -1613,7 +1629,6 @@ export const EvaluatorReviewWorkspace = (
               : undefined
           }
           backLabel={r27Evidence ? '← Back to session summary' : undefined}
-          showTheme={Boolean(hiringReviewContext)}
         />
         <div className="evaluator-workbench-topline">
           <nav
@@ -1640,7 +1655,15 @@ export const EvaluatorReviewWorkspace = (
                 }}
                 onKeyDown={(event) => onModeKeyDown(event, index)}
               >
-                {item}
+                <span>{item}</span>
+                {item === 'Review' && pendingPeerReviewsForMeCount > 0 ? (
+                  <span
+                    className="evaluator-tab-badge"
+                    aria-label={`${pendingPeerReviewsForMeCount} peer review requested`}
+                  >
+                    {pendingPeerReviewsForMeCount}
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -1757,6 +1780,9 @@ export const EvaluatorReviewWorkspace = (
                     {hiringReviewContext ? (
                       <HiringDecisionPanel
                         initialContext={hiringReviewContext}
+                        aiReviewReport={aiReviewReport}
+                        initialPeerReviewId={initialPeerReviewId}
+                        onOpenEvidence={openEvidence}
                       />
                     ) : null}
                   </div>
