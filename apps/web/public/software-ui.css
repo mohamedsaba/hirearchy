@@ -517,7 +517,7 @@ body.software-document-body *::after {
 
 .software-document-access
   .software-document-panel
-  :is(input:not([type='hidden']), select, button) {
+  :is(input:not([type='hidden']), select, button:not(.hiring-password-reveal)) {
   min-height: var(--software-touch-target);
 }
 
@@ -530,19 +530,22 @@ body.software-document-body *::after {
   .software-document-panel
   form[action='/r23/auth/login']
   input
-  + button {
+  + button:not(.hiring-password-reveal) {
   margin-top: 0.5rem;
 }
 
 .software-field-heading {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 4px 12px;
 }
 
 .software-field-heading a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
   font-size: 0.875rem;
 }
 
@@ -878,6 +881,9 @@ body.software-document-body *::after {
 }
 
 .software-workspace-sidebar-footer button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
   padding: 0;
   border: 0;
   background: transparent;
@@ -887,6 +893,9 @@ body.software-document-body *::after {
 }
 
 .software-workspace-sidebar-footer > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
   color: #eee8f4;
 }
 

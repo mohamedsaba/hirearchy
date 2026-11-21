@@ -3283,7 +3283,7 @@ BEGIN
     RAISE EXCEPTION 'Review context access denied' USING ERRCODE = '42501';
   END IF;
 
-  SELECT owner_principal_id, name INTO v_owner_id, v_org_name FROM hirearchy.organizations WHERE id = p_organization_id;
+  SELECT owner_principal_id, COALESCE(display_name, 'Organization') INTO v_owner_id, v_org_name FROM hirearchy.organizations WHERE id = p_organization_id;
   SELECT scenario_title INTO v_scenario_title FROM hirearchy.assessment_sessions WHERE id = p_session_id AND organization_id = p_organization_id;
   SELECT role INTO v_role FROM hirearchy.organization_memberships
   WHERE organization_id = p_organization_id AND principal_id = p_caller_principal_id AND status = 'active' AND revoked_at IS NULL;

@@ -417,15 +417,19 @@
 .software-product button.hiring-password-reveal {
   display: inline-grid;
   position: absolute;
-  inset-inline-end: 0.3rem;
+  inset-block-start: 50%;
+  inset-inline-end: 0.35rem;
+  transform: translateY(-50%);
   align-items: center;
   justify-items: center;
-  min-height: 2.125rem;
-  inline-size: 2.125rem;
+  min-height: 2rem;
+  block-size: 2rem;
+  inline-size: 2rem;
+  margin: 0;
   padding: 0;
   border: 0;
   border-radius: var(--software-radius-control);
-  background: var(--software-surface);
+  background: transparent;
   color: var(--software-muted);
   cursor: pointer;
 }
@@ -446,11 +450,12 @@
 
 .hiring-switch-input {
   position: absolute;
-  inset-inline-start: 0;
-  width: 2.25rem;
-  height: 1.35rem;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
   opacity: 0;
+  cursor: pointer;
 }
 
 .hiring-switch-track {
@@ -1187,6 +1192,22 @@
   gap: 0.5rem 1rem;
   flex-wrap: wrap;
   padding-block: 0.55rem;
+}
+
+.software-product .hiring-portal-header .hiring-btn {
+  border-color: var(--software-on-plum-muted);
+  background: var(--software-brand-plum);
+  color: var(--software-on-plum);
+}
+
+.software-product .hiring-portal-header .hiring-btn:hover:not(:disabled) {
+  background: #3d2c4b;
+  border-color: var(--software-on-plum);
+}
+
+.software-product .hiring-portal-header .hiring-btn:focus-visible {
+  outline: 2px solid var(--software-mint);
+  outline-offset: 2px;
 }
 
 .hiring-portal-email {
