@@ -7,13 +7,29 @@ vi.mock('../../apps/web/src/staging/dispatch.mjs', () => ({
 }));
 import { dispatchStagingProof } from '../../apps/web/src/staging/dispatch.mjs';
 import {
+  stagingAssessmentDraftApiGet,
+  stagingAssessmentDraftApiPut,
+  stagingAssessmentValidateApiPost,
   stagingCallbackGet,
   stagingLoginPost,
+  stagingOrganizationPost,
+  stagingRefreshPost,
   stagingOrganizationsGet,
 } from '../../apps/web/src/staging/browser';
+import { RefreshBuilderSession } from '../../apps/web/app/r23/organizations/[organizationId]/builder/refresh-builder-session';
+import AssessmentBuilderPage from '../../apps/web/app/r23/organizations/[organizationId]/builder/page';
 import { stagingPost } from '../../apps/web/src/staging/server';
+import { loadProblems } from '../../apps/web/app/r23/organizations/[organizationId]/problems/load-problems';
+const pageCookies = vi.hoisted(() => vi.fn());
+vi.mock('next/headers', () => ({ cookies: pageCookies }));
 import { proxy } from '../../apps/web/proxy';
-import { r23IsEnabled } from '../../apps/web/src/r23-auth/config';
+import {
+  R23_CSRF_COOKIE,
+  R23_SESSION_COOKIE,
+  r23IsEnabled,
+} from '../../apps/web/src/r23-auth/config';
+import { r211ReusableProblemApi } from '../../apps/web/src/r23-auth/server';
+import { content as problemContent } from '../staging/journey.mjs';
 
 const subject = '10000000-0000-4000-8000-0000000000a1';
 const session = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -32,10 +48,117 @@ const request = (
     body,
   });
 
+async function stagingBrowserLogin() {
+  vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+  const { privateKey } = generateKeyPairSync('ed25519');
+  const env = {
+    STAGING_AUTH_URL: 'http://127.0.0.1:54321',
+    STAGING_AUTH_ISSUER: 'https://auth.example.test',
+    STAGING_AUTH_AUDIENCE: 'authenticated',
+    STAGING_DATABASE_URL:
+      'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
+    STAGING_PROOF_PRIVATE_KEY: privateKey
+      .export({ format: 'der', type: 'pkcs8' })
+      .toString('base64'),
+    STAGING_PROOF_ISSUER: 'hirearchy',
+    STAGING_PROOF_AUDIENCE: 'database',
+    STAGING_PROOF_KEY_ID: 'key-1',
+  };
+  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+
+  const token = `${encode({ alg: 'HS256' })}.${encode({
+    sub: subject,
+    session_id: session,
+    aal: 'aal1',
+    iss: env.STAGING_AUTH_ISSUER,
+    aud: env.STAGING_AUTH_AUDIENCE,
+    exp: Math.floor(Date.now() / 1000) + 300,
+    amr: [{ method: 'password', timestamp: 1 }],
+  })}.signature`;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes('/token?grant_type=password')) {
+        return Response.json({
+          access_token: token,
+          refresh_token: 'synthetic-refresh-token',
+          expires_in: 300,
+        });
+      }
+      return Response.json({ id: subject });
+    }),
+  );
+
+  const login = await stagingLoginPost(
+    new Request('http://localhost/r23/auth/login', {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        email: 'evaluator@example.test',
+        password: 'synthetic-password',
+      }),
+    }),
+  );
+  expect(login.status).toBe(303);
+
+  const cookies = new Map<string, string>();
+  const mergeResponseCookies = (response: Response) => {
+    const raw = response.headers.get('set-cookie') ?? '';
+    for (const match of raw.matchAll(
+      /(?:^|,\s*)(__Host-r23-[^=;, ]+=[^;,]*)/g,
+    )) {
+      const pair = match[1].trim();
+      const separator = pair.indexOf('=');
+      const name = pair.slice(0, separator);
+      if (pair.slice(separator + 1) === '') cookies.delete(name);
+      else cookies.set(name, pair);
+    }
+  };
+  mergeResponseCookies(login);
+  const callback = await stagingCallbackGet(
+    new Request('http://localhost/r23/auth/callback', {
+      headers: { cookie: [...cookies.values()].join('; ') },
+    }),
+  );
+  expect(callback.status).toBe(303);
+  mergeResponseCookies(callback);
+  return { cookies, mergeResponseCookies };
+}
+
+function stubOneTimeRefresh(startedAt: number) {
+  let grants = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | Request | URL) => {
+      if (String(input).includes('/token?grant_type=refresh_token')) {
+        if (grants++)
+          return Response.json(
+            { error: 'refresh token already rotated' },
+            { status: 401 },
+          );
+        return Response.json({
+          access_token: `${encode({ alg: 'HS256' })}.${encode({ sub: subject, session_id: session, aal: 'aal1', iss: 'https://auth.example.test', aud: 'authenticated', exp: Math.floor(startedAt / 1000) + 600, amr: [{ method: 'password', timestamp: 1 }] })}.signature`,
+          refresh_token: 'rotated-secret',
+          expires_in: 320,
+        });
+      }
+      return Response.json({ id: subject });
+    }),
+  );
+  return () => grants;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.clearAllMocks();
+  vi.mocked(dispatchStagingProof).mockImplementation(async () => ({
+    ok: true,
+  }));
 });
 
 describe('authenticated staging boundary', () => {
@@ -183,6 +306,49 @@ describe('authenticated staging boundary', () => {
         new NextRequest(`http://localhost${path}`, { method }),
       );
       expect(blocked.status).toBe(503);
+    }
+  });
+
+  it('opens only the problem library routes and methods in authenticated staging', () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    const pages = '/r23/organizations/org-1/problems';
+    const api = '/r23/api/organizations/org-1/problems';
+    const problem = `${api}/problem-1`;
+    const reuse = `${problem}/reuse`;
+    for (const [method, path] of [
+      ['GET', pages],
+      ['HEAD', pages],
+      ['GET', `${pages}/problem-1`],
+      ['GET', api],
+      ['HEAD', problem],
+      ['GET', problem],
+      ['POST', api],
+      ['PATCH', problem],
+      ['DELETE', problem],
+      ['POST', reuse],
+    ]) {
+      const response = proxy(
+        new NextRequest(`http://localhost${path}`, { method }),
+      );
+      expect(
+        response.headers.get('x-middleware-next'),
+        `${method} ${path}`,
+      ).toBe('1');
+    }
+    for (const [method, path] of [
+      ['POST', pages],
+      ['DELETE', api],
+      ['POST', problem],
+      ['PUT', problem],
+      ['GET', reuse],
+      ['PATCH', reuse],
+      ['POST', `${problem}/unexpected`],
+      ['GET', `${api}/problem-1/unexpected`],
+    ]) {
+      const response = proxy(
+        new NextRequest(`http://localhost${path}`, { method }),
+      );
+      expect(response.status, `${method} ${path}`).toBe(503);
     }
   });
 
@@ -412,84 +578,473 @@ describe('authenticated staging boundary', () => {
     }
   });
 
-  it('surfaces organization database failures and renders persisted names', async () => {
-    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
-    const { privateKey } = generateKeyPairSync('ed25519');
-    const env = {
-      STAGING_AUTH_URL: 'http://127.0.0.1:54321',
-      STAGING_AUTH_ISSUER: 'https://auth.example.test',
-      STAGING_AUTH_AUDIENCE: 'authenticated',
-      STAGING_DATABASE_URL:
-        'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
-      STAGING_PROOF_PRIVATE_KEY: privateKey
-        .export({ format: 'der', type: 'pkcs8' })
-        .toString('base64'),
-      STAGING_PROOF_ISSUER: 'hirearchy',
-      STAGING_PROOF_AUDIENCE: 'database',
-      STAGING_PROOF_KEY_ID: 'key-1',
-    };
-    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+  const organizationId = '11111111-1111-4111-8111-111111111111';
+  const otherOrganizationId = '22222222-2222-4222-8222-222222222222';
+  const problemId = '33333333-3333-4333-8333-333333333333';
 
-    const token = `${encode({ alg: 'HS256' })}.${encode({
-      sub: subject,
-      session_id: session,
-      aal: 'aal1',
-      iss: env.STAGING_AUTH_ISSUER,
-      aud: env.STAGING_AUTH_AUDIENCE,
-      exp: Math.floor(Date.now() / 1000) + 300,
-      amr: [{ method: 'password', timestamp: 1 }],
-    })}.signature`;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        if (String(input).includes('/token?grant_type=password')) {
-          return Response.json({
-            access_token: token,
-            refresh_token: 'synthetic-refresh-token',
-            expires_in: 300,
-          });
+  it.each([
+    {
+      description: 'stale PATCH',
+      method: 'PATCH',
+      action: 'update',
+      body: { content: problemContent, expectedVersion: 1 },
+      sqlState: 'R2111',
+      status: 409,
+    },
+    {
+      description: 'stale DELETE',
+      method: 'DELETE',
+      action: 'delete',
+      body: { expectedVersion: 1 },
+      sqlState: 'R2111',
+      status: 409,
+    },
+    {
+      description: 'unselected organization',
+      method: 'GET',
+      action: 'get',
+      targetOrganizationId: otherOrganizationId,
+      status: 404,
+    },
+    {
+      description: 'invalid problem identifier',
+      method: 'GET',
+      action: 'get',
+      targetProblemId: 'invalid-id',
+      status: 404,
+    },
+    {
+      description: 'missing problem',
+      method: 'GET',
+      action: 'get',
+      sqlState: 'P0002',
+      status: 404,
+    },
+  ] as const)(
+    'retains refreshed credentials after a problem error ($description)',
+    async (entry) => {
+      vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+      const { privateKey } = generateKeyPairSync('ed25519');
+      const env = {
+        STAGING_AUTH_URL: 'http://127.0.0.1:54321',
+        STAGING_AUTH_ISSUER: 'https://auth.example.test',
+        STAGING_AUTH_AUDIENCE: 'authenticated',
+        STAGING_DATABASE_URL:
+          'postgres://r23_gateway:secret@127.0.0.1:5432/staging',
+        STAGING_PROOF_PRIVATE_KEY: privateKey
+          .export({ format: 'der', type: 'pkcs8' })
+          .toString('base64'),
+        STAGING_PROOF_ISSUER: 'hirearchy',
+        STAGING_PROOF_AUDIENCE: 'database',
+        STAGING_PROOF_KEY_ID: 'key-1',
+      };
+      for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+
+      const startedAt = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(startedAt);
+      const grant = (expiresIn: number) => ({
+        access_token: `${encode({ alg: 'HS256' })}.${encode({
+          sub: subject,
+          session_id: session,
+          aal: 'aal1',
+          iss: env.STAGING_AUTH_ISSUER,
+          aud: env.STAGING_AUTH_AUDIENCE,
+          exp: Math.floor(Date.now() / 1000) + expiresIn,
+          amr: [{ method: 'password', timestamp: 1 }],
+        })}.signature`,
+        refresh_token: `test-refresh-${expiresIn}`,
+        expires_in: expiresIn,
+      });
+      const refresh = vi.fn(() => Response.json(grant(300)));
+      vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes('/token?grant_type=password')) {
+          return Response.json(grant(60));
+        }
+        if (url.includes('/token?grant_type=refresh_token')) {
+          return refresh();
         }
         return Response.json({ id: subject });
-      }),
-    );
+      });
 
-    const login = await stagingLoginPost(
-      new Request('http://localhost/r23/auth/login', {
-        method: 'POST',
+      try {
+        const cookies = new Map<string, string>();
+        const storeCookies = (response: Response) => {
+          for (const header of response.headers.getSetCookie()) {
+            const [pair] = header.split(';', 1);
+            const [name, value] = pair.split('=', 2);
+            if (value) cookies.set(name, value);
+            else cookies.delete(name);
+          }
+        };
+        const cookieHeader = () =>
+          Array.from(cookies, ([name, value]) => `${name}=${value}`).join('; ');
+        const browserRequest = (path: string, method = 'GET', body?: object) =>
+          new Request(`http://localhost${path}`, {
+            method,
+            headers: {
+              cookie: cookieHeader(),
+              origin: 'http://localhost',
+              'content-type': 'application/json',
+              'x-csrf-token': cookies.get(R23_CSRF_COOKIE) ?? '',
+            },
+            body: body ? JSON.stringify(body) : undefined,
+          });
+
+        const login = await stagingLoginPost(
+          browserRequest('/r23/auth/login', 'POST', {
+            email: 'recruiter@example.test',
+            password: 'synthetic-password',
+          }),
+        );
+        expect(login.status).toBe(303);
+        storeCookies(login);
+        const callback = await stagingCallbackGet(
+          browserRequest('/r23/auth/callback'),
+        );
+        expect(callback.status).toBe(303);
+        storeCookies(callback);
+        const selected = await stagingOrganizationPost(
+          browserRequest('/r23/organization', 'POST', { organizationId }),
+        );
+        expect(selected.status).toBe(303);
+        storeCookies(selected);
+        const previousSession = cookies.get(R23_SESSION_COOKIE);
+        expect(previousSession).toBeDefined();
+        expect(refresh).not.toHaveBeenCalled();
+
+        clock.mockReturnValue(startedAt + 40_000);
+        if ('sqlState' in entry) {
+          vi.mocked(dispatchStagingProof).mockRejectedValueOnce(
+            Object.assign(new Error('Problem operation failed'), {
+              code: entry.sqlState,
+            }),
+          );
+        }
+        const targetOrganization =
+          'targetOrganizationId' in entry
+            ? entry.targetOrganizationId
+            : organizationId;
+        const targetProblem =
+          'targetProblemId' in entry ? entry.targetProblemId : problemId;
+        const response = await r211ReusableProblemApi(
+          browserRequest(
+            `/r23/api/organizations/${targetOrganization}/problems/${targetProblem}`,
+            entry.method,
+            'body' in entry ? entry.body : undefined,
+          ),
+          targetOrganization,
+          entry.action,
+          targetProblem,
+        );
+        expect(refresh).toHaveBeenCalledOnce();
+        expect(response.status).toBe(entry.status);
+        expect(await response.json()).toMatchObject({
+          error: {
+            code:
+              entry.status === 409
+                ? 'PROBLEM_CONCURRENCY_CONFLICT'
+                : 'NOT_FOUND',
+          },
+        });
+        expect(response.headers.getSetCookie()).toEqual([
+          expect.stringContaining(`${R23_SESSION_COOKIE}=`),
+        ]);
+        storeCookies(response);
+        expect(cookies.get(R23_SESSION_COOKIE)).not.toBe(previousSession);
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
+  it('delivers the refreshed HttpOnly cookie during problem loading before an edit across token expiry', async () => {
+    const startedAt = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(startedAt);
+    try {
+      const { cookies, mergeResponseCookies } = await stagingBrowserLogin();
+      pageCookies.mockResolvedValue({
+        toString: () => [...cookies.values()].join('; '),
+        get: (key: string) => ({ value: cookies.get(key)?.split('=')[1] }),
+      });
+      const api = `http://localhost/r23/api/organizations/${organizationId}/problems/${problemId}`;
+      const request = (url: string, method = 'GET', body?: object) =>
+        new Request(url, {
+          method,
+          headers: {
+            cookie: [...cookies.values()].join('; '),
+            origin: 'http://localhost',
+            accept: 'application/json',
+            'content-type': 'application/json',
+            'x-csrf-token': cookies.get(R23_CSRF_COOKIE)!.split('=')[1],
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      const selected = await stagingOrganizationPost(
+        request('http://localhost/r23/organization', 'POST', {
+          organizationId,
+        }),
+      );
+      expect(selected.status).toBe(303);
+      mergeResponseCookies(selected);
+      const oldCookie = cookies.get(R23_SESSION_COOKIE);
+      const grants = stubOneTimeRefresh(startedAt);
+      const problem = {
+        id: problemId,
+        organizationId,
+        authorPrincipalId: subject,
+        version: 1,
+        content: problemContent,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+      vi.mocked(dispatchStagingProof).mockResolvedValue({ problem });
+      clock.mockReturnValue(startedAt + 280_000);
+      const page = await loadProblems(organizationId, problemId);
+      expect(page.response === null).toBe(true);
+      expect(grants()).toBe(0);
+      const browserRead = await r211ReusableProblemApi(
+        request(api),
+        organizationId,
+        'get',
+        problemId,
+      );
+      expect(browserRead.status).toBe(200);
+      expect(await browserRead.json()).toEqual({ problem });
+      expect(browserRead.headers.getSetCookie()).toEqual([
+        expect.stringMatching(/__Host-r23-session=.*HttpOnly/i),
+      ]);
+      expect(browserRead.headers.getSetCookie()[0]).toMatch(/; Secure/i);
+      mergeResponseCookies(browserRead);
+      expect(cookies.get(R23_SESSION_COOKIE)).not.toBe(oldCookie);
+      clock.mockReturnValue(startedAt + 310_000);
+      const content = {
+        ...problemContent,
+        title: 'Updated after original access token expired',
+      };
+      vi.mocked(dispatchStagingProof).mockResolvedValueOnce({
+        problem: { ...problem, content, version: 2 },
+      });
+      const edited = await r211ReusableProblemApi(
+        request(api, 'PATCH', { expectedVersion: 1, content }),
+        organizationId,
+        'update',
+        problemId,
+      );
+      expect(edited.status).toBe(200);
+      expect(await edited.json()).toMatchObject({
+        problem: { content, version: 2 },
+      });
+      expect(grants()).toBe(1);
+    } finally {
+      clock.mockRestore();
+      vi.mocked(dispatchStagingProof).mockImplementation(async () => ({
+        ok: true,
+      }));
+    }
+  });
+
+  async function setupBuilder(fresh = false) {
+    const { cookies, mergeResponseCookies } = await stagingBrowserLogin();
+    const organizationId = '11111111-1111-4111-8111-111111111111';
+    const definitionId = '22222222-2222-4222-8222-222222222222';
+    const latestId = '33333333-3333-4333-8333-333333333333';
+    const input = {
+      ...problemContent,
+      templateId: 'custom',
+      rubric: problemContent.rubric.map((c) => ({
+        ...c,
+        applicability: {
+          kind: 'recorded_integrated_ai_interaction',
+          rule: 'When recorded',
+        },
+      })),
+    };
+    const draft = {
+      ...input,
+      definitionId,
+      organizationId,
+      authorPrincipalId: subject,
+      version: 2,
+      createdAt: '2026-11-19T00:00:00Z',
+      updatedAt: '2026-11-19T00:00:00Z',
+    };
+    const latest = {
+      ...draft,
+      title: 'Another draft',
+      definitionId: latestId,
+      version: 9,
+    };
+    const req = (path: string, method = 'GET', body?: object) =>
+      new Request('http://localhost' + path, {
+        method,
         headers: {
+          cookie: [...cookies.values()].join('; '),
           origin: 'http://localhost',
           'content-type': 'application/json',
           accept: 'application/json',
+          'x-csrf-token': cookies.get(R23_CSRF_COOKIE)!.split('=')[1],
         },
-        body: JSON.stringify({
-          email: 'evaluator@example.test',
-          password: 'synthetic-password',
-        }),
-      }),
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    vi.mocked(dispatchStagingProof).mockResolvedValueOnce({});
+    const selection = await stagingOrganizationPost(
+      req('/r23/organization', 'POST', { organizationId }),
     );
-    expect(login.status).toBe(303);
-
-    const cookies = new Map<string, string>();
-    const mergeResponseCookies = (response: Response) => {
-      const raw = response.headers.get('set-cookie') ?? '';
-      for (const match of raw.matchAll(
-        /(?:^|,\s*)(__Host-r23-[^=;, ]+=[^;,]*)/g,
-      )) {
-        const pair = match[1].trim();
-        const separator = pair.indexOf('=');
-        const name = pair.slice(0, separator);
-        if (pair.slice(separator + 1) === '') cookies.delete(name);
-        else cookies.set(name, pair);
-      }
+    expect(selection.status).toBe(303);
+    mergeResponseCookies(selection);
+    let stored = fresh ? null : draft;
+    const contextReads: Array<string | undefined> = [];
+    vi.mocked(dispatchStagingProof).mockImplementation(
+      async (_url, payload) => {
+        const { op, args } = JSON.parse(payload.toString());
+        switch (op) {
+          case 'organization.context':
+            contextReads.push(args.assessmentId);
+            return {
+              role: 'recruiter',
+              principalId: subject,
+              sessions: [],
+              reviewers: [],
+              draft: args.assessmentId === definitionId ? stored : latest,
+              validatedVersions: [{ id: 'validated', definitionId }],
+            };
+          case 'assessment.create': {
+            if (
+              args.assessmentId !== definitionId ||
+              args.content.expectedVersion !== stored?.version
+            )
+              throw Object.assign(new Error('stale draft'), {
+                code: '23505',
+              });
+            stored = {
+              ...draft,
+              ...args.content,
+              version: (stored?.version ?? 0) + 1,
+            };
+            return { assessmentId: definitionId };
+          }
+          case 'assessment.get':
+            return { content: input, assessmentId: definitionId };
+          case 'assessment.validate':
+            return { validatedVersionId: 'validated' };
+          default:
+            throw new Error('Unexpected staging operation');
+        }
+      },
+    );
+    const endpoint = `/r23/api/organizations/${organizationId}/assessments`;
+    return {
+      cookies,
+      mergeResponseCookies,
+      definitionId,
+      draft,
+      input,
+      contextReads,
+      req,
+      endpoint,
     };
-    mergeResponseCookies(login);
-    const callback = await stagingCallbackGet(
-      new Request('http://localhost/r23/auth/callback', {
-        headers: { cookie: [...cookies.values()].join('; ') },
-      }),
-    );
-    expect(callback.status).toBe(303);
-    mergeResponseCookies(callback);
+  }
+
+  it('reopens a copied draft during renewal, then saves after the original token expires', async () => {
+    const {
+      cookies,
+      mergeResponseCookies,
+      definitionId,
+      draft,
+      input,
+      contextReads,
+      req,
+      endpoint,
+    } = await setupBuilder();
+    const startedAt = Date.now();
+    const clock = vi.spyOn(Date, 'now');
+    const grants = stubOneTimeRefresh(startedAt);
+    pageCookies.mockResolvedValue({
+      toString: () => [...cookies.values()].join('; '),
+      get: (key: string) => ({ value: cookies.get(key)?.split('=')[1] }),
+    });
+    const open = () =>
+      AssessmentBuilderPage({
+        params: Promise.resolve({ organizationId }),
+        searchParams: Promise.resolve({ definitionId }),
+      });
+    try {
+      clock.mockReturnValue(startedAt + 280_000);
+      const waiting = await open();
+      expect(waiting.type).toBe(RefreshBuilderSession);
+      expect(waiting.props.csrfToken).toBe(
+        cookies.get(R23_CSRF_COOKIE)!.split('=')[1],
+      );
+      expect(grants()).toBe(0);
+      const renewed = await stagingRefreshPost(
+        req('/r23/auth/refresh', 'POST'),
+      );
+      expect(renewed.status).toBe(204);
+      expect(renewed.headers.getSetCookie()[0]).toMatch(/HttpOnly/i);
+      mergeResponseCookies(renewed);
+      contextReads.length = 0;
+      const page = await open();
+      expect(page.props.initialDraft).toEqual(draft);
+      expect(contextReads).toEqual([definitionId]);
+      clock.mockReturnValue(startedAt + 310_000);
+      const saved = await stagingAssessmentDraftApiPut(
+        req(endpoint + '/draft', 'PUT', {
+          ...input,
+          definitionId,
+          expectedVersion: 2,
+        }),
+        organizationId,
+      );
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).draft).toMatchObject({
+        definitionId,
+        version: 3,
+      });
+      expect(grants()).toBe(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it.each(['get', 'save', 'validate', 'fresh save', 'fresh validate'] as const)(
+    'targets the intended definition for staging %s when another draft is latest',
+    async (action) => {
+      const fresh = action.startsWith('fresh');
+      const { definitionId, input, req, endpoint } = await setupBuilder(fresh);
+      const response =
+        action === 'get'
+          ? await stagingAssessmentDraftApiGet(
+              req(endpoint + '/draft?definitionId=' + definitionId),
+              organizationId,
+            )
+          : action === 'save' || action === 'fresh save'
+            ? await stagingAssessmentDraftApiPut(
+                req(endpoint + '/draft', 'PUT', {
+                  ...input,
+                  definitionId,
+                  expectedVersion: fresh ? undefined : 2,
+                }),
+                organizationId,
+              )
+            : await stagingAssessmentValidateApiPost(
+                req(endpoint + '/validate', 'POST', {
+                  ...input,
+                  definitionId,
+                  expectedDraftVersion: fresh ? undefined : 2,
+                }),
+                organizationId,
+              );
+      expect(response.status).toBe(200);
+      expect((await response.json()).draft).toMatchObject({
+        ...input,
+        definitionId,
+        version: fresh ? 1 : action === 'get' ? 2 : 3,
+      });
+    },
+  );
+  it('surfaces organization database failures and renders persisted names', async () => {
+    const { cookies } = await stagingBrowserLogin();
     const browserCookies = [...cookies.values()].join('; ');
     const organizationsRequest = () =>
       new Request('http://localhost/r23/organizations', {

@@ -16,7 +16,7 @@ Hirearchy Software is a **Next.js 16 + PostgreSQL modular monolith** written in 
 ├── apps/web/
 │   ├── app/
 │   │   ├── page.tsx, products/, about/, contact/, early-access/, privacy/, terms/, thinking/
-│   │   ├── r23/            # GoTrue auth, email verification, org bootstrap, sessions overview, builder
+│   │   ├── r23/            # GoTrue auth, email verification, org bootstrap, sessions overview, builder, problem library
 │   │   ├── r26/            # Candidate IDE workspace & candidate runtime APIs (save, submit, AI, exec)
 │   │   ├── r27/            # Assigned-reviewer evidence workbench + AI review + revisions + observations + review packet
 │   │   ├── evaluator/      # Shared Evaluator Workbench components (diff viewer, AI review panel, header) & legacy slice
@@ -35,7 +35,7 @@ Hirearchy Software is a **Next.js 16 + PostgreSQL modular monolith** written in 
 │       ├── r213-execution/ # Restricted code execution contracts
 │       └── staging/        # Staging & Founder UAT runtime dispatch (`browser.ts`, `onboarding.ts`)
 ├── database/postgres/
-│   ├── migrations/         # Sequential SQL migrations (`0001` .. `0017`)
+│   ├── migrations/         # Sequential SQL migrations (`0001` .. `0018`)
 │   ├── r23/ .. r214/       # PostgreSQL adapter modules & SQL fixtures per vertical slice
 │   └── staging/            # Staging SQL verifier / dispatch installer
 ├── packages/restricted-executor/ # Sandbox runner daemon & container definition for Python test execution
@@ -48,7 +48,7 @@ Hirearchy Software is a **Next.js 16 + PostgreSQL modular monolith** written in 
 
 ## 2. Database & Authorization Architecture (`R2.3 – R2.15`)
 
-PostgreSQL is the durable system of record (`database/postgres/migrations/0001_tenant_foundation.sql` through `0017_self_service_onboarding.sql`):
+PostgreSQL is the durable system of record (`database/postgres/migrations/0001_tenant_foundation.sql` through `0018_reusable_problems.sql`):
 
 - **Identity & Organizations (`R2.3`):**
   - GoTrue issues JWTs verified server-side (`apps/web/src/r23-auth/identity.ts`).
@@ -57,6 +57,9 @@ PostgreSQL is the durable system of record (`database/postgres/migrations/0001_t
 - **Assessment Authoring & Issuance (`R2.4`, `R2.5`, `R2.11`):**
   - Built around deterministic versioned scenario snapshots (`scenarioSnapshot` + `snapshotDigest`).
   - Issuance creates a candidate session (`CREATED`), assigns reviewers, and issues an encrypted opaque candidate invitation token (`apps/web/src/sessions/candidate-token-storage.mjs`).
+- **Reusable Problem Library (`R2.11`)**
+  - Migration `0018_reusable_problems.sql` adds the organization-scoped `hirearchy.reusable_problems` table with row-level security. Active recruiters can manage the library through the authenticated application and verified Founder UAT/staging operations.
+  - Reuse copies the complete authoring content into a new assessment draft. Library edits and deletions affect the source record, while the draft proceeds independently through validation and issuance. See [ADR 0007](../decisions/0007-reusable-problem-library.md).
 - **Candidate Lifecycle & Workspace Authority (`R2.6`, `R2.12`, `R2.13`):**
   - Strictly follows `CREATED → ACTIVE → SUBMITTED` via database-enforced transitions and idempotency keys (`requestId`).
   - Workspace saves increment file version (`expectedVersion` optimistic concurrency check) and append `WORKSPACE_CHANGED` events to `hirearchy.candidate_session_events`.

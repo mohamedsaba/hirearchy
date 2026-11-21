@@ -41,7 +41,7 @@
 - Test: `tests/integration/generated-starter-repair.test.ts`
 - Test: `tests/unit/r27-ai-review.test.tsx`
 - Modify: `docs/scenarios/constitution.md`
-- Create: `docs/decisions/0007-generated-assessment-llm-style-probe.md`
+- Create: `docs/decisions/0008-generated-assessment-llm-style-probe.md`
 
 **Interfaces:**
 
@@ -49,7 +49,7 @@
 
 - [x] **Step 1: Document the narrow scenario-probe exception**
 
-Create ADR 0007 documenting that generated assessments may include this style probe despite the general ban on artificial traps, only because matching is a neutral observation and never changes task success or hiring outcomes. Update `docs/scenarios/constitution.md` to require evaluator-facing copy to state the limitation and prohibit hidden criteria, scores, or penalties. Keep the candidate-facing footer limited to the titled style instructions; do not disclose the probe's purpose there.
+Create ADR 0008 documenting that generated assessments may include this style probe despite the general ban on artificial traps, only because matching is a neutral observation and never changes task success or hiring outcomes. Update `docs/scenarios/constitution.md` to require evaluator-facing copy to state the limitation and prohibit hidden criteria, scores, or penalties. Keep the candidate-facing footer limited to the titled style instructions; do not disclose the probe's purpose there.
 
 - [x] **Step 2: Write tests for the footer helper**
 

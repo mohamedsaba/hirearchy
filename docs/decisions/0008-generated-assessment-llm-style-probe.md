@@ -1,4 +1,4 @@
-# 0007 — Generated assessment coding-style probe
+# 0008 — Generated assessment coding-style probe
 
 - **Status:** Accepted (2026-11-20)
 

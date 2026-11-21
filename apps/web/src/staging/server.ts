@@ -18,6 +18,11 @@ import {
   normalizeAssessmentTemplate,
   reservationMovesBinding,
 } from '../../../../database/postgres/r211/template.mjs';
+import {
+  R211InvalidProblemContent,
+  R211ProblemConcurrencyConflict,
+  validateReusableProblemContent,
+} from '../../../../database/postgres/r211/adapter.mjs';
 import type { R211AssessmentDraftInput } from '../r211-builder/contract';
 import { dispatchStagingProof } from './dispatch.mjs';
 
@@ -30,6 +35,12 @@ const operations = new Set([
   'assessment.get',
   'assessment.validate',
   'assessment.issue',
+  'problem.create',
+  'problem.list',
+  'problem.get',
+  'problem.update',
+  'problem.delete',
+  'problem.reuse',
   'candidate.invitation.create',
   'candidate.invitation.get',
   'candidate.invitation.revoke',
@@ -65,7 +76,16 @@ export async function dispatchVerifiedStagingOperation(
   op: string,
   args: StagingProofArgs,
 ): Promise<unknown> {
-  const proof = issueStagingProof(config.proof, identity, op, args);
+  const proofArgs =
+    op === 'problem.create' || op === 'problem.update'
+      ? {
+          ...args,
+          content: validateReusableProblemContent(
+            args.content,
+          ) as unknown as StagingProofArgs,
+        }
+      : args;
+  const proof = issueStagingProof(config.proof, identity, op, proofArgs);
   return dispatchStagingProof(
     config.databaseUrl,
     proof.payload,
@@ -194,16 +214,9 @@ export async function stagingPost(request: Request): Promise<Response> {
     )
       return response(400, { error: 'Invalid request' });
     const identity = await verifyR23AccessToken(config.auth, match[1]);
-    type ProofArgs = Parameters<typeof issueStagingProof>[3];
-    const dispatch = async (op: string, args: ProofArgs) => {
-      const proof = issueStagingProof(config.proof, identity, op, args);
-      return dispatchStagingProof(
-        config.databaseUrl,
-        proof.payload,
-        proof.signature,
-      );
-    };
-    const args = input.args as ProofArgs;
+    const dispatch = (op: string, args: StagingProofArgs) =>
+      dispatchVerifiedStagingOperation(config, identity, op, args);
+    const args = input.args as StagingProofArgs;
     if (input.op === 'assessment.validate') {
       // The caller cannot supply the validation result or its content. Read the
       // persisted draft, then have SQL compare it under lock before recording it.
@@ -272,8 +285,8 @@ export async function stagingPost(request: Request): Promise<Response> {
       };
       const result = await dispatch('assessment.validate', {
         ...args,
-        content: draft.content as ProofArgs,
-        validatedVersion: validatedVersion as unknown as ProofArgs,
+        content: draft.content as StagingProofArgs,
+        validatedVersion: validatedVersion as unknown as StagingProofArgs,
       });
       return response(200, { validation, result });
     }
@@ -308,11 +321,19 @@ export async function stagingPost(request: Request): Promise<Response> {
         return response(401, { error: 'Authentication denied' });
       if (error.code === '42501' || error.code === '23505')
         return response(403, { error: 'Authorization denied' });
+      if (error.code === 'P0002')
+        return response(404, { error: 'Problem not found.' });
+      if (error.code === 'R2111')
+        return response(409, {
+          error: new R211ProblemConcurrencyConflict().message,
+        });
       if (error.code === '22023')
         return response(400, {
           error: (error as { message?: string }).message || 'Invalid request',
         });
     }
+    if (error instanceof R211InvalidProblemContent)
+      return response(400, { error: error.message });
     if (error instanceof R23AuthenticationDenied)
       return response(401, { error: 'Authentication denied' });
     if (error instanceof SyntaxError || error instanceof TypeError)

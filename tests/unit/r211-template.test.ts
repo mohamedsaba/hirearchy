@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { validateReusableProblemContent } from '../../database/postgres/r211/adapter.mjs';
 import {
   APPROVED_ASSESSMENT_TEMPLATES,
   expectedBriefDigest,
@@ -64,5 +66,33 @@ describe('Reservation Moves template', () => {
     expect(() =>
       normalizeAssessmentTemplate({ ...draft, templateId: 'forged' } as never),
     ).toThrow('Unknown assessment template');
+  });
+
+  it('preserves the reviewed bytes in reusable Reservation Moves content', () => {
+    const content = validateReusableProblemContent({
+      templateId: 'reservation-moves-v3',
+      title: 'Forged title',
+      brief: 'Forged brief',
+      starterFiles: [{ path: 'forged.py', content: 'pass' }],
+      durationMinutes: 30,
+      terminalEnabled: true,
+      integratedAi: false,
+    });
+
+    expect(content.templateId).toBe('reservation-moves-v3');
+    expect(content.title).toBe('Reservation Moves');
+    const sha256 = (value: string) =>
+      createHash('sha256').update(value).digest('hex');
+    expect(sha256(content.brief)).toBe(expectedBriefDigest);
+    expect(
+      sha256(
+        JSON.stringify(
+          content.starterFiles.map(({ path, content: source }) => [
+            path,
+            sha256(source),
+          ]),
+        ),
+      ),
+    ).toBe(expectedWorkspaceDigest);
   });
 });
