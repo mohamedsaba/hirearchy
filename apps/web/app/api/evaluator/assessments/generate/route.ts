@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { ZodError } from 'zod';
 
 import {
   evaluatorCookieName,
@@ -27,6 +28,7 @@ import { parseAssessmentSelection } from '../../../../../src/assessments/assessm
 import { createGeneratedTaskRubric } from '../../../../../src/assessments/task-rubric';
 import { getAssessmentStructureGuidance } from '../../../../../src/scenarios/assessment-structure';
 import {
+  appendGeneratedTermsAndConditions,
   parseNewGeneratedAssessmentDraft,
   validateAndPersistGeneratedAssessment,
 } from '../../../../../src/scenarios/generated-assessment';
@@ -601,7 +603,27 @@ export const POST = async (request: Request) => {
         { status: 422, headers: { 'Cache-Control': 'no-store' } },
       );
     }
-    const generated = parsedDraft.value;
+    let generated;
+    try {
+      generated = appendGeneratedTermsAndConditions(parsedDraft.value);
+    } catch (error) {
+      if (
+        !(error instanceof ZodError) ||
+        !error.issues.some(
+          (issue) => issue.code === 'too_big' && issue.path[0] === 'brief',
+        )
+      ) {
+        throw error;
+      }
+      return Response.json(
+        {
+          status: 'UNAVAILABLE_DRAFT',
+          reason:
+            'The generated brief exceeds 5,000 characters after adding Terms and Conditions. Try preparing the task again.',
+        },
+        { status: 422, headers: { 'Cache-Control': 'no-store' } },
+      );
+    }
     let result = await validateAndPersistGeneratedAssessment(
       new DockerSandboxAdapter(),
       path.dirname(getApplicationDatabasePath()),
