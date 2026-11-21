@@ -848,4 +848,144 @@ ALTER FUNCTION r211.get_validated_version(pg_catalog.uuid, pg_catalog.uuid, pg_c
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA r211 FROM PUBLIC;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA r211 TO r23_session_owner, r23_gateway, app_evaluator;
 
+REVOKE ALL ON TABLE hirearchy.reusable_problems
+  FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker;
+
+GRANT SELECT, DELETE,
+  INSERT (organization_id, author_principal_id, content),
+  UPDATE (version, content, updated_at)
+  ON TABLE hirearchy.reusable_problems TO r23_session_owner;
+
+DROP POLICY IF EXISTS r211_reusable_problems_access ON hirearchy.reusable_problems;
+CREATE POLICY r211_reusable_problems_access ON hirearchy.reusable_problems
+  TO r23_session_owner
+  USING (
+    organization_id = NULLIF(
+      pg_catalog.current_setting('r211.problem_organization_id', true), ''
+    )::pg_catalog.uuid
+  )
+  WITH CHECK (
+    organization_id = NULLIF(
+      pg_catalog.current_setting('r211.problem_organization_id', true), ''
+    )::pg_catalog.uuid
+  );
+
+CREATE OR REPLACE FUNCTION r211.format_reusable_problem(p_problem hirearchy.reusable_problems)
+RETURNS pg_catalog.jsonb
+LANGUAGE sql
+STABLE
+SET search_path = ''
+AS $function$
+  SELECT pg_catalog.jsonb_build_object(
+    'id', p_problem.id,
+    'organizationId', p_problem.organization_id,
+    'authorPrincipalId', p_problem.author_principal_id,
+    'version', p_problem.version,
+    'content', p_problem.content,
+    'createdAt', p_problem.created_at,
+    'updatedAt', p_problem.updated_at
+  );
+$function$;
+
+CREATE OR REPLACE FUNCTION r211.reusable_problem_operation(
+  p_subject_id pg_catalog.uuid,
+  p_auth_session_id pg_catalog.uuid,
+  p_assurance pg_catalog.text,
+  p_organization_id pg_catalog.uuid,
+  p_operation pg_catalog.text,
+  p_problem_id pg_catalog.uuid,
+  p_expected_version pg_catalog.int8,
+  p_content pg_catalog.jsonb
+) RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_principal_id pg_catalog.uuid;
+  v_problem hirearchy.reusable_problems%ROWTYPE;
+BEGIN
+  IF SESSION_USER NOT IN ('r23_gateway', 'app_evaluator') OR CURRENT_USER <> 'r23_session_owner' THEN
+    RAISE EXCEPTION 'R2.11 problem library access denied' USING ERRCODE = '42501';
+  END IF;
+
+  IF (SELECT authz.role FROM r23.authorize_organization(
+    p_subject_id, p_auth_session_id, p_assurance, p_organization_id
+  ) AS authz) IS DISTINCT FROM 'recruiter' THEN
+    RAISE EXCEPTION 'Recruiter role required' USING ERRCODE = 'R2401';
+  END IF;
+
+  IF p_operation IS NULL OR p_operation NOT IN ('create', 'list', 'get', 'update', 'delete')
+     OR (p_operation IN ('get', 'update', 'delete') AND p_problem_id IS NULL)
+     OR (p_operation IN ('update', 'delete') AND (p_expected_version IS NULL OR p_expected_version < 1))
+     OR (p_operation IN ('create', 'update') AND p_content IS NULL) THEN
+    RAISE EXCEPTION 'Invalid problem library operation' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'r211.problem_organization_id', p_organization_id::pg_catalog.text, true
+  );
+
+  CASE p_operation
+    WHEN 'create' THEN
+      v_principal_id := r23.current_principal(
+        p_subject_id, p_auth_session_id, p_assurance
+      );
+      INSERT INTO hirearchy.reusable_problems (organization_id, author_principal_id, content)
+      VALUES (p_organization_id, v_principal_id, p_content)
+      RETURNING * INTO v_problem;
+      RETURN r211.format_reusable_problem(v_problem);
+    WHEN 'list' THEN
+      RETURN (
+        SELECT COALESCE(pg_catalog.jsonb_agg(
+          r211.format_reusable_problem(problem) ORDER BY problem.updated_at DESC, problem.id
+        ), '[]'::pg_catalog.jsonb)
+        FROM hirearchy.reusable_problems AS problem
+        WHERE problem.organization_id = p_organization_id
+      );
+    WHEN 'get' THEN
+      SELECT * INTO v_problem FROM hirearchy.reusable_problems
+      WHERE id = p_problem_id AND organization_id = p_organization_id;
+      IF NOT FOUND THEN RETURN NULL; END IF;
+      RETURN r211.format_reusable_problem(v_problem);
+    ELSE
+      SELECT * INTO v_problem FROM hirearchy.reusable_problems
+      WHERE id = p_problem_id AND organization_id = p_organization_id
+      FOR UPDATE;
+      IF NOT FOUND THEN RETURN NULL; END IF;
+      IF v_problem.version <> p_expected_version THEN
+        RAISE EXCEPTION 'Reusable problem was updated concurrently' USING ERRCODE = 'R2111';
+      END IF;
+
+      IF p_operation = 'delete' THEN
+        DELETE FROM hirearchy.reusable_problems
+        WHERE id = p_problem_id AND organization_id = p_organization_id;
+        RETURN 'true'::pg_catalog.jsonb;
+      END IF;
+
+      UPDATE hirearchy.reusable_problems
+      SET content = p_content, version = version + 1,
+          updated_at = pg_catalog.clock_timestamp()
+      WHERE id = p_problem_id AND organization_id = p_organization_id
+      RETURNING * INTO v_problem;
+      RETURN r211.format_reusable_problem(v_problem);
+  END CASE;
+END
+$function$;
+
+ALTER FUNCTION r211.format_reusable_problem(hirearchy.reusable_problems)
+  OWNER TO r23_session_owner;
+ALTER FUNCTION r211.reusable_problem_operation(pg_catalog.uuid, pg_catalog.uuid,
+  pg_catalog.text, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid,
+  pg_catalog.int8, pg_catalog.jsonb) OWNER TO r23_session_owner;
+
+REVOKE ALL ON FUNCTION r211.format_reusable_problem(hirearchy.reusable_problems)
+  FROM PUBLIC, r23_gateway, app_evaluator;
+REVOKE ALL ON FUNCTION r211.reusable_problem_operation(pg_catalog.uuid, pg_catalog.uuid,
+  pg_catalog.text, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid,
+  pg_catalog.int8, pg_catalog.jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION r211.reusable_problem_operation(pg_catalog.uuid, pg_catalog.uuid,
+  pg_catalog.text, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid,
+  pg_catalog.int8, pg_catalog.jsonb) TO r23_gateway, app_evaluator;
+
 COMMIT;

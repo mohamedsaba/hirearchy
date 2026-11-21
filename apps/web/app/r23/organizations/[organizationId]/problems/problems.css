@@ -1,0 +1,86 @@
+.problems-page {
+  width: min(58rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  color: var(--software-ink);
+  overflow-wrap: anywhere;
+}
+.problems-page header,
+.problems-page nav,
+.problems-page .problem-actions,
+.problem-library-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.problems-page header {
+  justify-content: space-between;
+  margin: 1.5rem 0;
+}
+.problems-page h1 {
+  margin: 0;
+}
+.problems-page table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.problems-page th,
+.problems-page td {
+  text-align: left;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--software-border, #d6dedb);
+}
+.problems-page tbody tr {
+  position: relative;
+}
+.problems-page tbody th a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.problems-page tbody tr:hover,
+.problems-page tbody tr:focus-within {
+  background: var(--accent-light);
+}
+.problems-page form,
+.problems-page fieldset,
+.problems-page label {
+  display: grid;
+  gap: 0.6rem;
+}
+.problems-page form {
+  gap: 1.2rem;
+}
+.problems-page fieldset {
+  min-width: 0;
+  border: 1px solid var(--software-border, #d6dedb);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+.problems-page legend {
+  font-weight: 600;
+}
+.problems-page input:not([type='checkbox']),
+.problems-page textarea,
+.problems-page select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--software-border, #d6dedb);
+  border-radius: 0.35rem;
+  font: inherit;
+}
+.problems-page textarea {
+  resize: vertical;
+}
+.problems-page .toggle {
+  display: flex;
+  align-items: center;
+}
+.problems-page .problem-delete {
+  margin-top: 2rem;
+}
+.problem-library-actions {
+  margin-block: 0.75rem;
+}

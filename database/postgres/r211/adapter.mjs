@@ -25,6 +25,24 @@ export class R211ConcurrencyConflict extends Error {
   }
 }
 
+export class R211ProblemConcurrencyConflict extends Error {
+  constructor() {
+    super('Edit conflict: this reusable problem was updated concurrently.');
+    this.name = 'R211ProblemConcurrencyConflict';
+    this.code = 'PROBLEM_CONCURRENCY_CONFLICT';
+    this.sqlState = 'R2111';
+    this.status = 409;
+  }
+}
+
+export class R211InvalidProblemContent extends Error {
+  constructor() {
+    super('Enter valid problem content and try again.');
+    this.name = 'R211InvalidProblemContent';
+    this.code = 'INVALID_PROBLEM_CONTENT';
+  }
+}
+
 function parseIdentity(identityInput, assertVerifiedIdentity) {
   if (assertVerifiedIdentity && typeof assertVerifiedIdentity === 'function') {
     identityInput = assertVerifiedIdentity(identityInput);
@@ -325,6 +343,200 @@ export async function getValidatedVersion(
   } catch (error) {
     mapDatabaseError(error);
   }
+}
+
+export function validateReusableProblemContent(input) {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    (input.templateId !== undefined &&
+      input.templateId !== 'custom' &&
+      input.templateId !== 'reservation-moves-v3')
+  ) {
+    throw new R211InvalidProblemContent();
+  }
+
+  const draft = normalizeAssessmentTemplate(input);
+  if (
+    !validateAssessmentDraft(draft).valid ||
+    typeof draft.integratedAi !== 'boolean' ||
+    draft.rubric.some(
+      (criterion) =>
+        typeof criterion.description !== 'string' ||
+        typeof criterion.applicability?.rule !== 'string' ||
+        !['always', 'recorded_integrated_ai_interaction'].includes(
+          criterion.applicability.kind,
+        ),
+    )
+  ) {
+    throw new R211InvalidProblemContent();
+  }
+
+  return {
+    templateId: draft.templateId,
+    title: draft.title,
+    brief: draft.brief,
+    expectedBehavior: draft.expectedBehavior,
+    acceptanceCriteria: draft.acceptanceCriteria,
+    primaryFilePath: draft.primaryFilePath,
+    starterFiles: draft.starterFiles.map(({ path, content }) => ({
+      path,
+      content,
+    })),
+    durationMinutes: draft.durationMinutes,
+    terminalEnabled: draft.terminalEnabled,
+    integratedAi: draft.integratedAi,
+    rubric: draft.rubric.map(
+      ({ id, label, description, weight, applicability }) => ({
+        id,
+        label,
+        description,
+        weight,
+        applicability: { kind: applicability.kind, rule: applicability.rule },
+      }),
+    ),
+  };
+}
+
+async function reusableProblemOperation(
+  client,
+  identityInput,
+  organizationId,
+  operation,
+  { problemId = null, expectedVersion = null, content = null },
+  assertVerifiedIdentity,
+) {
+  const { subjectId, sessionId, assurance } = parseIdentity(
+    identityInput,
+    assertVerifiedIdentity,
+  );
+  const orgId = validateUuid(organizationId, 'organization ID');
+  if (['get', 'update', 'delete'].includes(operation)) {
+    validateUuid(problemId, 'problem ID');
+  }
+  if (
+    ['update', 'delete'].includes(operation) &&
+    (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)
+  ) {
+    throw new TypeError('Valid expected problem version is required');
+  }
+
+  try {
+    const { rows } = await client.query(
+      `SELECT r211.reusable_problem_operation(
+         $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.text,
+         $4::pg_catalog.uuid, $5::pg_catalog.text, $6::pg_catalog.uuid,
+         $7::pg_catalog.int8, $8::pg_catalog.jsonb
+       ) AS result`,
+      [
+        subjectId,
+        sessionId,
+        assurance,
+        orgId,
+        operation,
+        problemId,
+        expectedVersion,
+        content === null ? null : JSON.stringify(content),
+      ],
+    );
+    return rows[0].result;
+  } catch (error) {
+    if (error?.code === 'R2111') throw new R211ProblemConcurrencyConflict();
+    throw error;
+  }
+}
+
+export function createReusableProblem(
+  client,
+  identity,
+  organizationId,
+  content,
+  assertVerifiedIdentity,
+) {
+  return reusableProblemOperation(
+    client,
+    identity,
+    organizationId,
+    'create',
+    { content: validateReusableProblemContent(content) },
+    assertVerifiedIdentity,
+  );
+}
+
+export function listReusableProblems(
+  client,
+  identity,
+  organizationId,
+  assertVerifiedIdentity,
+) {
+  return reusableProblemOperation(
+    client,
+    identity,
+    organizationId,
+    'list',
+    {},
+    assertVerifiedIdentity,
+  );
+}
+
+export function getReusableProblem(
+  client,
+  identity,
+  organizationId,
+  problemId,
+  assertVerifiedIdentity,
+) {
+  return reusableProblemOperation(
+    client,
+    identity,
+    organizationId,
+    'get',
+    { problemId },
+    assertVerifiedIdentity,
+  );
+}
+
+export function updateReusableProblem(
+  client,
+  identity,
+  organizationId,
+  problemId,
+  expectedVersion,
+  content,
+  assertVerifiedIdentity,
+) {
+  return reusableProblemOperation(
+    client,
+    identity,
+    organizationId,
+    'update',
+    {
+      problemId,
+      expectedVersion,
+      content: validateReusableProblemContent(content),
+    },
+    assertVerifiedIdentity,
+  );
+}
+
+export async function deleteReusableProblem(
+  client,
+  identity,
+  organizationId,
+  problemId,
+  expectedVersion,
+  assertVerifiedIdentity,
+) {
+  const deleted = await reusableProblemOperation(
+    client,
+    identity,
+    organizationId,
+    'delete',
+    { problemId, expectedVersion },
+    assertVerifiedIdentity,
+  );
+  return deleted === true;
 }
 
 export function createR211Adapter(clientOrPool) {

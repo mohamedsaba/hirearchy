@@ -1,7 +1,7 @@
 import { Client } from 'pg';
 import { operationalLogger, sanitizeError } from './logger.mjs';
 
-const TARGET_MIGRATION_VERSION = '0018';
+const TARGET_MIGRATION_VERSION = '0019';
 
 export async function checkOperationalReadiness(databaseUrlOverride) {
   const timestamp = new Date().toISOString();

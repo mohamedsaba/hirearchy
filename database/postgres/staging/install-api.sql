@@ -439,6 +439,26 @@ CREATE POLICY staging_verifier_assessment_draft_insert
     AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
   );
 
+DROP POLICY IF EXISTS staging_verifier_reusable_problem_access ON hirearchy.reusable_problems;
+CREATE POLICY staging_verifier_reusable_problem_access
+  ON hirearchy.reusable_problems
+  TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+  )
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+  );
+
+DROP POLICY IF EXISTS staging_verifier_reusable_problem_author ON hirearchy.reusable_problems;
+CREATE POLICY staging_verifier_reusable_problem_author
+  ON hirearchy.reusable_problems
+  AS RESTRICTIVE
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+  );
+
 DROP POLICY IF EXISTS staging_verifier_validated_version_select ON hirearchy.assessment_validated_versions;
 CREATE POLICY staging_verifier_validated_version_select
   ON hirearchy.assessment_validated_versions
@@ -949,6 +969,12 @@ GRANT SELECT, INSERT, UPDATE (title, draft_version, updated_at)
   ON hirearchy.assessment_definitions TO staging_verifier_owner;
 GRANT SELECT, INSERT ON hirearchy.assessment_drafts,
   hirearchy.assessment_validated_versions TO staging_verifier_owner;
+REVOKE ALL ON hirearchy.reusable_problems
+  FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker;
+GRANT SELECT (id, organization_id, author_principal_id, version, content, created_at, updated_at),
+  INSERT (organization_id, author_principal_id, content),
+  UPDATE (version, content, updated_at), DELETE
+  ON hirearchy.reusable_problems TO staging_verifier_owner;
 GRANT SELECT, INSERT ON hirearchy.assessment_sessions,
   hirearchy.reviewer_assignments,
   hirearchy.assessment_issuances TO staging_verifier_owner;
@@ -4093,13 +4119,19 @@ def require_open_session(auth_session_id, subject_id, principal_id, organization
 def validate_operation_args(operation, args):
     schemas = {
         'membership.list': ((), ()),
-        'organization.context': (('organizationId',), ()),
+        'organization.context': (('organizationId',), ('assessmentId',)),
         'session.open': (('organizationId',), ()),
         'session.revoke': (('organizationId',), ()),
         'assessment.create': (('organizationId', 'content'), ('assessmentId',)),
         'assessment.get': (('organizationId', 'assessmentId'), ()),
         'assessment.validate': (('organizationId', 'assessmentId', 'content', 'validatedVersion'), ()),
         'assessment.issue': (('organizationId', 'assessmentId', 'reviewerPrincipalId'), ()),
+        'problem.create': (('organizationId', 'content'), ()),
+        'problem.list': (('organizationId',), ()),
+        'problem.get': (('organizationId', 'problemId'), ()),
+        'problem.update': (('organizationId', 'problemId', 'expectedVersion', 'content'), ()),
+        'problem.delete': (('organizationId', 'problemId', 'expectedVersion'), ()),
+        'problem.reuse': (('organizationId', 'problemId'), ()),
         'candidate.invitation.create': (('organizationId', 'sessionId', 'expiresAt', 'idempotencyKey', 'candidateTokenHash', 'candidateTokenCiphertext'), ()),
         'candidate.invitation.get': (('organizationId', 'sessionId'), ()),
         'candidate.invitation.revoke': (('organizationId', 'sessionId'), ()),
@@ -4143,6 +4175,105 @@ def validate_operation_args(operation, args):
         error('Staging operation is unavailable', '22023')
     required, optional = schemas[operation]
     require_args(args, required, optional)
+
+# Shared projection for library reads and write results.
+PROBLEM_JSON = """
+    pg_catalog.jsonb_build_object(
+      'id', id, 'organizationId', organization_id,
+      'authorPrincipalId', author_principal_id, 'version', version,
+      'content', content, 'createdAt', created_at, 'updatedAt', updated_at
+    )
+"""
+
+def read_reusable_problem(organization_id, problem_id, lock=False):
+    lock_clause = 'FOR UPDATE' if lock else ''
+    rows = run(
+        f"""
+        SELECT {PROBLEM_JSON} AS problem
+        FROM hirearchy.reusable_problems
+        WHERE organization_id = $1::pg_catalog.uuid AND id = $2::pg_catalog.uuid
+        {lock_clause}
+        """,
+        ['uuid', 'uuid'],
+        [organization_id, problem_id],
+    )
+    if not rows:
+        error('Problem not found.', 'P0002')
+    return json_value(rows[0]['problem'])
+
+def operate_reusable_problem(operation, args, organization_id, principal_id):
+    if operation == 'problem.list':
+        rows = run(
+            f"""
+            SELECT COALESCE(pg_catalog.jsonb_agg(
+              {PROBLEM_JSON} ORDER BY updated_at DESC, id
+            ), '[]'::pg_catalog.jsonb) AS problems
+            FROM hirearchy.reusable_problems
+            WHERE organization_id = $1::pg_catalog.uuid
+            """,
+            ['uuid'],
+            [organization_id],
+        )
+        return {'problems': json_value(rows[0]['problems'])}
+
+    if operation in ('problem.create', 'problem.update'):
+        content = args['content']
+        require_draft(content)
+        if (
+            'definitionId' in content or 'expectedVersion' in content
+            or 'templateId' not in content
+            or content['durationMinutes'] not in (30, 45, 60, 90)
+            or not content['terminalEnabled']
+        ):
+            error('Problem content is invalid', '22023')
+        serialized_content = json.dumps(content, ensure_ascii=False)
+
+    if operation == 'problem.create':
+        rows = run(
+            f"""
+            INSERT INTO hirearchy.reusable_problems (organization_id, author_principal_id, content)
+            VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.jsonb)
+            RETURNING {PROBLEM_JSON} AS problem
+            """,
+            ['uuid', 'uuid', 'text'],
+            [organization_id, principal_id, serialized_content],
+        )
+        return {'problem': json_value(rows[0]['problem'])}
+
+    problem_id = require_uuid(args.get('problemId'), 'problem ID')
+    if operation == 'problem.get':
+        return {'problem': read_reusable_problem(organization_id, problem_id)}
+
+    expected_version = args.get('expectedVersion')
+    if type(expected_version) is not int or not 1 <= expected_version <= MAX_SAFE_INTEGER:
+        error('Staging request is invalid', '22023')
+    problem = read_reusable_problem(organization_id, problem_id, lock=True)
+    if problem['version'] != expected_version:
+        error('Reusable problem was updated concurrently', 'R2111')
+
+    if operation == 'problem.delete':
+        run(
+            """
+            DELETE FROM hirearchy.reusable_problems
+            WHERE organization_id = $1::pg_catalog.uuid AND id = $2::pg_catalog.uuid
+            """,
+            ['uuid', 'uuid'],
+            [organization_id, problem_id],
+        )
+        return {'deleted': True}
+
+    rows = run(
+        f"""
+        UPDATE hirearchy.reusable_problems
+        SET content = $3::pg_catalog.jsonb, version = version + 1,
+            updated_at = pg_catalog.clock_timestamp()
+        WHERE organization_id = $1::pg_catalog.uuid AND id = $2::pg_catalog.uuid
+        RETURNING {PROBLEM_JSON} AS problem
+        """,
+        ['uuid', 'uuid', 'text'],
+        [organization_id, problem_id, serialized_content],
+    )
+    return {'problem': json_value(rows[0]['problem'])}
 
 def candidate_invitation_view(session_id, replayed=None):
     rows = run(
@@ -4644,11 +4775,12 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                  AND draft.version = def.draft_version
                 WHERE def.organization_id = $1::pg_catalog.uuid
                   AND def.author_principal_id = $2::pg_catalog.uuid
+                  AND ($3::pg_catalog.uuid IS NULL OR def.id = $3::pg_catalog.uuid)
                 ORDER BY def.updated_at DESC, def.id DESC
                 LIMIT 1
                 """,
-                ['uuid', 'uuid'],
-                [organization_id, principal_id],
+                ['uuid', 'uuid', 'uuid'],
+                [organization_id, principal_id, require_uuid(args['assessmentId'], 'assessment ID') if 'assessmentId' in args else None],
             )
             if draft_rows:
                 d = draft_rows[0]
@@ -4819,12 +4951,24 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             error('Staging session is unavailable', '28000')
         return {'revoked': True, 'organizationId': organization_id}
 
-    if operation == 'assessment.create':
+    if operation in ('problem.create', 'problem.list', 'problem.get', 'problem.update', 'problem.delete'):
         if role != 'recruiter':
             error('Recruiter membership required', '42501')
-        content = args['content']
+        return operate_reusable_problem(operation, args, organization_id, principal_id)
+
+    if operation in ('assessment.create', 'problem.reuse'):
+        if role != 'recruiter':
+            error('Recruiter membership required', '42501')
+        if operation == 'problem.reuse':
+            problem_id = require_uuid(args.get('problemId'), 'problem ID')
+            content = read_reusable_problem(organization_id, problem_id)['content']
+        else:
+            content = args['content']
         require_draft(content)
-        requested_id = args.get('assessmentId') or content.get('definitionId')
+        requested_id = (
+            args.get('assessmentId') or content.get('definitionId')
+            if operation == 'assessment.create' else None
+        )
         assessment_id = require_uuid(requested_id, 'assessment ID') if requested_id else run(
             'SELECT pg_catalog.gen_random_uuid()::pg_catalog.text AS id'
         )[0]['id']
@@ -4861,7 +5005,7 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             if content.get('expectedVersion') is not None:
                 error('Assessment draft changed concurrently', '23505')
             next_version = 1
-            run(
+            inserted = run(
                 """
                 INSERT INTO hirearchy.assessment_definitions (
                   id, organization_id, author_principal_id, title, draft_version
@@ -4869,6 +5013,9 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                   $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid,
                   $4, 1
                 )
+                RETURNING pg_catalog.jsonb_build_object(
+                  'createdAt', created_at, 'updatedAt', updated_at
+                ) AS timestamps
                 """,
                 ['uuid', 'uuid', 'uuid', 'text'],
                 [assessment_id, organization_id, principal_id, content['title']],
@@ -4901,6 +5048,15 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                 json.dumps(content, ensure_ascii=False),
             ],
         )
+        if operation == 'problem.reuse':
+            return {'draft': {
+                **content,
+                'definitionId': assessment_id,
+                'organizationId': organization_id,
+                'authorPrincipalId': principal_id,
+                'version': next_version,
+                **json_value(inserted[0]['timestamps']),
+            }}
         return {'assessmentId': assessment_id}
 
     if operation == 'assessment.get':
@@ -6581,5 +6737,558 @@ REVOKE ALL ON FUNCTION staging.readiness_probe()
   FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker,
        staging_verifier_owner, hirearchy_migrator;
 GRANT EXECUTE ON FUNCTION staging.readiness_probe() TO r23_gateway;
+
+-- Hiring Platform durable Candidate AI RPCs live in the staging schema so the
+-- base hirearchy schema keeps only r26_candidate_command and its readiness
+-- probe executable by app_candidate_gateway.
+CREATE OR REPLACE FUNCTION staging.hiring_r212_get_view(
+  p_token_hash pg_catalog.text,
+  p_session_id pg_catalog.text
+) RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_session record;
+  v_enabled pg_catalog.bool := false;
+  v_provider_id pg_catalog.text := 'nvidia-nim';
+  v_model_id pg_catalog.text := 'moonshotai/kimi-k3.1-pro';
+  v_max_interactions pg_catalog.int4 := 15;
+  v_used_interactions pg_catalog.int4 := 0;
+  v_interactions pg_catalog.jsonb;
+BEGIN
+  IF SESSION_USER NOT IN ('app_candidate_gateway', 'postgres', 'hirearchy_migrator') THEN
+    RAISE EXCEPTION 'R2.12 candidate role denied' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$'
+     OR p_session_id IS NULL OR p_session_id !~ '^sess_[A-Za-z0-9_-]{1,128}$' THEN
+    RAISE EXCEPTION 'R2.12 invalid input parameters' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_catalog.set_config('r26.session_id', p_session_id, true);
+  PERFORM pg_catalog.set_config('r26.token_hash', p_token_hash, true);
+
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.candidate_token_envelopes AS envelope
+    WHERE envelope.session_id = p_session_id
+      AND envelope.candidate_token_hash = p_token_hash
+      AND envelope.revoked_at IS NULL
+      AND (envelope.expires_at IS NULL OR envelope.expires_at > pg_catalog.clock_timestamp())
+  ) THEN
+    RAISE EXCEPTION 'R2.12 candidate authentication failed' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT s.* INTO v_session
+  FROM hirearchy.assessment_sessions AS s
+  WHERE s.id = p_session_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'R2.12 candidate session unavailable' USING ERRCODE = 'R2604';
+  END IF;
+
+  IF v_session.ai_capability_snapshot IS NOT NULL THEN
+    v_enabled := COALESCE((v_session.ai_capability_snapshot ->> 'enabled')::boolean, false);
+    v_provider_id := COALESCE(
+      NULLIF(v_session.ai_capability_snapshot ->> 'providerId', ''),
+      NULLIF(v_session.ai_capability_snapshot ->> 'configuredProviderId', ''),
+      'nvidia-nim'
+    );
+    v_model_id := COALESCE(
+      NULLIF(v_session.ai_capability_snapshot ->> 'modelId', ''),
+      NULLIF(v_session.ai_capability_snapshot ->> 'configuredModelId', ''),
+      'moonshotai/kimi-k3.1-pro'
+    );
+    v_max_interactions := COALESCE((v_session.ai_capability_snapshot ->> 'maxInteractions')::pg_catalog.int4, 15);
+  END IF;
+
+  SELECT pg_catalog.count(*)::pg_catalog.int4 INTO v_used_interactions
+  FROM hirearchy.candidate_ai_interactions
+  WHERE session_id = p_session_id
+    AND status IN ('ADMITTED', 'COMPLETED');
+
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'interactionId', ai.interaction_id,
+        'requestId', ai.request_id,
+        'sequenceStart', ai.sequence_start,
+        'sequenceCompleted', ai.sequence_completed,
+        'candidatePrompt', ai.candidate_prompt,
+        'assistantResponse', ai.assistant_response,
+        'status', ai.status,
+        'failureReason', ai.failure_reason,
+        'errorMessage', ai.error_message,
+        'providerId', ai.provider_id,
+        'modelId', ai.model_id,
+        'createdAt', pg_catalog.to_char(ai.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'completedAt', CASE WHEN ai.completed_at IS NOT NULL THEN pg_catalog.to_char(ai.completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') ELSE NULL END
+      ) ORDER BY ai.sequence_start
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_interactions
+  FROM hirearchy.candidate_ai_interactions AS ai
+  WHERE ai.session_id = p_session_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'enabled', v_enabled,
+    'providerId', v_provider_id,
+    'modelId', v_model_id,
+    'remainingInteractions', GREATEST(0, v_max_interactions - v_used_interactions),
+    'totalInteractionsAllowed', v_max_interactions,
+    'interactions', v_interactions
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_r212_admit(
+  p_token_hash pg_catalog.text,
+  p_session_id pg_catalog.text,
+  p_request_id pg_catalog.text,
+  p_prompt pg_catalog.text
+) RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_envelope_org_id pg_catalog.uuid;
+  v_session record;
+  v_existing record;
+  v_sequence pg_catalog.int8;
+  v_interaction_id pg_catalog.text;
+  v_now pg_catalog.timestamptz;
+  v_deadline pg_catalog.timestamptz;
+  v_max_interactions pg_catalog.int4 := 15;
+  v_current_count pg_catalog.int4 := 0;
+  v_provider_id pg_catalog.text;
+  v_model_id pg_catalog.text;
+BEGIN
+  IF SESSION_USER NOT IN ('app_candidate_gateway', 'postgres', 'hirearchy_migrator') THEN
+    RAISE EXCEPTION 'R2.12 candidate role denied' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$'
+     OR p_session_id IS NULL OR p_session_id !~ '^sess_[A-Za-z0-9_-]{1,128}$'
+     OR p_request_id IS NULL OR p_request_id !~ '^[A-Za-z0-9_-]{1,128}$'
+     OR p_prompt IS NULL THEN
+    RAISE EXCEPTION 'R2.12 invalid input parameters' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_catalog.set_config('r26.session_id', p_session_id, true);
+  PERFORM pg_catalog.set_config('r26.token_hash', p_token_hash, true);
+
+  SELECT envelope.organization_id INTO v_envelope_org_id
+  FROM hirearchy.candidate_token_envelopes AS envelope
+  WHERE envelope.session_id = p_session_id
+    AND envelope.candidate_token_hash = p_token_hash
+    AND envelope.revoked_at IS NULL
+    AND (envelope.expires_at IS NULL OR envelope.expires_at > pg_catalog.clock_timestamp());
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'R2.12 candidate authentication failed' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT s.* INTO v_session
+  FROM hirearchy.assessment_sessions AS s
+  WHERE s.id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_session.organization_id <> v_envelope_org_id THEN
+    RAISE EXCEPTION 'R2.12 candidate session unavailable' USING ERRCODE = 'R2604';
+  END IF;
+
+  IF v_session.ai_capability_snapshot IS NULL
+     OR (v_session.ai_capability_snapshot ->> 'enabled')::boolean IS NOT TRUE THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'DENIED',
+      'reason', 'NOT_ENABLED',
+      'remainingBudget', 0
+    );
+  END IF;
+
+  v_max_interactions := COALESCE(
+    (v_session.ai_capability_snapshot ->> 'maxInteractions')::pg_catalog.int4,
+    15
+  );
+
+  SELECT ai.* INTO v_existing
+  FROM hirearchy.candidate_ai_interactions AS ai
+  WHERE ai.session_id = p_session_id
+    AND ai.request_id = p_request_id;
+
+  IF FOUND THEN
+    IF v_existing.candidate_prompt <> p_prompt THEN
+      RAISE EXCEPTION 'R2.12 request ID reused with different intent' USING ERRCODE = '23514';
+    END IF;
+    SELECT pg_catalog.count(*)::pg_catalog.int4 INTO v_current_count
+    FROM hirearchy.candidate_ai_interactions
+    WHERE session_id = p_session_id AND status IN ('ADMITTED', 'COMPLETED');
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'REPLAY',
+      'remainingBudget', GREATEST(0, v_max_interactions - v_current_count),
+      'interaction', pg_catalog.jsonb_build_object(
+        'interactionId', v_existing.interaction_id,
+        'requestId', v_existing.request_id,
+        'sequenceStart', v_existing.sequence_start,
+        'sequenceCompleted', v_existing.sequence_completed,
+        'candidatePrompt', v_existing.candidate_prompt,
+        'assistantResponse', v_existing.assistant_response,
+        'status', v_existing.status,
+        'failureReason', v_existing.failure_reason,
+        'errorMessage', v_existing.error_message,
+        'providerId', v_existing.provider_id,
+        'modelId', v_existing.model_id,
+        'createdAt', pg_catalog.to_char(v_existing.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'completedAt', CASE WHEN v_existing.completed_at IS NOT NULL THEN pg_catalog.to_char(v_existing.completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') ELSE NULL END
+      )
+    );
+  END IF;
+
+  IF v_session.status <> 'ACTIVE' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'DENIED',
+      'reason', 'SESSION_CLOSED',
+      'remainingBudget', 0
+    );
+  END IF;
+
+  v_now := pg_catalog.clock_timestamp();
+  v_deadline := v_session.activated_at + (v_session.duration_seconds * INTERVAL '1 second');
+  IF v_now >= v_deadline THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'DENIED',
+      'reason', 'DEADLINE_EXCEEDED',
+      'remainingBudget', 0
+    );
+  END IF;
+
+  SELECT pg_catalog.count(*)::pg_catalog.int4 INTO v_current_count
+  FROM hirearchy.candidate_ai_interactions
+  WHERE session_id = p_session_id AND status IN ('ADMITTED', 'COMPLETED');
+
+  IF pg_catalog.char_length(p_prompt) > 4000 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'DENIED',
+      'reason', 'PROMPT_TOO_LARGE',
+      'remainingBudget', GREATEST(0, v_max_interactions - v_current_count)
+    );
+  END IF;
+
+  IF v_current_count >= v_max_interactions THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'DENIED',
+      'reason', 'BUDGET_EXHAUSTED',
+      'remainingBudget', 0
+    );
+  END IF;
+
+  SELECT COALESCE(pg_catalog.max(event.sequence), 0) + 1
+  INTO v_sequence
+  FROM hirearchy.candidate_session_events AS event
+  WHERE event.session_id = p_session_id;
+
+  v_interaction_id := 'ai_' || p_request_id;
+  v_provider_id := COALESCE(
+    NULLIF(v_session.ai_capability_snapshot ->> 'providerId', ''),
+    NULLIF(v_session.ai_capability_snapshot ->> 'configuredProviderId', ''),
+    'nvidia-nim'
+  );
+  v_model_id := COALESCE(
+    NULLIF(v_session.ai_capability_snapshot ->> 'modelId', ''),
+    NULLIF(v_session.ai_capability_snapshot ->> 'configuredModelId', ''),
+    'moonshotai/kimi-k3.1-pro'
+  );
+
+  INSERT INTO hirearchy.candidate_session_events (
+    organization_id, session_id, sequence, event_type, happened_at, payload
+  ) VALUES (
+    v_session.organization_id, p_session_id, v_sequence,
+    'AI_REQUEST_STARTED', v_now,
+    pg_catalog.jsonb_build_object(
+      'requestId', p_request_id,
+      'interactionId', v_interaction_id,
+      'promptChars', pg_catalog.char_length(p_prompt)
+    )
+  );
+
+  INSERT INTO hirearchy.candidate_ai_interactions (
+    organization_id, session_id, interaction_id, request_id,
+    sequence_start, candidate_prompt, status, provider_id, model_id, created_at
+  ) VALUES (
+    v_session.organization_id, p_session_id, v_interaction_id, p_request_id,
+    v_sequence, p_prompt, 'ADMITTED', v_provider_id, v_model_id, v_now
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'status', 'ADMITTED',
+    'remainingBudget', GREATEST(0, v_max_interactions - (v_current_count + 1)),
+    'interaction', pg_catalog.jsonb_build_object(
+      'interactionId', v_interaction_id,
+      'requestId', p_request_id,
+      'sequenceStart', v_sequence,
+      'sequenceCompleted', NULL,
+      'candidatePrompt', p_prompt,
+      'assistantResponse', NULL,
+      'status', 'ADMITTED',
+      'failureReason', NULL,
+      'errorMessage', NULL,
+      'providerId', v_provider_id,
+      'modelId', v_model_id,
+      'createdAt', pg_catalog.to_char(v_now AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      'completedAt', NULL
+    )
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_r212_complete(
+  p_token_hash pg_catalog.text,
+  p_session_id pg_catalog.text,
+  p_request_id pg_catalog.text,
+  p_assistant_response pg_catalog.text,
+  p_duration_ms pg_catalog.int4 DEFAULT NULL
+) RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_session record;
+  v_interaction record;
+  v_sequence pg_catalog.int8;
+  v_now pg_catalog.timestamptz;
+BEGIN
+  IF SESSION_USER NOT IN ('app_candidate_gateway', 'postgres', 'hirearchy_migrator') THEN
+    RAISE EXCEPTION 'R2.12 candidate role denied' USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM pg_catalog.set_config('r26.session_id', p_session_id, true);
+  PERFORM pg_catalog.set_config('r26.token_hash', p_token_hash, true);
+
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.candidate_token_envelopes AS envelope
+    WHERE envelope.session_id = p_session_id
+      AND envelope.candidate_token_hash = p_token_hash
+  ) THEN
+    RAISE EXCEPTION 'R2.12 candidate authentication failed' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT s.* INTO v_session
+  FROM hirearchy.assessment_sessions AS s
+  WHERE s.id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_session.status <> 'ACTIVE' THEN
+    RAISE EXCEPTION 'R2.12 candidate session is not active' USING ERRCODE = 'R2605';
+  END IF;
+
+  SELECT ai.* INTO v_interaction
+  FROM hirearchy.candidate_ai_interactions AS ai
+  WHERE ai.session_id = p_session_id AND ai.request_id = p_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'R2.12 interaction not found' USING ERRCODE = '22023';
+  END IF;
+
+  IF v_interaction.status = 'COMPLETED' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'interactionId', v_interaction.interaction_id,
+      'requestId', v_interaction.request_id,
+      'sequenceStart', v_interaction.sequence_start,
+      'sequenceCompleted', v_interaction.sequence_completed,
+      'candidatePrompt', v_interaction.candidate_prompt,
+      'assistantResponse', v_interaction.assistant_response,
+      'status', v_interaction.status,
+      'failureReason', v_interaction.failure_reason,
+      'errorMessage', v_interaction.error_message,
+      'providerId', v_interaction.provider_id,
+      'modelId', v_interaction.model_id,
+      'createdAt', pg_catalog.to_char(v_interaction.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      'completedAt', pg_catalog.to_char(v_interaction.completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+    );
+  END IF;
+
+  v_now := pg_catalog.clock_timestamp();
+  SELECT COALESCE(pg_catalog.max(event.sequence), 0) + 1
+  INTO v_sequence
+  FROM hirearchy.candidate_session_events AS event
+  WHERE event.session_id = p_session_id;
+
+  INSERT INTO hirearchy.candidate_session_events (
+    organization_id, session_id, sequence, event_type, happened_at, payload
+  ) VALUES (
+    v_session.organization_id, p_session_id, v_sequence,
+    'AI_RESPONSE_COMPLETED', v_now,
+    pg_catalog.jsonb_build_object(
+      'requestId', p_request_id,
+      'interactionId', v_interaction.interaction_id,
+      'sequenceStart', v_interaction.sequence_start,
+      'durationMs', p_duration_ms,
+      'responseChars', pg_catalog.char_length(p_assistant_response)
+    )
+  );
+
+  UPDATE hirearchy.candidate_ai_interactions
+  SET status = 'COMPLETED',
+      assistant_response = p_assistant_response,
+      sequence_completed = v_sequence,
+      completed_at = v_now
+  WHERE session_id = p_session_id AND request_id = p_request_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'interactionId', v_interaction.interaction_id,
+    'requestId', p_request_id,
+    'sequenceStart', v_interaction.sequence_start,
+    'sequenceCompleted', v_sequence,
+    'candidatePrompt', v_interaction.candidate_prompt,
+    'assistantResponse', p_assistant_response,
+    'status', 'COMPLETED',
+    'failureReason', NULL,
+    'errorMessage', NULL,
+    'providerId', v_interaction.provider_id,
+    'modelId', v_interaction.model_id,
+    'createdAt', pg_catalog.to_char(v_interaction.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'completedAt', pg_catalog.to_char(v_now AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_r212_fail(
+  p_token_hash pg_catalog.text,
+  p_session_id pg_catalog.text,
+  p_request_id pg_catalog.text,
+  p_failure_reason pg_catalog.text,
+  p_error_message pg_catalog.text,
+  p_duration_ms pg_catalog.int4 DEFAULT NULL
+) RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_session record;
+  v_interaction record;
+  v_sequence pg_catalog.int8;
+  v_now pg_catalog.timestamptz;
+BEGIN
+  IF SESSION_USER NOT IN ('app_candidate_gateway', 'postgres', 'hirearchy_migrator') THEN
+    RAISE EXCEPTION 'R2.12 candidate role denied' USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM pg_catalog.set_config('r26.session_id', p_session_id, true);
+  PERFORM pg_catalog.set_config('r26.token_hash', p_token_hash, true);
+
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.candidate_token_envelopes AS envelope
+    WHERE envelope.session_id = p_session_id
+      AND envelope.candidate_token_hash = p_token_hash
+  ) THEN
+    RAISE EXCEPTION 'R2.12 candidate authentication failed' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT s.* INTO v_session
+  FROM hirearchy.assessment_sessions AS s
+  WHERE s.id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'R2.12 candidate session unavailable' USING ERRCODE = 'R2604';
+  END IF;
+
+  SELECT ai.* INTO v_interaction
+  FROM hirearchy.candidate_ai_interactions AS ai
+  WHERE ai.session_id = p_session_id AND ai.request_id = p_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'R2.12 interaction not found' USING ERRCODE = '22023';
+  END IF;
+
+  IF v_interaction.status IN ('COMPLETED', 'FAILED') THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'interactionId', v_interaction.interaction_id,
+      'requestId', v_interaction.request_id,
+      'sequenceStart', v_interaction.sequence_start,
+      'sequenceCompleted', v_interaction.sequence_completed,
+      'candidatePrompt', v_interaction.candidate_prompt,
+      'assistantResponse', v_interaction.assistant_response,
+      'status', v_interaction.status,
+      'failureReason', v_interaction.failure_reason,
+      'errorMessage', v_interaction.error_message,
+      'providerId', v_interaction.provider_id,
+      'modelId', v_interaction.model_id,
+      'createdAt', pg_catalog.to_char(v_interaction.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      'completedAt', pg_catalog.to_char(v_interaction.completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+    );
+  END IF;
+
+  v_now := pg_catalog.clock_timestamp();
+  SELECT COALESCE(pg_catalog.max(event.sequence), 0) + 1
+  INTO v_sequence
+  FROM hirearchy.candidate_session_events AS event
+  WHERE event.session_id = p_session_id;
+
+  INSERT INTO hirearchy.candidate_session_events (
+    organization_id, session_id, sequence, event_type, happened_at, payload
+  ) VALUES (
+    v_session.organization_id, p_session_id, v_sequence,
+    'AI_REQUEST_FAILED', v_now,
+    pg_catalog.jsonb_build_object(
+      'requestId', p_request_id,
+      'interactionId', v_interaction.interaction_id,
+      'sequenceStart', v_interaction.sequence_start,
+      'failureReason', p_failure_reason,
+      'durationMs', p_duration_ms
+    )
+  );
+
+  UPDATE hirearchy.candidate_ai_interactions
+  SET status = 'FAILED',
+      failure_reason = p_failure_reason,
+      error_message = p_error_message,
+      sequence_completed = v_sequence,
+      completed_at = v_now
+  WHERE session_id = p_session_id AND request_id = p_request_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'interactionId', v_interaction.interaction_id,
+    'requestId', p_request_id,
+    'sequenceStart', v_interaction.sequence_start,
+    'sequenceCompleted', v_sequence,
+    'candidatePrompt', v_interaction.candidate_prompt,
+    'assistantResponse', NULL,
+    'status', 'FAILED',
+    'failureReason', p_failure_reason,
+    'errorMessage', p_error_message,
+    'providerId', v_interaction.provider_id,
+    'modelId', v_interaction.model_id,
+    'createdAt', pg_catalog.to_char(v_interaction.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'completedAt', pg_catalog.to_char(v_now AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+  );
+END
+$function$;
+
+ALTER FUNCTION staging.hiring_r212_get_view(pg_catalog.text, pg_catalog.text) OWNER TO hirearchy_migrator;
+ALTER FUNCTION staging.hiring_r212_admit(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) OWNER TO hirearchy_migrator;
+ALTER FUNCTION staging.hiring_r212_complete(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4) OWNER TO hirearchy_migrator;
+ALTER FUNCTION staging.hiring_r212_fail(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4) OWNER TO hirearchy_migrator;
+
+REVOKE ALL ON FUNCTION staging.hiring_r212_get_view(pg_catalog.text, pg_catalog.text)
+  FROM PUBLIC, r23_gateway, app_evaluator, app_control_worker, staging_verifier_owner, staging_readiness_owner;
+REVOKE ALL ON FUNCTION staging.hiring_r212_admit(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text)
+  FROM PUBLIC, r23_gateway, app_evaluator, app_control_worker, staging_verifier_owner, staging_readiness_owner;
+REVOKE ALL ON FUNCTION staging.hiring_r212_complete(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4)
+  FROM PUBLIC, r23_gateway, app_evaluator, app_control_worker, staging_verifier_owner, staging_readiness_owner;
+REVOKE ALL ON FUNCTION staging.hiring_r212_fail(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4)
+  FROM PUBLIC, r23_gateway, app_evaluator, app_control_worker, staging_verifier_owner, staging_readiness_owner;
+
+GRANT USAGE ON SCHEMA staging TO app_candidate_gateway;
+GRANT EXECUTE ON FUNCTION staging.hiring_r212_get_view(pg_catalog.text, pg_catalog.text) TO app_candidate_gateway;
+GRANT EXECUTE ON FUNCTION staging.hiring_r212_admit(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO app_candidate_gateway;
+GRANT EXECUTE ON FUNCTION staging.hiring_r212_complete(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4) TO app_candidate_gateway;
+GRANT EXECUTE ON FUNCTION staging.hiring_r212_fail(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4) TO app_candidate_gateway;
 
 COMMIT;

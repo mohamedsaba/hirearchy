@@ -1,0 +1,2 @@
+# Keep the reviewed Reservation Moves bytes stable for digest validation.
+docs/scenarios/examples/reservation-moves/** text eol=lf

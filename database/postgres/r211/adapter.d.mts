@@ -3,6 +3,8 @@ import type {
   R211AssessmentDraft,
   R211AssessmentDraftInput,
   R211ValidatedVersion,
+  R211ReusableProblem,
+  R211ReusableProblemContent,
 } from './contract.d.mts';
 
 export class R211ConcurrencyConflict extends Error {
@@ -58,3 +60,59 @@ export function listAssessmentDefinitions(
   identityInput: unknown,
   organizationId: string,
 ): Promise<unknown[]>;
+
+export class R211ProblemConcurrencyConflict extends Error {
+  readonly code: 'PROBLEM_CONCURRENCY_CONFLICT';
+  readonly sqlState: 'R2111';
+  readonly status: 409;
+}
+
+export class R211InvalidProblemContent extends Error {
+  readonly code: 'INVALID_PROBLEM_CONTENT';
+}
+
+export function validateReusableProblemContent(
+  input: unknown,
+): R211ReusableProblemContent;
+
+export function createReusableProblem(
+  client: { query(sql: string, params?: unknown[]): Promise<unknown> },
+  identity: unknown,
+  organizationId: string,
+  content: R211ReusableProblemContent,
+  assertVerifiedIdentity?: (identity: unknown) => unknown,
+): Promise<R211ReusableProblem>;
+
+export function listReusableProblems(
+  client: { query(sql: string, params?: unknown[]): Promise<unknown> },
+  identity: unknown,
+  organizationId: string,
+  assertVerifiedIdentity?: (identity: unknown) => unknown,
+): Promise<R211ReusableProblem[]>;
+
+export function getReusableProblem(
+  client: { query(sql: string, params?: unknown[]): Promise<unknown> },
+  identity: unknown,
+  organizationId: string,
+  problemId: string,
+  assertVerifiedIdentity?: (identity: unknown) => unknown,
+): Promise<R211ReusableProblem | null>;
+
+export function updateReusableProblem(
+  client: { query(sql: string, params?: unknown[]): Promise<unknown> },
+  identity: unknown,
+  organizationId: string,
+  problemId: string,
+  expectedVersion: number,
+  content: R211ReusableProblemContent,
+  assertVerifiedIdentity?: (identity: unknown) => unknown,
+): Promise<R211ReusableProblem | null>;
+
+export function deleteReusableProblem(
+  client: { query(sql: string, params?: unknown[]): Promise<unknown> },
+  identity: unknown,
+  organizationId: string,
+  problemId: string,
+  expectedVersion: number,
+  assertVerifiedIdentity?: (identity: unknown) => unknown,
+): Promise<boolean>;

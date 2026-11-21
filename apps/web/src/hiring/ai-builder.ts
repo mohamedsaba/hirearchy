@@ -5,6 +5,7 @@ import type {
   R211StarterFile,
 } from '../r211-builder/contract';
 import { validateAssessmentDraft } from '../r211-builder/validation';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../scenarios/generated-terms-and-conditions';
 import {
   experienceLevelLabel,
   type ExperienceLevelId,
@@ -247,10 +248,20 @@ export async function generateHiringAssessmentWithKimi(
       ? parsed.title.trim().slice(0, 120)
       : `${input.targetRole} · ${input.domain} Task`.slice(0, 120);
 
-  const brief =
+  const baseBrief =
     typeof parsed.brief === 'string' && parsed.brief.trim().length >= 20
-      ? parsed.brief.trim().slice(0, 4800)
+      ? parsed.brief.trim()
       : `Resolve the engineering issue in ${primaryFilePath} for ${input.targetRole} (${input.domain}) and ensure all tests pass.`;
+
+  const brief = baseBrief.endsWith(GENERATED_TERMS_AND_CONDITIONS_FOOTER)
+    ? baseBrief
+    : baseBrief + GENERATED_TERMS_AND_CONDITIONS_FOOTER;
+
+  if (brief.length > 5000) {
+    throw new Error(
+      'Generated assessment brief exceeds 5,000 characters after adding Terms and Conditions. Please try again.',
+    );
+  }
 
   const expectedBehavior = (
     Array.isArray(parsed.expectedBehavior)

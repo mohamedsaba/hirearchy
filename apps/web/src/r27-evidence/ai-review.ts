@@ -5,6 +5,7 @@ import {
   resolveAiReviewProviderConfig,
   type ResolvedAiReviewProvider,
 } from '../ai/server-ai-configuration';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../scenarios/generated-terms-and-conditions';
 import {
   buildDeterministicEvidencePreviewReport,
   computeEvidenceMetricsAndDiffSummary,
@@ -147,8 +148,14 @@ function buildReviewPromptPayload(
   });
 
   const aiLines = (evidence.aiInteractions ?? []).map((item, index) => {
-    const respSnippet = (item.assistantResponse ?? '').slice(0, 180).trim();
-    return `${index + 1}. [seq ${item.sequenceStart}] prompt="${item.candidatePrompt.slice(0, 260)}" status=${item.status}${respSnippet ? ` assistantSummary="${respSnippet}"` : ''}`;
+    const excerpt = item.candidatePrompt
+      .replaceAll(GENERATED_TERMS_AND_CONDITIONS_FOOTER, '')
+      .slice(0, 260);
+    const respSnippet = (item.assistantResponse ?? '')
+      .replaceAll(GENERATED_TERMS_AND_CONDITIONS_FOOTER, '')
+      .slice(0, 180)
+      .trim();
+    return `${index + 1}. [seq ${item.sequenceStart}] prompt="${excerpt}" status=${item.status}${respSnippet ? ` assistantSummary="${respSnippet}"` : ''}`;
   });
 
   const systemPrompt = [
@@ -181,6 +188,10 @@ function buildReviewPromptPayload(
       ]
     : [];
 
+  const brief = summary.brief?.endsWith(GENERATED_TERMS_AND_CONDITIONS_FOOTER)
+    ? summary.brief.slice(0, -GENERATED_TERMS_AND_CONDITIONS_FOOTER.length)
+    : summary.brief;
+
   const userPrompt = [
     `Scenario: ${evidence.scenario.title} (v${evidence.scenario.version})`,
     ...roleHeader,
@@ -189,7 +200,7 @@ function buildReviewPromptPayload(
     `Timeline Events: ${summary.timelineEventsCount}, Save Checkpoints: ${summary.saveEventsCount}`,
     '',
     'Scenario Brief:',
-    summary.brief ?? '(Not provided in snapshot)',
+    brief ?? '(Not provided in snapshot)',
     '',
     'Acceptance Criteria:',
     summary.acceptanceCriteria.length

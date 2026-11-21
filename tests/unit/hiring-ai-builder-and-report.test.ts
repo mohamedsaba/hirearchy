@@ -9,6 +9,8 @@ import {
 } from '../../apps/web/src/hiring/ai-performance-report';
 import { validateAssessmentDraft } from '../../apps/web/src/r211-builder/validation';
 import { generateR27AiCandidateReview } from '../../apps/web/src/r27-evidence/ai-review';
+import { buildR27Presentation } from '../../apps/web/src/r27-evidence/presentation';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../../apps/web/src/scenarios/generated-terms-and-conditions';
 
 function makeEvidence(): R27Evidence {
   const starter = 'def process_item(item):\n    return item\n';
@@ -225,7 +227,73 @@ describe('Kimi K3.1 Pro AI Builder, Evidence Timing Deltas & Fit Report', () => 
     expect(capturedBody).toContain('"model":"moonshotai/kimi-k3.1-pro"');
     expect(capturedBody).toContain('Backend Engineer');
     expect(result.draft.templateId).toBe('ai-generated');
+    expect(
+      result.draft.brief.endsWith(GENERATED_TERMS_AND_CONDITIONS_FOOTER),
+    ).toBe(true);
     expect(validateAssessmentDraft(result.draft).valid).toBe(true);
+
+    const presentation = buildR27Presentation({
+      ...makeEvidence(),
+      scenario: {
+        ...makeEvidence().scenario,
+        snapshotText: JSON.stringify({
+          scenario: {
+            brief: result.draft.brief,
+            acceptanceCriteria: result.draft.acceptanceCriteria,
+          },
+        }),
+      },
+    });
+    expect(presentation.termsPatternObservation).not.toBeNull();
+  });
+
+  it('rejects oversized Kimi-generated briefs without truncating task text when adding Terms and Conditions', async () => {
+    const fetchImpl: typeof fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    title: 'Oversized Brief Assessment',
+                    brief: 'A'.repeat(4950),
+                    primaryFilePath: 'src/relay.py',
+                    expectedBehavior: ['Handles duplicate events safely.'],
+                    acceptanceCriteria: ['Unit tests pass under pytest.'],
+                    starterFiles: [
+                      {
+                        path: 'src/relay.py',
+                        content: 'def relay(events):\n    return events\n',
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    ) as typeof fetch;
+
+    await expect(
+      generateHiringAssessmentWithKimi(
+        {
+          targetRole: 'Backend Engineer',
+          experienceLevel: 'senior',
+          yearsExperience: 6,
+          skills: ['Python'],
+          problemStructure: 'single_module',
+          workKind: 'incident',
+          domain: 'fintech',
+          durationMinutes: 60,
+          integratedAi: false,
+        },
+        { fetchImpl },
+      ),
+    ).rejects.toThrow(
+      /exceeds 5,000 characters after adding Terms and Conditions/,
+    );
   });
 
   it('includes chronological timing deltas and role context in AI Candidate Review', async () => {

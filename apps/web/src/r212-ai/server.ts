@@ -83,7 +83,7 @@ export async function readCandidateAiCapability(
   if (isHiringPlatformEnabled()) {
     const { rows } = await getClientPool(databaseUrl).query<{
       result: { enabled?: boolean } | null;
-    }>('SELECT hirearchy.hiring_r212_get_view($1, $2) AS result', [
+    }>('SELECT staging.hiring_r212_get_view($1, $2) AS result', [
       tokenHash,
       sessionId,
     ]);
@@ -304,7 +304,7 @@ export async function r212CandidateAiRead(
     const view = isHiringPlatformEnabled()
       ? (
           await pool.query(
-            'SELECT hirearchy.hiring_r212_get_view($1, $2) AS result',
+            'SELECT staging.hiring_r212_get_view($1, $2) AS result',
             [tokenHash, sessionId],
           )
         ).rows[0]?.result
@@ -367,7 +367,7 @@ export async function r212CandidateAiAction(
     if (hiringActive) {
       try {
         const { rows } = await pool.query(
-          'SELECT hirearchy.hiring_r212_admit($1, $2, $3, $4) AS result',
+          'SELECT staging.hiring_r212_admit($1, $2, $3, $4) AS result',
           [tokenHash, sessionId, payload.requestId, payload.candidatePrompt],
         );
         admission = rows[0]?.result as R212AdmissionResult;
@@ -487,7 +487,7 @@ export async function r212CandidateAiAction(
       const completedInteraction = hiringActive
         ? ((
             await pool.query(
-              'SELECT hirearchy.hiring_r212_complete($1, $2, $3, $4, $5) AS result',
+              'SELECT staging.hiring_r212_complete($1, $2, $3, $4, $5) AS result',
               [
                 tokenHash,
                 sessionId,
@@ -518,7 +518,7 @@ export async function r212CandidateAiAction(
       const failedInteraction = hiringActive
         ? ((
             await pool.query(
-              'SELECT hirearchy.hiring_r212_fail($1, $2, $3, $4, $5, $6) AS result',
+              'SELECT staging.hiring_r212_fail($1, $2, $3, $4, $5, $6) AS result',
               [
                 tokenHash,
                 sessionId,

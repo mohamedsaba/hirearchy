@@ -268,6 +268,7 @@ const R27SummaryView = ({
   loadingMore: boolean;
   pageError: string | null;
 }>) => {
+  const { termsPatternObservation } = presentation;
   const fileSources = [...sources]
     .filter((source) => source.r27?.kind === 'file')
     .sort((left, right) => {
@@ -361,6 +362,36 @@ const R27SummaryView = ({
               <h2 id="r27-snapshot-title">Task context</h2>
             </div>
           </header>
+          {termsPatternObservation ? (
+            <section
+              className="evaluator-source-details"
+              aria-labelledby="r27-terms-pattern-title"
+            >
+              <h3 id="r27-terms-pattern-title">
+                Coding patterns in added Python lines
+              </h3>
+              <ul>
+                <li>
+                  <code>snake_case</code> identifier{' '}
+                  {termsPatternObservation.snakeCaseIdentifierFound
+                    ? 'was observed'
+                    : 'was not observed'}
+                  .
+                </li>
+                <li>
+                  Nested object return{' '}
+                  {termsPatternObservation.nestedObjectReturnFound
+                    ? 'was observed'
+                    : 'was not observed'}
+                  .
+                </li>
+              </ul>
+              <p className="evaluator-muted-copy">
+                These observations cannot establish external AI use, authorship,
+                intent, or competence.
+              </p>
+            </section>
+          ) : null}
           <details className="evaluator-source-details">
             <summary>Read task brief and acceptance criteria</summary>
             <ScenarioBrief

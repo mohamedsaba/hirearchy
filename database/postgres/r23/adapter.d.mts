@@ -13,6 +13,8 @@ import type {
 import type {
   R211AssessmentDraft,
   R211AssessmentDraftInput,
+  R211ReusableProblem,
+  R211ReusableProblemContent,
   R211ValidatedVersion,
 } from '../r211/contract.d.mts';
 
@@ -174,6 +176,33 @@ export interface R23Authorization {
     sessionId: string,
     input: R210FinalizePacketInput,
   ): Promise<R210ReviewPacket>;
+  createReusableProblem(
+    identity: R23VerifiedIdentity,
+    organizationId: string,
+    content: R211ReusableProblemContent,
+  ): Promise<R211ReusableProblem>;
+  listReusableProblems(
+    identity: R23VerifiedIdentity,
+    organizationId: string,
+  ): Promise<R211ReusableProblem[]>;
+  getReusableProblem(
+    identity: R23VerifiedIdentity,
+    organizationId: string,
+    problemId: string,
+  ): Promise<R211ReusableProblem | null>;
+  updateReusableProblem(
+    identity: R23VerifiedIdentity,
+    organizationId: string,
+    problemId: string,
+    expectedVersion: number,
+    content: R211ReusableProblemContent,
+  ): Promise<R211ReusableProblem | null>;
+  deleteReusableProblem(
+    identity: R23VerifiedIdentity,
+    organizationId: string,
+    problemId: string,
+    expectedVersion: number,
+  ): Promise<boolean>;
   saveAssessmentDraft(
     identity: R23VerifiedIdentity,
     organizationId: string,

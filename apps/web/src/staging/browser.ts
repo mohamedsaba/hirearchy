@@ -27,6 +27,7 @@ import {
   type AcceptInvitationResponse,
 } from './onboarding';
 
+import { R211ProblemConcurrencyConflict } from '../../../../database/postgres/r211/adapter.mjs';
 import type {
   R23Membership,
   R23Session,
@@ -87,6 +88,10 @@ import {
 } from '../r23-auth/founder-uat-state';
 import {
   resolveOrgDisplay,
+  reusableProblemError,
+  reusableProblemJson,
+  reusableProblemNotFound,
+  type R211ProblemAction,
   type AuthenticatedSessionListContext,
   type AuthenticatedSessionSummaryContext,
   type R24OrganizationSessionListResult,
@@ -162,6 +167,8 @@ const MAX_BODY_BYTES = 4096;
 const RANDOM_VALUE = /^[A-Za-z0-9_-]{43}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const R27_MAX_SEQUENCE = 9223372036854775807n;
+
+export class StagingBrowserRefreshRequired extends Error {}
 
 class StagingBadRequest extends Error {
   readonly code = 'INVALID_REQUEST';
@@ -1025,7 +1032,7 @@ async function withStagingBrowserSession<T>(
     csrfToken: string;
     refreshedSessionCookie: string | null;
   }) => Promise<T>,
-  forceRefresh = false,
+  refresh: 'automatic' | 'force' | 'defer' = 'automatic',
 ): Promise<T> {
   if (!isAuthenticatedStaging()) throw new StagingUnavailable();
   let config: StagingConfiguration;
@@ -1050,8 +1057,11 @@ async function withStagingBrowserSession<T>(
 
   const storedClaims = readR23Claims(session.accessToken, config.auth);
   const needsRefresh =
-    forceRefresh ||
+    refresh === 'force' ||
     storedClaims.exp <= Date.now() / 1000 + REFRESH_AHEAD_SECONDS;
+  // A server component cannot deliver the rotated HttpOnly cookie.
+  if (needsRefresh && refresh === 'defer')
+    throw new StagingBrowserRefreshRequired();
   const grant: R23TokenGrant | undefined = needsRefresh
     ? await refreshGrant(config.auth, session.refreshToken)
     : undefined;
@@ -1103,12 +1113,13 @@ async function fetchOrganizationContext(
   config: StagingConfiguration,
   identity: R23VerifiedIdentity,
   organizationId: string,
+  assessmentId?: string,
 ): Promise<StagingOrganizationContextResponse> {
   const raw = await dispatchVerifiedStagingOperation(
     config,
     identity,
     'organization.context',
-    { organizationId },
+    { organizationId, ...(assessmentId ? { assessmentId } : {}) },
   );
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new StagingUnavailable();
@@ -1515,7 +1526,9 @@ export async function stagingLoadOrganizationSessionList(
     search?: string;
     cursor?: string | null;
     limit?: number;
+    assessmentId?: string;
   },
+  refresh: 'automatic' | 'defer' = 'automatic',
 ): Promise<
   AuthenticatedSessionListContext & {
     reviewers: StagingReviewerItem[];
@@ -1547,6 +1560,7 @@ export async function stagingLoadOrganizationSessionList(
         config,
         identity,
         orgIdLower,
+        queryParams?.assessmentId,
       );
       const { filtered, totalAuthorizedCount, filteredAuthorizedCount } =
         filterStagingSessions(orgContext.sessions ?? [], queryParams);
@@ -1601,6 +1615,7 @@ export async function stagingLoadOrganizationSessionList(
         refreshedSessionCookie,
       };
     },
+    refresh,
   );
 }
 
@@ -1849,7 +1864,16 @@ export async function stagingOrganizationGet(
     const content = `
       <header class="software-page-heading">
         <div><p class="software-eyebrow">${safeOrgName}</p><h1>${isOrgManager ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
-        ${isOrgManager || hiring ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>` : ''}
+        ${
+          hiring
+            ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>`
+            : membership.role === 'recruiter'
+              ? `<div>
+                <a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>
+                <a href="/r23/organizations/${safeOrgId}/problems">Problems</a>
+              </div>`
+              : ''
+        }
       </header>
 
       ${
@@ -2277,7 +2301,7 @@ export async function stagingRefreshPost(request: Request): Promise<Response> {
         });
         return attachRefreshedCookie(response, refreshedSessionCookie);
       },
-      true,
+      'force',
     );
   } catch (error) {
     return failureResponse(request, error);
@@ -2419,6 +2443,13 @@ export async function stagingSessionAssignmentsApiGet(
   }
 }
 
+function requestedStagingDefinitionId(input: Record<string, unknown>) {
+  if (input.definitionId === undefined) return undefined;
+  if (typeof input.definitionId !== 'string' || !UUID.test(input.definitionId))
+    throw new StagingBadRequest();
+  return input.definitionId.toLowerCase();
+}
+
 function buildStagingDraftContent(
   input: Record<string, unknown>,
   existingDraft: R211AssessmentDraft | null,
@@ -2496,8 +2527,9 @@ function buildStagingDraftContent(
                   : 0,
               applicability: {
                 kind:
+                  app.kind === 'recorded_integrated_ai_interaction' ||
                   app.kind === 'conditional'
-                    ? ('conditional' as const)
+                    ? app.kind
                     : ('always' as const),
                 rule: typeof app.rule === 'string' ? app.rule : 'always',
               },
@@ -2507,10 +2539,7 @@ function buildStagingDraftContent(
   };
 
   const normalized = normalizeAssessmentTemplate(rawDraft);
-  const requestedDefinitionId =
-    typeof input.definitionId === 'string' && UUID.test(input.definitionId)
-      ? input.definitionId.toLowerCase()
-      : undefined;
+  const requestedDefinitionId = requestedStagingDefinitionId(input);
   const requestedExpectedVersion =
     typeof input.expectedVersion === 'number' &&
     Number.isInteger(input.expectedVersion)
@@ -2572,6 +2601,98 @@ function buildStagingDraftContent(
   return { content };
 }
 
+export async function stagingReusableProblemApi(
+  request: Request,
+  targetOrganizationId: string,
+  action: R211ProblemAction,
+  problemId?: string,
+  refresh: 'automatic' | 'defer' = 'automatic',
+): Promise<Response> {
+  const jsonHeaders = new Headers(request.headers);
+  jsonHeaders.set('Accept', 'application/json');
+  const jsonRequest = new Request(request.url, { headers: jsonHeaders });
+  let refreshedSessionCookie: string | null = null;
+  let response: Response;
+  try {
+    if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
+    const organizationId = targetOrganizationId.toLowerCase();
+    const csrf = requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+    let body: Record<string, unknown> = {};
+    if (action !== 'list' && action !== 'get') {
+      requireSameOrigin(request);
+      body = await parseBody(request, action === 'reuse', 262144);
+      requireOriginAndCsrf(request, body);
+    }
+
+    response = await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({
+        config,
+        session,
+        identity,
+        refreshedSessionCookie: sessionCookie,
+      }) => {
+        refreshedSessionCookie = sessionCookie;
+        if (session.selectedOrganizationId !== organizationId) {
+          return reusableProblemNotFound();
+        }
+
+        const args: StagingProofArgs = { organizationId };
+        const bodyFields = ['csrf'];
+        if (action !== 'list' && action !== 'create') {
+          if (!problemId || !UUID.test(problemId)) {
+            return reusableProblemNotFound();
+          }
+          args.problemId = problemId.toLowerCase();
+        }
+        if (action === 'create' || action === 'update') {
+          bodyFields.push('content');
+          args.content = body.content as StagingProofArgs[string];
+        }
+        if (action === 'update' || action === 'delete') {
+          const { expectedVersion } = body;
+          if (
+            typeof expectedVersion !== 'number' ||
+            !Number.isSafeInteger(expectedVersion) ||
+            expectedVersion < 1
+          ) {
+            throw new StagingBadRequest();
+          }
+          bodyFields.push('expectedVersion');
+          args.expectedVersion = expectedVersion;
+        }
+        allowedFields(body, bodyFields);
+
+        const result = await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          `problem.${action}`,
+          args,
+        );
+        return reusableProblemJson(
+          result as object,
+          action === 'create' || action === 'reuse' ? 201 : 200,
+        );
+      },
+      refresh,
+    );
+  } catch (error) {
+    if (error instanceof StagingBrowserRefreshRequired)
+      return new Response(null, { status: 428 });
+    const code = getSqlErrorCode(error);
+    if (code === 'P0002') {
+      response = reusableProblemNotFound();
+    } else {
+      response =
+        reusableProblemError(
+          code === 'R2111' ? new R211ProblemConcurrencyConflict() : error,
+        ) ?? failureResponse(jsonRequest, error);
+    }
+  }
+  return attachRefreshedCookie(response, refreshedSessionCookie);
+}
+
 export async function stagingAssessmentDraftApiGet(
   request: Request,
   targetOrganizationId: string,
@@ -2584,9 +2705,13 @@ export async function stagingAssessmentDraftApiGet(
   });
 
   try {
+    const definitionId = new URL(request.url).searchParams.get('definitionId');
+    if (definitionId !== null && !UUID.test(definitionId))
+      throw new StagingBadRequest();
     const context = await stagingLoadOrganizationSessionList(
       request,
       targetOrganizationId,
+      { assessmentId: definitionId ?? undefined },
     );
     if (context.membership.role !== 'recruiter') {
       throw new StagingForbidden();
@@ -2637,6 +2762,7 @@ export async function stagingAssessmentDraftApiPut(
           config,
           identity,
           organizationId,
+          requestedStagingDefinitionId(body),
         );
         if (beforeContext.role !== 'recruiter') {
           throw new StagingForbidden();
@@ -2646,7 +2772,7 @@ export async function stagingAssessmentDraftApiPut(
           body,
           beforeContext.draft,
         );
-        await dispatchVerifiedStagingOperation(
+        const created = (await dispatchVerifiedStagingOperation(
           config,
           identity,
           'assessment.create',
@@ -2655,12 +2781,13 @@ export async function stagingAssessmentDraftApiPut(
             ...(assessmentId ? { assessmentId } : {}),
             content: content as unknown as StagingProofArgs,
           },
-        );
+        )) as { assessmentId: string };
 
         const afterContext = await fetchOrganizationContext(
           config,
           identity,
           organizationId,
+          created.assessmentId,
         );
         return attachRefreshedCookie(
           Response.json(
@@ -2710,13 +2837,21 @@ export async function stagingAssessmentValidateApiPost(
           config,
           identity,
           organizationId,
+          requestedStagingDefinitionId(body),
         );
         if (beforeContext.role !== 'recruiter') {
           throw new StagingForbidden();
         }
 
         const { assessmentId: existingOrRequestedId, content } =
-          buildStagingDraftContent(body, beforeContext.draft);
+          buildStagingDraftContent(
+            {
+              ...body,
+              expectedVersion:
+                body.expectedDraftVersion ?? body.expectedVersion,
+            },
+            beforeContext.draft,
+          );
 
         if (content.integratedAi === true) {
           return attachRefreshedCookie(
@@ -2845,11 +2980,12 @@ export async function stagingAssessmentValidateApiPost(
           config,
           identity,
           organizationId,
+          assessmentId,
         );
-        const createdVersion =
-          afterContext.validatedVersions.find(
-            (v) => v.id === validatedResult.validatedVersionId,
-          ) ?? afterContext.validatedVersions[0];
+        const createdVersion = afterContext.validatedVersions.find(
+          (v) => v.id === validatedResult.validatedVersionId,
+        );
+        if (!createdVersion) throw new StagingUnavailable();
 
         return attachRefreshedCookie(
           Response.json(

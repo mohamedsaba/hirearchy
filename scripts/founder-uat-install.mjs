@@ -200,6 +200,7 @@ async function readFounderUatDatabaseCounts(client) {
       'hirearchy.assessment_validated_versions',
       'hirearchy.assessment_issuances',
       'hirearchy.assessment_library_entries',
+      'hirearchy.reusable_problems',
     ]),
     candidateSessions: sum([
       'hirearchy.assessment_sessions',
@@ -247,6 +248,7 @@ async function readFounderUatDatabaseCounts(client) {
             'hirearchy.assessment_validated_versions',
             'hirearchy.assessment_issuances',
             'hirearchy.assessment_library_entries',
+            'hirearchy.reusable_problems',
             'hirearchy.assessment_sessions',
             'hirearchy.hiring_session_metadata',
             'hirearchy.candidate_workspace_files',
@@ -343,8 +345,8 @@ async function main() {
   try {
     const result = await applyMigrations(migrator);
     assert(
-      result.appliedVersions.includes('0018'),
-      'Founder UAT requires migration 0018',
+      result.appliedVersions.includes('0019'),
+      'Founder UAT requires migration 0019',
     );
     console.log(
       `Migrations verified through ${result.appliedVersions.at(-1)} (${result.appliedVersions.length} total).`,

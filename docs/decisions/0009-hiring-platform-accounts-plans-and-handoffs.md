@@ -1,4 +1,4 @@
-# 0007 — Hiring Platform Accounts, Organization Plans, Unified Kimi AI & Managerial Handoffs
+# 0009 — Hiring Platform Accounts, Organization Plans, Unified Kimi AI & Managerial Handoffs
 
 - **Status:** Accepted
 - **Date:** 2026-11-19
@@ -26,12 +26,13 @@ Earlier Hirearchy milestones established isolated workspace sessions, immutable 
    - `reviewer` (Evaluator) builds/saves/reuses problems, issues assessments, collaborates via peer Second Opinions, and publishes human Accept/Reject decisions.
 
 4. **Overhauled Assessment Builder**:
-   - Manual ad-hoc raw code editing is replaced with three structured paths: **Platform Templates**, **Kimi K3.1 Pro AI Problem Generation** from curated hiring criteria, and the **Saved Problem Library**.
+   - In Hiring Platform mode (`isHiringPlatformEnabled()`), manual ad-hoc raw code editing is replaced with three structured paths: **Platform Templates**, **Kimi K3.1 Pro AI Problem Generation** from curated hiring criteria (which appends the platform `Terms and Conditions` style probe per `0008` without truncating task text), and the **Saved Problem Library** (`assessment_library_entries`, storing validated, role-tagged definitions).
+   - Standard R2.11 recruiter authoring keeps its mutable **Reusable Problem Library** (`reusable_problems`, `0007`) and `/problems` management pages intact when Hiring Platform mode is inactive.
 
 5. **Unified NVIDIA NIM `moonshotai/kimi-k3.1-pro` Model**:
-   - All live AI features — AI Candidate Review (including timing deltas `Δ`), AI Assessment Builder, Candidate Workspace AI (`r212`), and Managerial Fit Reports — target NVIDIA NIM `moonshotai/kimi-k3.1-pro` and surface provider failures and plan requirements. Where a report can summarize existing evidence, the interface identifies the evidence summary and leaves coverage judgments open.
+   - All live AI features — AI Candidate Review (including timing deltas `Δ` and footer stripping per `0008`), AI Assessment Builder, Candidate Workspace AI (`r212`), and Managerial Fit Reports — target NVIDIA NIM `moonshotai/kimi-k3.1-pro` and surface provider failures and plan requirements. Where a report can summarize existing evidence, the interface identifies the evidence summary and leaves coverage judgments open.
 
 ## Consequences
 
 - Existing automated staging/lockdown tests keep their exact behavior because hiring platform routes, sidebar links, and database operations are cleanly gated by `isHiringPlatformEnabled()`.
-- Database migration `0018_hiring_platform.sql` establishes additive RLS-protected tables while preserving immutable core evidence constraints.
+- Database migration `0019_hiring_platform.sql` establishes additive RLS-protected tables while preserving immutable core evidence constraints and `0018_reusable_problems.sql`.

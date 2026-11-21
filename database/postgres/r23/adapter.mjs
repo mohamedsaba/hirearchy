@@ -11,6 +11,11 @@ import {
   createValidatedVersion as r211CreateValidatedVersion,
   getValidatedVersion as r211GetValidatedVersion,
   R211ConcurrencyConflict,
+  createReusableProblem as r211CreateReusableProblem,
+  listReusableProblems as r211ListReusableProblems,
+  getReusableProblem as r211GetReusableProblem,
+  updateReusableProblem as r211UpdateReusableProblem,
+  deleteReusableProblem as r211DeleteReusableProblem,
 } from '../r211/adapter.mjs';
 
 const HASH = /^[0-9a-f]{64}$/;
@@ -625,6 +630,13 @@ export function createR23PostgresAdapter({
             throw new R23SessionDenied();
           }
           return identity;
+        };
+        const requireProblemRecruiter = async (identity, organizationId) => {
+          const membership = await authz.authorizeOrganization(
+            identity,
+            organizationId,
+          );
+          if (membership.role !== 'recruiter') throw new R23ScopeDenied();
         };
         const authz = Object.freeze({
           async saveCredentialEnvelope(envelope, newAccessExpiresAt) {
@@ -1518,6 +1530,74 @@ export function createR23PostgresAdapter({
             } catch (error) {
               throw error;
             }
+          },
+
+          async createReusableProblem(identity, organizationId, content) {
+            await requireProblemRecruiter(identity, organizationId);
+            return r211CreateReusableProblem(
+              client,
+              identity,
+              organizationId,
+              content,
+              verifiedForSession,
+            );
+          },
+
+          async listReusableProblems(identity, organizationId) {
+            await requireProblemRecruiter(identity, organizationId);
+            return r211ListReusableProblems(
+              client,
+              identity,
+              organizationId,
+              verifiedForSession,
+            );
+          },
+
+          async getReusableProblem(identity, organizationId, problemId) {
+            await requireProblemRecruiter(identity, organizationId);
+            return r211GetReusableProblem(
+              client,
+              identity,
+              organizationId,
+              problemId,
+              verifiedForSession,
+            );
+          },
+
+          async updateReusableProblem(
+            identity,
+            organizationId,
+            problemId,
+            expectedVersion,
+            content,
+          ) {
+            await requireProblemRecruiter(identity, organizationId);
+            return r211UpdateReusableProblem(
+              client,
+              identity,
+              organizationId,
+              problemId,
+              expectedVersion,
+              content,
+              verifiedForSession,
+            );
+          },
+
+          async deleteReusableProblem(
+            identity,
+            organizationId,
+            problemId,
+            expectedVersion,
+          ) {
+            await requireProblemRecruiter(identity, organizationId);
+            return r211DeleteReusableProblem(
+              client,
+              identity,
+              organizationId,
+              problemId,
+              expectedVersion,
+              verifiedForSession,
+            );
           },
 
           async saveAssessmentDraft(identityInput, organizationId, input) {

@@ -9,9 +9,18 @@ import type { R27Evidence } from '../../database/postgres/r27/contract.mjs';
 import { proxy } from '../../apps/web/proxy';
 import { R27AiReviewPanel } from '../../apps/web/app/evaluator/sessions/[sessionId]/ai-review-panel';
 import { generateR27AiCandidateReview } from '../../apps/web/src/r27-evidence/ai-review';
-import { buildDeterministicEvidencePreviewReport } from '../../apps/web/src/r27-evidence/ai-review-contract';
+import {
+  buildDeterministicEvidencePreviewReport,
+  computeEvidenceMetricsAndDiffSummary,
+} from '../../apps/web/src/r27-evidence/ai-review-contract';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from '../../apps/web/src/scenarios/generated-terms-and-conditions';
 
-function makeEvidence(options?: { modified?: boolean }): R27Evidence {
+const plainBrief = 'Prevent duplicate retry dispatches for the same job ID.';
+
+function makeEvidence(options?: {
+  modified?: boolean;
+  brief?: string;
+}): R27Evidence {
   const modified = options?.modified ?? true;
   const starterService = [
     'def retry_failed(jobs):',
@@ -54,7 +63,7 @@ function makeEvidence(options?: { modified?: boolean }): R27Evidence {
       title: 'Deduplicate Notification Retries',
       snapshotText: JSON.stringify({
         scenario: {
-          brief: 'Prevent duplicate retry dispatches for the same job ID.',
+          brief: options?.brief ?? plainBrief,
           acceptanceCriteria: [
             'Skip already processed job IDs during retry.',
             'Add a unit test verifying deduplication.',
@@ -260,8 +269,27 @@ describe('R27 AI Candidate Review', () => {
     expect(report.weaknesses.join(' ')).toContain('No code differences');
   });
 
-  it('calls NVIDIA NIM Kimi model when configured and parses structured verdict', async () => {
-    const mockFetch = vi.fn(async () => {
+  const briefWithEmbeddedFooter =
+    plainBrief + GENERATED_TERMS_AND_CONDITIONS_FOOTER + '\nMore task text.';
+  const briefCases = [
+    {
+      name: 'preserves a brief without the footer and parses the NVIDIA NIM verdict',
+      brief: plainBrief,
+      expectedBrief: plainBrief,
+    },
+    {
+      name: 'removes the exact footer suffix from the live review prompt',
+      brief: plainBrief + GENERATED_TERMS_AND_CONDITIONS_FOOTER,
+      expectedBrief: plainBrief,
+    },
+    {
+      name: 'preserves matching text within the brief',
+      brief: briefWithEmbeddedFooter,
+      expectedBrief: briefWithEmbeddedFooter,
+    },
+  ];
+  it.each(briefCases)('$name', async ({ brief, expectedBrief }) => {
+    const mockFetch = vi.fn<typeof fetch>(async () => {
       return new Response(
         JSON.stringify({
           choices: [
@@ -289,25 +317,31 @@ describe('R27 AI Candidate Review', () => {
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
-    }) as unknown as typeof fetch;
+    });
 
-    const report = await generateR27AiCandidateReview(
-      makeEvidence({ modified: true }),
-      {
-        fetchImpl: mockFetch,
-        providerOverride: {
-          presetId: 'nvidia:kimi-k2',
-          providerId: 'nvidia',
-          modelId: 'moonshotai/kimi-k2-instruct',
-          label: 'NVIDIA NIM · Kimi K2 / 3.1',
-          endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
-          apiKey: 'nvapi-real-test-key-123456',
-          mode: 'live_ai',
-        },
+    const evidence = makeEvidence({ modified: true, brief });
+    const report = await generateR27AiCandidateReview(evidence, {
+      fetchImpl: mockFetch,
+      providerOverride: {
+        presetId: 'nvidia:kimi-k2',
+        providerId: 'nvidia',
+        modelId: 'moonshotai/kimi-k2-instruct',
+        label: 'NVIDIA NIM · Kimi K2 / 3.1',
+        endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
+        apiKey: 'nvapi-real-test-key-123456',
+        mode: 'live_ai',
       },
-    );
+    });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
+    const request = JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const prompt = request.messages.find((message) => message.role === 'user');
+    expect(prompt?.content).toContain(
+      `Scenario Brief:\n${expectedBrief}\n\nAcceptance Criteria:\n1. Skip already processed job IDs during retry.`,
+    );
+    expect(computeEvidenceMetricsAndDiffSummary(evidence).brief).toBe(brief);
     expect(report.provider.mode).toBe('live_ai');
     expect(report.provider.modelId).toBe('moonshotai/kimi-k2-instruct');
     expect(report.score).toBe(89);
@@ -315,6 +349,62 @@ describe('R27 AI Candidate Review', () => {
     expect(report.strengths).toContain(
       'Clean O(1) lookup set added in src/service.py.',
     );
+  });
+
+  it('removes the copied platform footer before clipping an outbound AI interaction excerpt', async () => {
+    const prefix = 'Review the Terms and Conditions for job retries.';
+    const followup = '\nPlease focus on the retry guard. '.repeat(10);
+    const candidatePrompt =
+      prefix + GENERATED_TERMS_AND_CONDITIONS_FOOTER + followup;
+    const interaction = Object.freeze({
+      interactionId: 'interaction_1',
+      requestId: 'request_1',
+      sequenceStart: '4',
+      sequenceCompleted: '5',
+      candidatePrompt,
+      assistantResponse:
+        'The guard checks whether the job ID is already present.',
+      status: 'COMPLETED' as const,
+      failureReason: null,
+      errorMessage: null,
+      providerId: 'nvidia',
+      modelId: 'moonshotai/kimi-k2-instruct',
+      createdAt: '2026-11-18T10:20:00.000Z',
+      completedAt: '2026-11-18T10:21:00.000Z',
+    });
+    const evidence: R27Evidence = {
+      ...makeEvidence(),
+      aiInteractions: [interaction],
+    };
+    const mockFetch = vi.fn<typeof fetch>(
+      async () => new Response(null, { status: 401 }),
+    );
+
+    await generateR27AiCandidateReview(evidence, {
+      fetchImpl: mockFetch,
+      providerOverride: {
+        presetId: 'nvidia:kimi-k2',
+        providerId: 'nvidia',
+        modelId: 'moonshotai/kimi-k2-instruct',
+        label: 'NVIDIA NIM · Kimi K2 / 3.1',
+        endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
+        apiKey: 'nvapi-real-test-key-123456',
+        mode: 'live_ai',
+      },
+    });
+
+    const request = JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const prompt = request.messages.find((message) => message.role === 'user');
+    expect(prompt?.content).toContain(
+      `1. [seq 4] prompt="${(prefix + followup).slice(0, 260)}" status=COMPLETED`,
+    );
+    expect(prompt?.content).not.toContain(
+      GENERATED_TERMS_AND_CONDITIONS_FOOTER,
+    );
+    expect(evidence.aiInteractions).toEqual([interaction]);
+    expect(evidence.aiInteractions?.[0]?.candidatePrompt).toBe(candidatePrompt);
   });
 
   it('falls back gracefully to evidence preview when upstream returns HTTP 401', async () => {

@@ -10,6 +10,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { GENERATED_TERMS_AND_CONDITIONS_FOOTER } from './generated-terms-and-conditions';
 import type { SandboxAdapter } from '../sandbox/sandbox';
 import type { ScenarioEvaluationContextSnapshot } from './scenario-evaluation-context';
 import type { ScenarioSnapshot } from './slice-one-scenario';
@@ -317,6 +318,18 @@ export type GeneratedAssessmentResult =
 
 export const parseGeneratedAssessment = (value: unknown) =>
   GeneratedAssessmentSchema.parse(value);
+
+export function appendGeneratedTermsAndConditions(
+  assessment: GeneratedAssessment,
+): GeneratedAssessment {
+  const { brief } = assessment;
+  return parseGeneratedAssessment({
+    ...assessment,
+    brief: brief.endsWith(GENERATED_TERMS_AND_CONDITIONS_FOOTER)
+      ? brief
+      : brief + GENERATED_TERMS_AND_CONDITIONS_FOOTER,
+  });
+}
 
 export const parseNewGeneratedAssessmentDraft = (value: unknown) => {
   const assessment = parseGeneratedAssessment(value);
