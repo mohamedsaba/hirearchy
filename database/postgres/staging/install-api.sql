@@ -439,6 +439,26 @@ CREATE POLICY staging_verifier_assessment_draft_insert
     AND author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
   );
 
+DROP POLICY IF EXISTS staging_verifier_reusable_problem_access ON hirearchy.reusable_problems;
+CREATE POLICY staging_verifier_reusable_problem_access
+  ON hirearchy.reusable_problems
+  TO staging_verifier_owner
+  USING (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+  )
+  WITH CHECK (
+    organization_id = NULLIF(pg_catalog.current_setting('staging.organization_id', true), '')::pg_catalog.uuid
+  );
+
+DROP POLICY IF EXISTS staging_verifier_reusable_problem_author ON hirearchy.reusable_problems;
+CREATE POLICY staging_verifier_reusable_problem_author
+  ON hirearchy.reusable_problems
+  AS RESTRICTIVE
+  FOR INSERT TO staging_verifier_owner
+  WITH CHECK (
+    author_principal_id = NULLIF(pg_catalog.current_setting('staging.principal_id', true), '')::pg_catalog.uuid
+  );
+
 DROP POLICY IF EXISTS staging_verifier_validated_version_select ON hirearchy.assessment_validated_versions;
 CREATE POLICY staging_verifier_validated_version_select
   ON hirearchy.assessment_validated_versions
@@ -949,6 +969,12 @@ GRANT SELECT, INSERT, UPDATE (title, draft_version, updated_at)
   ON hirearchy.assessment_definitions TO staging_verifier_owner;
 GRANT SELECT, INSERT ON hirearchy.assessment_drafts,
   hirearchy.assessment_validated_versions TO staging_verifier_owner;
+REVOKE ALL ON hirearchy.reusable_problems
+  FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker;
+GRANT SELECT (id, organization_id, author_principal_id, version, content, created_at, updated_at),
+  INSERT (organization_id, author_principal_id, content),
+  UPDATE (version, content, updated_at), DELETE
+  ON hirearchy.reusable_problems TO staging_verifier_owner;
 GRANT SELECT, INSERT ON hirearchy.assessment_sessions,
   hirearchy.reviewer_assignments,
   hirearchy.assessment_issuances TO staging_verifier_owner;
@@ -2004,13 +2030,19 @@ def require_open_session(auth_session_id, subject_id, principal_id, organization
 def validate_operation_args(operation, args):
     schemas = {
         'membership.list': ((), ()),
-        'organization.context': (('organizationId',), ()),
+        'organization.context': (('organizationId',), ('assessmentId',)),
         'session.open': (('organizationId',), ()),
         'session.revoke': (('organizationId',), ()),
         'assessment.create': (('organizationId', 'content'), ('assessmentId',)),
         'assessment.get': (('organizationId', 'assessmentId'), ()),
         'assessment.validate': (('organizationId', 'assessmentId', 'content', 'validatedVersion'), ()),
         'assessment.issue': (('organizationId', 'assessmentId', 'reviewerPrincipalId'), ()),
+        'problem.create': (('organizationId', 'content'), ()),
+        'problem.list': (('organizationId',), ()),
+        'problem.get': (('organizationId', 'problemId'), ()),
+        'problem.update': (('organizationId', 'problemId', 'expectedVersion', 'content'), ()),
+        'problem.delete': (('organizationId', 'problemId', 'expectedVersion'), ()),
+        'problem.reuse': (('organizationId', 'problemId'), ()),
         'candidate.invitation.create': (('organizationId', 'sessionId', 'expiresAt', 'idempotencyKey', 'candidateTokenHash', 'candidateTokenCiphertext'), ()),
         'candidate.invitation.get': (('organizationId', 'sessionId'), ()),
         'candidate.invitation.revoke': (('organizationId', 'sessionId'), ()),
@@ -2036,6 +2068,105 @@ def validate_operation_args(operation, args):
         error('Staging operation is unavailable', '22023')
     required, optional = schemas[operation]
     require_args(args, required, optional)
+
+# Shared projection for library reads and write results.
+PROBLEM_JSON = """
+    pg_catalog.jsonb_build_object(
+      'id', id, 'organizationId', organization_id,
+      'authorPrincipalId', author_principal_id, 'version', version,
+      'content', content, 'createdAt', created_at, 'updatedAt', updated_at
+    )
+"""
+
+def read_reusable_problem(organization_id, problem_id, lock=False):
+    lock_clause = 'FOR UPDATE' if lock else ''
+    rows = run(
+        f"""
+        SELECT {PROBLEM_JSON} AS problem
+        FROM hirearchy.reusable_problems
+        WHERE organization_id = $1::pg_catalog.uuid AND id = $2::pg_catalog.uuid
+        {lock_clause}
+        """,
+        ['uuid', 'uuid'],
+        [organization_id, problem_id],
+    )
+    if not rows:
+        error('Problem not found.', 'P0002')
+    return json_value(rows[0]['problem'])
+
+def operate_reusable_problem(operation, args, organization_id, principal_id):
+    if operation == 'problem.list':
+        rows = run(
+            f"""
+            SELECT COALESCE(pg_catalog.jsonb_agg(
+              {PROBLEM_JSON} ORDER BY updated_at DESC, id
+            ), '[]'::pg_catalog.jsonb) AS problems
+            FROM hirearchy.reusable_problems
+            WHERE organization_id = $1::pg_catalog.uuid
+            """,
+            ['uuid'],
+            [organization_id],
+        )
+        return {'problems': json_value(rows[0]['problems'])}
+
+    if operation in ('problem.create', 'problem.update'):
+        content = args['content']
+        require_draft(content)
+        if (
+            'definitionId' in content or 'expectedVersion' in content
+            or 'templateId' not in content
+            or content['durationMinutes'] not in (30, 45, 60, 90)
+            or not content['terminalEnabled']
+        ):
+            error('Problem content is invalid', '22023')
+        serialized_content = json.dumps(content, ensure_ascii=False)
+
+    if operation == 'problem.create':
+        rows = run(
+            f"""
+            INSERT INTO hirearchy.reusable_problems (organization_id, author_principal_id, content)
+            VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.jsonb)
+            RETURNING {PROBLEM_JSON} AS problem
+            """,
+            ['uuid', 'uuid', 'text'],
+            [organization_id, principal_id, serialized_content],
+        )
+        return {'problem': json_value(rows[0]['problem'])}
+
+    problem_id = require_uuid(args.get('problemId'), 'problem ID')
+    if operation == 'problem.get':
+        return {'problem': read_reusable_problem(organization_id, problem_id)}
+
+    expected_version = args.get('expectedVersion')
+    if type(expected_version) is not int or not 1 <= expected_version <= MAX_SAFE_INTEGER:
+        error('Staging request is invalid', '22023')
+    problem = read_reusable_problem(organization_id, problem_id, lock=True)
+    if problem['version'] != expected_version:
+        error('Reusable problem was updated concurrently', 'R2111')
+
+    if operation == 'problem.delete':
+        run(
+            """
+            DELETE FROM hirearchy.reusable_problems
+            WHERE organization_id = $1::pg_catalog.uuid AND id = $2::pg_catalog.uuid
+            """,
+            ['uuid', 'uuid'],
+            [organization_id, problem_id],
+        )
+        return {'deleted': True}
+
+    rows = run(
+        f"""
+        UPDATE hirearchy.reusable_problems
+        SET content = $3::pg_catalog.jsonb, version = version + 1,
+            updated_at = pg_catalog.clock_timestamp()
+        WHERE organization_id = $1::pg_catalog.uuid AND id = $2::pg_catalog.uuid
+        RETURNING {PROBLEM_JSON} AS problem
+        """,
+        ['uuid', 'uuid', 'text'],
+        [organization_id, problem_id, serialized_content],
+    )
+    return {'problem': json_value(rows[0]['problem'])}
 
 def candidate_invitation_view(session_id, replayed=None):
     rows = run(
@@ -2537,11 +2668,12 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                  AND draft.version = def.draft_version
                 WHERE def.organization_id = $1::pg_catalog.uuid
                   AND def.author_principal_id = $2::pg_catalog.uuid
+                  AND ($3::pg_catalog.uuid IS NULL OR def.id = $3::pg_catalog.uuid)
                 ORDER BY def.updated_at DESC, def.id DESC
                 LIMIT 1
                 """,
-                ['uuid', 'uuid'],
-                [organization_id, principal_id],
+                ['uuid', 'uuid', 'uuid'],
+                [organization_id, principal_id, require_uuid(args['assessmentId'], 'assessment ID') if 'assessmentId' in args else None],
             )
             if draft_rows:
                 d = draft_rows[0]
@@ -2708,12 +2840,24 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             error('Staging session is unavailable', '28000')
         return {'revoked': True, 'organizationId': organization_id}
 
-    if operation == 'assessment.create':
+    if operation in ('problem.create', 'problem.list', 'problem.get', 'problem.update', 'problem.delete'):
         if role != 'recruiter':
             error('Recruiter membership required', '42501')
-        content = args['content']
+        return operate_reusable_problem(operation, args, organization_id, principal_id)
+
+    if operation in ('assessment.create', 'problem.reuse'):
+        if role != 'recruiter':
+            error('Recruiter membership required', '42501')
+        if operation == 'problem.reuse':
+            problem_id = require_uuid(args.get('problemId'), 'problem ID')
+            content = read_reusable_problem(organization_id, problem_id)['content']
+        else:
+            content = args['content']
         require_draft(content)
-        requested_id = args.get('assessmentId') or content.get('definitionId')
+        requested_id = (
+            args.get('assessmentId') or content.get('definitionId')
+            if operation == 'assessment.create' else None
+        )
         assessment_id = require_uuid(requested_id, 'assessment ID') if requested_id else run(
             'SELECT pg_catalog.gen_random_uuid()::pg_catalog.text AS id'
         )[0]['id']
@@ -2750,7 +2894,7 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             if content.get('expectedVersion') is not None:
                 error('Assessment draft changed concurrently', '23505')
             next_version = 1
-            run(
+            inserted = run(
                 """
                 INSERT INTO hirearchy.assessment_definitions (
                   id, organization_id, author_principal_id, title, draft_version
@@ -2758,6 +2902,9 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                   $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid,
                   $4, 1
                 )
+                RETURNING pg_catalog.jsonb_build_object(
+                  'createdAt', created_at, 'updatedAt', updated_at
+                ) AS timestamps
                 """,
                 ['uuid', 'uuid', 'uuid', 'text'],
                 [assessment_id, organization_id, principal_id, content['title']],
@@ -2790,6 +2937,15 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
                 json.dumps(content, ensure_ascii=False),
             ],
         )
+        if operation == 'problem.reuse':
+            return {'draft': {
+                **content,
+                'definitionId': assessment_id,
+                'organizationId': organization_id,
+                'authorPrincipalId': principal_id,
+                'version': next_version,
+                **json_value(inserted[0]['timestamps']),
+            }}
         return {'assessmentId': assessment_id}
 
     if operation == 'assessment.get':

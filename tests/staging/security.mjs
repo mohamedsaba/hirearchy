@@ -9,6 +9,7 @@ import {
   candidateTokenHash,
   encryptCandidateToken,
 } from '../../apps/web/src/sessions/candidate-token-storage.mjs';
+import { content as assessmentContent } from './journey.mjs';
 
 const canonical = (value) => {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -400,6 +401,52 @@ export async function checkProofBoundary(
   });
   checkpoint('second organization session open');
   await execute(secondOpen, sign(null, secondOpen, rotated.privateKey));
+  checkpoint('problem library organization isolation');
+  const libraryContent = { templateId: 'custom', ...assessmentContent };
+  const { problem: otherProblem } = await dispatchOperation('problem.create', {
+    organizationId: secondOrganizationId,
+    content: libraryContent,
+  });
+  const problemArgs = { organizationId, problemId: otherProblem.id };
+  const { problems } = await dispatchOperation('problem.list', {
+    organizationId,
+  });
+  assert.ok(problems.every((problem) => problem.id !== otherProblem.id));
+  for (const [operation, args] of [
+    ['problem.get', problemArgs],
+    [
+      'problem.update',
+      { ...problemArgs, expectedVersion: 1, content: libraryContent },
+    ],
+    ['problem.delete', { ...problemArgs, expectedVersion: 1 }],
+    ['problem.reuse', problemArgs],
+  ]) {
+    await assert.rejects(dispatchOperation(operation, args), { code: 'P0002' });
+  }
+  const ownerArgs = { ...problemArgs, organizationId: secondOrganizationId };
+  assert.deepEqual(await dispatchOperation('problem.get', ownerArgs), {
+    problem: otherProblem,
+  });
+  await assert.rejects(
+    dispatchOperation('problem.reuse', {
+      ...ownerArgs,
+      content: libraryContent,
+    }),
+    { code: '22023' },
+  );
+  await assert.rejects(
+    dispatchOperation('problem.update', {
+      ...ownerArgs,
+      expectedVersion: true,
+      content: libraryContent,
+    }),
+    { code: '22023' },
+  );
+  await assert.rejects(
+    gateway.query('SELECT id FROM hirearchy.reusable_problems'),
+    { code: '42501' },
+  );
+
   const revoke = proof({
     kid: 'rehearsal-2',
     jti: randomUUID(),

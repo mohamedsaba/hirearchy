@@ -31,9 +31,11 @@ const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
   /^\/r23\/organizations$/,
   /^\/r23\/organizations\/[^/]+$/,
   /^\/r23\/organizations\/[^/]+\/builder$/,
+  /^\/r23\/organizations\/[^/]+\/problems(?:\/[^/]+)?$/,
   /^\/r23\/organizations\/[^/]+\/sessions\/[^/]+$/,
   /^\/r23\/api\/organizations\/[^/]+\/assessments\/draft$/,
   /^\/r23\/api\/organizations\/[^/]+\/assessments\/versions\/[^/]+$/,
+  /^\/r23\/api\/organizations\/[^/]+\/problems(?:\/[^/]+)?$/,
   /^\/r23\/api\/organizations\/[^/]+\/reviewers$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+$/,
@@ -70,6 +72,8 @@ const STAGING_BROWSER_POST_PATTERNS: readonly RegExp[] = [
   /^\/r23\/auth\/refresh$/,
   /^\/r23\/organization$/,
   /^\/r23\/api\/organizations\/[^/]+\/assessments\/validate$/,
+  /^\/r23\/api\/organizations\/[^/]+\/problems$/,
+  /^\/r23\/api\/organizations\/[^/]+\/problems\/[^/]+\/reuse$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/ai-review$/,
@@ -85,10 +89,12 @@ const STAGING_BROWSER_PUT_PATTERNS: readonly RegExp[] = [
 ];
 
 const STAGING_BROWSER_PATCH_PATTERNS: readonly RegExp[] = [
+  /^\/r23\/api\/organizations\/[^/]+\/problems\/[^/]+$/,
   /^\/r27\/api\/organizations\/[^/]+\/sessions\/[^/]+\/observations\/[^/]+$/,
 ];
 
 const STAGING_BROWSER_DELETE_PATTERNS: readonly RegExp[] = [
+  /^\/r23\/api\/organizations\/[^/]+\/problems\/[^/]+$/,
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
 ];
 

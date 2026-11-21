@@ -10,6 +10,7 @@ Current decisions:
 - [0004 — Scenario context joins at presentation](0004-scenario-context-joins-at-presentation.md)
 - [0005 — Briefing semantics remain presentation-only](0005-briefing-semantics-remain-presentation-only.md)
 - [0006 — Advisory AI Candidate Review Assistant](0006-ai-assisted-candidate-review.md)
+- [0007 — Reusable problem library](0007-reusable-problem-library.md)
 - [Founder local UAT profile](founder-local-uat.md)
 - [MVP first-team onboarding](mvp-first-team-onboarding.md)
 
