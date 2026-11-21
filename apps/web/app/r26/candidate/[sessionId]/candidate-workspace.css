@@ -31,7 +31,7 @@
   padding: 0.5rem var(--software-space-page);
   border-bottom: 1px solid var(--software-plum-line);
   color: var(--software-on-plum);
-  background: var(--r26-plum);
+  background: var(--software-brand-plum);
 }
 
 .r26-header button:focus-visible {
@@ -59,6 +59,18 @@
   font-weight: 750;
   letter-spacing: -0.035em;
   line-height: 1;
+  color: var(--software-on-plum);
+}
+
+.r26-header .r26-button-primary {
+  background: var(--software-mint);
+  border-color: var(--software-mint);
+  color: #211426;
+}
+
+.r26-header .r26-button-primary:hover:not(:disabled) {
+  background: #abe8c7;
+  border-color: #abe8c7;
   color: #211426;
 }
 
@@ -1894,6 +1906,18 @@
   background: var(--software-btn-primary-bg-hover, #43324f);
   border-color: var(--software-btn-primary-bg-hover, #43324f);
   color: var(--software-btn-primary-fg, #ffffff);
+}
+
+.r26-candidate .r26-header .r26-button-primary {
+  background: var(--software-mint);
+  border-color: var(--software-mint);
+  color: #211426;
+}
+
+.r26-candidate .r26-header .r26-button-primary:hover:not(:disabled) {
+  background: #abe8c7;
+  border-color: #abe8c7;
+  color: #211426;
 }
 
 .r26-candidate .r26-button-secondary {

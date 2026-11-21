@@ -26,7 +26,9 @@ import type {
   CandidateProfile,
   SafePortalAssessmentView,
 } from '../../src/hiring/types';
+import { SoundToggle } from '../_components/sound-toggle';
 import { ThemeToggle } from '../_components/theme-toggle';
+import { playHirearchySound } from '../../src/ui/sound';
 
 export interface CandidatePortalClientProps {
   readonly email: string;
@@ -235,11 +237,13 @@ export function CandidatePortalClient({
       }
 
       setProfile(data.profile);
+      playHirearchySound('confirm');
       setStatusMsg('Profile saved.');
       if (setupMode && nextPath) {
         await handleLaunchAssessment(nextPath.split('/').at(-1) ?? '');
       }
     } catch (err) {
+      playHirearchySound('error');
       setErrorMsg(err instanceof Error ? err.message : 'Save failed.');
     } finally {
       setBusy(null);
@@ -297,6 +301,9 @@ export function CandidatePortalClient({
 
   return (
     <div className="hiring-candidate-portal software-product">
+      <a className="software-skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <header className="software-document-header hiring-portal-header">
         <div className="hiring-portal-brand">
           <a
@@ -310,18 +317,23 @@ export function CandidatePortalClient({
         </div>
         <div className="hiring-header-actions">
           <span className="hiring-portal-email">{email}</span>
+          <SoundToggle variant="header" />
           <ThemeToggle variant="header" />
           <button
             type="button"
             className="hiring-btn hiring-btn-sm"
             onClick={() => void handleSignOut()}
           >
-            <IconLogout size={14} /> Sign out
+            <IconLogout size={14} aria-hidden="true" /> Sign out
           </button>
         </div>
       </header>
 
-      <main className="hiring-portal-main software-portal-document">
+      <main
+        className="hiring-portal-main software-portal-document"
+        id="main-content"
+        tabIndex={-1}
+      >
         <div className="hiring-page-header">
           <div>
             <h1>{tab === 'assessments' ? 'My assessments' : 'My profile'}</h1>

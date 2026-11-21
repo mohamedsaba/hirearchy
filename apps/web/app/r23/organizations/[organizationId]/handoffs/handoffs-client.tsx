@@ -149,6 +149,33 @@ export function HandoffsHubClient({
                           {item.candidateCode}
                         </span>
                       ) : null}
+                      {item.secondOpinions.length > 0
+                        ? (() => {
+                            const approved = item.secondOpinions.filter(
+                              (op) =>
+                                op.status === 'completed' &&
+                                op.verdict === 'approve',
+                            ).length;
+                            const flagged = item.secondOpinions.filter(
+                              (op) =>
+                                op.status === 'completed' &&
+                                op.verdict === 'request_changes',
+                            ).length;
+                            const pillCls =
+                              flagged > 0
+                                ? 'hiring-pill hiring-pill-danger'
+                                : approved > 0
+                                  ? 'hiring-pill hiring-pill-success'
+                                  : 'hiring-pill';
+                            const label =
+                              flagged > 0
+                                ? `${flagged} peer concern${flagged === 1 ? '' : 's'}`
+                                : approved > 0
+                                  ? `${approved} peer approved`
+                                  : `${item.secondOpinions.length} peer review${item.secondOpinions.length === 1 ? '' : 's'}`;
+                            return <span className={pillCls}>{label}</span>;
+                          })()
+                        : null}
                     </div>
                     <div className="hiring-candidate-meta">
                       <span>{item.candidateEmail}</span>

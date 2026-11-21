@@ -9,6 +9,7 @@ import {
   hasPlanFeature,
   type OrganizationPlanSummary,
 } from '../../../../../../src/plans/entitlements';
+import { playHirearchySound } from '../../../../../../src/ui/sound';
 
 export interface HandoffDossierClientProps {
   readonly organizationId: string;
@@ -80,8 +81,10 @@ export function HandoffDossierClient({
         (h) => h.sessionId === dossier.sessionId,
       );
       if (updated) setDossier(updated);
+      playHirearchySound('confirm');
       setStatusMsg(`Handoff marked as "${nextStatus}".`);
     } catch (err) {
+      playHirearchySound('error');
       setErrorMsg(err instanceof Error ? err.message : 'Update failed.');
     } finally {
       setBusy(null);
@@ -121,10 +124,12 @@ export function HandoffDossierClient({
         (h) => h.sessionId === dossier.sessionId,
       );
       if (updated) setDossier(updated);
+      playHirearchySound('complete');
       setStatusMsg(
         'Updated Managerial Performance & Fit Report using Kimi K3.1 Pro.',
       );
     } catch (err) {
+      playHirearchySound('error');
       setErrorMsg(err instanceof Error ? err.message : 'Generation failed.');
     } finally {
       setBusy(null);
@@ -280,20 +285,43 @@ export function HandoffDossierClient({
 
           {dossier.secondOpinions.length > 0 ? (
             <section className="hiring-card hiring-card-animated">
-              <span className="hiring-eyebrow">Peer Second Opinions</span>
+              <span className="hiring-eyebrow">Team Peer Reviews</span>
               <div className="hiring-opinion-list hiring-mt-sm">
-                {dossier.secondOpinions.map((op) => (
-                  <div key={op.id} className="hiring-opinion-card">
-                    <strong>
-                      {op.requestedByName} → {op.requestedReviewerName} (
-                      {op.status})
-                    </strong>
-                    {op.requestNote ? <p>Ask: {op.requestNote}</p> : null}
-                    {op.responseNote ? (
-                      <p>Response: {op.responseNote}</p>
-                    ) : null}
-                  </div>
-                ))}
+                {dossier.secondOpinions.map((op) => {
+                  const verdictPill =
+                    op.status !== 'completed'
+                      ? { label: 'Awaiting review', cls: 'hiring-pill-warning' }
+                      : op.verdict === 'approve'
+                        ? { label: 'Approved', cls: 'hiring-pill-success' }
+                        : op.verdict === 'request_changes'
+                          ? {
+                              label: 'Concerns flagged',
+                              cls: 'hiring-pill-danger',
+                            }
+                          : { label: 'Commented', cls: 'hiring-pill-plum' };
+                  return (
+                    <div key={op.id} className="hiring-opinion-card">
+                      <div className="hiring-candidate-name">
+                        <strong>
+                          {op.requestedByName} → {op.requestedReviewerName}
+                        </strong>
+                        <span className={`hiring-pill ${verdictPill.cls}`}>
+                          {verdictPill.label}
+                        </span>
+                      </div>
+                      {op.requestNote ? (
+                        <p className="hiring-dossier-bio hiring-mt-xs">
+                          <strong>Asked:</strong> {op.requestNote}
+                        </p>
+                      ) : null}
+                      {op.responseNote ? (
+                        <blockquote className="hiring-peer-response-quote">
+                          {op.responseNote}
+                        </blockquote>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </section>
           ) : null}

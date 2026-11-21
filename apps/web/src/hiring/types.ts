@@ -101,15 +101,41 @@ export interface SavedLibraryProblem {
   readonly createdAt: string;
 }
 
+export type PeerReviewVerdict = 'approve' | 'comment' | 'request_changes';
+
+export interface PeerReviewRequestContext {
+  readonly evaluatorStrengths?: readonly string[];
+  readonly evaluatorWeaknesses?: readonly string[];
+  readonly internalNotesExcerpt?: string;
+  readonly aiAdvisory?: {
+    readonly headline: string;
+    readonly score: number;
+    readonly verdictLabel: string;
+    readonly rationale: string;
+    readonly providerLabel: string;
+  } | null;
+}
+
+export interface PeerReviewEmailDelivery {
+  readonly status: 'sent' | 'not_configured' | 'failed';
+  readonly recipientEmail: string;
+  readonly inboxUrl?: string;
+  readonly reason?: string;
+}
+
 export interface SecondOpinionRecord {
   readonly id: string;
   readonly sessionId: string;
   readonly requestedByPrincipalId: string;
   readonly requestedByName: string;
+  readonly requestedByEmail?: string;
   readonly requestedReviewerPrincipalId: string;
   readonly requestedReviewerName: string;
+  readonly requestedReviewerEmail?: string;
   readonly requestNote: string;
+  readonly requestContext?: PeerReviewRequestContext;
   readonly responseNote: string | null;
+  readonly verdict?: PeerReviewVerdict | null;
   readonly status: 'pending' | 'completed';
   readonly createdAt: string;
   readonly respondedAt: string | null;
@@ -216,7 +242,9 @@ export interface TeamMemberOption {
 
 export interface SessionHiringReviewContext {
   readonly organizationId: string;
+  readonly organizationName?: string;
   readonly sessionId: string;
+  readonly scenarioTitle?: string;
   readonly currentPrincipalId: string;
   readonly currentRole: WorkspaceRoleKind;
   readonly isOwner: boolean;

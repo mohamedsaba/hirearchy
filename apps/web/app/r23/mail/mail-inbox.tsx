@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-type MailKind = 'confirmation' | 'recovery';
+type MailKind =
+  'confirmation' | 'recovery' | 'peer_review_request' | 'peer_review_response';
 type MailMessage = {
   id: string;
   recipient: string;
@@ -10,6 +11,15 @@ type MailMessage = {
   receivedAt: string;
   kind: MailKind;
 };
+
+function isMailKind(value: unknown): value is MailKind {
+  return (
+    value === 'confirmation' ||
+    value === 'recovery' ||
+    value === 'peer_review_request' ||
+    value === 'peer_review_response'
+  );
+}
 
 function isMailMessage(value: unknown): value is MailMessage {
   if (!value || typeof value !== 'object') return false;
@@ -19,8 +29,34 @@ function isMailMessage(value: unknown): value is MailMessage {
     typeof message.recipient === 'string' &&
     typeof message.subject === 'string' &&
     typeof message.receivedAt === 'string' &&
-    (message.kind === 'confirmation' || message.kind === 'recovery')
+    isMailKind(message.kind)
   );
+}
+
+function mailKindHeading(kind: MailKind): string {
+  switch (kind) {
+    case 'confirmation':
+      return 'Account confirmation';
+    case 'recovery':
+      return 'Password recovery';
+    case 'peer_review_request':
+      return 'Peer review requested';
+    case 'peer_review_response':
+      return 'Peer review submitted';
+  }
+}
+
+function mailKindActionLabel(kind: MailKind): string {
+  switch (kind) {
+    case 'confirmation':
+      return 'Confirm email';
+    case 'recovery':
+      return 'Reset password';
+    case 'peer_review_request':
+      return 'Open peer review';
+    case 'peer_review_response':
+      return 'View peer review';
+  }
 }
 
 export function FounderUatMailInbox({
@@ -135,8 +171,9 @@ export function FounderUatMailInbox({
       ) : null}
       {status === 'ready' && visibleMessages.length === 0 ? (
         <p role="status">
-          No messages yet. After requesting confirmation or recovery, refresh
-          this inbox.
+          {candidate
+            ? 'No messages yet. After requesting confirmation, refresh this inbox.'
+            : 'No messages yet. Account confirmations, recovery emails, and team peer-review notifications appear here.'}
         </p>
       ) : null}
       {visibleMessages.length > 0 ? (
@@ -144,11 +181,7 @@ export function FounderUatMailInbox({
           {visibleMessages.map((message) => (
             <li key={message.id}>
               <p>
-                <strong>
-                  {message.kind === 'confirmation'
-                    ? 'Account confirmation'
-                    : 'Password recovery'}
-                </strong>
+                <strong>{mailKindHeading(message.kind)}</strong>
               </p>
               <p>{message.subject}</p>
               <p>
@@ -180,9 +213,7 @@ export function FounderUatMailInbox({
                 >
                   {busyMessageId === message.id
                     ? 'Opening…'
-                    : message.kind === 'confirmation'
-                      ? 'Confirm email'
-                      : 'Reset password'}
+                    : mailKindActionLabel(message.kind)}
                 </button>
               </form>
             </li>

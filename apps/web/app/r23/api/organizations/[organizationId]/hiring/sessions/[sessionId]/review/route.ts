@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 
 import { generateAcceptancePerformanceReport } from '../../../../../../../../../src/hiring/ai-performance-report';
+import {
+  buildPeerReviewRequestEmail,
+  buildPeerReviewResponseEmail,
+  deliverHiringNotificationEmail,
+} from '../../../../../../../../../src/hiring/mail';
 import type {
   HandoffDossierItem,
+  PeerReviewRequestContext,
+  PeerReviewVerdict,
   PerformanceFitReport,
   SessionHiringReviewContext,
 } from '../../../../../../../../../src/hiring/types';
@@ -10,10 +17,100 @@ import { hasPlanFeature } from '../../../../../../../../../src/plans/entitlement
 import {
   hiringFailureJsonResponse,
   hiringParseJsonBody,
+  resolveStagingPublicOrigin,
   StagingBadRequest,
   stagingLoadR27Evidence,
   withHiringOrganizationSession,
 } from '../../../../../../../../../src/staging/browser';
+
+function sanitizeStringList(
+  value: unknown,
+  maxItems: number,
+  maxChars: number,
+): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim().slice(0, maxChars))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function sanitizePeerReviewRequestContext(
+  raw: unknown,
+): PeerReviewRequestContext {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const obj = raw as Record<string, unknown>;
+  const evaluatorStrengths = sanitizeStringList(obj.evaluatorStrengths, 8, 240);
+  const evaluatorWeaknesses = sanitizeStringList(
+    obj.evaluatorWeaknesses,
+    8,
+    240,
+  );
+  const internalNotesExcerpt =
+    typeof obj.internalNotesExcerpt === 'string'
+      ? obj.internalNotesExcerpt.trim().slice(0, 1500)
+      : '';
+  let aiAdvisory: PeerReviewRequestContext['aiAdvisory'] = null;
+  if (
+    obj.aiAdvisory &&
+    typeof obj.aiAdvisory === 'object' &&
+    !Array.isArray(obj.aiAdvisory)
+  ) {
+    const ai = obj.aiAdvisory as Record<string, unknown>;
+    const headline =
+      typeof ai.headline === 'string' ? ai.headline.trim().slice(0, 240) : '';
+    const rationale =
+      typeof ai.rationale === 'string'
+        ? ai.rationale.trim().slice(0, 1200)
+        : '';
+    const verdictLabel =
+      typeof ai.verdictLabel === 'string'
+        ? ai.verdictLabel.trim().slice(0, 80)
+        : '';
+    const providerLabel =
+      typeof ai.providerLabel === 'string'
+        ? ai.providerLabel.trim().slice(0, 120)
+        : 'Advisory AI Review';
+    const rawScore = Number(ai.score);
+    const score = Number.isFinite(rawScore)
+      ? Math.max(0, Math.min(100, Math.round(rawScore)))
+      : 0;
+    if (headline || rationale) {
+      aiAdvisory = {
+        headline,
+        score,
+        verdictLabel: verdictLabel || 'Advisory signal',
+        rationale,
+        providerLabel,
+      };
+    }
+  }
+  return {
+    ...(evaluatorStrengths.length > 0 ? { evaluatorStrengths } : {}),
+    ...(evaluatorWeaknesses.length > 0 ? { evaluatorWeaknesses } : {}),
+    ...(internalNotesExcerpt ? { internalNotesExcerpt } : {}),
+    ...(aiAdvisory ? { aiAdvisory } : {}),
+  };
+}
+
+function parsePeerReviewVerdict(value: unknown): PeerReviewVerdict {
+  if (value === 'approve' || value === 'request_changes') return value;
+  return 'comment';
+}
+
+function workspaceRoleLabel(role: string | undefined): string {
+  switch (role) {
+    case 'cto':
+      return 'CTO / Engineering Lead';
+    case 'reviewer':
+      return 'Evaluator';
+    case 'recruiter':
+      return 'Recruiter';
+    default:
+      return 'Team member';
+  }
+}
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -152,6 +249,9 @@ export async function POST(
             .trim()
             .slice(0, 2000);
           if (!reviewerPrincipalId) throw new StagingBadRequest();
+          const requestContext = sanitizePeerReviewRequestContext(
+            body.requestContext,
+          );
 
           const reviewContext = (await dispatch(
             'hiring.second_opinion.create',
@@ -160,10 +260,72 @@ export async function POST(
               sessionId,
               reviewerPrincipalId,
               note,
+              requestContext,
             },
           )) as SessionHiringReviewContext;
+
+          const createdOpinion =
+            reviewContext.secondOpinions.find(
+              (opinion) =>
+                opinion.requestedReviewerPrincipalId === reviewerPrincipalId &&
+                opinion.status === 'pending',
+            ) ?? reviewContext.secondOpinions[0];
+          const recipientMember = reviewContext.teamMembers.find(
+            (member) => member.principalId === reviewerPrincipalId,
+          );
+          const requesterMember = reviewContext.teamMembers.find(
+            (member) => member.principalId === reviewContext.currentPrincipalId,
+          );
+          const recipientEmail =
+            createdOpinion?.requestedReviewerEmail ||
+            recipientMember?.email ||
+            '';
+          const publicOrigin = resolveStagingPublicOrigin(request);
+          const reviewUrl = `${publicOrigin}/r27/organizations/${encodeURIComponent(
+            orgId,
+          )}/sessions/${encodeURIComponent(sessionId)}?tab=review${
+            createdOpinion
+              ? `&peerReview=${encodeURIComponent(createdOpinion.id)}`
+              : ''
+          }`;
+          const emailDelivery = await deliverHiringNotificationEmail(
+            recipientEmail,
+            buildPeerReviewRequestEmail({
+              organizationName:
+                reviewContext.organizationName || 'Hirearchy Workspace',
+              organizationId: orgId,
+              sessionId,
+              opinionId: createdOpinion?.id ?? '',
+              scenarioTitle:
+                reviewContext.scenarioTitle ||
+                reviewContext.targetRole ||
+                'Engineering Assessment',
+              candidateName:
+                reviewContext.candidateName ||
+                reviewContext.candidateEmail ||
+                'Candidate',
+              candidateCode: reviewContext.candidateCode,
+              targetRole: reviewContext.targetRole || 'Software Engineer',
+              requesterName:
+                createdOpinion?.requestedByName ||
+                requesterMember?.displayName ||
+                requesterMember?.email ||
+                'Teammate',
+              requesterRole: workspaceRoleLabel(requesterMember?.role),
+              recipientName:
+                createdOpinion?.requestedReviewerName ||
+                recipientMember?.displayName ||
+                recipientEmail ||
+                'Teammate',
+              recipientEmail,
+              requestNote: note,
+              requestContext,
+              reviewUrl,
+            }),
+          );
+
           return NextResponse.json(
-            { reviewContext },
+            { reviewContext, emailDelivery },
             { headers: { 'Cache-Control': 'private, no-store' } },
           );
         }
@@ -173,6 +335,7 @@ export async function POST(
           const responseNote = String(body.responseNote ?? '')
             .trim()
             .slice(0, 4000);
+          const verdict = parsePeerReviewVerdict(body.verdict);
           if (!opinionId || !responseNote) throw new StagingBadRequest();
 
           const reviewContext = (await dispatch(
@@ -181,10 +344,64 @@ export async function POST(
               organizationId: orgId,
               opinionId,
               responseNote,
+              verdict,
             },
           )) as SessionHiringReviewContext;
+
+          const updatedOpinion = reviewContext.secondOpinions.find(
+            (opinion) => opinion.id === opinionId,
+          );
+          const requesterMember = reviewContext.teamMembers.find(
+            (member) =>
+              member.principalId === updatedOpinion?.requestedByPrincipalId,
+          );
+          const reviewerMember = reviewContext.teamMembers.find(
+            (member) => member.principalId === reviewContext.currentPrincipalId,
+          );
+          const requesterEmail =
+            updatedOpinion?.requestedByEmail || requesterMember?.email || '';
+          const publicOrigin = resolveStagingPublicOrigin(request);
+          const reviewUrl = `${publicOrigin}/r27/organizations/${encodeURIComponent(
+            orgId,
+          )}/sessions/${encodeURIComponent(sessionId)}?tab=review&peerReview=${encodeURIComponent(
+            opinionId,
+          )}`;
+          const emailDelivery = await deliverHiringNotificationEmail(
+            requesterEmail,
+            buildPeerReviewResponseEmail({
+              organizationName:
+                reviewContext.organizationName || 'Hirearchy Workspace',
+              organizationId: orgId,
+              sessionId,
+              opinionId,
+              scenarioTitle:
+                reviewContext.scenarioTitle ||
+                reviewContext.targetRole ||
+                'Engineering Assessment',
+              candidateName:
+                reviewContext.candidateName ||
+                reviewContext.candidateEmail ||
+                'Candidate',
+              targetRole: reviewContext.targetRole || 'Software Engineer',
+              reviewerName:
+                updatedOpinion?.requestedReviewerName ||
+                reviewerMember?.displayName ||
+                reviewerMember?.email ||
+                'Teammate',
+              recipientName:
+                updatedOpinion?.requestedByName ||
+                requesterMember?.displayName ||
+                requesterEmail ||
+                'Teammate',
+              recipientEmail: requesterEmail,
+              verdict,
+              responseNote,
+              reviewUrl,
+            }),
+          );
+
           return NextResponse.json(
-            { reviewContext },
+            { reviewContext, emailDelivery },
             { headers: { 'Cache-Control': 'private, no-store' } },
           );
         }

@@ -2908,6 +2908,10 @@ BEGIN
               'requestedByName', COALESCE(NULLIF(trim(so_req_p.display_name), ''), so_req_u.email, 'Team Member'),
               'requestedReviewerPrincipalId', so.requested_reviewer_principal_id::pg_catalog.text,
               'requestedReviewerName', COALESCE(NULLIF(trim(so_rev_p.display_name), ''), so_rev_u.email, 'Reviewer'),
+              'requestNote', so.request_note,
+              'requestContext', COALESCE(so.request_context, '{}'::pg_catalog.jsonb),
+              'responseNote', so.response_note,
+              'verdict', so.verdict,
               'status', so.status,
               'createdAt', pg_catalog.to_char(so.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
               'respondedAt', CASE WHEN so.responded_at IS NULL THEN NULL ELSE pg_catalog.to_char(so.responded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
@@ -3263,6 +3267,8 @@ SET search_path = pg_catalog, hirearchy, auth, staging, pg_temp
 AS $function$
 DECLARE
   v_owner_id pg_catalog.uuid;
+  v_org_name pg_catalog.text;
+  v_scenario_title pg_catalog.text;
   v_role pg_catalog.text;
   v_meta hirearchy.hiring_session_metadata%ROWTYPE;
   v_cp hirearchy.candidate_profiles%ROWTYPE;
@@ -3277,7 +3283,8 @@ BEGIN
     RAISE EXCEPTION 'Review context access denied' USING ERRCODE = '42501';
   END IF;
 
-  SELECT owner_principal_id INTO v_owner_id FROM hirearchy.organizations WHERE id = p_organization_id;
+  SELECT owner_principal_id, COALESCE(display_name, 'Organization') INTO v_owner_id, v_org_name FROM hirearchy.organizations WHERE id = p_organization_id;
+  SELECT scenario_title INTO v_scenario_title FROM hirearchy.assessment_sessions WHERE id = p_session_id AND organization_id = p_organization_id;
   SELECT role INTO v_role FROM hirearchy.organization_memberships
   WHERE organization_id = p_organization_id AND principal_id = p_caller_principal_id AND status = 'active' AND revoked_at IS NULL;
 
@@ -3310,10 +3317,14 @@ BEGIN
         'sessionId', so.session_id,
         'requestedByPrincipalId', so.requested_by_principal_id::pg_catalog.text,
         'requestedByName', COALESCE(NULLIF(trim(rp.display_name), ''), ru.email, 'Team Member'),
+        'requestedByEmail', COALESCE(ru.email, ''),
         'requestedReviewerPrincipalId', so.requested_reviewer_principal_id::pg_catalog.text,
         'requestedReviewerName', COALESCE(NULLIF(trim(vp.display_name), ''), vu.email, 'Reviewer'),
+        'requestedReviewerEmail', COALESCE(vu.email, ''),
         'requestNote', so.request_note,
+        'requestContext', COALESCE(so.request_context, '{}'::pg_catalog.jsonb),
         'responseNote', so.response_note,
+        'verdict', so.verdict,
         'status', so.status,
         'createdAt', pg_catalog.to_char(so.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
         'respondedAt', CASE WHEN so.responded_at IS NULL THEN NULL ELSE pg_catalog.to_char(so.responded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
@@ -3349,7 +3360,9 @@ BEGIN
 
   RETURN pg_catalog.jsonb_build_object(
     'organizationId', p_organization_id::pg_catalog.text,
+    'organizationName', COALESCE(v_org_name, ''),
     'sessionId', p_session_id,
+    'scenarioTitle', COALESCE(v_scenario_title, ''),
     'currentPrincipalId', p_caller_principal_id::pg_catalog.text,
     'currentRole', CASE WHEN v_owner_id = p_caller_principal_id THEN 'cto' ELSE v_role END,
     'isOwner', (v_owner_id = p_caller_principal_id),
@@ -3388,12 +3401,17 @@ BEGIN
 END
 $function$;
 
+DROP FUNCTION IF EXISTS staging.hiring_second_opinion_create(
+  pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid, pg_catalog.text
+);
+
 CREATE OR REPLACE FUNCTION staging.hiring_second_opinion_create(
   p_organization_id pg_catalog.uuid,
   p_caller_principal_id pg_catalog.uuid,
   p_session_id pg_catalog.text,
   p_reviewer_principal_id pg_catalog.uuid,
-  p_note pg_catalog.text
+  p_note pg_catalog.text,
+  p_request_context pg_catalog.jsonb DEFAULT '{}'::pg_catalog.jsonb
 )
 RETURNS pg_catalog.jsonb
 LANGUAGE plpgsql
@@ -3402,6 +3420,7 @@ SET search_path = pg_catalog, hirearchy, staging, pg_temp
 AS $function$
 DECLARE
   v_id pg_catalog.uuid;
+  v_context pg_catalog.jsonb;
 BEGIN
   IF NOT staging.hiring_can_access_session(p_organization_id, p_caller_principal_id, p_session_id) THEN
     RAISE EXCEPTION 'Session access denied' USING ERRCODE = '42501';
@@ -3432,12 +3451,19 @@ BEGIN
     );
   END IF;
 
+  v_context := CASE
+    WHEN p_request_context IS NOT NULL AND pg_catalog.jsonb_typeof(p_request_context) = 'object'
+      THEN p_request_context
+    ELSE '{}'::pg_catalog.jsonb
+  END;
+
   v_id := pg_catalog.gen_random_uuid();
   INSERT INTO hirearchy.hiring_second_opinions (
-    id, organization_id, session_id, requested_by_principal_id, requested_reviewer_principal_id, request_note
+    id, organization_id, session_id, requested_by_principal_id, requested_reviewer_principal_id, request_note, request_context
   ) VALUES (
     v_id, p_organization_id, p_session_id, p_caller_principal_id, p_reviewer_principal_id,
-    left(trim(COALESCE(p_note, '')), 2000)
+    left(trim(COALESCE(p_note, '')), 2000),
+    v_context
   );
 
   UPDATE hirearchy.assessment_sessions
@@ -3451,11 +3477,16 @@ BEGIN
 END
 $function$;
 
+DROP FUNCTION IF EXISTS staging.hiring_second_opinion_respond(
+  pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text
+);
+
 CREATE OR REPLACE FUNCTION staging.hiring_second_opinion_respond(
   p_organization_id pg_catalog.uuid,
   p_caller_principal_id pg_catalog.uuid,
   p_opinion_id pg_catalog.uuid,
-  p_response_note pg_catalog.text
+  p_response_note pg_catalog.text,
+  p_verdict pg_catalog.text DEFAULT 'comment'
 )
 RETURNS pg_catalog.jsonb
 LANGUAGE plpgsql
@@ -3464,6 +3495,7 @@ SET search_path = pg_catalog, hirearchy, staging, pg_temp
 AS $function$
 DECLARE
   v_op record;
+  v_verdict pg_catalog.text;
 BEGIN
   SELECT * INTO v_op
   FROM hirearchy.hiring_second_opinions
@@ -3474,8 +3506,14 @@ BEGIN
     RAISE EXCEPTION 'Second opinion request not assigned to caller' USING ERRCODE = '42501';
   END IF;
 
+  v_verdict := CASE
+    WHEN p_verdict IN ('approve', 'comment', 'request_changes') THEN p_verdict
+    ELSE 'comment'
+  END;
+
   UPDATE hirearchy.hiring_second_opinions
   SET response_note = left(trim(COALESCE(p_response_note, '')), 5000),
+      verdict = v_verdict,
       status = 'completed',
       responded_at = pg_catalog.clock_timestamp()
   WHERE id = p_opinion_id;
@@ -3665,7 +3703,9 @@ BEGIN
               'requestedReviewerPrincipalId', so.requested_reviewer_principal_id::pg_catalog.text,
               'requestedReviewerName', COALESCE(NULLIF(trim(svp.display_name), ''), svu.email, 'Reviewer'),
               'requestNote', so.request_note,
+              'requestContext', COALESCE(so.request_context, '{}'::pg_catalog.jsonb),
               'responseNote', so.response_note,
+              'verdict', so.verdict,
               'status', so.status,
               'createdAt', pg_catalog.to_char(so.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
               'respondedAt', CASE WHEN so.responded_at IS NULL THEN NULL ELSE pg_catalog.to_char(so.responded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
@@ -3807,8 +3847,8 @@ GRANT EXECUTE ON FUNCTION staging.hiring_get_session_ai_interactions(pg_catalog.
 GRANT EXECUTE ON FUNCTION staging.hiring_can_access_session(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_evidence_read(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_review_context(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
-GRANT EXECUTE ON FUNCTION staging.hiring_second_opinion_create(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
-GRANT EXECUTE ON FUNCTION staging.hiring_second_opinion_respond(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_second_opinion_create(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_second_opinion_respond(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_decision_publish(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_handoffs_list(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_handoff_update(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb) TO staging_verifier_owner;
@@ -3841,8 +3881,8 @@ REVOKE ALL ON FUNCTION staging.hiring_get_session_ai_interactions(pg_catalog.uui
 REVOKE ALL ON FUNCTION staging.hiring_can_access_session(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_evidence_read(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_review_context(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
-REVOKE ALL ON FUNCTION staging.hiring_second_opinion_create(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
-REVOKE ALL ON FUNCTION staging.hiring_second_opinion_respond(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_second_opinion_create(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_second_opinion_respond(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_decision_publish(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_handoffs_list(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_handoff_update(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
@@ -4165,8 +4205,8 @@ def validate_operation_args(operation, args):
         'hiring.candidates.list': (('organizationId',), ()),
         'hiring.evidence.read': (('organizationId', 'sessionId'), ()),
         'hiring.review.context': (('organizationId', 'sessionId'), ()),
-        'hiring.second_opinion.create': (('organizationId', 'sessionId', 'reviewerPrincipalId', 'note'), ()),
-        'hiring.second_opinion.respond': (('organizationId', 'opinionId', 'responseNote'), ()),
+        'hiring.second_opinion.create': (('organizationId', 'sessionId', 'reviewerPrincipalId', 'note'), ('requestContext',)),
+        'hiring.second_opinion.respond': (('organizationId', 'opinionId', 'responseNote'), ('verdict',)),
         'hiring.decision.publish': (('organizationId', 'sessionId', 'input'), ()),
         'hiring.handoffs.list': (('organizationId',), ()),
         'hiring.handoff.update': (('organizationId', 'sessionId', 'input'), ()),
@@ -6141,24 +6181,26 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
         session_id = args.get('sessionId')
         reviewer_id = require_uuid(args.get('reviewerPrincipalId'), 'reviewer principal ID')
         note = args.get('note')
-        if not isinstance(session_id, str) or not re.fullmatch(r'sess_[A-Za-z0-9_-]{1,128}', session_id) or not isinstance(note, str):
+        request_context = args.get('requestContext') if 'requestContext' in args else {}
+        if not isinstance(session_id, str) or not re.fullmatch(r'sess_[A-Za-z0-9_-]{1,128}', session_id) or not isinstance(note, str) or not isinstance(request_context, dict):
             error('Staging request is invalid', '22023')
         rows = run(
-            "SELECT staging.hiring_second_opinion_create($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4::pg_catalog.uuid, $5) AS result",
-            ['uuid', 'uuid', 'text', 'uuid', 'text'],
-            [organization_id, principal_id, session_id, reviewer_id, note],
+            "SELECT staging.hiring_second_opinion_create($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4::pg_catalog.uuid, $5, $6::pg_catalog.jsonb) AS result",
+            ['uuid', 'uuid', 'text', 'uuid', 'text', 'text'],
+            [organization_id, principal_id, session_id, reviewer_id, note, json.dumps(request_context, ensure_ascii=False)],
         )
         return safe_json_value(rows[0]['result'])
 
     if operation == 'hiring.second_opinion.respond':
         opinion_id = require_uuid(args.get('opinionId'), 'opinion ID')
         response_note = args.get('responseNote')
-        if not isinstance(response_note, str):
+        verdict = args.get('verdict') if 'verdict' in args else 'comment'
+        if not isinstance(response_note, str) or verdict not in ('approve', 'comment', 'request_changes'):
             error('Staging request is invalid', '22023')
         rows = run(
-            "SELECT staging.hiring_second_opinion_respond($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4) AS result",
-            ['uuid', 'uuid', 'uuid', 'text'],
-            [organization_id, principal_id, opinion_id, response_note],
+            "SELECT staging.hiring_second_opinion_respond($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4, $5) AS result",
+            ['uuid', 'uuid', 'uuid', 'text', 'text'],
+            [organization_id, principal_id, opinion_id, response_note, verdict],
         )
         return safe_json_value(rows[0]['result'])
 

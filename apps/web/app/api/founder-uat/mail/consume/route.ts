@@ -4,7 +4,7 @@ import { enforceRateLimit } from '../../../../../src/security/rate-limit';
 import {
   FounderUatMailMessageDenied,
   FounderUatMailUnavailable,
-  readFounderUatMessageOtp,
+  readFounderUatMessageAction,
 } from '../../../../../src/runtime/founder-uat-mail';
 import { isValidFounderUatEmail } from '../../../../../src/runtime/founder-uat';
 import {
@@ -48,7 +48,20 @@ export async function POST(request: Request): Promise<Response> {
     const messageId = form.messageId ?? '';
     if (!isValidFounderUatEmail(email)) throw new FounderUatInvalidRequest();
 
-    const message = await readFounderUatMessageOtp(config, email, messageId);
+    const message = await readFounderUatMessageAction(config, email, messageId);
+    if ('reviewPath' in message) {
+      if (
+        form.audience === 'candidate' ||
+        !message.reviewPath.startsWith('/r27/organizations/')
+      ) {
+        throw new FounderUatMailMessageDenied();
+      }
+      return founderUatRedirect(
+        config,
+        message.reviewPath as `/r27/organizations/${string}`,
+      );
+    }
+
     const verificationType =
       message.kind === 'confirmation' ? 'signup' : 'recovery';
     const grant = await verifyR23Otp(

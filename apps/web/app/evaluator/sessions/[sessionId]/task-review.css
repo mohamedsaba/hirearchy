@@ -854,6 +854,9 @@
 }
 
 .evaluator-back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
   color: var(--software-plum);
   font-size: 13px;
   text-decoration: none;
@@ -1986,6 +1989,9 @@
 
 .evaluator-workbench-modes button {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   min-height: 48px;
   flex: 0 0 auto;
   padding: 0 16px;
@@ -1995,6 +2001,22 @@
   color: var(--software-muted);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
+}
+
+.evaluator-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 1.25rem;
+  block-size: 1.25rem;
+  padding-inline: 0.32rem;
+  border-radius: 999px;
+  background: var(--software-btn-primary-bg, var(--software-plum));
+  color: var(--software-btn-primary-fg, #ffffff);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .evaluator-workbench-modes button[aria-selected='true'] {
@@ -2008,8 +2030,8 @@
 .evaluator-evidence-filter-bar button:focus-visible,
 .evaluator-mobile-inspector button:focus-visible,
 .review-note-state:focus-visible {
-  outline: 3px solid var(--software-plum);
-  outline-offset: 3px;
+  outline: 2px solid var(--software-focus);
+  outline-offset: 2px;
 }
 
 .evaluator-quick-note-trigger,

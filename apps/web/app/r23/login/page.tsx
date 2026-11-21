@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { isAuthenticatedStaging } from '../../../src/runtime/profile';
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
 import { r23IsEnabled } from '../../../src/r23-auth/config';
+import { sanitizePostLoginPath } from '../../../src/staging/browser';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
 
@@ -14,6 +15,7 @@ type SearchParams = {
   verified?: string;
   reset?: string;
   error?: string;
+  next?: string;
 };
 
 export default async function R23LoginPage({
@@ -22,6 +24,10 @@ export default async function R23LoginPage({
   const founderUat = isFounderUatEnabled();
   if (!founderUat && !isAuthenticatedStaging() && !r23IsEnabled()) notFound();
   const params = await searchParams;
+  const safeNext = sanitizePostLoginPath(params.next);
+  const nextIsPeerReview = Boolean(
+    safeNext && safeNext.includes('peerReview='),
+  );
   const notice =
     params.verified === '1'
       ? 'Email confirmed. Sign in to continue.'
@@ -31,12 +37,19 @@ export default async function R23LoginPage({
           ? 'Sign-in failed. Check your email and password, and confirm your email address if you have not already.'
           : params.error === 'unavailable'
             ? 'Sign-in is temporarily unavailable. Try again shortly.'
-            : null;
+            : nextIsPeerReview
+              ? 'Sign in with your team account to open the requested peer review.'
+              : safeNext
+                ? 'Sign in with your team account to open this review.'
+                : null;
   const noticeIsError =
     params.error === 'credentials' || params.error === 'unavailable';
 
   return (
     <div className="software-product software-document-access software-team-access">
+      <a className="software-skip-link" href="#main-content">
+        Skip to sign in
+      </a>
       <header className="software-document-header">
         <Link
           className="software-document-wordmark"
@@ -49,7 +62,7 @@ export default async function R23LoginPage({
         </Link>
         <ThemeToggle variant="header" />
       </header>
-      <main className="software-document-shell">
+      <main className="software-document-shell" id="main-content" tabIndex={-1}>
         <p className="software-access-principle">
           Evidence informs.
           <br />
@@ -65,6 +78,9 @@ export default async function R23LoginPage({
             <p role={noticeIsError ? 'alert' : 'status'}>{notice}</p>
           ) : null}
           <form action="/r23/auth/login" method="post">
+            {safeNext ? (
+              <input type="hidden" name="next" value={safeNext} />
+            ) : null}
             <label htmlFor="email">Email</label>
             <input
               id="email"

@@ -29,15 +29,38 @@
   background: var(--software-surface-note);
 }
 
-:is(.software-document-header, .hiring-portal-header) .hiring-theme-toggle {
+:is(
+    .software-document-header,
+    .software-product-header,
+    .hiring-portal-header,
+    .r26-header
+  )
+  .hiring-theme-toggle {
   border-color: var(--software-on-plum-muted);
   background: var(--software-brand-plum);
   color: var(--software-on-plum);
 }
 
-:is(.software-document-header, .hiring-portal-header)
+:is(
+    .software-document-header,
+    .software-product-header,
+    .hiring-portal-header,
+    .r26-header
+  )
   .hiring-theme-toggle:hover {
-  background: #493954;
+  background: #3d2c4b;
+  border-color: var(--software-on-plum);
+}
+
+:is(
+    .software-document-header,
+    .software-product-header,
+    .hiring-portal-header,
+    .r26-header
+  )
+  .hiring-theme-toggle:focus-visible {
+  outline: 2px solid var(--software-mint);
+  outline-offset: 2px;
 }
 
 .hiring-page-shell,
@@ -394,11 +417,15 @@
 .software-product button.hiring-password-reveal {
   display: inline-grid;
   position: absolute;
-  inset-inline-end: 0.3rem;
+  inset-block-start: 50%;
+  inset-inline-end: 0.35rem;
+  transform: translateY(-50%);
   align-items: center;
   justify-items: center;
-  min-height: 2.125rem;
-  inline-size: 2.125rem;
+  min-height: 2rem;
+  block-size: 2rem;
+  inline-size: 2rem;
+  margin: 0;
   padding: 0;
   border: 0;
   border-radius: var(--software-radius-control);
@@ -423,11 +450,12 @@
 
 .hiring-switch-input {
   position: absolute;
-  inset-inline-start: 0;
-  width: 2.25rem;
-  height: 1.35rem;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
   opacity: 0;
+  cursor: pointer;
 }
 
 .hiring-switch-track {
@@ -1166,6 +1194,22 @@
   padding-block: 0.55rem;
 }
 
+.software-product .hiring-portal-header .hiring-btn {
+  border-color: var(--software-on-plum-muted);
+  background: var(--software-brand-plum);
+  color: var(--software-on-plum);
+}
+
+.software-product .hiring-portal-header .hiring-btn:hover:not(:disabled) {
+  background: #3d2c4b;
+  border-color: var(--software-on-plum);
+}
+
+.software-product .hiring-portal-header .hiring-btn:focus-visible {
+  outline: 2px solid var(--software-mint);
+  outline-offset: 2px;
+}
+
 .hiring-portal-email {
   color: var(--software-on-plum-muted);
   font-size: 0.8125rem;
@@ -1363,5 +1407,297 @@
 @media (min-width: 74rem) {
   .software-handoff-layout {
     grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Team Peer Review (GitHub-PR style, strictly Common Thread editorial craft)
+   ========================================================================== */
+
+.hiring-peer-spotlight {
+  display: grid;
+  gap: 1rem;
+  border-block-start: 3px solid var(--software-btn-primary-bg);
+}
+
+.hiring-peer-spotlight-header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.hiring-peer-spotlight-header h3 {
+  font-size: 1.125rem;
+  line-height: 1.3;
+}
+
+.hiring-peer-section-head,
+.hiring-peer-thread-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.9rem;
+}
+
+.hiring-peer-jump-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding-block: 0.65rem;
+  border-block: 1px solid var(--software-border);
+}
+
+.hiring-peer-request-body {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface-subtle);
+}
+
+.hiring-peer-request-body.is-focused,
+.hiring-opinion-card.is-focused {
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--software-border-strong);
+  border-inline-start: 3px solid var(--software-btn-primary-bg);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface-note);
+}
+
+.hiring-peer-quote,
+.hiring-peer-response-quote {
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-inline-start: 3px solid var(--software-border-strong);
+  border-radius: 0 var(--software-radius-control) var(--software-radius-control)
+    0;
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hiring-peer-response-quote {
+  margin-block-start: 0.55rem;
+  border-inline-start-color: var(--software-status-success);
+  background: var(--software-surface-subtle);
+}
+
+.hiring-peer-context-box {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  font-size: 0.84rem;
+}
+
+.hiring-peer-context-label {
+  display: block;
+  margin-block-end: 0.25rem;
+  color: var(--software-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hiring-peer-context-note {
+  margin: 0;
+  color: var(--software-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.hiring-peer-ai-box {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface-note);
+}
+
+.hiring-peer-ai-disclaimer {
+  margin: 0;
+  color: var(--software-muted);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.hiring-peer-context-details {
+  margin-block-start: 0.5rem;
+}
+
+.hiring-peer-context-details > summary {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2rem;
+  color: var(--software-link);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.hiring-peer-context-details[open] > summary {
+  margin-block-end: 0.5rem;
+}
+
+.hiring-verdict-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.hiring-verdict-fieldset > legend {
+  padding: 0;
+  margin-block-end: 0.5rem;
+  color: var(--software-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.hiring-verdict-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.software-product .hiring-verdict-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  width: 100%;
+  min-block-size: 3.25rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--software-border-strong);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.software-product .hiring-verdict-option:hover {
+  background: var(--software-surface-note);
+  border-color: var(--software-ink);
+}
+
+.software-product .hiring-verdict-option.is-selected.hiring-verdict-approve {
+  border-color: var(--software-status-success);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+
+.software-product .hiring-verdict-option.is-selected.hiring-verdict-comment {
+  border-color: var(--software-btn-primary-bg);
+  background: var(--software-surface-note);
+  color: var(--software-ink);
+}
+
+.software-product
+  .hiring-verdict-option.is-selected.hiring-verdict-request_changes {
+  border-color: var(--software-status-danger);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+.hiring-verdict-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-block-start: 0.1rem;
+}
+
+.hiring-verdict-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-inline-size: 0;
+}
+
+.hiring-verdict-copy strong {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.hiring-verdict-copy span {
+  color: var(--software-muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.hiring-verdict-option.is-selected .hiring-verdict-copy span {
+  color: currentColor;
+  opacity: 0.88;
+}
+
+.hiring-peer-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-block-size: 2.5rem;
+  color: var(--software-ink);
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.hiring-peer-checkbox-meta {
+  color: var(--software-muted);
+  font-size: 0.78rem;
+}
+
+.hiring-field-hint {
+  margin: 0.2rem 0 0;
+  color: var(--software-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.hiring-peer-queue-card {
+  display: grid;
+  gap: 0.85rem;
+  border-block-start: 3px solid var(--software-btn-primary-bg);
+}
+
+.hiring-peer-queue-card h2 {
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+
+.hiring-peer-queue-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.hiring-peer-queue-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface-subtle);
+}
+
+.hiring-peer-queue-note {
+  margin: 0.35rem 0 0;
+  color: var(--software-ink);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+@media (max-width: 45rem) {
+  .hiring-verdict-grid {
+    grid-template-columns: 1fr;
   }
 }

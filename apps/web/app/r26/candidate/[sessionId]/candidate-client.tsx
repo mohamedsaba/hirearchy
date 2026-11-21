@@ -32,10 +32,12 @@ import type {
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { SoundToggle } from '../../../_components/sound-toggle';
 import {
   ThemeToggle,
   useHirearchyTheme,
 } from '../../../_components/theme-toggle';
+import { playHirearchySound } from '../../../../src/ui/sound';
 import './candidate-workspace.css';
 
 export type CandidateAccountGate = Readonly<{
@@ -837,8 +839,10 @@ export function R26CandidateClient({
       if (result?.operationId) {
         setSelectedExecutionId(result.operationId);
       }
+      playHirearchySound('complete');
       executionRequestIdRef.current = requestId();
     } catch {
+      playHirearchySound('error');
       setExecutionError('Network error executing checks. Please retry.');
     } finally {
       setExecutionRunning(false);
@@ -920,6 +924,7 @@ export function R26CandidateClient({
         setPendingSave(null);
         if (saved?.content === intent.content) {
           setConflictLatest(null);
+          if (!automatic) playHirearchySound('confirm');
           setMessage(
             automatic ? 'Changes saved automatically.' : 'Work saved.',
           );
@@ -1115,10 +1120,12 @@ export function R26CandidateClient({
       const next = await callApi('POST', { action: 'submit', input: intent });
       applyView(next);
       setPendingSubmit(null);
+      playHirearchySound('submit');
       setMessage('Assessment submitted. Your saved work is now read-only.');
       void fetchAiView(next.capabilities.ai);
       void fetchExecutionView(next.capabilities.execution);
     } catch (error) {
+      playHirearchySound('error');
       const failure = error as ApiFailure;
       if (isCandidateAccessUnavailable(failure)) {
         setPendingSubmit(null);
@@ -1347,7 +1354,10 @@ export function R26CandidateClient({
         <div className="hiring-gate-card">
           <div className="hiring-gate-topbar">
             <span className="hiring-eyebrow">Hirearchy Software</span>
-            <ThemeToggle variant="pill" />
+            <div className="software-header-controls">
+              <SoundToggle variant="pill" />
+              <ThemeToggle variant="pill" />
+            </div>
           </div>
           {accountGate.state === 'sign_in_required' ? (
             <>
@@ -1471,6 +1481,7 @@ export function R26CandidateClient({
           </span>
         </div>
         <div className="r26-header-status">
+          <SoundToggle variant="header" />
           {accountGate ? <ThemeToggle variant="header" /> : null}
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
             <div

@@ -10,6 +10,7 @@ import {
   type AiReviewPresetId,
   type R27AiReviewReport,
 } from '../../../../src/r27-evidence/ai-review-contract';
+import { playHirearchySound } from '../../../../src/ui/sound';
 
 export type R27AiReviewPanelProps = Readonly<{
   organizationId?: string;
@@ -129,7 +130,9 @@ export const R27AiReviewPanel = ({
         throw new Error('AI review endpoint returned no report payload.');
       }
       setReport(data.report);
+      playHirearchySound('complete');
     } catch (err: unknown) {
+      playHirearchySound('error');
       setError(
         err instanceof Error ? err.message : 'Unable to generate AI review.',
       );

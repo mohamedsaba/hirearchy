@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FounderUatMailMessageDenied,
   listFounderUatMessages,
+  readFounderUatMessageAction,
   readFounderUatMessageOtp,
 } from '../../apps/web/src/runtime/founder-uat-mail';
 import type { FounderUatConfiguration } from '../../apps/web/src/runtime/founder-uat';
@@ -112,6 +113,74 @@ describe('Founder UAT local mail capture', () => {
     );
     await expect(
       readFounderUatMessageOtp(config, 'founder@local.test', 'recovery_2'),
+    ).rejects.toBeInstanceOf(FounderUatMailMessageDenied);
+  });
+
+  it('lists peer review notifications and extracts safe same-origin review links', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL) => {
+        const href = String(url);
+        if (href.includes('/api/v1/search?')) {
+          return Response.json({
+            messages: [
+              {
+                ID: 'peer_1',
+                To: [{ Address: 'lead@local.test' }],
+                Subject:
+                  '[Hirearchy] Peer review requested: Nadia Hassan (Senior Backend Engineer)',
+                Created: '2026-11-21T12:00:00Z',
+              },
+              {
+                ID: 'peer_2',
+                To: [{ Address: 'lead@local.test' }],
+                Subject:
+                  '[Hirearchy] Peer review submitted: Nadia Hassan (Senior Backend Engineer)',
+                Created: '2026-11-21T12:10:00Z',
+              },
+            ],
+          });
+        }
+        return Response.json({
+          ID: 'peer_1',
+          To: [{ Email: 'lead@local.test' }],
+          Subject:
+            '[Hirearchy] Peer review requested: Nadia Hassan (Senior Backend Engineer)',
+          Text: 'Inspect review:\nhttp://127.0.0.1:3000/r27/organizations/11111111-1111-1111-1111-111111111111/sessions/sess_demo_1?tab=review&peerReview=22222222-2222-2222-2222-222222222222\n',
+        });
+      }),
+    );
+
+    const listed = await listFounderUatMessages(config, 'lead@local.test');
+    expect(listed.map((m) => m.kind)).toEqual([
+      'peer_review_request',
+      'peer_review_response',
+    ]);
+
+    await expect(
+      readFounderUatMessageAction(config, 'lead@local.test', 'peer_1'),
+    ).resolves.toEqual({
+      kind: 'peer_review_request',
+      reviewPath:
+        '/r27/organizations/11111111-1111-1111-1111-111111111111/sessions/sess_demo_1?tab=review&peerReview=22222222-2222-2222-2222-222222222222',
+    });
+  });
+
+  it('rejects peer review emails pointing to off-origin URLs', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          ID: 'peer_evil',
+          To: [{ Email: 'lead@local.test' }],
+          Subject: '[Hirearchy] Peer review requested: Evil',
+          Text: 'Click https://evil.example/r27/organizations/11111111-1111-1111-1111-111111111111/sessions/sess_1',
+        }),
+      ),
+    );
+
+    await expect(
+      readFounderUatMessageAction(config, 'lead@local.test', 'peer_evil'),
     ).rejects.toBeInstanceOf(FounderUatMailMessageDenied);
   });
 });

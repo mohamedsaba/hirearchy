@@ -34,6 +34,9 @@ export default async function FounderUatMailPage({
 
   return (
     <main className="software-product evaluator-product-shell software-mail-page">
+      <a className="software-skip-link" href="#mail-title">
+        Skip to inbox
+      </a>
       <header className="software-product-header">
         <Link
           className="software-wordmark"
@@ -51,8 +54,9 @@ export default async function FounderUatMailPage({
             <p className="software-eyebrow">Local email</p>
             <h1 id="mail-title">Check your inbox</h1>
             <p>
-              Confirm your account or recover access. Messages stay on this
-              machine during local testing.
+              {candidate
+                ? 'Confirm your account. Messages stay on this machine during local testing.'
+                : 'Confirm your account, recover access, or open team peer-review notifications. Messages stay on this machine during local testing.'}
             </p>
           </div>
         </section>

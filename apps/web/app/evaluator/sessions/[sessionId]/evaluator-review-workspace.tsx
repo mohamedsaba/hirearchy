@@ -1256,14 +1256,32 @@ type R27EvaluatorReviewWorkspaceProps = Readonly<{
   readOnly: true;
   r27Evidence: R27Evidence;
   hiringReviewContext?: SessionHiringReviewContext | null;
+  initialTab?: WorkbenchMode;
+  initialPeerReviewId?: string | null;
 }>;
 
 export const EvaluatorReviewWorkspace = (
   props: LegacyEvaluatorReviewWorkspaceProps | R27EvaluatorReviewWorkspaceProps,
 ) => {
   const { sessionId } = props;
-  const hiringReviewContext =
+  const initialHiringReviewContext =
     'hiringReviewContext' in props ? (props.hiringReviewContext ?? null) : null;
+  const [hiringReviewContext, setHiringReviewContext] =
+    useState<SessionHiringReviewContext | null>(initialHiringReviewContext);
+  const initialTab: WorkbenchMode =
+    'initialTab' in props && props.initialTab ? props.initialTab : 'Summary';
+  const initialPeerReviewId =
+    'initialPeerReviewId' in props ? (props.initialPeerReviewId ?? null) : null;
+  const pendingPeerReviewsForMeCount = useMemo(
+    () =>
+      (hiringReviewContext?.secondOpinions ?? []).filter(
+        (opinion) =>
+          opinion.status === 'pending' &&
+          opinion.requestedReviewerPrincipalId ===
+            hiringReviewContext?.currentPrincipalId,
+      ).length,
+    [hiringReviewContext],
+  );
   const aiReviewPlanLocked = Boolean(
     hiringReviewContext &&
     !hasPlanFeature(hiringReviewContext.plan.planTier, 'aiCandidateReview'),
@@ -1294,7 +1312,7 @@ export const EvaluatorReviewWorkspace = (
         : buildEvidenceSources(review!, projection!, aiConversations),
     [aiConversations, projection, r27Evidence, r27Presentation, review],
   );
-  const [mode, setMode] = useState<WorkbenchMode>('Summary');
+  const [mode, setMode] = useState<WorkbenchMode>(initialTab);
   const [filter, setFilter] = useState<EvidenceFilter>('Chronology');
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(
     () => preferredEvidenceSource(sources)?.key ?? null,
@@ -1613,7 +1631,6 @@ export const EvaluatorReviewWorkspace = (
               : undefined
           }
           backLabel={r27Evidence ? '← Back to session summary' : undefined}
-          showTheme={Boolean(hiringReviewContext)}
         />
         <div className="evaluator-workbench-topline">
           <nav
@@ -1640,7 +1657,15 @@ export const EvaluatorReviewWorkspace = (
                 }}
                 onKeyDown={(event) => onModeKeyDown(event, index)}
               >
-                {item}
+                <span>{item}</span>
+                {item === 'Review' && pendingPeerReviewsForMeCount > 0 ? (
+                  <span
+                    className="evaluator-tab-badge"
+                    aria-label={`${pendingPeerReviewsForMeCount} peer review requested`}
+                  >
+                    {pendingPeerReviewsForMeCount}
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -1744,6 +1769,15 @@ export const EvaluatorReviewWorkspace = (
               r27Evidence ? (
                 <div className="r27-review-stack">
                   <div className="r27-human-review">
+                    {hiringReviewContext ? (
+                      <HiringDecisionPanel
+                        initialContext={hiringReviewContext}
+                        aiReviewReport={aiReviewReport}
+                        initialPeerReviewId={initialPeerReviewId}
+                        onOpenEvidence={openEvidence}
+                        onContextChange={setHiringReviewContext}
+                      />
+                    ) : null}
                     {r210IsEnabled() ? (
                       <R210ReviewPacketPanel
                         organizationId={r27Evidence.organizationId}
@@ -1752,11 +1786,6 @@ export const EvaluatorReviewWorkspace = (
                         r27Evidence={r27Evidence}
                         sources={sources}
                         onOpenEvidence={openEvidence}
-                      />
-                    ) : null}
-                    {hiringReviewContext ? (
-                      <HiringDecisionPanel
-                        initialContext={hiringReviewContext}
                       />
                     ) : null}
                   </div>
