@@ -1264,8 +1264,10 @@ export const EvaluatorReviewWorkspace = (
   props: LegacyEvaluatorReviewWorkspaceProps | R27EvaluatorReviewWorkspaceProps,
 ) => {
   const { sessionId } = props;
-  const hiringReviewContext =
+  const initialHiringReviewContext =
     'hiringReviewContext' in props ? (props.hiringReviewContext ?? null) : null;
+  const [hiringReviewContext, setHiringReviewContext] =
+    useState<SessionHiringReviewContext | null>(initialHiringReviewContext);
   const initialTab: WorkbenchMode =
     'initialTab' in props && props.initialTab ? props.initialTab : 'Summary';
   const initialPeerReviewId =
@@ -1767,6 +1769,15 @@ export const EvaluatorReviewWorkspace = (
               r27Evidence ? (
                 <div className="r27-review-stack">
                   <div className="r27-human-review">
+                    {hiringReviewContext ? (
+                      <HiringDecisionPanel
+                        initialContext={hiringReviewContext}
+                        aiReviewReport={aiReviewReport}
+                        initialPeerReviewId={initialPeerReviewId}
+                        onOpenEvidence={openEvidence}
+                        onContextChange={setHiringReviewContext}
+                      />
+                    ) : null}
                     {r210IsEnabled() ? (
                       <R210ReviewPacketPanel
                         organizationId={r27Evidence.organizationId}
@@ -1774,14 +1785,6 @@ export const EvaluatorReviewWorkspace = (
                         reviewer={r27Evidence.reviewer}
                         r27Evidence={r27Evidence}
                         sources={sources}
-                        onOpenEvidence={openEvidence}
-                      />
-                    ) : null}
-                    {hiringReviewContext ? (
-                      <HiringDecisionPanel
-                        initialContext={hiringReviewContext}
-                        aiReviewReport={aiReviewReport}
-                        initialPeerReviewId={initialPeerReviewId}
                         onOpenEvidence={openEvidence}
                       />
                     ) : null}

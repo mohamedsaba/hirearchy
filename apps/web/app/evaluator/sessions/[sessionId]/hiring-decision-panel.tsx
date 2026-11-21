@@ -38,6 +38,7 @@ export interface HiringDecisionPanelProps {
   readonly aiReviewReport?: R27AiReviewReport | null;
   readonly initialPeerReviewId?: string | null;
   readonly onOpenEvidence?: (filter: EvidenceFilter) => void;
+  readonly onContextChange?: (next: SessionHiringReviewContext) => void;
 }
 
 function readCsrfCookie(): string {
@@ -77,12 +78,13 @@ function formatTimestampShort(iso: string | null): string {
   if (!iso) return '';
   const parsed = Date.parse(iso);
   if (!Number.isFinite(parsed)) return '';
-  return new Date(parsed).toLocaleString('en-US', {
+  return `${new Date(parsed).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  });
+    timeZone: 'UTC',
+  })} UTC`;
 }
 
 function verdictPillMeta(opinion: SecondOpinionRecord): {
@@ -215,8 +217,14 @@ export function HiringDecisionPanel({
   aiReviewReport = null,
   initialPeerReviewId = null,
   onOpenEvidence,
+  onContextChange,
 }: HiringDecisionPanelProps) {
-  const [ctx, setCtx] = useState<SessionHiringReviewContext>(initialContext);
+  const [ctx, setCtxState] =
+    useState<SessionHiringReviewContext>(initialContext);
+  const setCtx = (next: SessionHiringReviewContext) => {
+    setCtxState(next);
+    onContextChange?.(next);
+  };
   const otherTeammates = useMemo(
     () =>
       ctx.teamMembers.filter(

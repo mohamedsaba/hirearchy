@@ -308,8 +308,18 @@
   font-size: 13px;
 }
 
+.software-mail-page .software-product-header {
+  justify-content: space-between;
+}
+
 .software-mail-page .evaluator-product-content {
   max-width: 800px;
+}
+
+.software-mail-page .evaluator-product-content > p > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
 }
 
 .software-mail-page .evaluator-page-intro h1 {
