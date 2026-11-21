@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import {
   isAuthenticatedStaging,
   isFounderUatEnabled,
+  isHiringPlatformEnabled,
   isPublicPreview,
   isStagingLockdown,
 } from './src/runtime/profile';
@@ -98,27 +99,62 @@ const STAGING_BROWSER_DELETE_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/sessions\/[^/]+\/candidate-token$/,
 ];
 
+const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
+  /^\/hiring-platform\.css$/,
+  /^\/candidate$/,
+  /^\/candidate\/login$/,
+  /^\/candidate\/signup$/,
+  /^\/api\/candidate-portal$/,
+  /^\/r26\/api\/candidate\/[^/]+\/ai$/,
+  /^\/r23\/organizations\/[^/]+\/candidates$/,
+  /^\/r23\/organizations\/[^/]+\/handoffs$/,
+  /^\/r23\/organizations\/[^/]+\/handoffs\/[^/]+$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/plan$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/candidates$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/library$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/handoffs$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/sessions\/[^/]+\/review$/,
+];
+
+const HIRING_PLATFORM_POST_PATTERNS: readonly RegExp[] = [
+  /^\/api\/theme$/,
+  /^\/api\/candidate-portal$/,
+  /^\/r26\/api\/candidate\/[^/]+\/ai$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/plan$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/builder\/generate$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/library$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/issue$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/handoffs$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/sessions\/[^/]+\/review$/,
+];
+
 function isAllowedAuthenticatedStagingRequest(
   method: string,
   pathname: string,
 ): boolean {
+  const hiring = isHiringPlatformEnabled();
   if (
     (method === 'GET' || method === 'HEAD') &&
     (pathname.startsWith('/_next/') ||
       pathname === '/software-ui.css' ||
+      (hiring && pathname === '/hiring-platform.css') ||
       pathname === '/fonts/dm-sans-latin.woff2' ||
       pathname === '/favicon.ico')
   ) {
     return true;
   }
   if (method === 'GET' || method === 'HEAD') {
-    return STAGING_BROWSER_GET_PATTERNS.some((pattern) =>
-      pattern.test(pathname),
+    return (
+      STAGING_BROWSER_GET_PATTERNS.some((pattern) => pattern.test(pathname)) ||
+      (hiring &&
+        HIRING_PLATFORM_GET_PATTERNS.some((pattern) => pattern.test(pathname)))
     );
   }
   if (method === 'POST') {
-    return STAGING_BROWSER_POST_PATTERNS.some((pattern) =>
-      pattern.test(pathname),
+    return (
+      STAGING_BROWSER_POST_PATTERNS.some((pattern) => pattern.test(pathname)) ||
+      (hiring &&
+        HIRING_PLATFORM_POST_PATTERNS.some((pattern) => pattern.test(pathname)))
     );
   }
   if (method === 'PUT') {

@@ -398,7 +398,7 @@ describe('R27 AI Candidate Review', () => {
     };
     const prompt = request.messages.find((message) => message.role === 'user');
     expect(prompt?.content).toContain(
-      `1. prompt="${(prefix + followup).slice(0, 240)}" status=COMPLETED`,
+      `1. [seq 4] prompt="${(prefix + followup).slice(0, 260)}" status=COMPLETED`,
     );
     expect(prompt?.content).not.toContain(
       GENERATED_TERMS_AND_CONDITIONS_FOOTER,

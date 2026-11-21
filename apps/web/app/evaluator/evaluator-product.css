@@ -4,21 +4,22 @@
 }
 
 .software-product-header {
-  min-height: 64px;
-  padding: 0 28px;
+  min-height: var(--software-header-height, 4rem);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24px;
-  border-bottom: 1px solid var(--software-border);
-  background: var(--software-surface);
-  color: var(--software-plum);
+  gap: 4px 24px;
+  padding-inline: var(--software-space-page);
+  border-bottom: 1px solid var(--software-plum-line);
+  background: var(--software-brand-plum);
+  color: var(--software-on-plum);
 }
 
-.software-wordmark {
+.software-product-header .software-wordmark {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  color: var(--software-plum);
+  gap: 10px;
+  color: var(--software-on-plum);
   font-size: 24px;
   font-weight: 750;
   text-decoration: none;
@@ -26,47 +27,17 @@
 }
 
 .software-product-capsule {
-  padding: 5px 8px;
-  border: 1px solid var(--software-mint);
-  border-radius: 5px;
+  padding: 4px 7px;
+  border-radius: 4px;
   background: var(--software-mint);
   color: var(--software-plum);
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 650;
   letter-spacing: 0.01em;
 }
 
-.software-product-header nav {
-  display: flex;
-  align-items: center;
-  align-self: stretch;
-  gap: 24px;
-  margin-left: 70px;
-}
-
-.software-product-header nav a {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px 0;
-  color: var(--software-muted);
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.software-product-header nav a[aria-current='page'] {
-  color: var(--software-plum);
-}
-
-.software-product-header nav a[aria-current='page']::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 4px;
-  background: var(--software-mint);
-  content: '';
+.software-product-header :is(a, button):focus-visible {
+  outline-color: var(--software-mint);
 }
 
 .evaluator-product-content {
@@ -293,30 +264,22 @@
 .evaluator-signin-form .access-form .button-primary {
   min-height: 44px;
   border: 0;
-  border-radius: 7px;
-  background: var(--software-plum);
-  color: white;
+  border-radius: 9px;
+  background: var(--software-btn-primary-bg, var(--software-plum));
+  color: var(--software-btn-primary-fg, #ffffff);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
 }
 
-.software-password-field {
-  display: grid;
-  gap: 8px;
-}
-
-.software-field-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.software-field-heading a {
-  color: var(--software-muted);
-  font-size: 11px;
-  text-underline-offset: 3px;
+.evaluator-signin-form .access-form .button-primary:hover:not(:disabled) {
+  background: var(--software-btn-primary-bg-hover, #3b2b4a);
+  color: var(--software-btn-primary-fg, #ffffff);
+  transform: translateY(-1px);
 }
 
 .evaluator-signin-form nav {
@@ -506,18 +469,7 @@
 }
 
 @media (max-width: 760px) {
-  .software-product-header {
-    min-height: 64px;
-    padding: 0 18px;
-    gap: 12px;
-  }
-
-  .software-product-header nav a {
-    padding: 3px 6px 0;
-    font-size: 13px;
-  }
-
-  .software-wordmark {
+  .software-product-header .software-wordmark {
     gap: 7px;
     font-size: 24px;
   }
@@ -525,11 +477,6 @@
   .software-product-capsule {
     padding: 4px 8px;
     font-size: 10px;
-  }
-
-  .software-product-header nav {
-    gap: 8px;
-    margin-left: auto;
   }
 
   .evaluator-product-content {
@@ -567,110 +514,7 @@
 }
 
 @media (max-width: 420px) {
-  .software-product-header {
-    padding: 0 12px;
-    gap: 6px;
-  }
-
-  .software-wordmark {
-    gap: 5px;
-    font-size: 20px;
-  }
-
-  .software-product-capsule {
-    padding: 3px 6px;
-    font-size: 10px;
-  }
-
-  .software-product-header nav {
-    gap: 0;
-  }
-
-  .software-product-header nav a {
-    padding-inline: 5px;
-    font-size: 11px;
-  }
-
   .evaluator-review-link {
     grid-template-columns: 1fr;
-  }
-}
-
-.software-access-page {
-  background: var(--software-canvas);
-}
-
-.software-access-page .software-product-header {
-  border: 0;
-  background: transparent;
-}
-
-.software-access-page .evaluator-signin-panel {
-  overflow: hidden;
-  max-width: 900px;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-  gap: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 24px;
-  background: var(--software-surface);
-}
-
-.software-access-page .evaluator-signin-copy {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-self: stretch;
-  padding: clamp(32px, 5vw, 56px);
-  background: #211426;
-  color: #f5efe6;
-}
-
-.software-access-page .evaluator-signin-form {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: clamp(32px, 5vw, 56px);
-}
-
-.software-access-page .evaluator-signin-copy::after {
-  display: block;
-  width: min(65%, 130px);
-  height: 30px;
-  margin-top: 40px;
-  border-bottom: 8px solid #8ee3b8;
-  border-left: 8px solid #8ee3b8;
-  border-radius: 0 0 0 24px;
-  content: '';
-}
-
-.software-access-page .evaluator-signin-copy h1 {
-  color: inherit;
-  font-size: clamp(32px, 3.8vw, 48px);
-  line-height: 1.05;
-}
-
-.software-access-page .evaluator-signin-copy .software-eyebrow {
-  color: #8ee3b8;
-}
-
-.software-access-page .evaluator-signin-copy > p:not(.software-eyebrow) {
-  color: #e4d9e2;
-}
-
-@media (max-width: 700px) {
-  .software-access-page .evaluator-signin-panel {
-    display: block;
-    max-width: 460px;
-    padding: 0;
-  }
-
-  .software-access-page .evaluator-signin-copy,
-  .software-access-page .evaluator-signin-form {
-    padding: 28px;
-  }
-
-  .software-access-page .evaluator-signin-copy::after {
-    display: none;
   }
 }

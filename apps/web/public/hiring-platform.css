@@ -1,0 +1,1367 @@
+/* Common Thread controls, workspace documents, and the read-only code viewer. */
+
+.hiring-doc-theme-form {
+  display: flex;
+  margin: 0;
+}
+
+.software-product .hiring-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-block-size: 2.25rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--software-border-strong);
+  border-radius: 100px;
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: 650 0.75rem / 1.3 var(--software-sans);
+  cursor: pointer;
+}
+
+.hiring-theme-toggle-icon {
+  display: inline-flex;
+  color: currentColor;
+}
+
+.software-product .hiring-theme-toggle:hover {
+  background: var(--software-surface-note);
+}
+
+:is(.software-document-header, .hiring-portal-header) .hiring-theme-toggle {
+  border-color: var(--software-on-plum-muted);
+  background: var(--software-brand-plum);
+  color: var(--software-on-plum);
+}
+
+:is(.software-document-header, .hiring-portal-header)
+  .hiring-theme-toggle:hover {
+  background: #493954;
+}
+
+.hiring-page-shell,
+.hiring-handoff-dossier,
+.software-builder-content,
+.software-directory-results {
+  display: grid;
+  gap: 1.125rem;
+  min-inline-size: 0;
+}
+
+.hiring-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  flex-wrap: wrap;
+  padding-block-end: clamp(1rem, 3vw, 1.75rem);
+  border-block-end: 1px solid var(--software-border);
+}
+
+.software-product .hiring-page-header h1 {
+  margin: 0;
+  color: var(--software-ink);
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 650;
+  letter-spacing: -0.06em;
+  line-height: 1.05;
+}
+
+.hiring-page-header p {
+  max-width: 52ch;
+  margin: 0.55rem 0 0;
+  color: var(--software-muted);
+}
+
+.hiring-card,
+.hiring-card-subtle {
+  min-inline-size: 0;
+  padding: clamp(1rem, 2.6vw, 1.65rem);
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
+}
+
+.hiring-card-subtle {
+  background: var(--software-surface-subtle);
+}
+
+.hiring-card-compact {
+  padding: 0.9rem 1rem;
+}
+
+.hiring-card :is(h2, h3, h4),
+.hiring-card-subtle :is(h2, h3, h4),
+.hiring-opinion-card p {
+  margin-block: 0;
+}
+
+.hiring-card :is(p, ul, ol):last-child {
+  margin-block-end: 0;
+}
+
+.hiring-eyebrow,
+.hiring-sublabel {
+  display: inline-block;
+  color: var(--software-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+}
+
+.hiring-muted-copy,
+.hiring-dossier-bio {
+  margin: 0;
+  color: var(--software-muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.hiring-prewrap,
+.hiring-outcome-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hiring-stack-xs,
+.hiring-stack-sm,
+.hiring-issue-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hiring-stack-sm,
+.hiring-issue-form {
+  gap: 0.9rem;
+}
+
+.hiring-mt-xs {
+  margin-block-start: 0.35rem;
+}
+.hiring-mt-sm {
+  margin-block-start: 0.75rem;
+}
+.hiring-mt-md {
+  margin-block-start: 1.15rem;
+}
+
+.hiring-header-actions,
+.hiring-chip-group,
+.hiring-candidate-name,
+.hiring-candidate-meta,
+.hiring-filter-heading,
+.hiring-builder-head,
+.hiring-preview-header,
+.software-repo-intro {
+  display: flex;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.hiring-builder-head,
+.hiring-preview-header,
+.hiring-filter-heading,
+.software-repo-intro {
+  justify-content: space-between;
+  gap: 0.85rem 1.2rem;
+}
+
+.hiring-preview-header h2,
+.hiring-builder-head h2 {
+  margin: 0;
+  line-height: 1.15;
+}
+
+.software-product
+  :is(.hiring-btn, .hiring-builder-tab, .hiring-preview-subtab, .hiring-chip) {
+  display: inline-flex;
+  width: auto;
+  min-height: 2.5rem;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--software-border-strong);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: 650 0.8125rem / 1.4 var(--software-sans);
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.software-product
+  :is(
+    .hiring-btn,
+    .hiring-builder-tab,
+    .hiring-preview-subtab,
+    .hiring-chip
+  ):not(:disabled):hover {
+  background: var(--software-surface-note);
+  border-color: var(--software-ink);
+}
+
+.software-product .hiring-btn-primary {
+  border-color: var(--software-btn-primary-bg);
+  background: var(--software-btn-primary-bg);
+  color: var(--software-btn-primary-fg);
+}
+
+.software-product .hiring-btn-primary:not(:disabled):hover {
+  border-color: var(--software-btn-primary-bg-hover);
+  background: var(--software-btn-primary-bg-hover);
+}
+
+.software-product .hiring-btn-mint {
+  border-color: var(--software-mint);
+  background: var(--software-mint);
+  color: #211426;
+}
+
+.software-product .hiring-btn-mint:not(:disabled):hover {
+  border-color: #abe8c7;
+  background: #abe8c7;
+}
+
+.software-product .hiring-btn-danger {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+.software-product .hiring-btn-sm {
+  min-height: 2.125rem;
+  padding: 0.3rem 0.58rem;
+  font-size: 0.75rem;
+}
+
+.software-product
+  :is(
+    .hiring-btn,
+    .hiring-builder-tab,
+    .hiring-preview-subtab,
+    .hiring-theme-toggle
+  ):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hiring-pill,
+.hiring-sidebar-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-inline-size: 100%;
+  padding: 0.22rem 0.55rem;
+  border: 1px solid var(--software-border);
+  border-radius: 100px;
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.hiring-pill-plum {
+  background: var(--software-surface-note);
+}
+
+.hiring-sidebar-plan-badge {
+  justify-self: start;
+  margin-block-start: 0.5rem;
+  border-color: #71607e;
+  background: #372941;
+  color: #f4eefa;
+}
+
+.hiring-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+  max-inline-size: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--software-border);
+  border-inline-start: 3px solid currentColor;
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface-subtle);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.hiring-banner-warning,
+.hiring-pill-warning {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
+}
+.hiring-banner-success,
+.hiring-pill-success {
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+.hiring-banner-danger,
+.hiring-pill-danger {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+.hiring-two-col,
+.hiring-filter-grid,
+.hiring-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.875rem 1rem;
+  align-items: start;
+}
+
+.hiring-plan-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  align-items: stretch;
+}
+
+.hiring-two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hiring-field {
+  display: grid;
+  gap: 0.4rem;
+  min-inline-size: 0;
+}
+
+.hiring-field :is(label, .hiring-field-label) {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.software-product
+  .hiring-field
+  :is(input:not([type='checkbox']), select, textarea) {
+  width: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  min-height: 2.625rem;
+  padding: 0.5rem 0.7rem;
+}
+
+.software-product .hiring-field textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.hiring-input-wrap {
+  display: flex;
+  position: relative;
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.hiring-input-wrap input {
+  inline-size: 100%;
+  padding-inline-end: 2.75rem;
+}
+
+.hiring-input-icon {
+  position: absolute;
+  inset-inline-start: 0.65rem;
+  display: inline-flex;
+  color: var(--software-muted);
+}
+
+.hiring-input-wrap:has(.hiring-input-icon) input {
+  padding-inline-start: 2rem;
+}
+
+.software-product button.hiring-password-reveal {
+  display: inline-grid;
+  position: absolute;
+  inset-inline-end: 0.3rem;
+  align-items: center;
+  justify-items: center;
+  min-height: 2.125rem;
+  inline-size: 2.125rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-muted);
+  cursor: pointer;
+}
+
+.software-product button.hiring-password-reveal:hover {
+  background: var(--software-surface-note);
+  color: var(--software-ink);
+}
+
+.hiring-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  position: relative;
+  min-block-size: 2.625rem;
+  cursor: pointer;
+}
+
+.hiring-switch-input {
+  position: absolute;
+  inset-inline-start: 0;
+  width: 2.25rem;
+  height: 1.35rem;
+  margin: 0;
+  opacity: 0;
+}
+
+.hiring-switch-track {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 2.25rem;
+  block-size: 1.35rem;
+  padding: 0.16rem;
+  border: 1px solid var(--software-border-strong);
+  border-radius: 100px;
+  background: var(--software-surface-note);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.hiring-switch-track::after {
+  content: '';
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+  border-radius: 50%;
+  background: var(--software-muted);
+  transition: transform 140ms ease;
+}
+
+.hiring-switch-input:checked + .hiring-switch-track {
+  background: var(--software-mint);
+  border-color: #40785c;
+}
+
+.hiring-switch-input:checked + .hiring-switch-track::after {
+  background: #211426;
+  transform: translateX(0.9rem);
+}
+
+.hiring-switch-input:focus-visible + .hiring-switch-track {
+  outline: 2px solid var(--software-focus);
+  outline-offset: 2px;
+}
+
+.hiring-switch-copy {
+  color: var(--software-muted);
+  font-size: 0.8125rem;
+}
+
+.hiring-builder-tabs,
+.hiring-preview-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  background: var(--software-surface-subtle);
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+}
+
+.software-product
+  :is(.hiring-builder-tab, .hiring-preview-subtab, .hiring-chip) {
+  min-height: 2.2rem;
+  border-color: transparent;
+  background: var(--software-surface-subtle);
+}
+
+.software-product
+  :is(.hiring-builder-tab, .hiring-preview-subtab, .hiring-chip).is-active {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface);
+  color: var(--software-ink);
+}
+
+.software-product .hiring-chip {
+  min-height: 1.85rem;
+  border-color: var(--software-border);
+  padding: 0.25rem 0.6rem;
+}
+
+.software-builder-flow {
+  display: grid;
+  gap: clamp(1rem, 2vw, 1.75rem);
+  align-items: start;
+  min-inline-size: 0;
+}
+
+.software-builder-stages,
+.software-builder-content,
+.software-builder-stage {
+  min-inline-size: 0;
+}
+
+.software-document-panel .software-builder-stages {
+  margin: 0;
+}
+
+.software-builder-stages ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.software-product .software-builder-stages button {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  justify-items: start;
+  align-content: start;
+  gap: 0.2rem;
+  padding: 0.7rem;
+  border: 1px solid var(--software-border);
+  border-block-start: 3px solid var(--software-border);
+  border-radius: 0 0 var(--software-radius-control)
+    var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: 650 0.875rem / 1.2 var(--software-sans);
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.software-builder-stages button span {
+  color: var(--software-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.software-product .software-builder-stages button:hover {
+  background: var(--software-surface-note);
+}
+
+.software-product .software-builder-stages button[aria-current='step'] {
+  border-block-start-color: var(--software-status-success);
+  background: var(--software-surface-note);
+}
+
+.software-builder-stage,
+.hiring-builder-pane,
+.hiring-preview-panel,
+.hiring-rubric-list,
+.software-repo-preview {
+  display: grid;
+  gap: 1rem;
+}
+
+.software-builder-stage[hidden] {
+  display: none;
+}
+
+@media (min-width: 76rem) {
+  .software-builder-flow {
+    grid-template-columns: 10rem minmax(0, 1fr);
+  }
+  .software-builder-stages ol {
+    grid-template-columns: 1fr;
+  }
+  .software-product .software-builder-stages button {
+    border-block-start-width: 1px;
+    border-inline-start: 3px solid var(--software-border);
+    border-radius: var(--software-radius-control);
+  }
+  .software-product .software-builder-stages button[aria-current='step'] {
+    border-block-start-color: var(--software-border);
+    border-inline-start-color: var(--software-status-success);
+  }
+}
+
+.software-problem-list {
+  display: grid;
+  border-block: 1px solid var(--software-border);
+}
+
+.software-problem-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem 1.2rem;
+  padding: 1rem 0;
+  min-inline-size: 0;
+}
+
+.software-problem-row + .software-problem-row {
+  border-block-start: 1px solid var(--software-border);
+}
+
+.software-problem-row h3 {
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+
+.software-builder-next {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: 0.8rem;
+  border-block-start: 1px solid var(--software-border);
+}
+
+.hiring-ai-studio {
+  display: grid;
+  gap: 1rem;
+}
+
+.hiring-ai-studio-head {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.hiring-ai-studio-badge,
+.hiring-rubric-row,
+.hiring-slot-meter-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 650;
+}
+
+.hiring-rubric-item,
+.hiring-slot-meter {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem 0.9rem;
+  border-block-start: 1px solid var(--software-border);
+  background: var(--software-surface-subtle);
+}
+
+.hiring-rubric-row,
+.hiring-slot-meter-head {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.hiring-rubric-progress,
+.hiring-slot-progress {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  accent-color: var(--software-status-success);
+}
+
+.hiring-slot-note,
+.hiring-slot-unlimited {
+  font-size: 0.8125rem;
+  color: var(--software-muted);
+}
+
+.hiring-issued-box,
+.hiring-outcome-box {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--software-border);
+  border-inline-start: 3px solid var(--software-status-success);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface-subtle);
+}
+
+.hiring-issued-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hiring-issued-link-input {
+  flex: 1 1 13rem;
+  min-inline-size: 0;
+  padding: 0.5rem;
+  font-family: var(--software-mono);
+  font-size: 0.8125rem;
+}
+
+/* The window has its own solid plum surfaces so code contrast is consistent in both themes. */
+.software-repository {
+  --repo-canvas: #201629;
+  --repo-rail: #2a1e34;
+  --repo-toolbar: #342541;
+  --repo-line: #4c3a5a;
+  --repo-text: #f2eaf5;
+  --repo-muted: #c4b4ce;
+  display: grid;
+  min-inline-size: 0;
+  overflow: hidden;
+  border: 1px solid var(--repo-line);
+  border-radius: var(--software-radius-surface);
+  background: var(--repo-canvas);
+  color: var(--repo-text);
+}
+
+.software-repo-bar,
+.software-repo-status,
+.software-repo-name,
+.software-repo-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.65rem;
+}
+
+.software-repo-bar,
+.software-repo-status {
+  justify-content: space-between;
+  padding: 0.65rem 0.8rem;
+  background: var(--repo-rail);
+}
+
+.software-repo-bar {
+  border-block-end: 1px solid var(--repo-line);
+}
+
+.software-repo-bar :is(strong, span) {
+  overflow-wrap: anywhere;
+}
+
+.software-repo-name svg {
+  color: var(--software-mint);
+}
+
+.software-repo-actions span {
+  color: var(--repo-muted);
+  font-size: 0.75rem;
+}
+
+.software-product .software-repository button {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--repo-line);
+  border-radius: 4px;
+  background: var(--repo-toolbar);
+  color: var(--repo-text);
+  font: 550 0.75rem / 1.3 var(--software-sans);
+  cursor: pointer;
+  text-align: start;
+}
+
+.software-product .software-repository button:hover {
+  background: #493754;
+}
+
+.software-product .software-repository button[aria-pressed='true'],
+.software-product .software-repository button[aria-current='true'] {
+  border-color: var(--software-mint);
+  background: #3c2e49;
+  color: var(--software-mint);
+}
+
+.software-repository
+  :is(button, input, select, summary, .software-repo-code):focus-visible {
+  outline: 2px solid var(--software-mint);
+  outline-offset: -2px;
+}
+
+.software-repo-body {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, 24%) minmax(0, 1fr);
+}
+
+.software-repo-files {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 0.55rem;
+  align-content: start;
+  max-block-size: 34rem;
+  padding: 0.85rem 0.65rem;
+  border-inline-end: 1px solid var(--repo-line);
+  background: var(--repo-rail);
+  overflow: auto;
+}
+
+.software-product .software-repo-files h3 {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  color: var(--repo-text);
+  font-size: 0.8rem;
+}
+
+.software-repo-files h3 span {
+  color: var(--repo-muted);
+}
+
+.software-product .software-repository :is(input, select) {
+  width: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  min-height: 2rem;
+  padding: 0.3rem 0.5rem;
+  border-color: var(--repo-line);
+  background: var(--repo-canvas);
+  color: var(--repo-text);
+  font-size: 0.8125rem;
+  color-scheme: dark;
+}
+
+.software-repository input::placeholder {
+  color: var(--repo-muted);
+}
+
+.software-repo-tree {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.software-repo-tree .software-repo-tree {
+  margin-inline-start: 0.45rem;
+  padding-inline-start: 0.45rem;
+  border-inline-start: 1px solid var(--repo-line);
+}
+
+.software-repo-tree summary,
+.software-product .software-repository .software-repo-file {
+  display: flex;
+  min-inline-size: 0;
+  min-height: 2rem;
+  inline-size: 100%;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.25rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--repo-rail);
+  color: var(--repo-text);
+  font: 550 0.75rem / 1.3 var(--software-sans);
+  cursor: pointer;
+}
+
+.software-repo-tree summary:hover,
+.software-product .software-repository .software-repo-file:hover {
+  background: var(--repo-toolbar);
+}
+
+.software-repo-tree summary::after {
+  content: '';
+  margin-inline-start: auto;
+  inline-size: 5px;
+  block-size: 5px;
+  border-block-start: 1px solid currentColor;
+  border-inline-end: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.software-repo-tree details[open] > summary::after {
+  transform: rotate(135deg);
+}
+
+.software-repo-tree :is(summary, button) span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.software-repo-tree svg {
+  flex-shrink: 0;
+  color: var(--repo-muted);
+}
+
+.software-repo-editor {
+  min-inline-size: 0;
+}
+
+.software-repo-tabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  border-block-end: 1px solid var(--repo-line);
+  background: var(--repo-rail);
+}
+
+.software-repo-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-inline-end: 1px solid var(--repo-line);
+  border-block-end: 2px solid transparent;
+}
+
+.software-repo-tab[data-selected='true'] {
+  border-block-end-color: var(--software-mint);
+  background: var(--repo-canvas);
+}
+
+.software-product .software-repository .software-repo-tab button {
+  border: 0;
+  border-radius: 0;
+  background: inherit;
+}
+
+.software-product .software-repository .software-repo-close {
+  padding-inline: 0.3rem;
+  color: var(--repo-muted);
+}
+
+.software-repo-path,
+.software-repo-status {
+  color: var(--repo-muted);
+  font: 500 0.75rem / 1.4 var(--software-mono);
+  overflow-wrap: anywhere;
+}
+
+.software-repo-path {
+  padding: 0.55rem 0.75rem;
+  border-block-end: 1px solid var(--repo-line);
+}
+
+.software-repo-status {
+  border-block-start: 1px solid var(--repo-line);
+}
+
+.software-repo-code {
+  min-block-size: 15rem;
+  max-block-size: 26rem;
+  overflow: auto;
+  padding-block: 0.65rem;
+  font: 500 0.8125rem / 1.7 var(--software-mono);
+  tab-size: 4;
+}
+
+.software-repo-line {
+  display: grid;
+  min-inline-size: max-content;
+  grid-template-columns: 3rem minmax(0, 1fr);
+}
+
+.software-repo-line:hover {
+  background: var(--repo-rail);
+}
+
+.software-repo-line > span {
+  padding-inline-end: 0.6rem;
+  border-inline-end: 1px solid var(--repo-line);
+  color: var(--repo-muted);
+  text-align: end;
+  user-select: none;
+}
+
+.software-repo-line code {
+  padding-inline: 0.75rem 1rem;
+  font: inherit;
+  white-space: pre;
+}
+
+.software-repo-code[data-wrap='true'] .software-repo-line {
+  min-inline-size: 0;
+}
+
+.software-repo-code[data-wrap='true'] code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.software-repository :is(.tok-string, .tok-property) {
+  color: #a3edc4;
+}
+.software-repository :is(.tok-keyword, .tok-heading) {
+  color: #dcbaff;
+}
+.software-repository :is(.tok-number, .tok-operator) {
+  color: #ffd3a7;
+}
+.software-repository :is(.tok-type, .tok-function) {
+  color: #a8dbff;
+}
+.software-repository .tok-comment {
+  color: #c4a9cd;
+  font-style: italic;
+}
+.software-repository .tok-punctuation {
+  color: #e2cdea;
+}
+
+.software-repo-mobile-file {
+  display: none;
+}
+
+.hiring-filter-bar {
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+  min-inline-size: 0;
+  padding: 1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
+}
+
+.hiring-filter-heading h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.software-directory {
+  display: grid;
+  grid-template-columns: minmax(11.25rem, 15.5rem) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.software-directory .hiring-filter-grid {
+  grid-template-columns: 1fr;
+}
+
+.software-directory-results {
+  gap: 0.65rem;
+}
+
+.hiring-filter-result {
+  color: var(--software-muted);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.hiring-candidate-list,
+.hiring-session-sublist,
+.hiring-opinion-list {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.7rem;
+}
+
+.hiring-candidate-card {
+  min-inline-size: 0;
+  padding: 1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
+}
+
+.hiring-candidate-header,
+.hiring-session-subrow,
+.hiring-portal-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  gap: 0.8rem 1rem;
+}
+
+.hiring-candidate-identity {
+  display: flex;
+  align-items: flex-start;
+  min-inline-size: 0;
+  gap: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.hiring-avatar {
+  display: grid;
+  flex: 0 0 2.45rem;
+  place-items: center;
+  block-size: 2.45rem;
+  border-radius: 50%;
+  background: var(--software-surface-note);
+  color: var(--software-ink);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.hiring-candidate-name :is(h2, h3) {
+  margin: 0;
+}
+
+.hiring-candidate-meta {
+  gap: 0.25rem 0.9rem;
+  color: var(--software-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.hiring-candidate-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hiring-session-sublist {
+  margin-block-start: 1rem;
+}
+
+.hiring-session-subrow,
+.hiring-opinion-card,
+.hiring-timing-item {
+  padding: 0.8rem 0 0;
+  border-block-start: 1px solid var(--software-border);
+}
+
+.hiring-timing-list {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0.65rem 0 0;
+  list-style: none;
+}
+
+.hiring-bullet-list,
+.hiring-ol-list {
+  padding-inline-start: 1.3rem;
+  margin-block: 0.45rem;
+}
+
+.hiring-bullet-list li + li,
+.hiring-ol-list li + li {
+  margin-block-start: 0.25rem;
+}
+
+.hiring-plan-card {
+  padding: 1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+}
+
+.hiring-plan-card.is-active,
+.hiring-plan-card.is-current {
+  border-color: var(--software-status-success);
+  background: var(--software-status-success-surface);
+}
+
+.hiring-plan-card h3 {
+  margin: 0;
+}
+
+.hiring-candidate-portal,
+.hiring-gate-shell {
+  min-block-size: 100dvh;
+  background: var(--software-canvas);
+}
+
+.hiring-portal-header {
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+  padding-block: 0.55rem;
+}
+
+.hiring-portal-email {
+  color: var(--software-on-plum-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.hiring-portal-main {
+  display: grid;
+  inline-size: min(72rem, 100%);
+  margin-inline: auto;
+  padding: clamp(1rem, 5vw, 3.2rem);
+  box-sizing: border-box;
+  gap: 1.125rem;
+}
+
+.hiring-portal-main > .hiring-builder-tabs {
+  justify-self: start;
+}
+
+.hiring-portal-card-title {
+  margin: 0.4rem 0 0.25rem;
+}
+
+.hiring-outcome-note {
+  margin: 0;
+}
+
+.hiring-gate-shell {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.hiring-gate-card {
+  display: grid;
+  gap: 0.9rem;
+  inline-size: min(32rem, 100%);
+  padding: clamp(1rem, 5vw, 2rem);
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
+  box-sizing: border-box;
+}
+
+.hiring-gate-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.hiring-gate-card h1 {
+  margin: 0;
+}
+
+@media (max-width: 63rem) {
+  .software-directory {
+    grid-template-columns: 1fr;
+  }
+  .software-directory .hiring-filter-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr));
+  }
+}
+
+@media (max-width: 45rem) {
+  .hiring-two-col,
+  .software-problem-row,
+  .software-repo-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .software-problem-row > button {
+    justify-self: start;
+  }
+  .software-directory .hiring-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .software-directory .hiring-field:has(#candidate-sort) {
+    grid-column: 1 / -1;
+  }
+  .software-repo-mobile-file {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.6rem 0.8rem;
+    border-block-end: 1px solid var(--repo-line);
+    color: var(--repo-text);
+    font-size: 0.8125rem;
+  }
+  .software-repo-files {
+    display: none;
+  }
+  .software-repo-code {
+    max-block-size: 21rem;
+  }
+  .hiring-portal-email {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .software-builder-stage:not([hidden]),
+  .software-portal-document {
+    animation: software-pane-enter 175ms ease-out both;
+  }
+
+  @keyframes software-pane-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .software-product
+    :is(
+      .hiring-btn,
+      .hiring-builder-tab,
+      .hiring-preview-subtab,
+      .hiring-chip,
+      .hiring-switch-track
+    )::after,
+  .software-product
+    :is(
+      .hiring-btn,
+      .hiring-builder-tab,
+      .hiring-preview-subtab,
+      .hiring-chip
+    ) {
+    transition: none;
+  }
+}
+
+.software-review-consult > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.software-review-consult > summary::after {
+  content: '';
+  margin-inline-start: auto;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-block-end: 2px solid var(--software-muted);
+  border-inline-end: 2px solid var(--software-muted);
+  transform: rotate(45deg);
+}
+
+.software-review-consult[open] > summary::after {
+  transform: rotate(225deg);
+}
+
+.software-review-consult[open] > summary,
+.software-review-decision > .hiring-candidate-name {
+  margin-block-end: 0.65rem;
+}
+
+.software-handoff-layout {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.software-handoff-next,
+.software-handoff-facts,
+.software-handoff-facts div {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.software-handoff-facts {
+  margin-block: 0.5rem 0;
+  padding-block: 0.7rem;
+  border-block: 1px solid var(--software-border);
+}
+
+.software-handoff-facts dt {
+  color: var(--software-muted);
+  font-size: 0.8125rem;
+}
+
+.software-handoff-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 74rem) {
+  .software-handoff-layout {
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  }
+}

@@ -1,3 +1,5 @@
+import { candidateSignInPath } from '../../../../../src/hiring/candidate-entry';
+import { isHiringPlatformEnabled } from '../../../../../src/runtime/profile';
 import { enforceRateLimit } from '../../../../../src/security/rate-limit';
 import {
   FounderUatMailMessageDenied,
@@ -36,7 +38,12 @@ export async function POST(request: Request): Promise<Response> {
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const form = await founderUatForm(request, ['email', 'messageId']);
+    const form = await founderUatForm(request, [
+      'email',
+      'messageId',
+      'audience',
+      'next',
+    ]);
     const email = form.email?.trim().toLowerCase() ?? '';
     const messageId = form.messageId ?? '';
     if (!isValidFounderUatEmail(email)) throw new FounderUatInvalidRequest();
@@ -70,9 +77,11 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (verificationType === 'signup') {
-      return founderUatRedirect(config, '/r23/login?verified=1', [
-        clearFounderUatRecovery(),
-      ]);
+      const signIn =
+        isHiringPlatformEnabled() && form.audience === 'candidate'
+          ? candidateSignInPath(form.next, true)
+          : '/r23/login?verified=1';
+      return founderUatRedirect(config, signIn, [clearFounderUatRecovery()]);
     }
 
     return founderUatRedirect(config, '/r23/reset-password', [

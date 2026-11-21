@@ -7,7 +7,10 @@ import {
   verifyR23AccessToken,
 } from '../r23-auth/identity';
 import { issueStagingProof } from '../r23-auth/staging-proof';
-import { isAuthenticatedStaging } from '../runtime/profile';
+import {
+  isAuthenticatedStaging,
+  isHiringPlatformEnabled,
+} from '../runtime/profile';
 import {
   validateAssessmentDraft,
   computeCanonicalContentDigest,
@@ -213,6 +216,11 @@ export async function stagingPost(request: Request): Promise<Response> {
       Array.isArray(input.args)
     )
       return response(400, { error: 'Invalid request' });
+    if (isHiringPlatformEnabled() && input.op === 'assessment.issue') {
+      return response(403, {
+        error: 'Issue hiring assessments through the organization workspace.',
+      });
+    }
     const identity = await verifyR23AccessToken(config.auth, match[1]);
     const dispatch = (op: string, args: StagingProofArgs) =>
       dispatchVerifiedStagingOperation(config, identity, op, args);

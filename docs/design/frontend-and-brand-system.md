@@ -43,33 +43,20 @@ Loaded globally via `apps/web/app/layout.tsx` under `.software-product`:
 
 ## 2. Core Product UI Surfaces
 
-### 2.1 Auth, Email Verification & Organization Shell (`/r23/*`)
+### 2.1 Sign in, account recovery, and workspace
 
-- **Seamless Account Flow:** Signup (`/r23/signup`) and login (`/r23/login`) redirect directly into email OTP verification (`/r23/verify-email`) without redundant interstitial buttons. In Founder UAT, confirmation emails are captured cleanly in loopback Mailpit and surfaced smoothly.
-- **Header (`apps/web/app/evaluator/software-product-header.tsx` & `.css`):** Unified single-row top navigation pairing the `Hirearchy` wordmark, `Software` mint capsule, scoped navigation (`Sessions`, `Assessments`, `Team`, `Evidence review`), and account controls.
+The hiring team enters at `/r23/login` and candidates enter at `/candidate/login`. Each screen uses the plum canvas and a focused form, with the candidate’s invitation journey shown alongside. Authenticated workspaces preserve the same masthead and connected navigation in warm light and plum dark, including on narrow screens. Theme choice persists across screens. The entry animation respects reduced motion.
 
-### 2.2 Candidate IDE Workspace (`/r26/candidate/[sessionId]`)
+### 2.2 Assessment authoring
 
-Implemented in `apps/web/app/r26/candidate/[sessionId]/candidate-client.tsx` and `candidate-workspace.css`:
+The builder gives the problem, candidate preview, and invitation separate stages. The problem stage lists templates, AI generation, and saved problems. The preview groups the formatted brief, repository files, and rubric. Its editor has a desktop file tree, a narrow-screen file selector, open tabs, language highlighting, and wrap and copy controls. Long paths remain readable and the code area supports keyboard scrolling.
 
-- **Clean Cognitive Separation:** Pre-start view presents task framing, time limit, and affirmative privacy consent (`Activate assessment`) BEFORE entering the IDE so the workspace itself remains distraction-free.
-- **IDE Chrome:**
-  - **Left Explorer:** Hierarchical folder/file tree (`FolderOpen` / `Folder` / `FileCode` icons) + task brief drawer toggle.
-  - **Top Editor Tab Bar:** Open file tabs (`aria-label="Open file tabs"`), responsive `<select aria-label="Workspace file" className="r26-file-switcher">` file switcher, save state indicator, and primary **Save work** / **Submit assessment** actions.
-  - **Editor Canvas:** `@uiw/react-codemirror` with Python & JavaScript language modes, warm gutters (`#faf8f5`), active-line highlight, and generous reading line height (`1.65`).
-  - **Toggleable Bottom Drawers:** Terminal Execution Console (with stdout/stderr tabs & exit code badges) and AI Coding Assistant panel.
-  - **Bottom Status Bar:** Active file path, save indicator dot, compact capabilities popover, and calm countdown **Assessment timer** (`role="progressbar"`).
+The candidate directory places filters beside results on wide screens and above them on small screens. The candidate portal uses the Software masthead and highlights published feedback within each assessment. The reviewer can expand second opinions to inspect the conversation. The handoff gives the recipient and interview stage their own column on wide screens.
 
-### 2.3 Evaluator Review Workbench (`/r27/organizations/[organizationId]/sessions/[sessionId]`)
+### 2.3 Candidate workspace
 
-Implemented across `apps/web/app/evaluator/sessions/[sessionId]/`:
+The brief shows the issued time limit before activation. Consent remains with the activation action. In the IDE, the toolbar shows the clock and available actions, and the sidebar holds the task and file tree. Narrow screens use a native file selector above the editor. Save, submission and read-only states are visible in the workspace.
 
-- **Three Focused Modes (`Summary`, `Evidence`, `Review`)** inside `evaluator-review-workspace.tsx` + `task-review.css`:
-  - **Platform AI Candidate Review (`ai-review-panel.tsx`):** Prominent advisory card in `Summary` and `Review` letting evaluators select **NVIDIA NIM** (`Kimi K2 / 3.1`, `Nemotron Super 120B`, `Qwen 3 235B`, or custom model slug), **OpenRouter**, or **Instant Preview**, generating:
-    - Circular `0–100` AI Rating Ring
-    - `Should Accept` / `Should Reject` Verdict Badge & Confidence tag
-    - Executive Rationale (`Why`)
-    - Diff & Chronology Metrics Strip
-    - Two-column **Observed Strengths** & **Weaknesses & Verification Risks** cards.
-  - **Unified GitHub-Style Code Diff & Syntax Viewer (`code-diff-viewer.tsx`):** Line-numbered additions/deletions/hunks (`+X / -Y` pills) comparing starter baseline against frozen submission and intermediate `R28` file revisions.
-  - **Anchored Observations (`R29`) & Human Review Packet (`R210`)** in `evidence-workbench.tsx`.
+### 2.4 Evaluator review
+
+The summary opens with the recorded timeline. Reviewers can open the original event, submitted files, diffs, and other source evidence. The evidence inspector opens as a focused dialog on small screens. The Review tab puts the human review packet first. The optional AI Candidate Review opens from a separate disclosure with its provider, rating, rationale and recommendation identified as advisory.

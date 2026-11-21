@@ -149,3 +149,7 @@ export const isStagingLockdown = () =>
   isFounderUatProfile() ||
   isAuthenticatedStaging() ||
   isPublicPreview();
+
+export const isHiringPlatformEnabled = () =>
+  isAuthenticatedStaging() &&
+  process.env.HIREARCHY_HIRING_PLATFORM_ENABLED === 'true';

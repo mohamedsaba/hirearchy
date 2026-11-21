@@ -23,7 +23,11 @@ function isMailMessage(value: unknown): value is MailMessage {
   );
 }
 
-export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
+export function FounderUatMailInbox({
+  email,
+  candidate,
+  next,
+}: Readonly<{ email: string; candidate: boolean; next: string | null }>) {
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading',
@@ -54,6 +58,10 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
     }
   }, []);
 
+  const visibleMessages = candidate
+    ? messages.filter((message) => message.kind === 'confirmation')
+    : messages;
+
   const refresh = useCallback(async () => {
     setStatus('loading');
     setError(null);
@@ -74,11 +82,14 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
     setError(null);
 
     try {
+      const body = new URLSearchParams({ email, messageId });
+      if (candidate) body.set('audience', 'candidate');
+      if (next) body.set('next', next);
       const response = await fetch('/api/founder-uat/mail/consume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         credentials: 'same-origin',
-        body: new URLSearchParams({ email, messageId }),
+        body,
       });
       const destination = new URL(response.url, window.location.href);
       if (destination.origin !== window.location.origin) {
@@ -122,15 +133,15 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
       {status === 'loading' ? (
         <p role="status">Checking for new messages…</p>
       ) : null}
-      {status === 'ready' && messages.length === 0 ? (
+      {status === 'ready' && visibleMessages.length === 0 ? (
         <p role="status">
           No messages yet. After requesting confirmation or recovery, refresh
           this inbox.
         </p>
       ) : null}
-      {messages.length > 0 ? (
+      {visibleMessages.length > 0 ? (
         <ul aria-label="Local email messages">
-          {messages.map((message) => (
+          {visibleMessages.map((message) => (
             <li key={message.id}>
               <p>
                 <strong>
@@ -158,6 +169,10 @@ export function FounderUatMailInbox({ email }: Readonly<{ email: string }>) {
               >
                 <input name="email" type="hidden" value={email} />
                 <input name="messageId" type="hidden" value={message.id} />
+                {candidate ? (
+                  <input type="hidden" name="audience" value="candidate" />
+                ) : null}
+                {next ? <input type="hidden" name="next" value={next} /> : null}
                 <button
                   className="software-button software-button-primary"
                   disabled={busyMessageId !== null}

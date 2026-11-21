@@ -160,7 +160,11 @@ export function AssessmentBuilderClient({
     initialDraft?.version ?? (fresh ? undefined : 1),
   );
   const [templateId, setTemplateId] = useState<
-    'custom' | 'reservation-moves-v3'
+    | 'custom'
+    | 'reservation-moves-v3'
+    | 'webhook-dedup-v1'
+    | 'cache-rate-limiter-v1'
+    | 'ai-generated'
   >(
     initialDraft
       ? (initialDraft.templateId ?? 'custom')
@@ -1144,6 +1148,14 @@ export function AssessmentBuilderClient({
     setAcceptanceCriteria(acceptanceCriteria.filter((_, idx) => idx !== index));
   };
 
+  const managingInvitation = Boolean(
+    issuedSession || recoveredSessionId || recoveryContextError,
+  );
+  const issuedEvaluator = reviewers.find(
+    (reviewer) => reviewer.principalId === issuedSession?.reviewerPrincipalId,
+  );
+  const issuedEvaluatorName =
+    issuedEvaluator?.displayName?.trim() || issuedEvaluator?.email?.trim();
   const activeCandidatePath = confirmedCandidatePathFor(currentSessionId);
   const candidateInvitationUrl =
     activeCandidatePath && appOrigin
@@ -1177,13 +1189,12 @@ export function AssessmentBuilderClient({
         {currentInvitation?.status === 'not_created' ? (
           <div>
             <p>
-              No candidate invitation has been created. The link defaults to
-              seven days and can be set to expire within 30 days. No email will
-              be sent.
+              Choose when the invitation expires. You can then copy and share
+              the link.
             </p>
             <label
               htmlFor="candidate-invitation-expires-at"
-              style={{ display: 'block', margin: '12px 0' }}
+              className="assessment-invitation-field"
             >
               Invitation expires at
               <input
@@ -1252,50 +1263,53 @@ export function AssessmentBuilderClient({
               </p>
             )}
             {candidateInvitationUrl ? (
-              <>
-                <label
-                  htmlFor="candidate-invitation-link"
-                  style={{ display: 'block', margin: '12px 0' }}
-                >
-                  Candidate invitation link
-                  <input
-                    id="candidate-invitation-link"
-                    data-testid="candidate-invitation-link"
-                    type="text"
-                    readOnly
-                    value={candidateInvitationUrl}
-                    onFocus={(event) => event.currentTarget.select()}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  data-testid="candidate-invitation-copy"
-                  disabled={currentInvitationBusy}
-                  onClick={() => void copyCandidateInvitation()}
-                >
-                  Copy candidate link
-                </button>
-                {currentInvitationCopyMessage ? (
-                  <p role="status">{currentInvitationCopyMessage}</p>
-                ) : null}
-              </>
+              <label
+                htmlFor="candidate-invitation-link"
+                className="assessment-invitation-field"
+              >
+                Candidate invitation link
+                <input
+                  id="candidate-invitation-link"
+                  data-testid="candidate-invitation-link"
+                  type="text"
+                  readOnly
+                  value={candidateInvitationUrl}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              </label>
             ) : currentInvitationNeedsRefresh ? null : (
               <p role="alert">
                 The active invitation link could not be confirmed. Reload status
                 before sharing it.
               </p>
             )}
-            <button
-              type="button"
-              className="button button-secondary"
-              data-testid="candidate-invitation-revoke"
-              disabled={currentInvitationBusy}
-              onClick={() => void revokeCandidateInvitation()}
-              style={{ marginLeft: '8px' }}
-            >
-              {currentInvitationBusy ? 'Updating…' : 'Revoke candidate access'}
-            </button>
+            <div className="assessment-invitation-actions">
+              {candidateInvitationUrl ? (
+                <button
+                  type="button"
+                  className="button button-primary"
+                  data-testid="candidate-invitation-copy"
+                  disabled={currentInvitationBusy}
+                  onClick={() => void copyCandidateInvitation()}
+                >
+                  Copy candidate link
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="button button-secondary"
+                data-testid="candidate-invitation-revoke"
+                disabled={currentInvitationBusy}
+                onClick={() => void revokeCandidateInvitation()}
+              >
+                {currentInvitationBusy
+                  ? 'Updating…'
+                  : 'Revoke candidate access'}
+              </button>
+            </div>
+            {currentInvitationCopyMessage ? (
+              <p role="status">{currentInvitationCopyMessage}</p>
+            ) : null}
           </div>
         ) : null}
 
@@ -1326,7 +1340,7 @@ export function AssessmentBuilderClient({
         currentInvitationNeedsRefresh ? (
           <button
             type="button"
-            className="button button-secondary"
+            className="assessment-text-button"
             data-testid="candidate-invitation-refresh"
             disabled={invitationLoading || currentInvitationBusy}
             onClick={refreshInvitationStatus}
@@ -1360,12 +1374,7 @@ export function AssessmentBuilderClient({
       <main className="assessment-builder-shell">
         <div className="assessment-builder-container">
           <header className="assessment-builder-hero">
-            <p className="assessment-eyebrow">Assessment authoring</p>
             <h1>Assessment Builder</h1>
-            <p>
-              Start with meaningful work. Set the expectations. Invite a
-              candidate when it is ready.
-            </p>
             {isAuthenticatedStaging ? (
               <div
                 className="assessment-builder-capability-note"
@@ -1447,25 +1456,25 @@ export function AssessmentBuilderClient({
             data-stage={stage}
           >
             <header className="assessment-stage-heading">
-              <span className="assessment-stage-index">
-                {stage === 'define' ? '01' : stage === 'validate' ? '02' : '03'}{' '}
-                <span aria-hidden="true">/ 03</span>
-              </span>
               <div>
                 <h2 id="assessment-stage-title">
                   {stage === 'define'
-                    ? 'Define Assessment'
+                    ? 'Define the assessment'
                     : stage === 'validate'
-                      ? 'Validate Structure & Integrity'
-                      : 'Issue Assessment'}
+                      ? 'Validate the assessment'
+                      : managingInvitation
+                        ? 'Candidate access'
+                        : 'Issue the assessment'}
                 </h2>
-                <p>
-                  {stage === 'define'
-                    ? 'Choose a starting point and prepare the candidate experience.'
-                    : stage === 'validate'
-                      ? 'Check the structure and review the exact version candidates will receive.'
-                      : 'Issue validated assessment version and receive unique candidate workspace link.'}
-                </p>
+                {stage !== 'issue' || !managingInvitation ? (
+                  <p>
+                    {stage === 'define'
+                      ? 'Choose a starting point and prepare the candidate experience.'
+                      : stage === 'validate'
+                        ? 'Check the structure and review the exact version candidates will receive.'
+                        : 'Assign an evaluator and create a candidate invitation.'}
+                  </p>
+                ) : null}
               </div>
             </header>
 
@@ -1474,13 +1483,6 @@ export function AssessmentBuilderClient({
               <div
                 className="assessment-stage-content"
                 suppressHydrationWarning
-                style={{
-                  padding: 'clamp(12px, 2.5vw, 24px)',
-                  boxSizing: 'border-box',
-                  minWidth: 0,
-                  maxWidth: '100%',
-                  overflowWrap: 'anywhere',
-                }}
               >
                 {/* Save Feedback Alerts */}
                 {saveStatus === 'saved' && (
@@ -1565,11 +1567,6 @@ export function AssessmentBuilderClient({
                       should not undo a newer move. Candidates repair a small
                       Python service while preserving its public contract.
                     </p>
-                    <div className="assessment-template-details">
-                      <span>Real source files</span>
-                      <span>Clear acceptance criteria</span>
-                      <span>Human evidence review</span>
-                    </div>
                     <p className="assessment-template-footnote">
                       The brief, workspace and review criteria come from the
                       approved template. Set the session duration below.
@@ -2225,16 +2222,7 @@ export function AssessmentBuilderClient({
 
             {/* STAGE 2: VALIDATE */}
             {stage === 'validate' && (
-              <div
-                className="assessment-stage-content"
-                style={{
-                  padding: 'clamp(12px, 2.5vw, 24px)',
-                  boxSizing: 'border-box',
-                  minWidth: 0,
-                  maxWidth: '100%',
-                  overflowWrap: 'anywhere',
-                }}
-              >
+              <div className="assessment-stage-content">
                 {isValidating && (
                   <div
                     className="assessment-preparation-status"
@@ -2467,23 +2455,13 @@ export function AssessmentBuilderClient({
 
             {/* STAGE 3: ISSUE */}
             {stage === 'issue' && (
-              <div
-                className="assessment-stage-content"
-                style={{
-                  padding: 'clamp(12px, 2.5vw, 24px)',
-                  boxSizing: 'border-box',
-                  minWidth: 0,
-                  maxWidth: '100%',
-                  overflowWrap: 'anywhere',
-                }}
-              >
+              <div className="assessment-stage-content">
                 {(recoveredSessionId || recoveryContextError) &&
                 !issuedSession ? (
                   <section
-                    className="assessment-feedback"
+                    className="assessment-invitation"
                     data-testid="recovered-candidate-invitation-panel"
                     aria-label="Recovered candidate invitation"
-                    style={{ marginBottom: '20px' }}
                   >
                     <h3>Recovered candidate invitation</h3>
                     <p>
@@ -2515,7 +2493,6 @@ export function AssessmentBuilderClient({
                       className="button button-secondary"
                       data-testid="return-to-assessment-draft"
                       onClick={navigateToDefine}
-                      style={{ marginLeft: '8px' }}
                     >
                       Return to assessment draft
                     </button>
@@ -2733,99 +2710,39 @@ export function AssessmentBuilderClient({
                   <div
                     data-testid="issuance-success"
                     className="assessment-issuance-success"
-                    style={{
-                      padding: '24px',
-                      borderRadius: 'var(--software-radius-surface, 8px)',
-                      border: '1px solid #10b981',
-                      background: '#ecfdf5',
-                    }}
                   >
-                    <h3
-                      style={{
-                        margin: '0 0 12px',
-                        color: '#064e3b',
-                        fontSize: '1.25rem',
-                      }}
-                    >
-                      Assessment issued
-                    </h3>
-                    <p
-                      style={{
-                        margin: '0 0 16px',
-                        color: '#065f46',
-                        fontSize: '0.9rem',
-                      }}
-                    >
-                      The candidate session has been created and bound to
-                      immutable validated version{' '}
-                      {validatedVersion?.versionNumber}.
-                    </p>
-
-                    <div
-                      style={{
-                        background: '#fff',
-                        padding: '16px',
-                        borderRadius: '6px',
-                        border: '1px solid #a7f3d0',
-                        marginBottom: '20px',
-                      }}
-                    >
-                      <dl
-                        className="assessment-snapshot-facts"
-                        style={{
-                          display: 'grid',
-                          gap: '8px',
-                          fontSize: '0.9rem',
-                          margin: 0,
-                        }}
-                      >
-                        <dt style={{ fontWeight: 600 }}>Session Reference:</dt>
-                        <dd>
-                          <code data-testid="issued-session-id">
-                            {issuedSession.sessionId}
-                          </code>
-                        </dd>
-                        {issuedSession.reviewerPrincipalId ? (
+                    <h3>Assessment issued</h3>
+                    <p>Validated version {validatedVersion?.versionNumber}</p>
+                    {issuedSession.reviewerPrincipalId ? (
+                      <p>
+                        {issuedEvaluatorName ? (
                           <>
-                            <dt style={{ fontWeight: 600 }}>
-                              Assigned Evaluator:
-                            </dt>
-                            <dd>
-                              <code data-testid="issued-reviewer-principal-id">
-                                {issuedSession.reviewerPrincipalId}
-                              </code>
-                            </dd>
+                            Assigned evaluator{' '}
+                            <strong>{issuedEvaluatorName}</strong>
                           </>
-                        ) : null}
-                        <dt style={{ fontWeight: 600 }}>Candidate Link:</dt>
-                        <dd>
-                          <section
-                            className="assessment-feedback"
-                            data-testid="candidate-invitation-panel"
-                            aria-label="Candidate invitation"
-                          >
-                            <h4>Candidate invitation</h4>
-                            {renderCandidateInvitationControls()}
-                            {issuedSession.candidatePath &&
-                            !candidateInvitationUrl ? (
-                              <div style={{ marginTop: '8px' }}>
-                                <Link
-                                  href={issuedSession.candidatePath}
-                                  data-testid="candidate-workspace-link"
-                                  style={{
-                                    color: '#047857',
-                                    fontWeight: 600,
-                                    wordBreak: 'break-all',
-                                  }}
-                                >
-                                  {issuedSession.candidatePath}
-                                </Link>
-                              </div>
-                            ) : null}
-                          </section>
-                        </dd>
-                      </dl>
-                    </div>
+                        ) : (
+                          'Evaluator assigned'
+                        )}
+                      </p>
+                    ) : null}
+
+                    <section
+                      className="assessment-invitation"
+                      data-testid="candidate-invitation-panel"
+                      aria-label="Candidate invitation"
+                    >
+                      <h4>Candidate invitation</h4>
+                      {renderCandidateInvitationControls()}
+                      {issuedSession.candidatePath &&
+                      !candidateInvitationUrl ? (
+                        <Link
+                          href={issuedSession.candidatePath}
+                          data-testid="candidate-workspace-link"
+                        >
+                          {issuedSession.candidatePath}
+                        </Link>
+                      ) : null}
+                    </section>
 
                     <div className="assessment-issuance-links">
                       <Link
@@ -2833,15 +2750,37 @@ export function AssessmentBuilderClient({
                         className="button button-secondary"
                         data-testid="inspect-session-link"
                       >
-                        Inspect Session in Organization
+                        View session
                       </Link>
                       <Link
                         href={`/r23/organizations/${encodeURIComponent(organizationId)}`}
                         className="button button-secondary"
                       >
-                        Back to Session List
+                        Back to assessments
                       </Link>
                     </div>
+
+                    <details className="assessment-issuance-references">
+                      <summary>Session references</summary>
+                      <dl className="assessment-snapshot-facts">
+                        <dt>Session reference</dt>
+                        <dd>
+                          <code data-testid="issued-session-id">
+                            {issuedSession.sessionId}
+                          </code>
+                        </dd>
+                        {issuedSession.reviewerPrincipalId ? (
+                          <>
+                            <dt>Assigned evaluator</dt>
+                            <dd>
+                              <code data-testid="issued-reviewer-principal-id">
+                                {issuedSession.reviewerPrincipalId}
+                              </code>
+                            </dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    </details>
                   </div>
                 )}
               </div>

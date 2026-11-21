@@ -1,14 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  IconAlertCircle,
-  IconAlertTriangle,
-  IconCheck,
-  IconCircleCheck,
-  IconRefresh,
-  IconSparkles,
-} from '@tabler/icons-react';
+import { useEffect, useRef, useState } from 'react';
+import { IconRefresh } from '@tabler/icons-react';
 
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
 import {
@@ -25,19 +18,15 @@ export type R27AiReviewPanelProps = Readonly<{
   report?: R27AiReviewReport | null;
   onReportChange?: (report: R27AiReviewReport | null) => void;
   defaultPreset?: AiReviewPresetId;
-  compact?: boolean;
+  planLocked?: boolean;
+  hiring?: boolean;
+  planSettingsHref?: string;
 }>;
 
 function readCsrfCookie(): string {
   if (typeof document === 'undefined') return '';
   const match = document.cookie.match(/(?:^|;\s*)__Host-r23-csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : '';
-}
-
-function scoreToneClass(report: R27AiReviewReport): string {
-  if (report.verdict === 'accept' && report.score >= 75) return 'is-accept';
-  if (report.score >= 55) return 'is-borderline';
-  return 'is-reject';
 }
 
 export const R27AiReviewPanel = ({
@@ -47,16 +36,30 @@ export const R27AiReviewPanel = ({
   report: controlledReport,
   onReportChange,
   defaultPreset = 'nvidia:kimi-k2',
-  compact = false,
+  planLocked = false,
+  hiring = false,
+  planSettingsHref,
 }: R27AiReviewPanelProps) => {
   const [internalReport, setInternalReport] =
     useState<R27AiReviewReport | null>(null);
   const report =
     controlledReport !== undefined ? controlledReport : internalReport;
-  const setReport = (next: R27AiReviewReport | null) => {
+  const evidenceSummary =
+    hiring && report?.provider.mode === 'evidence_preview';
+  const reportHeading = useRef<HTMLHeadingElement>(null);
+  const shouldFocusReport = useRef(false);
+  const setReport = (next: R27AiReviewReport) => {
+    shouldFocusReport.current = true;
     setInternalReport(next);
     onReportChange?.(next);
   };
+
+  useEffect(() => {
+    if (report && shouldFocusReport.current) {
+      shouldFocusReport.current = false;
+      reportHeading.current?.focus();
+    }
+  }, [report]);
 
   const [selectedPreset, setSelectedPreset] =
     useState<AiReviewPresetId>(defaultPreset);
@@ -107,8 +110,14 @@ export const R27AiReviewPanel = ({
 
       if (!response.ok) {
         const errPayload = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
+          error?: { code?: string; message?: string };
         } | null;
+        if (response.status === 402) {
+          throw new Error(
+            errPayload?.error?.message ??
+              'AI Candidate Review requires the Ultra plan. Upgrade in Team & Plan.',
+          );
+        }
         throw new Error(
           errPayload?.error?.message ??
             `Unable to generate AI review (HTTP ${response.status})`,
@@ -130,93 +139,86 @@ export const R27AiReviewPanel = ({
   };
 
   return (
-    <section
-      className={`evaluator-review-card r27-ai-review-card${compact ? ' is-compact' : ''}`}
-      aria-labelledby="r27-ai-review-heading"
+    <details
+      className="r27-ai-review-card"
       data-testid="r27-ai-review-panel"
+      open={Boolean(report)}
     >
-      <header className="r27-ai-review-header">
-        <div className="r27-ai-review-title-group">
-          <span className="evaluator-review-title-icon" aria-hidden="true">
-            <IconSparkles size={20} stroke={1.8} />
-          </span>
-          <div>
-            <p className="section-kicker">Hirearchy Platform Assistant</p>
-            <h2 id="r27-ai-review-heading">AI Candidate Review</h2>
-          </div>
-        </div>
-        {report ? (
-          <span
-            className={`r27-ai-review-mode-pill ${report.provider.mode === 'live_ai' ? 'is-live' : 'is-preview'}`}
-          >
-            {report.provider.label}
-          </span>
-        ) : (
-          <span className="r27-ai-review-mode-pill is-idle">
-            NVIDIA NIM &amp; OpenRouter Ready
-          </span>
-        )}
-      </header>
-
+      <summary>AI Candidate Review</summary>
       {!report ? (
         <div className="r27-ai-review-launcher">
           <p className="evaluator-muted-copy">
-            Synthesize submitted diffs, saved workspace milestones, and recorded
-            verification receipts into an AI review report with a 0–100 rating,
-            accept/reject recommendation, strengths, and risks.
+            Generate an advisory report from the submitted work and recorded
+            evidence. The evaluator owns the final review.
           </p>
 
-          <div className="r27-ai-review-controls">
-            <label className="r27-ai-review-field">
-              <span>AI model preset</span>
-              <select
-                aria-label="AI review model"
-                value={selectedPreset}
-                onChange={(event) =>
-                  setSelectedPreset(event.target.value as AiReviewPresetId)
-                }
-                disabled={loading}
-              >
-                {AI_REVIEW_MODEL_CATALOG.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedOption.providerId !== 'preview' ? (
+          {hiring ? (
+            <p className="r27-ai-review-context">Kimi K3.1 Pro · NVIDIA</p>
+          ) : (
+            <div className="r27-ai-review-controls">
               <label className="r27-ai-review-field">
-                <span>Custom model slug (optional)</span>
-                <input
-                  type="text"
-                  aria-label="Custom model slug"
-                  placeholder={selectedOption.modelId}
-                  value={customModelId}
-                  onChange={(event) => setCustomModelId(event.target.value)}
+                <span>AI model preset</span>
+                <select
+                  aria-label="AI review model"
+                  value={selectedPreset}
+                  onChange={(event) =>
+                    setSelectedPreset(event.target.value as AiReviewPresetId)
+                  }
                   disabled={loading}
-                />
+                >
+                  {AI_REVIEW_MODEL_CATALOG.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
-            ) : null}
-          </div>
+
+              {selectedOption.providerId !== 'preview' ? (
+                <label className="r27-ai-review-field">
+                  <span>Custom model slug (optional)</span>
+                  <input
+                    type="text"
+                    aria-label="Custom model slug"
+                    placeholder={selectedOption.modelId}
+                    value={customModelId}
+                    onChange={(event) => setCustomModelId(event.target.value)}
+                    disabled={loading}
+                  />
+                </label>
+              ) : null}
+            </div>
+          )}
+
+          {planLocked ? (
+            <div className="hiring-banner hiring-banner-warning" role="status">
+              <div>
+                <strong>AI Candidate Review is available on Ultra.</strong>
+              </div>
+              {planSettingsHref ? (
+                <a className="hiring-btn hiring-btn-sm" href={planSettingsHref}>
+                  Upgrade to Ultra
+                </a>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="r27-ai-review-actions">
             <button
               type="button"
               className="r27-ai-review-primary-btn"
               onClick={() => void handleGenerate(false)}
-              disabled={loading}
+              disabled={loading || planLocked}
             >
-              <IconSparkles size={16} aria-hidden="true" />
               {loading ? 'Analyzing candidate evidence…' : 'Generate AI Review'}
             </button>
             <button
               type="button"
               className="r27-ai-review-secondary-btn"
               onClick={() => void handleGenerate(true)}
-              disabled={loading}
+              disabled={loading || planLocked}
             >
-              Instant Preview
+              {hiring ? 'Show evidence summary' : 'Instant Preview'}
             </button>
           </div>
         </div>
@@ -225,43 +227,36 @@ export const R27AiReviewPanel = ({
           className="r27-ai-review-report"
           data-testid="r27-ai-review-report"
         >
-          <div className="r27-ai-review-hero">
-            <div
-              className={`r27-ai-review-score-ring ${scoreToneClass(report)}`}
-              aria-label={`AI rating ${report.score} out of 100`}
-            >
-              <strong data-testid="r27-ai-review-score">{report.score}</strong>
-              <span>/ 100</span>
-            </div>
-
-            <div className="r27-ai-review-verdict-block">
-              <div className="r27-ai-review-badges">
-                <span
-                  className={`r27-ai-review-verdict-pill ${report.verdict === 'accept' ? 'is-accept' : 'is-reject'}`}
-                  data-testid="r27-ai-review-verdict"
-                >
-                  {report.verdict === 'accept' ? (
-                    <IconCircleCheck size={16} aria-hidden="true" />
-                  ) : (
-                    <IconAlertTriangle size={16} aria-hidden="true" />
-                  )}
+          <h3
+            className="r27-ai-review-headline"
+            ref={reportHeading}
+            tabIndex={-1}
+          >
+            {evidenceSummary ? 'Recorded evidence summary' : report.headline}
+          </h3>
+          <p className="r27-ai-review-context">{report.provider.label}</p>
+          {evidenceSummary ? null : (
+            <>
+              <div className="r27-ai-review-result">
+                <span>
+                  AI rating{' '}
+                  <strong data-testid="r27-ai-review-score">
+                    {report.score}
+                  </strong>{' '}
+                  / 100
+                </span>
+                <span data-testid="r27-ai-review-verdict">
                   {report.verdictLabel}
                 </span>
-                <span className="r27-ai-review-confidence">
-                  {report.confidenceLabel}
-                </span>
+                <span>{report.confidenceLabel}</span>
               </div>
-              <h3 className="r27-ai-review-headline">{report.headline}</h3>
               <p className="r27-ai-review-rationale">{report.rationale}</p>
-            </div>
-          </div>
+            </>
+          )}
 
           {report.provider.fallbackReason ? (
             <p className="r27-ai-review-fallback-note" role="status">
-              {report.provider.fallbackReason} Add an active key in{' '}
-              <code>.env</code> (<code>NVIDIA_API_KEY</code> or{' '}
-              <code>OPENROUTER_KEY</code>) to switch seamlessly to live model
-              inference.
+              {report.provider.fallbackReason}
             </p>
           ) : null}
 
@@ -289,48 +284,81 @@ export const R27AiReviewPanel = ({
             </div>
           </dl>
 
-          <div className="r27-ai-review-columns">
-            <div className="r27-ai-review-list-card is-strengths">
-              <h4>
-                <IconCheck size={16} aria-hidden="true" />
-                Observed Strengths
-              </h4>
-              <ul>
-                {report.strengths.map((item, index) => (
-                  <li key={`${index}:${item}`}>{item}</li>
-                ))}
-              </ul>
-            </div>
+          {evidenceSummary ? null : (
+            <div className="r27-ai-review-columns">
+              <div className="r27-ai-review-list-card">
+                <h4>Observed Strengths</h4>
+                <ul>
+                  {report.strengths.map((item, index) => (
+                    <li key={`${index}:${item}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
 
-            <div className="r27-ai-review-list-card is-weaknesses">
-              <h4>
-                <IconAlertCircle size={16} aria-hidden="true" />
-                Weaknesses &amp; Verification Risks
-              </h4>
-              <ul>
-                {report.weaknesses.map((item, index) => (
-                  <li key={`${index}:${item}`}>{item}</li>
+              <div className="r27-ai-review-list-card">
+                <h4>Weaknesses &amp; Verification Risks</h4>
+                <ul>
+                  {report.weaknesses.map((item, index) => (
+                    <li key={`${index}:${item}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {report.timingInsights && report.timingInsights.length > 0 ? (
+            <div className="hiring-card-subtle">
+              <h4>Chronological Timing &amp; Workflow Analysis</h4>
+              <ul className="hiring-timing-list">
+                {report.timingInsights.map((insight, index) => (
+                  <li
+                    key={`${index}:${insight}`}
+                    className="hiring-timing-item"
+                  >
+                    {insight}
+                  </li>
                 ))}
               </ul>
             </div>
-          </div>
+          ) : null}
+
+          {report.requirementBreakdown &&
+          report.requirementBreakdown.length > 0 ? (
+            <div className="hiring-card-subtle">
+              <h4>Requirement Evidence Breakdown</h4>
+              <ul className="hiring-timing-list">
+                {report.requirementBreakdown.map((item, index) => (
+                  <li
+                    key={`${index}:${item.requirement}`}
+                    className="hiring-timing-item"
+                  >
+                    <strong>{item.requirement}</strong> ·{' '}
+                    <span className="hiring-pill">{item.status}</span> —{' '}
+                    {item.evidence}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="r27-ai-review-footer">
             <div className="r27-ai-review-footer-controls">
-              <select
-                aria-label="Switch AI review model"
-                value={selectedPreset}
-                onChange={(event) =>
-                  setSelectedPreset(event.target.value as AiReviewPresetId)
-                }
-                disabled={loading}
-              >
-                {AI_REVIEW_MODEL_CATALOG.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              {hiring ? null : (
+                <select
+                  aria-label="Switch AI review model"
+                  value={selectedPreset}
+                  onChange={(event) =>
+                    setSelectedPreset(event.target.value as AiReviewPresetId)
+                  }
+                  disabled={loading}
+                >
+                  {AI_REVIEW_MODEL_CATALOG.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 className="r27-ai-review-secondary-btn"
@@ -354,6 +382,6 @@ export const R27AiReviewPanel = ({
           {error}
         </p>
       ) : null}
-    </section>
+    </details>
   );
 };

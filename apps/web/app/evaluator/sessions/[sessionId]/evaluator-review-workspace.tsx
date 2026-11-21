@@ -19,9 +19,10 @@ import type {
   BriefingDepthProfile,
   ProjectedBriefing,
 } from '../../../../src/evaluator/project-evaluator-briefing';
-import type {
-  EvaluatorReviewEvidence,
-  EvaluatorReviewPresentation,
+import {
+  formatElapsed,
+  type EvaluatorReviewEvidence,
+  type EvaluatorReviewPresentation,
 } from '../../../../src/evaluator/evaluator-review-presentation';
 import type { EvaluatorAiConversation } from '../../../../src/evaluator/evaluator-ai-conversations';
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
@@ -30,8 +31,11 @@ import {
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
+import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
+import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { R27AiReviewPanel } from './ai-review-panel';
+import { HiringDecisionPanel } from './hiring-decision-panel';
 import { computeDiffStats } from './code-diff-viewer';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
@@ -255,8 +259,6 @@ const R27SummaryView = ({
   onLoadMore,
   loadingMore,
   pageError,
-  aiReviewReport,
-  onAiReviewReportChange,
 }: Readonly<{
   evidence: R27Evidence;
   presentation: R27Presentation;
@@ -265,8 +267,6 @@ const R27SummaryView = ({
   onLoadMore: () => void;
   loadingMore: boolean;
   pageError: string | null;
-  aiReviewReport: R27AiReviewReport | null;
-  onAiReviewReportChange: (report: R27AiReviewReport | null) => void;
 }>) => {
   const { termsPatternObservation } = presentation;
   const fileSources = [...sources]
@@ -291,40 +291,19 @@ const R27SummaryView = ({
   const executionSources = sources.filter(
     (source) => source.r27?.kind === 'execution' || Boolean(source.execution),
   );
-  const elapsedMs =
-    Date.parse(evidence.submittedAt) - Date.parse(evidence.activatedAt);
-  const elapsedMinutes =
-    Number.isFinite(elapsedMs) && elapsedMs >= 0
-      ? Math.max(1, Math.round(elapsedMs / 60_000))
-      : null;
   const duration =
-    elapsedMinutes !== null
-      ? `${elapsedMinutes} ${elapsedMinutes === 1 ? 'minute' : 'minutes'}`
-      : 'Unavailable';
+    formatElapsed(evidence.activatedAt, evidence.submittedAt)?.slice(1) ??
+    'Unavailable';
 
   return (
     <div className="workbench-summary-grid">
       <div className="workbench-summary-content">
-        <R27AiReviewPanel
-          organizationId={evidence.organizationId}
-          sessionId={evidence.sessionId}
-          evidence={evidence}
-          report={aiReviewReport}
-          onReportChange={onAiReviewReportChange}
-        />
-
         <section
           className="evaluator-review-card workbench-session-timeline"
           aria-labelledby="r27-timeline-title"
         >
           <header className="evaluator-review-section-heading">
-            <span className="evaluator-review-title-icon" aria-hidden="true">
-              <IconListDetails size={21} stroke={1.8} />
-            </span>
-            <div>
-              <p className="section-kicker">Session chronology</p>
-              <h2 id="r27-timeline-title">Recorded timeline</h2>
-            </div>
+            <h2 id="r27-timeline-title">Recorded timeline</h2>
             <span>{eventSources.length} events available</span>
           </header>
           {eventSources.length ? (
@@ -682,7 +661,6 @@ const R27SummaryView = ({
           className="evaluator-review-card"
           aria-labelledby="r27-summary-title"
         >
-          <p className="section-kicker">Assigned reviewer · Read only</p>
           <h2 id="r27-summary-title">Submitted evidence</h2>
           <dl className="evaluator-source-metadata">
             <div>
@@ -750,7 +728,6 @@ const R27SummaryView = ({
         </section>
 
         <section className="evaluator-review-card">
-          <p className="section-kicker">Source availability</p>
           <h2>Evidence limits</h2>
           <dl className="evaluator-source-metadata">
             <div>
@@ -1129,10 +1106,7 @@ const EvidenceView = ({
           aria-label={`${filter} source list`}
         >
           <header>
-            <div>
-              <p className="section-kicker">Chronological records</p>
-              <h2>{filter}</h2>
-            </div>
+            <h2>{filter}</h2>
             <span>
               {visibleSources.length} source
               {visibleSources.length === 1 ? '' : 's'}
@@ -1281,12 +1255,19 @@ type R27EvaluatorReviewWorkspaceProps = Readonly<{
   sessionId: string;
   readOnly: true;
   r27Evidence: R27Evidence;
+  hiringReviewContext?: SessionHiringReviewContext | null;
 }>;
 
 export const EvaluatorReviewWorkspace = (
   props: LegacyEvaluatorReviewWorkspaceProps | R27EvaluatorReviewWorkspaceProps,
 ) => {
   const { sessionId } = props;
+  const hiringReviewContext =
+    'hiringReviewContext' in props ? (props.hiringReviewContext ?? null) : null;
+  const aiReviewPlanLocked = Boolean(
+    hiringReviewContext &&
+    !hasPlanFeature(hiringReviewContext.plan.planTier, 'aiCandidateReview'),
+  );
   const initialR27Evidence = 'r27Evidence' in props ? props.r27Evidence : null;
   const [r27Evidence, setR27Evidence] = useState<R27Evidence | null>(
     initialR27Evidence,
@@ -1632,6 +1613,7 @@ export const EvaluatorReviewWorkspace = (
               : undefined
           }
           backLabel={r27Evidence ? '← Back to session summary' : undefined}
+          showTheme={Boolean(hiringReviewContext)}
         />
         <div className="evaluator-workbench-topline">
           <nav
@@ -1696,8 +1678,6 @@ export const EvaluatorReviewWorkspace = (
                   onLoadMore={loadMoreR27Events}
                   loadingMore={loadingMoreR27}
                   pageError={r27PageError}
-                  aiReviewReport={aiReviewReport}
-                  onAiReviewReportChange={setAiReviewReport}
                 />
               ) : evidence && review && projection ? (
                 <SummaryView
@@ -1738,7 +1718,7 @@ export const EvaluatorReviewWorkspace = (
           <aside
             className={`evaluator-review-sidebar evaluator-workflow-slot${mode === 'Review' ? ' is-dedicated' : ' is-quick-note'}`}
             aria-label={
-              readOnly
+              readOnly && !r27Evidence
                 ? 'Read-only review boundary'
                 : mode === 'Review'
                   ? 'Review workflow'
@@ -1763,24 +1743,33 @@ export const EvaluatorReviewWorkspace = (
             {mode === 'Review' && readOnly ? (
               r27Evidence ? (
                 <div className="r27-review-stack">
+                  <div className="r27-human-review">
+                    {r210IsEnabled() ? (
+                      <R210ReviewPacketPanel
+                        organizationId={r27Evidence.organizationId}
+                        sessionId={r27Evidence.sessionId}
+                        reviewer={r27Evidence.reviewer}
+                        r27Evidence={r27Evidence}
+                        sources={sources}
+                        onOpenEvidence={openEvidence}
+                      />
+                    ) : null}
+                    {hiringReviewContext ? (
+                      <HiringDecisionPanel
+                        initialContext={hiringReviewContext}
+                      />
+                    ) : null}
+                  </div>
                   <R27AiReviewPanel
                     organizationId={r27Evidence.organizationId}
                     sessionId={r27Evidence.sessionId}
                     evidence={r27Evidence}
                     report={aiReviewReport}
                     onReportChange={setAiReviewReport}
-                    compact
+                    planLocked={aiReviewPlanLocked}
+                    hiring={Boolean(hiringReviewContext)}
+                    planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
                   />
-                  {r210IsEnabled() ? (
-                    <R210ReviewPacketPanel
-                      organizationId={r27Evidence.organizationId}
-                      sessionId={r27Evidence.sessionId}
-                      reviewer={r27Evidence.reviewer}
-                      r27Evidence={r27Evidence}
-                      sources={sources}
-                      onOpenEvidence={openEvidence}
-                    />
-                  ) : null}
                 </div>
               ) : (
                 <section

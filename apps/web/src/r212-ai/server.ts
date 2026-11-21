@@ -9,8 +9,9 @@ import {
   type R212AdmissionResult,
   type R212RecordedInteraction,
 } from '../../../../database/postgres/r212/adapter.mjs';
+import { callNvidiaKimiChat } from '../ai/kimi-client';
 import { readR26Config, r26IsEnabled } from '../r26-candidate/config';
-import { isStagingLockdown } from '../runtime/profile';
+import { isHiringPlatformEnabled, isStagingLockdown } from '../runtime/profile';
 import {
   R212_MAX_PROMPT_CHARS,
   R212_SYNTHETIC_MODEL_ID,
@@ -79,6 +80,15 @@ export async function readCandidateAiCapability(
   tokenHash: string,
   sessionId: string,
 ): Promise<boolean> {
+  if (isHiringPlatformEnabled()) {
+    const { rows } = await getClientPool(databaseUrl).query<{
+      result: { enabled?: boolean } | null;
+    }>('SELECT staging.hiring_r212_get_view($1, $2) AS result', [
+      tokenHash,
+      sessionId,
+    ]);
+    return rows[0]?.result?.enabled === true;
+  }
   const view = await getCandidateAiView(getClientPool(databaseUrl), {
     tokenHash,
     sessionId,
@@ -122,7 +132,7 @@ function requireBearer(request: Request): string {
 }
 
 function requireEnabledConfig() {
-  if (!r26IsEnabled()) {
+  if (!r26IsEnabled() && !isHiringPlatformEnabled()) {
     throw new R212RequestError(
       404,
       'ASSESSMENT_NOT_FOUND',
@@ -291,7 +301,14 @@ export async function r212CandidateAiRead(
     const tokenHash = createHash('sha256').update(token, 'utf8').digest('hex');
     const pool = getClientPool(config.databaseUrl);
 
-    const view = await getCandidateAiView(pool, { tokenHash, sessionId });
+    const view = isHiringPlatformEnabled()
+      ? (
+          await pool.query(
+            'SELECT staging.hiring_r212_get_view($1, $2) AS result',
+            [tokenHash, sessionId],
+          )
+        ).rows[0]?.result
+      : await getCandidateAiView(pool, { tokenHash, sessionId });
     return Response.json(view, { status: 200, headers: responseHeaders });
   } catch (error) {
     if (error instanceof R212RequestError) {
@@ -327,7 +344,8 @@ export async function r212CandidateAiAction(
   request: Request,
   sessionId: string,
 ): Promise<Response> {
-  if (isStagingLockdown()) {
+  const hiringActive = isHiringPlatformEnabled();
+  if (isStagingLockdown() && !hiringActive) {
     return errorResponse(
       503,
       'AI_ASSISTANCE_DISABLED',
@@ -345,15 +363,33 @@ export async function r212CandidateAiAction(
     const pool = getClientPool(config.databaseUrl);
 
     // 1. Admission reservation in PostgreSQL
-    const admission: R212AdmissionResult = await admitCandidateAiInteraction(
-      pool,
-      {
+    let admission: R212AdmissionResult;
+    if (hiringActive) {
+      try {
+        const { rows } = await pool.query(
+          'SELECT staging.hiring_r212_admit($1, $2, $3, $4) AS result',
+          [tokenHash, sessionId, payload.requestId, payload.candidatePrompt],
+        );
+        admission = rows[0]?.result as R212AdmissionResult;
+      } catch (admitErr: unknown) {
+        const errObj = admitErr as { code?: string; message?: string };
+        if (
+          errObj?.code === '23514' &&
+          errObj?.message?.includes('different intent')
+        ) {
+          admission = { status: 'CONFLICT', reason: errObj.message };
+        } else {
+          throw admitErr;
+        }
+      }
+    } else {
+      admission = await admitCandidateAiInteraction(pool, {
         tokenHash,
         sessionId,
         requestId: payload.requestId,
         prompt: payload.candidatePrompt,
-      },
-    );
+      });
+    }
 
     if (admission.status === 'CONFLICT') {
       return errorResponse(
@@ -420,47 +456,87 @@ export async function r212CandidateAiAction(
       );
     }
 
-    // 2. Call synthetic provider
+    // 2. Call NVIDIA Kimi K3.1 Pro (when active in hiring platform) or synthetic provider
     const startTime = Date.now();
     try {
-      const providerOutput = await defaultSyntheticProvider.generateResponse({
-        organizationId: '',
-        sessionId,
-        requestId: payload.requestId,
-        candidatePrompt: payload.candidatePrompt,
-        capabilitySnapshot: defaultSyntheticAiSnapshot,
-      });
+      let assistantText: string;
+      if (hiringActive) {
+        const kimi = await callNvidiaKimiChat({
+          systemPrompt:
+            'You are a concise, thoughtful software engineering pair-programming assistant embedded inside the Hirearchy candidate assessment IDE. Answer questions clearly, explain bugs and Python patterns accurately, and help the candidate reason through edge cases without fabricating test results.',
+          userPrompt: payload.candidatePrompt,
+          temperature: 0.25,
+          maxTokens: 1200,
+          timeoutMs: 30_000,
+        });
+        assistantText = kimi.content;
+      } else {
+        const providerOutput = await defaultSyntheticProvider.generateResponse({
+          organizationId: '',
+          sessionId,
+          requestId: payload.requestId,
+          candidatePrompt: payload.candidatePrompt,
+          capabilitySnapshot: defaultSyntheticAiSnapshot,
+        });
+        assistantText = providerOutput.response;
+      }
 
       const durationMs = Date.now() - startTime;
 
       // 3. Complete interaction in PostgreSQL
-      const completedInteraction = await completeCandidateAiInteraction(pool, {
-        tokenHash,
-        sessionId,
-        requestId: payload.requestId,
-        assistantResponse: providerOutput.response,
-        durationMs,
-      });
+      const completedInteraction = hiringActive
+        ? ((
+            await pool.query(
+              'SELECT staging.hiring_r212_complete($1, $2, $3, $4, $5) AS result',
+              [
+                tokenHash,
+                sessionId,
+                payload.requestId,
+                assistantText,
+                durationMs,
+              ],
+            )
+          ).rows[0]?.result as R212RecordedInteraction)
+        : await completeCandidateAiInteraction(pool, {
+            tokenHash,
+            sessionId,
+            requestId: payload.requestId,
+            assistantResponse: assistantText,
+            durationMs,
+          });
 
       const response = buildFactualResponse(completedInteraction, false);
       return Response.json(response, { status: 200, headers: responseHeaders });
     } catch (providerError) {
       const durationMs = Date.now() - startTime;
       const failureReason =
-        (providerError as { code?: string })?.code ||
-        'SYNTHETIC_PROVIDER_FAILURE';
+        (providerError as { code?: string })?.code || 'AI_PROVIDER_FAILURE';
       const errorMessage =
-        (providerError as Error)?.message || 'Synthetic AI provider failed';
+        (providerError as Error)?.message || 'AI provider failed';
 
       // Record failure in PostgreSQL
-      const failedInteraction = await failCandidateAiInteraction(pool, {
-        tokenHash,
-        sessionId,
-        requestId: payload.requestId,
-        failureReason,
-        errorMessage,
-        durationMs,
-      });
+      const failedInteraction = hiringActive
+        ? ((
+            await pool.query(
+              'SELECT staging.hiring_r212_fail($1, $2, $3, $4, $5, $6) AS result',
+              [
+                tokenHash,
+                sessionId,
+                payload.requestId,
+                failureReason,
+                errorMessage,
+                durationMs,
+              ],
+            )
+          ).rows[0]?.result as R212RecordedInteraction)
+        : await failCandidateAiInteraction(pool, {
+            tokenHash,
+            sessionId,
+            requestId: payload.requestId,
+            failureReason,
+            errorMessage,
+            durationMs,
+          });
 
       return Response.json(
         {

@@ -5,10 +5,17 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { EvaluatorExperience } from '../../../../../evaluator/sessions/[sessionId]/evaluator-experience';
+import type { SessionHiringReviewContext } from '../../../../../../src/hiring/types';
 import { r27EvidenceApiGet } from '../../../../../../src/r23-auth/server';
 import { r27IsEnabled } from '../../../../../../src/r27-evidence/config';
-import { isAuthenticatedStaging } from '../../../../../../src/runtime/profile';
-import { stagingLoadR27EvidencePage } from '../../../../../../src/staging/browser';
+import {
+  isAuthenticatedStaging,
+  isHiringPlatformEnabled,
+} from '../../../../../../src/runtime/profile';
+import {
+  loadHiringOrganizationWorkspaceFromCookie,
+  stagingLoadR27EvidencePage,
+} from '../../../../../../src/staging/browser';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -98,6 +105,23 @@ export default async function R27EvidencePage({
       );
     }
 
+    const hiringReviewContext: SessionHiringReviewContext | null =
+      isHiringPlatformEnabled()
+        ? await loadHiringOrganizationWorkspaceFromCookie(
+            incomingHeaders.get('cookie') ?? '',
+            organizationId,
+          )
+            .then((ws) =>
+              ws
+                ? (ws.dispatch('hiring.review.context', {
+                    organizationId: ws.organizationId,
+                    sessionId,
+                  }) as Promise<SessionHiringReviewContext>)
+                : null,
+            )
+            .catch(() => null)
+        : null;
+
     return (
       <main
         className="software-product evaluator-review-shell"
@@ -108,6 +132,7 @@ export default async function R27EvidencePage({
           sessionId={sessionId}
           readOnly
           r27Evidence={pageState.evidence}
+          hiringReviewContext={hiringReviewContext}
         />
       </main>
     );

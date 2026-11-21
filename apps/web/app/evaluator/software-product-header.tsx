@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ThemeToggle } from '../_components/theme-toggle';
 import './software-product-header.css';
 
 export interface SoftwareProductHeaderTenantScope {
@@ -126,6 +127,7 @@ export const SoftwareProductHeader = ({
         ) : null}
         {allowIssuance ? null : null}
       </nav>
+      <ThemeToggle variant="header" />
     </header>
   );
 };

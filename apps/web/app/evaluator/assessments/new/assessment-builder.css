@@ -48,7 +48,7 @@
 
 .assessment-builder-hero h1 {
   margin: 8px 0 3px;
-  font-size: 32px;
+  font-size: clamp(1.875rem, 4vw, 3rem);
   font-weight: 650;
   letter-spacing: -0.04em;
   line-height: 1.12;
@@ -71,9 +71,12 @@
   justify-content: space-between;
 }
 
-.assessment-app-return {
-  color: var(--software-muted);
-  font-size: 12px;
+.software-product-header .assessment-app-return {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--software-on-plum);
+  font-size: 0.875rem;
   text-underline-offset: 3px;
 }
 
@@ -95,15 +98,12 @@
 }
 
 .assessment-template-preview {
-  padding: 28px;
-  border: 1px solid var(--software-border);
-  border-left: 3px solid var(--software-plum);
-  border-radius: 0 8px 8px 0;
+  padding: 1.5rem;
+  border-left: 3px solid var(--software-mint);
   background: var(--software-canvas);
 }
 
-.assessment-template-heading,
-.assessment-template-details {
+.assessment-template-heading {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -122,7 +122,7 @@
 }
 
 .assessment-template-preview h3 {
-  margin: 20px 0 10px;
+  margin: 12px 0 8px;
   font-size: 25px;
   font-weight: 650;
   letter-spacing: -0.035em;
@@ -135,28 +135,20 @@
   line-height: 1.65;
 }
 
-.assessment-template-details {
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--software-border);
-}
-
 .assessment-template-preview > p.assessment-template-footnote {
-  margin: 20px 0 0;
-  font-size: 12px;
+  margin: 8px 0 0;
 }
 
 .assessment-builder-capability-note {
   display: flex;
-  gap: 12px;
-  margin-top: 22px;
-  padding: 12px 0;
-  border: 0;
-  border-top: 1px solid var(--software-border);
-  border-radius: 0;
-  background: transparent;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--software-border-strong);
+  background: var(--software-surface-note);
   color: var(--software-muted);
-  font-size: 12px;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -272,6 +264,10 @@
   border-bottom: 1px solid var(--software-border-subtle);
 }
 
+.assessment-stage-heading > :only-child {
+  grid-column: 1 / -1;
+}
+
 .assessment-stage-index {
   padding-top: 4px;
   color: var(--software-plum);
@@ -312,9 +308,12 @@
 }
 
 .assessment-stage-content {
+  min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
-  padding: 0 24px 24px;
+  padding: clamp(1rem, 2.5vw, 1.75rem);
+  overflow-wrap: anywhere;
 }
 
 .assessment-section {
@@ -1572,7 +1571,11 @@
   }
 
   .assessment-stage-label {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .assessment-stage-button .assessment-stage-caption {
+    display: none;
   }
 
   .assessment-stage-heading {
@@ -1595,7 +1598,6 @@
 
   .assessment-stage-content {
     gap: 14px;
-    padding: 0 15px 17px;
   }
 
   .assessment-section {
@@ -1865,7 +1867,26 @@
 }
 
 .assessment-snapshot-facts {
-  grid-template-columns: 150px minmax(0, 1fr);
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.assessment-snapshot-facts dt {
+  color: var(--software-muted);
+}
+
+.assessment-issuance-references {
+  width: 100%;
+}
+
+.assessment-issuance-references > summary {
+  padding-block: 0.625rem;
+  color: var(--software-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
 }
 
 .assessment-snapshot-facts dd {
@@ -1874,14 +1895,58 @@
   overflow-wrap: anywhere;
 }
 
-.assessment-issuance-success {
+.assessment-issuance-success,
+.assessment-invitation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  gap: 0.875rem;
   min-width: 0;
 }
 
+.assessment-issuance-success > h3 {
+  color: var(--software-status-success);
+  font-size: 1.25rem;
+}
+
+.assessment-issuance-success > :is(h3, p),
+.assessment-invitation :is(h3, h4, p) {
+  margin: 0;
+}
+
+.assessment-issuance-success .assessment-invitation {
+  width: 100%;
+  margin-block: 0.5rem;
+  padding-block: 1.25rem 0;
+  border-top: 1px solid var(--software-border);
+}
+
+.assessment-invitation > div {
+  min-width: 0;
+  width: min(100%, 34rem);
+}
+
+.assessment-invitation-field {
+  display: grid;
+  gap: 6px;
+  margin-block: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.assessment-invitation-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+}
+
+.assessment-invitation-actions,
 .assessment-issuance-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 0.625rem;
 }
 
 @media (max-width: 700px) {
