@@ -120,10 +120,12 @@ function buildReviewPromptPayload(evidence: R27Evidence) {
     return `${index + 1}. recipe=${run.recipeId} status=${run.status} exitCode=${run.exitCode ?? 'null'} durationMs=${run.durationMs ?? 'null'}${outSnippet ? ` stdout="${outSnippet}"` : ''}`;
   });
 
-  const aiLines = (evidence.aiInteractions ?? []).map(
-    (item, index) =>
-      `${index + 1}. prompt="${item.candidatePrompt.slice(0, 240)}" status=${item.status}`,
-  );
+  const aiLines = (evidence.aiInteractions ?? []).map((item, index) => {
+    const excerpt = item.candidatePrompt
+      .replaceAll(GENERATED_TERMS_AND_CONDITIONS_FOOTER, '')
+      .slice(0, 240);
+    return `${index + 1}. prompt="${excerpt}" status=${item.status}`;
+  });
 
   const systemPrompt = [
     'You are the Hirearchy Software AI Candidate Review Assistant.',

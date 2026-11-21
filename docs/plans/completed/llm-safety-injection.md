@@ -47,31 +47,31 @@
 
 - Produces: `GENERATED_TERMS_AND_CONDITIONS_FOOTER: string` in the pure shared module, and `appendGeneratedTermsAndConditions(assessment: GeneratedAssessment): GeneratedAssessment`, which appends one fixed footer and validates the resulting assessment against the existing schema.
 
-- [ ] **Step 1: Document the narrow scenario-probe exception**
+- [x] **Step 1: Document the narrow scenario-probe exception**
 
 Create ADR 0007 documenting that generated assessments may include this style probe despite the general ban on artificial traps, only because matching is a neutral observation and never changes task success or hiring outcomes. Update `docs/scenarios/constitution.md` to require evaluator-facing copy to state the limitation and prohibit hidden criteria, scores, or penalties. Keep the candidate-facing footer limited to the titled style instructions; do not disclose the probe's purpose there.
 
-- [ ] **Step 2: Write tests for the footer helper**
+- [x] **Step 2: Write tests for the footer helper**
 
 Add cases asserting that the footer is appended once, is titled `Terms and Conditions`, contains the `snake_case` and nested-object return instructions, leaves the original task text intact, is idempotent when generation repair reuses the assessment, and throws the existing schema validation error if the appended brief exceeds 5,000 characters. Add an integration regression asserting that generation returns a visible 422 draft validation failure before sandbox validation when the footer would exceed the limit.
 
-- [ ] **Step 3: Run the focused test and verify it fails**
+- [x] **Step 3: Run the focused test and verify it fails**
 
 Run: `npm test -- apps/web/src/scenarios/generated-assessment.test.ts tests/integration/generated-starter-repair.test.ts`
 Expected: FAIL because `appendGeneratedTermsAndConditions` is not implemented.
 
-- [ ] **Step 4: Implement the footer helper and call it before sandbox validation**
+- [x] **Step 4: Implement the footer helper and call it before sandbox validation**
 
 Append the fixed platform-owned footer after the initial model draft parses and before the first `validateAndPersistGeneratedAssessment` call. Keep subsequent starter/reference repair objects based on that already-footed assessment. Re-validate the complete brief; never truncate it.
 
-- [ ] **Step 5: Run the focused test and verify it passes**
+- [x] **Step 5: Run the focused test and verify it passes**
 
 Run: `npm test -- apps/web/src/scenarios/generated-assessment.test.ts tests/integration/generated-starter-repair.test.ts`
 Expected: PASS, including the length-boundary and idempotence cases.
 
-- [ ] **Step 6: Keep the probe out of the live AI Candidate Review prompt**
+- [x] **Step 6: Keep the probe out of the live AI Candidate Review prompt**
 
-Remove only the exact platform footer suffix from the scenario brief used in the live provider request. Preserve the stored/candidate-visible brief and the rest of the review context. Add a regression inspecting the serialized outbound provider request, and run `npm test -- tests/unit/r27-ai-review.test.tsx`.
+Remove the exact platform footer suffix from the scenario brief used in the live provider request. Remove exact copies from outbound candidate prompt excerpts before the 240-character limit. Preserve the recorded interactions, stored brief, and other review context. Inspect the serialized outbound request in the regression tests and run `npm test -- tests/unit/r27-ai-review.test.tsx`.
 
 ### Task 2: Show bounded pattern observations to evaluators
 
