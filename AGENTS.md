@@ -1,47 +1,34 @@
 # Hirearchy / Hirearchy Software agent guide
 
-Hirearchy Software is Hirearchy's engineering-evaluation prototype. A candidate does realistic engineering work in a controlled workspace; the system captures observable events and reconstructs them as evidence; a human evaluator decides what that evidence means.
+Hirearchy Software is an end-to-end engineering hiring and evaluation platform built as a **Next.js 16 + PostgreSQL modular monolith** (`apps/web`, `database/postgres`, `packages/restricted-executor`). Candidates complete realistic engineering tasks in an authentic IDE workspace; the system captures observable events and reconstructs them as evidence; advisory AI helps synthesize signals; and human evaluators own final hiring decisions.
 
-## Read before changing the product
+## Orientation (read on demand)
 
-- `docs/README.md` is the master index for backend, frontend, brand/UI, assets, and onboarding.
-- `docs/product/` defines the thesis, principles, non-goals, and requirements.
-- `docs/scenarios/constitution.md` governs scenario design.
-- `docs/architecture/` and `docs/decisions/` define technical and product boundaries.
-- For substantial work, create `docs/plans/active/<task>.md` and preserve it in `completed/` when done.
+Read only the docs relevant to your task instead of scanning the entire `docs/` tree upfront:
 
-## Non-negotiable rules
+- `docs/README.md` — master index of routes, architecture, design tokens, and fixtures.
+- `docs/architecture/system-overview.md` — backend, PostgreSQL migrations (`0001`–`0019`+), auth/CSRF, staging, and AI providers.
+- `docs/design/frontend-and-brand-system.md` — brand tokens, typography, and UI conventions.
+- `docs/decisions/` — key product and architectural ADRs (`0006` AI review, `0007` reusable problems, `0008` generated style probe, `0009` hiring platform).
+- `docs/scenarios/constitution.md` — scenario design rules when authoring or modifying tasks.
 
-- Evidence precedes judgment. Keep acceptance criteria, test outcome, task outcome, advisory AI review signals (`docs/decisions/0006-ai-assisted-candidate-review.md`), evaluator decision, and competence distinct.
-- AI use by candidates is neutral. Record observable AI interactions; never infer hidden mental state or the origin of manually typed code.
-- The human evaluator owns final review packets (`r210`) and final hiring judgment. Advisory AI Candidate Review reports (`R27AiReviewPanel`) sit strictly outside immutable evidence (`r27`) and finalized review packets (`r210`).
-- The evaluator experience centers on chronological evidence reconstruction, code diffs, and clear advisory insights—not a generic multi-metric analytics dashboard.
-- Keep the prototype a modular monolith. No premature microservices, speculative infrastructure, or generic SaaS expansion.
-- Fix root causes. No exception suppression, authorization bypasses, weakened tests, arbitrary defaults, duplicated shortcuts, or other cheap-tape fixes.
+## Non-negotiable product & engineering rules
 
-## Engineering workflow
+- **Evidence precedes judgment.** Keep immutable evidence (`r27`), test outcomes, advisory AI outputs (`ADR 0006`, `ADR 0008`), and human decisions (`r210`, `hiring_decisions`) clearly distinct. Human evaluators always own finalized review packets and hiring outcomes.
+- **AI use by candidates is neutral.** Record observable AI interactions; never infer hidden mental state or claim proof of authorship from style heuristics.
+- **Keep the modular monolith.** Extend the existing Next.js + PostgreSQL + restricted-executor architecture. Do not introduce microservices or speculative infrastructure.
+- **Preserve PostgreSQL security boundaries.** Base migrations (`database/postgres/migrations/`) define tables, constraints, and RLS only; runtime staging/hiring RPCs belong in `database/postgres/staging/install-api.sql` (`staging` schema) so `hirearchy` exposes only `r26_candidate_command` and `r26_candidate_lifecycle_ready` to `app_candidate_gateway`.
+- **Fix root causes, not symptoms.** No exception swallowing, authorization bypasses, weakened tests, or brittle shortcuts.
 
-Read the relevant authoritative docs, inspect current behavior, identify requirements, and update a plan before substantial changes. Implement the smallest coherent vertical slice. Run tests, typechecking, linting, formatting, the build, and relevant integration checks. Review the diff for unnecessary complexity and update documentation when behavior changes. Never resolve product ambiguity silently in code; document a proposed decision first when a product rule must change.
+## Pragmatic development workflow
 
-## Definition of done
-
-The requested slice is demoable; important behavior and product constraints are tested; `npm run verify` passes; no unjustified abstraction or dependency was added; errors and known assumptions remain visible; and docs and plans reflect the resulting system.
+- **Deliver complete, polished work.** Build the full requested feature with cohesive, responsive UI/UX rather than stripped-down placeholders. Make sensible product and UI decisions on minor details and note assumptions concisely; pause to ask only when a decision involves a breaking schema/product-rule change or genuine ambiguity.
+- **Use good tools when warranted.** Reuse existing components and styles first; adding a focused, well-maintained dependency is fine when it meaningfully improves UI quality, accessibility, or reliability over hand-rolled code.
+- **Keep docs lightweight.** Update relevant docs when architecture, routes, or behavior change. Writing a plan under `docs/plans/` or a new ADR under `docs/decisions/` is only needed for major architectural changes or when explicitly requested.
+- **Right-sized verification.** While iterating, run targeted tests, `npm run typecheck`, and `npm run lint` for fast feedback. Before opening a PR or finishing a milestone, run `npm run verify` (plus `npm run test:postgres` / `npm run test:staging` when changing migrations, SQL, or staging/auth flows).
 
 ## Repository safety
 
-Prohibit destructive operations against developer work, including:
-
-- `git reset --hard`
-- `git clean -fd`
-- `git restore` over dirty files
-- unapproved `git stash`
-- forced checkout overwriting work
-- `git worktree remove --force`
-- force push
-- destructive cleanup of primary checkout
-
-Require:
-
-- inspect `git status` first;
-- preserve unrelated dirty work;
-- use isolated worktrees for implementation.
+- Inspect `git status` first and preserve unrelated dirty work.
+- Work on a clean feature branch (or directly in the current checkout when clean and requested); use a git worktree only when isolation from parallel work or dirty files is actually needed.
+- Never run destructive Git operations (`git reset --hard`, `git clean -fd`, `git restore` over dirty files, unapproved `git stash`, or force-push to `main`) without explicit user approval.
