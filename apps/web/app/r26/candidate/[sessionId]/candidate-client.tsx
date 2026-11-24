@@ -35,6 +35,7 @@ import type {
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { formatLocalDateTime } from '../../../../src/ui/relative-time';
 import { BrandMark } from '../../../_components/brand-mark';
 import { CommonThreadLoader } from '../../../_components/common-thread-loader';
 import {
@@ -2280,117 +2281,83 @@ export function R26CandidateClient({
                   aria-label="Assessment overview before starting"
                 >
                   <div className="r26-prestart-header">
-                    <div>
-                      <p className="r26-eyebrow" style={{ margin: 0 }}>
-                        Ready when you are
-                      </p>
-                      <h1>{scenarioTitle}</h1>
-                    </div>
-                    {view.durationSeconds ? (
-                      <p className="r26-time-budget">
-                        <IconClock size={17} aria-hidden="true" />
-                        <span>
-                          Time limit{' '}
-                          <strong>
-                            {formatDuration(view.durationSeconds * 1000)}
-                          </strong>
-                        </span>
+                    <h1>{scenarioTitle}</h1>
+                    <p className="r26-time-budget">
+                      <IconClock size={17} aria-hidden="true" />
+                      {view.durationSeconds
+                        ? `${Math.round(view.durationSeconds / 60)} minutes`
+                        : 'Untimed'}
+                    </p>
+                  </div>
+                  <p className="r26-readiness-tools">
+                    Code editor with autosave · Terminal and tests
+                    {view.capabilities.ai ? ' · AI assistant' : ''}
+                  </p>
+                  <div
+                    className="r26-readiness-actions"
+                    data-testid={
+                      view.dataNotice ? 'candidate-data-use-notice' : undefined
+                    }
+                  >
+                    {view.dataNotice ? (
+                      <p>
+                        Your saved files, test runs
+                        {view.capabilities.ai ? ', AI conversations,' : ''} and
+                        final submission are recorded for your hiring team.
                       </p>
                     ) : null}
-                  </div>
-
-                  <div className="r26-prestart-grid">
-                    <div className="r26-prestart-feature">
-                      <strong>Code Editor & Auto-Save</strong>
-                      <p>
-                        Multi-file workspace with keyboard shortcuts and instant
-                        draft persistence.
-                      </p>
-                    </div>
-                    <div className="r26-prestart-feature">
-                      <strong>Integrated Terminal & Tests</strong>
-                      <p>
-                        {view.capabilities.execution
-                          ? 'Run automated checks against your saved code at any time.'
-                          : 'Workspace verification checks are configured automatically.'}
-                      </p>
-                    </div>
-                    <div className="r26-prestart-feature">
-                      <strong>AI Assistant</strong>
-                      <p>
-                        {view.capabilities.ai
-                          ? 'Enabled for task clarifications and debugging help.'
-                          : 'Turned off for this assessment.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {view.dataNotice ? (
-                    <section
-                      className="r26-notice"
-                      aria-labelledby="candidate-data-use-title"
-                      data-testid="candidate-data-use-notice"
-                    >
-                      <strong id="candidate-data-use-title">
-                        Before you start
-                      </strong>
-                      <p>
-                        While you work, your file changes, test runs, optional
-                        AI questions, and final submission are recorded for
-                        review by the hiring team.
-                      </p>
-                      <label>
-                        <input
-                          checked={consentAccepted}
-                          onChange={(event) => {
-                            const dataNotice = view.dataNotice;
-                            setAcceptedConsent(
-                              event.target.checked && dataNotice
-                                ? {
-                                    sessionId,
-                                    digest: dataNotice.digest,
-                                  }
-                                : null,
-                            );
-                          }}
-                          type="checkbox"
-                        />{' '}
-                        I understand and am ready to begin.
-                      </label>
-                    </section>
-                  ) : null}
-
-                  <div className="r26-prestart">
-                    <p>
-                      Your task brief and starter files unlock as soon as you
-                      click Start, and your timer begins then.
+                    <p id="candidate-start-timing">
+                      {view.durationSeconds
+                        ? 'Your timer starts when you click Start assessment.'
+                        : 'Click Start assessment to open the task and files.'}
                       {view.invitationExpiresAt ? (
-                        <>
+                        <span className="r26-readiness-expiry">
                           {' '}
                           Invitation expires{' '}
                           <time dateTime={view.invitationExpiresAt}>
-                            {formatDateTime(invitationExpiryMs)}
+                            {formatLocalDateTime(view.invitationExpiresAt)}
                           </time>
                           .
-                        </>
+                        </span>
                       ) : null}
                     </p>
-                    <button
-                      className="r26-button r26-button-primary"
-                      disabled={
-                        busy ||
-                        accessUnavailable ||
-                        invitationExpired ||
-                        Boolean(view.dataNotice && !consentAccepted)
-                      }
-                      onClick={() => void activate()}
-                      type="button"
-                    >
-                      {busy ? 'Starting…' : 'Start assessment'}
-                    </button>
-                    {view.dataNotice && !consentAccepted ? (
-                      <p role="status">Check the box above to start.</p>
-                    ) : null}
+                    <div className="r26-readiness-start">
+                      {view.dataNotice ? (
+                        <label htmlFor="candidate-start-consent">
+                          <input
+                            id="candidate-start-consent"
+                            checked={consentAccepted}
+                            onChange={(event) => {
+                              const dataNotice = view.dataNotice;
+                              setAcceptedConsent(
+                                event.target.checked && dataNotice
+                                  ? {
+                                      sessionId,
+                                      digest: dataNotice.digest,
+                                    }
+                                  : null,
+                              );
+                            }}
+                            type="checkbox"
+                          />{' '}
+                          I understand what’s recorded.
+                        </label>
+                      ) : null}
+                      <button
+                        className="r26-button r26-button-primary"
+                        aria-describedby="candidate-start-timing"
+                        disabled={
+                          busy ||
+                          accessUnavailable ||
+                          invitationExpired ||
+                          Boolean(view.dataNotice && !consentAccepted)
+                        }
+                        onClick={() => void activate()}
+                        type="button"
+                      >
+                        {busy ? 'Starting…' : 'Start assessment'}
+                      </button>
+                    </div>
                   </div>
                 </section>
               ) : (

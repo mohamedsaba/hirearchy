@@ -408,7 +408,7 @@ body.software-document-body *::after {
   align-items: center;
   gap: clamp(2rem, 6vw, 6rem);
   margin-inline: auto;
-  padding-block: clamp(2rem, 7vw, 6rem);
+  padding-block: clamp(1.25rem, 5vh, 4rem);
   background: transparent;
 }
 
@@ -579,36 +579,20 @@ body.software-document-body *::after {
   font-size: 0.875rem;
 }
 
-@media (max-width: 56rem) {
+@media (max-width: 56rem), (max-height: 38rem) {
   .software-document-access .software-document-shell {
     max-width: 28rem;
     grid-template-columns: minmax(0, 1fr);
     align-content: start;
   }
 
-  .software-access-principle {
+  .software-document-access .software-document-panel {
+    padding: clamp(1rem, 3vh, 1.6rem);
+  }
+
+  .software-access-principle,
+  .software-candidate-intro {
     display: none;
-  }
-
-  .software-candidate-access .software-document-shell {
-    gap: 1.5rem;
-  }
-
-  .software-candidate-access .software-access-principle {
-    display: block;
-    font-size: clamp(2rem, 7vw, 3.25rem);
-  }
-
-  .software-candidate-access .software-access-principle br {
-    display: none;
-  }
-
-  .software-candidate-access .software-access-principle span {
-    margin-inline-start: 0.18em;
-  }
-
-  .software-candidate-steps {
-    margin-top: 1.25rem;
   }
 }
 
@@ -942,6 +926,94 @@ body.software-document-body *::after {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.software-document-compact-nav .software-document-shell {
+  padding-block-start: clamp(1.25rem, 4vh, 2.25rem);
+}
+
+.software-workspace-rail-control {
+  display: none;
+}
+
+@media (701px <= width <= 1024px) {
+  .software-document-compact-nav .software-document-layout {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+
+  .software-document-compact-nav:not(
+      :has(.software-workspace-rail-control input:checked)
+    )
+    .software-document-layout {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .software-document-compact-nav .software-workspace-sidebar {
+    gap: 1rem;
+    padding: 0.8rem 0.6rem;
+  }
+
+  .software-workspace-rail-control {
+    position: relative;
+    display: grid;
+    place-items: center;
+    align-self: start;
+    inline-size: 42px;
+    block-size: 42px;
+    border: 1px solid var(--software-plum-line);
+    border-radius: var(--software-radius-control);
+    color: var(--software-on-plum);
+  }
+
+  .software-workspace-rail-control input {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .software-workspace-rail-control:has(input:focus-visible) {
+    outline: 2px solid var(--software-mint);
+    outline-offset: 2px;
+  }
+
+  .software-workspace-rail-control:has(input:checked) svg:first-of-type,
+  .software-workspace-rail-control:not(:has(input:checked)) svg:last-of-type {
+    display: none;
+  }
+
+  .software-workspace-sidebar:not(
+      :has(.software-workspace-rail-control input:checked)
+    ):has(.software-workspace-rail-control)
+    :is(.software-workspace-identity, .software-workspace-sidebar-footer) {
+    display: none;
+  }
+
+  .software-workspace-sidebar:not(
+      :has(.software-workspace-rail-control input:checked)
+    ):has(.software-workspace-rail-control)
+    nav
+    a {
+    min-block-size: 42px;
+    justify-content: center;
+    padding: 0.4rem;
+  }
+
+  .software-workspace-sidebar:not(
+      :has(.software-workspace-rail-control input:checked)
+    ):has(.software-workspace-rail-control)
+    nav
+    a
+    > span {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 .software-page-heading {
@@ -1346,7 +1418,8 @@ body.software-document-body *::after {
 }
 
 @media (max-width: 900px) {
-  .software-document-workspace .software-document-layout {
+  .software-document-workspace:not(.software-document-compact-nav)
+    .software-document-layout {
     grid-template-columns: 180px minmax(0, 1fr);
   }
   .software-workspace-sidebar {

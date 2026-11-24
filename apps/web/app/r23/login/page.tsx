@@ -10,11 +10,13 @@ import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
 import { r23IsEnabled } from '../../../src/r23-auth/config';
 import {
   sanitizePostLoginPath,
+  tryReadHiringAccountFromCookie,
   tryResolveSignedInLandingPath,
 } from '../../../src/staging/browser';
 import { BrandMark } from '../../_components/brand-mark';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
+import { SwitchSignInAccount } from '../../_components/switch-sign-in-account';
 
 export const metadata = { title: 'Sign in' };
 export const dynamic = 'force-dynamic';
@@ -35,6 +37,9 @@ export default async function R23LoginPage({
   const params = await searchParams;
   const safeNext = sanitizePostLoginPath(params.next ?? params.redirect);
 
+  let activeAccount: Awaited<
+    ReturnType<typeof tryReadHiringAccountFromCookie>
+  > = null;
   if (isHiringPlatformEnabled() && isAuthenticatedStaging()) {
     const jar = await cookies();
     const signedInTarget = await tryResolveSignedInLandingPath(
@@ -44,6 +49,7 @@ export default async function R23LoginPage({
     if (signedInTarget) {
       redirect(signedInTarget);
     }
+    activeAccount = await tryReadHiringAccountFromCookie(jar.toString());
   }
   const nextIsPeerReview = Boolean(
     safeNext && safeNext.includes('peerReview='),
@@ -94,62 +100,77 @@ export default async function R23LoginPage({
           aria-labelledby="signin-title"
         >
           <h1 id="signin-title">Team sign in</h1>
-          <p>Access your assessments and assigned reviews.</p>
-          {notice ? (
-            <p role={noticeIsError ? 'alert' : 'status'}>{notice}</p>
-          ) : null}
-          <form action="/r23/auth/login" method="post">
-            {safeNext ? (
-              <input type="hidden" name="next" value={safeNext} />
-            ) : null}
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="username"
-              required
-              maxLength={320}
+          {activeAccount?.identity.email ? (
+            <SwitchSignInAccount
+              email={activeAccount.identity.email}
+              csrfToken={activeAccount.csrfToken}
+              signInPath={
+                safeNext
+                  ? `/r23/login?next=${encodeURIComponent(safeNext)}`
+                  : '/r23/login'
+              }
             />
-            <div className="software-field-heading">
-              <label htmlFor="password">Password</label>
-              <Link
-                href={
-                  safeNext
-                    ? `/r23/recover?next=${encodeURIComponent(safeNext)}`
-                    : '/r23/recover'
-                }
-                prefetch={false}
-              >
-                Reset your password
-              </Link>
-            </div>
-            <PasswordToggleInput
-              id="password"
-              name="password"
-              autoComplete="current-password"
-              maxLength={1024}
-            />
-            <button type="submit">Sign in</button>
-          </form>
-          {founderUat ||
-          process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true' ? (
-            <nav aria-label="Account help">
-              <p>
-                New to Hirearchy?{' '}
-                <Link
-                  href={
-                    safeNext
-                      ? `/r23/signup?next=${encodeURIComponent(safeNext)}`
-                      : '/r23/signup'
-                  }
-                  prefetch={false}
-                >
-                  Create an account
-                </Link>
-              </p>
-            </nav>
-          ) : null}
+          ) : (
+            <>
+              <p>Access your assessments and assigned reviews.</p>
+              {notice ? (
+                <p role={noticeIsError ? 'alert' : 'status'}>{notice}</p>
+              ) : null}
+              <form action="/r23/auth/login" method="post">
+                {safeNext ? (
+                  <input type="hidden" name="next" value={safeNext} />
+                ) : null}
+                <label htmlFor="email">Email</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="username"
+                  required
+                  maxLength={320}
+                />
+                <div className="software-field-heading">
+                  <label htmlFor="password">Password</label>
+                  <Link
+                    href={
+                      safeNext
+                        ? `/r23/recover?next=${encodeURIComponent(safeNext)}`
+                        : '/r23/recover'
+                    }
+                    prefetch={false}
+                  >
+                    Reset your password
+                  </Link>
+                </div>
+                <PasswordToggleInput
+                  id="password"
+                  name="password"
+                  autoComplete="current-password"
+                  maxLength={1024}
+                />
+                <button type="submit">Sign in</button>
+              </form>
+              {founderUat ||
+              process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED ===
+                'true' ? (
+                <nav aria-label="Account help">
+                  <p>
+                    New to Hirearchy?{' '}
+                    <Link
+                      href={
+                        safeNext
+                          ? `/r23/signup?next=${encodeURIComponent(safeNext)}`
+                          : '/r23/signup'
+                      }
+                      prefetch={false}
+                    >
+                      Create an account
+                    </Link>
+                  </p>
+                </nav>
+              ) : null}
+            </>
+          )}
         </section>
       </main>
     </div>

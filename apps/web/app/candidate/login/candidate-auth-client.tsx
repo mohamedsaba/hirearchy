@@ -10,17 +10,20 @@ import { useRouter } from 'next/navigation';
 import { BrandMark } from '../../_components/brand-mark';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
+import { SwitchSignInAccount } from '../../_components/switch-sign-in-account';
 
 export interface CandidateAuthClientProps {
   readonly mode: 'login' | 'signup';
   readonly nextPath: string;
   readonly verified?: boolean;
+  readonly activeAccount?: { email: string; csrfToken: string } | null;
 }
 
 export function CandidateAuthClient({
   mode,
   nextPath,
   verified = false,
+  activeAccount,
 }: CandidateAuthClientProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -163,7 +166,16 @@ export function CandidateAuthClient({
               ) : null}
             </p>
           ) : null}
-          {signupSuccess ? (
+          {activeAccount ? (
+            <SwitchSignInAccount
+              email={activeAccount.email}
+              csrfToken={activeAccount.csrfToken}
+              signInPath={loginPath}
+              continuePath={
+                nextPath === '/candidate' ? '/candidate' : undefined
+              }
+            />
+          ) : signupSuccess ? (
             <>
               <p>
                 Confirm <strong>{signupSuccess.email}</strong> to open your

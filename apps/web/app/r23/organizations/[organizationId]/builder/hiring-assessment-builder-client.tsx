@@ -6,7 +6,6 @@ import Link from 'next/link';
 import {
   IconArrowRight,
   IconBookmark,
-  IconCheck,
   IconCopy,
   IconMail,
   IconSend,
@@ -33,7 +32,6 @@ import type {
   TeamMemberOption,
 } from '../../../../../src/hiring/types';
 import {
-  formatPlanBadge,
   hasPlanFeature,
   type OrganizationPlanSummary,
 } from '../../../../../src/plans/entitlements';
@@ -120,6 +118,13 @@ export function HiringAssessmentBuilderClient({
   const [library, setLibrary] =
     useState<readonly SavedLibraryProblem[]>(initialLibrary);
   const [stage, setStage] = useState<BuilderStage>('source');
+
+  const goToStage = (nextStage: BuilderStage) => {
+    setStage(nextStage);
+    const button = document.getElementById(`builder-stage-${nextStage}`);
+    button?.focus({ preventScroll: true });
+    button?.scrollIntoView({ block: 'nearest' });
+  };
   const [mode, setMode] = useState<BuilderMode>('templates');
   const [previewTab, setPreviewTab] = useState<PreviewTab>('overview');
 
@@ -352,7 +357,7 @@ export function HiringAssessmentBuilderClient({
     setPreviewFilePath(nextDraft.primaryFilePath);
     setIssuedResult(null);
     setErrorBanner(null);
-    setStatusBanner(`Loaded platform template "${tpl.title}".`);
+    setStatusBanner(null);
   };
 
   const selectSavedProblem = (problem: SavedLibraryProblem) => {
@@ -456,7 +461,7 @@ export function HiringAssessmentBuilderClient({
       });
       setSavedIds(null);
       setPreviewFilePath(data.draft.primaryFilePath);
-      setStage('preview');
+      goToStage('preview');
       playHirearchySound('complete');
       setStatusBanner(
         `Generated "${data.draft.title}". Review it below, save to your library, or invite a candidate.`,
@@ -672,17 +677,9 @@ export function HiringAssessmentBuilderClient({
   };
 
   const stages = [
-    { id: 'source', title: 'Problem', detail: 'Choose the work' },
-    {
-      id: 'preview',
-      title: 'Candidate preview',
-      detail: `${activeDraft.starterFiles.length} files · ${activeDraft.durationMinutes} min`,
-    },
-    {
-      id: 'invite',
-      title: 'Invitation',
-      detail: issuedResult ? 'Ready to share' : formatPlanBadge(plan),
-    },
+    { id: 'source', title: 'Problem' },
+    { id: 'preview', title: 'Preview' },
+    { id: 'invite', title: 'Invitation' },
   ] as const;
 
   return (
@@ -696,11 +693,11 @@ export function HiringAssessmentBuilderClient({
             <li key={item.id}>
               <button
                 type="button"
+                id={`builder-stage-${item.id}`}
                 aria-current={stage === item.id ? 'step' : undefined}
-                onClick={() => setStage(item.id)}
+                onClick={() => goToStage(item.id)}
               >
-                <strong>{item.title}</strong>
-                <span>{item.detail}</span>
+                {item.title}
               </button>
             </li>
           ))}
@@ -745,9 +742,6 @@ export function HiringAssessmentBuilderClient({
           className="software-builder-stage hiring-card"
         >
           <div className="hiring-builder-head">
-            <div>
-              <h2>Problem source</h2>
-            </div>
             <div
               className="hiring-builder-tabs"
               role="tablist"
@@ -785,9 +779,9 @@ export function HiringAssessmentBuilderClient({
 
           {mode === 'templates' ? (
             <div className="hiring-builder-pane">
-              <div className="hiring-two-col">
+              <div className="hiring-template-settings">
                 <div className="hiring-field">
-                  <label htmlFor="tpl-duration">Session duration</label>
+                  <label htmlFor="tpl-duration">Time limit</label>
                   <select
                     id="tpl-duration"
                     value={tplDuration}
@@ -809,9 +803,6 @@ export function HiringAssessmentBuilderClient({
                   </select>
                 </div>
                 <div className="hiring-field">
-                  <span className="hiring-field-label">
-                    Candidate Workspace AI
-                  </span>
                   <label className="hiring-switch-row">
                     <input
                       type="checkbox"
@@ -830,12 +821,9 @@ export function HiringAssessmentBuilderClient({
                     />
                     <span className="hiring-switch-track" aria-hidden="true" />
                     <span className="hiring-switch-copy">
-                      Allow AI Assistant inside the candidate workspace
+                      Allow candidate AI assistant
                     </span>
                   </label>
-                  <p className="hiring-field-hint">
-                    Integrated Terminal &amp; Test Runner are always enabled.
-                  </p>
                 </div>
               </div>
 
@@ -878,7 +866,7 @@ export function HiringAssessmentBuilderClient({
                         className={`hiring-btn${selected ? ' hiring-btn-primary' : ''}`}
                         onClick={() => {
                           selectTemplate(tpl);
-                          setStage('preview');
+                          goToStage('preview');
                         }}
                       >
                         Preview template{' '}
@@ -1213,7 +1201,7 @@ export function HiringAssessmentBuilderClient({
                           className={`hiring-btn${isSelected ? ' hiring-btn-primary' : ''}`}
                           onClick={() => {
                             selectSavedProblem(problem);
-                            setStage('preview');
+                            goToStage('preview');
                           }}
                         >
                           Preview saved problem{' '}
@@ -1235,48 +1223,38 @@ export function HiringAssessmentBuilderClient({
         >
           <header className="hiring-preview-header">
             <div className="hiring-stack-xs">
-              <span className="hiring-eyebrow">Candidate workspace</span>
               <h2>{activeDraft.title}</h2>
-              <div className="hiring-chip-group">
-                <span className="hiring-pill hiring-pill-plum">
-                  {activeSourceMeta.targetRole}
-                </span>
-                <span className="hiring-pill">
-                  {experienceLevelLabel(activeSourceMeta.experienceLevel)}
-                </span>
-                <span className="hiring-pill">
-                  {activeDraft.durationMinutes} min
-                </span>
-                <span className="hiring-pill">
-                  {activeDraft.starterFiles.length} workspace{' '}
-                  {activeDraft.starterFiles.length === 1 ? 'file' : 'files'}
-                </span>
-                <span className="hiring-pill">
-                  Candidate AI:{' '}
-                  {activeDraft.integratedAi ? 'Enabled' : 'Disabled'}
-                </span>
-                {savedIds ? (
-                  <span className="hiring-pill hiring-pill-success">
-                    <IconCheck size={12} /> Saved in Library
-                  </span>
-                ) : null}
-              </div>
+              <p className="hiring-muted-copy">
+                {activeSourceMeta.targetRole} ·{' '}
+                {experienceLevelLabel(activeSourceMeta.experienceLevel)} ·{' '}
+                {activeDraft.durationMinutes} min
+                {activeDraft.integratedAi ? ' · AI assistant enabled' : ''}
+              </p>
             </div>
+          </header>
+          <div className="software-builder-next">
             <button
               type="button"
-              className="hiring-btn"
+              className="hiring-btn hiring-btn-sm"
               disabled={savingLibrary || Boolean(savedIds)}
               onClick={handleSaveLibraryOnly}
             >
               <IconBookmark size={16} />{' '}
               {savedIds
-                ? 'Saved in Problem Library'
+                ? 'Saved to library'
                 : savingLibrary
-                  ? 'Saving...'
-                  : 'Save to Problem Library'}
+                  ? 'Saving…'
+                  : 'Save to library'}
             </button>
-          </header>
-
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-primary"
+              onClick={() => goToStage('invite')}
+            >
+              Continue to invitation{' '}
+              <IconArrowRight size={15} aria-hidden="true" />
+            </button>
+          </div>
           <div className="hiring-preview-subtabs" role="tablist">
             <button
               type="button"
@@ -1357,23 +1335,6 @@ export function HiringAssessmentBuilderClient({
               />
             </div>
           )}
-          <footer className="software-builder-next">
-            <button
-              type="button"
-              className="hiring-btn"
-              onClick={() => setStage('source')}
-            >
-              ← Change problem
-            </button>
-            <button
-              type="button"
-              className="hiring-btn hiring-btn-primary"
-              onClick={() => setStage('invite')}
-            >
-              Continue to invitation{' '}
-              <IconArrowRight size={15} aria-hidden="true" />
-            </button>
-          </footer>
         </section>
 
         <section
@@ -1494,7 +1455,7 @@ export function HiringAssessmentBuilderClient({
               <button
                 type="button"
                 className="hiring-btn"
-                onClick={() => setStage('preview')}
+                onClick={() => goToStage('preview')}
               >
                 ← Back to preview
               </button>

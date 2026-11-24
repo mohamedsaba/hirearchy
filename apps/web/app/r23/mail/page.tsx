@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {
-  candidateAssessmentPath,
+  candidateEntryPath,
   candidateSignInPath,
 } from '../../../src/hiring/candidate-entry';
 import { isHiringPlatformEnabled } from '../../../src/runtime/profile';
@@ -29,7 +29,7 @@ export default async function FounderUatMailPage({
 
   const candidate =
     isHiringPlatformEnabled() && params.audience === 'candidate';
-  const next = candidate ? candidateAssessmentPath(params.next) : null;
+  const next = candidate ? candidateEntryPath(params.next) : null;
   const signInPath = candidate ? candidateSignInPath(next) : '/r23/login';
 
   return (

@@ -76,6 +76,47 @@ describe('HiringDecisionPanel team peer review UX', () => {
     vi.unstubAllGlobals();
   });
 
+  it('requires a human choice and restores notes from an older draft', async () => {
+    const context = makeContext({ sessionId: 'sess_decision_choice' });
+    const legacyKey = `hirearchy:eval:decision-draft:v1:${context.sessionId}`;
+    const draftKey = `hirearchy:eval:decision-draft:v2:${context.sessionId}`;
+    window.sessionStorage.setItem(
+      legacyKey,
+      JSON.stringify({
+        decision: 'accepted',
+        internalNotes: 'Review edge cases',
+      }),
+    );
+    try {
+      await act(async () =>
+        root.render(<HiringDecisionPanel initialContext={context} />),
+      );
+      const choose = (label: string) =>
+        Array.from(
+          container.querySelectorAll<HTMLButtonElement>('button'),
+        ).find((button) => button.textContent?.trim() === label)!;
+      expect(choose('Advance candidate').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+      expect(choose('Reject candidate').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+      expect(choose('Publish decision').disabled).toBe(true);
+      expect(
+        container.querySelector<HTMLTextAreaElement>('#decision-internal-notes')
+          ?.value,
+      ).toBe('Review edge cases');
+      await act(async () => choose('Advance candidate').click());
+      expect(choose('Publish acceptance').disabled).toBe(false);
+      expect(
+        JSON.parse(window.sessionStorage.getItem(draftKey)!).decision,
+      ).toBe('accepted');
+    } finally {
+      window.sessionStorage.removeItem(legacyKey);
+      window.sessionStorage.removeItem(draftKey);
+    }
+  });
+
   it('surfaces an assigned peer review spotlight card with shared context and submits verdict without requiring final decision', async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const payload = JSON.parse(String(init?.body ?? '{}')) as Record<

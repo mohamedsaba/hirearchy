@@ -1,5 +1,5 @@
 import {
-  candidateAssessmentPath,
+  candidateEntryPath,
   candidateConfirmationParams,
 } from '../../../src/hiring/candidate-entry';
 import { NextResponse } from 'next/server';
@@ -136,7 +136,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const body = await hiringParseJsonBody(request, 32768);
     const action = String(body.action ?? '').trim();
-    const nextPath = candidateAssessmentPath(body.next);
+    const nextPath = candidateEntryPath(body.next);
     if (action === 'login' || action === 'signup') {
       const limited = enforceRateLimit(request, 'auth');
       if (limited) return limited;

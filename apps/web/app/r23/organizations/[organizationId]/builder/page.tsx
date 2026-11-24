@@ -113,16 +113,7 @@ export default async function AssessmentBuilderPage({
       >
         <div className="hiring-page-shell">
           <header className="hiring-page-header">
-            <div>
-              <span className="hiring-eyebrow">
-                {workspace.organizationName}
-              </span>
-              <h1>Assessment Builder</h1>
-              <p>
-                Start from a template, generate a custom task with AI, or reuse
-                one from your library.
-              </p>
-            </div>
+            <h1>Assessment Builder</h1>
           </header>
 
           <HiringAssessmentBuilderClient

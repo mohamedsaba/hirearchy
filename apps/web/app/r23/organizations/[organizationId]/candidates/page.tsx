@@ -78,20 +78,13 @@ export default async function OrganizationCandidatesPage({
     >
       <div className="hiring-page-shell">
         <header className="hiring-page-header">
-          <div>
-            <span className="hiring-eyebrow">{workspace.organizationName}</span>
-            <h1>Candidates</h1>
-            <p>
-              Track candidates across every assessment stage and filter by role,
-              skills, or status.
-            </p>
-          </div>
+          <h1>Candidates</h1>
           <div className="hiring-header-actions">
             <Link
               className="hiring-btn hiring-btn-primary"
               href={`/r23/organizations/${encodeURIComponent(workspace.organizationId)}/builder`}
             >
-              Build &amp; Issue Assessment
+              New assessment
             </Link>
           </div>
         </header>

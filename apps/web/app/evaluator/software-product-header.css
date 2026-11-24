@@ -1,3 +1,17 @@
+.software-product-header .software-review-related-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding-inline: 0.5rem;
+  color: var(--software-on-plum-muted);
+  font-size: 0.8125rem;
+  text-underline-offset: 0.2em;
+}
+
+.software-product-header .software-review-related-link:hover {
+  color: var(--software-on-plum);
+}
+
 .software-product-header nav {
   min-width: 0;
   display: flex;

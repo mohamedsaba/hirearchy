@@ -18,6 +18,7 @@ Hirearchy Software is a **Next.js 16 + PostgreSQL modular monolith** written in 
 │   │   ├── page.tsx, products/, about/, contact/, early-access/, privacy/, terms/, thinking/
 │   │   ├── r23/            # GoTrue auth, email verification, org bootstrap, sessions overview, builder, problem library
 │   │   ├── r26/            # Candidate IDE workspace & candidate runtime APIs (save, submit, AI, exec)
+│   │   ├── candidate/      # Candidate portal, sign-in, and read-only submitted work
 │   │   ├── r27/            # Assigned-reviewer evidence workbench + AI review + revisions + observations + review packet
 │   │   ├── evaluator/      # Shared Evaluator Workbench components (diff viewer, AI review panel, header) & legacy slice
 │   │   └── api/            # Legacy APIs + founder-uat mail capture + health/staging probes
@@ -45,6 +46,8 @@ Hirearchy Software is a **Next.js 16 + PostgreSQL modular monolith** written in 
 ```
 
 ---
+
+Candidate submission review at `/candidate/submissions/[sessionId]` uses the signed staging dispatch and the existing account ownership check. It reads the immutable submitted manifest. Invitation tokens still govern starting and working on an assessment.
 
 ## 2. Database & Authorization Architecture (`R2.3 – R2.15`)
 

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
   IconBriefcase,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
   IconListDetails,
   IconSettings,
   IconSparkles,
@@ -58,7 +60,7 @@ export function OrganizationWorkspaceShell({
   const planBadge = plan ? formatPlanBadge(plan) : undefined;
 
   return (
-    <div className="software-product software-document-body software-document-workspace">
+    <div className="software-product software-document-body software-document-workspace software-document-compact-nav">
       <a className="software-skip-link" href="#main-content">
         Skip to main content
       </a>
@@ -79,6 +81,14 @@ export function OrganizationWorkspaceShell({
       </header>
       <div className="software-document-layout">
         <aside className="software-workspace-sidebar">
+          <label
+            className="software-workspace-rail-control"
+            title="Expand workspace navigation"
+          >
+            <input type="checkbox" aria-label="Expand workspace navigation" />
+            <IconLayoutSidebarLeftExpand size={20} aria-hidden="true" />
+            <IconLayoutSidebarLeftCollapse size={20} aria-hidden="true" />
+          </label>
           <div
             className="software-workspace-identity"
             role="region"
@@ -94,6 +104,7 @@ export function OrganizationWorkspaceShell({
           <nav aria-label="Workspace navigation">
             <Link
               href={`${orgBase}/candidates`}
+              title="Candidates"
               aria-current={active === 'candidates' ? 'page' : undefined}
             >
               <IconUsers size={16} stroke={1.9} aria-hidden="true" />
@@ -101,6 +112,7 @@ export function OrganizationWorkspaceShell({
             </Link>
             <Link
               href={`${orgBase}/builder`}
+              title="Assessment Builder"
               aria-current={active === 'builder' ? 'page' : undefined}
             >
               <IconSparkles size={16} stroke={1.9} aria-hidden="true" />
@@ -108,6 +120,7 @@ export function OrganizationWorkspaceShell({
             </Link>
             <Link
               href={`${orgBase}/handoffs`}
+              title="Handoffs"
               aria-current={active === 'handoffs' ? 'page' : undefined}
             >
               <IconBriefcase size={16} stroke={1.9} aria-hidden="true" />
@@ -115,6 +128,7 @@ export function OrganizationWorkspaceShell({
             </Link>
             <a
               href={orgBase}
+              title="Sessions"
               aria-current={active === 'assessments' ? 'page' : undefined}
             >
               <IconListDetails size={16} stroke={1.9} aria-hidden="true" />
@@ -123,6 +137,7 @@ export function OrganizationWorkspaceShell({
             <a
               data-testid="org-settings-link"
               href={`${orgBase}/settings`}
+              title="Team &amp; Plan"
               aria-current={active === 'settings' ? 'page' : undefined}
             >
               <IconSettings size={16} stroke={1.9} aria-hidden="true" />

@@ -67,18 +67,18 @@ export const SoftwareProductHeader = ({
           <span className="software-tenant-email">{tenantScope.userEmail}</span>
         </div>
       ) : null}
-      <nav aria-label="Evaluator workspace">
+      <nav
+        aria-label={
+          stagingReview ? 'Related review pages' : 'Evaluator workspace'
+        }
+      >
         {stagingReview && sessionSummaryHref ? (
           <>
-            <Link className="software-nav-link" href={sessionSummaryHref}>
-              Session summary
-            </Link>
             <Link
-              className="software-nav-link"
-              href={`/r27/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`}
-              aria-current={active === 'reviews' ? 'page' : undefined}
+              className="software-review-related-link"
+              href={sessionSummaryHref}
             >
-              Evidence review
+              Session details
             </Link>
           </>
         ) : (

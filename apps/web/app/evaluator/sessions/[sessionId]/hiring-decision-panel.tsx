@@ -16,10 +16,7 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 
-import {
-  NEXT_STAGE_OPTIONS,
-  experienceLevelLabel,
-} from '../../../../src/hiring/catalogs';
+import { NEXT_STAGE_OPTIONS } from '../../../../src/hiring/catalogs';
 import type {
   PeerReviewEmailDelivery,
   PeerReviewRequestContext,
@@ -30,6 +27,7 @@ import type {
 } from '../../../../src/hiring/types';
 import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
+import { formatLocalDateTime } from '../../../../src/ui/relative-time';
 import { playHirearchySound } from '../../../../src/ui/sound';
 import { CommonThreadLoader } from '../../../_components/common-thread-loader';
 import {
@@ -39,13 +37,65 @@ import {
 import type { EvidenceFilter } from './evidence-workbench';
 
 export interface HiringDecisionDraft {
-  readonly decision: 'accepted' | 'rejected';
+  readonly decision: 'accepted' | 'rejected' | null;
   readonly strengthsText: string;
   readonly weaknessesText: string;
   readonly feedbackNote: string;
   readonly internalNotes: string;
   readonly nextStageLabel: string;
   readonly handoffRecipientId: string;
+}
+
+export function initialHiringDecisionDraft(
+  initialContext: SessionHiringReviewContext,
+): HiringDecisionDraft {
+  return {
+    decision: initialContext.decision?.decision ?? null,
+    strengthsText: initialContext.decision?.candidateStrengths.join('\n') ?? '',
+    weaknessesText:
+      initialContext.decision?.candidateWeaknesses.join('\n') ?? '',
+    feedbackNote: initialContext.decision?.candidateFeedbackNote ?? '',
+    internalNotes: initialContext.decision?.internalNotes ?? '',
+    nextStageLabel:
+      initialContext.decision?.nextStageLabel ?? NEXT_STAGE_OPTIONS[0],
+    handoffRecipientId:
+      initialContext.decision?.handoffRecipientPrincipalId ??
+      initialContext.teamMembers.find((m) => m.role === 'cto' || m.isOwner)
+        ?.principalId ??
+      initialContext.teamMembers[0]?.principalId ??
+      '',
+  };
+}
+
+export function hiringDecisionDraftKey(sessionId: string): string {
+  return `hirearchy:eval:decision-draft:v2:${sessionId}`;
+}
+
+export function restoreHiringDecisionDraft(
+  sessionId: string,
+  defaults: HiringDecisionDraft,
+): HiringDecisionDraft {
+  const saved = window.sessionStorage.getItem(
+    hiringDecisionDraftKey(sessionId),
+  );
+  if (saved) {
+    return {
+      ...defaults,
+      ...(JSON.parse(saved) as Partial<HiringDecisionDraft>),
+    };
+  }
+  const previous = window.sessionStorage.getItem(
+    `hirearchy:eval:decision-draft:v1:${sessionId}`,
+  );
+  if (!previous) return defaults;
+
+  const draft = JSON.parse(previous) as Partial<HiringDecisionDraft> | null;
+  // The previous form preselected Advance, so that draft value may be implicit.
+  return {
+    ...defaults,
+    ...draft,
+    decision: draft?.decision === 'rejected' ? 'rejected' : defaults.decision,
+  };
 }
 
 export interface HiringDecisionPanelProps {
@@ -71,13 +121,6 @@ function splitLines(raw: string): string[] {
     .filter(Boolean);
 }
 
-function candidateInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
-
 function formatRoleLabel(role: string): string {
   switch (role) {
     case 'cto':
@@ -89,19 +132,6 @@ function formatRoleLabel(role: string): string {
     default:
       return role;
   }
-}
-
-function formatTimestampShort(iso: string | null): string {
-  if (!iso) return '';
-  const parsed = Date.parse(iso);
-  if (!Number.isFinite(parsed)) return '';
-  return `${new Date(parsed).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'UTC',
-  })} UTC`;
 }
 
 function verdictPillMeta(opinion: SecondOpinionRecord): {
@@ -272,27 +302,11 @@ export function HiringDecisionPanel({
     useState<PeerReviewEmailDelivery | null>(null);
   const [copiedReviewLink, setCopiedReviewLink] = useState(false);
 
-  const defaultDraft: HiringDecisionDraft = useMemo(
-    () => ({
-      decision: initialContext.decision?.decision ?? 'accepted',
-      strengthsText:
-        initialContext.decision?.candidateStrengths.join('\n') ?? '',
-      weaknessesText:
-        initialContext.decision?.candidateWeaknesses.join('\n') ?? '',
-      feedbackNote: initialContext.decision?.candidateFeedbackNote ?? '',
-      internalNotes: initialContext.decision?.internalNotes ?? '',
-      nextStageLabel:
-        initialContext.decision?.nextStageLabel ?? NEXT_STAGE_OPTIONS[0],
-      handoffRecipientId:
-        initialContext.decision?.handoffRecipientPrincipalId ??
-        initialContext.teamMembers.find((m) => m.role === 'cto' || m.isOwner)
-          ?.principalId ??
-        initialContext.teamMembers[0]?.principalId ??
-        '',
-    }),
+  const defaultDraft = useMemo(
+    () => initialHiringDecisionDraft(initialContext),
     [initialContext],
   );
-  const draftStorageKey = `hirearchy:eval:decision-draft:v1:${ctx.sessionId}`;
+  const draftStorageKey = hiringDecisionDraftKey(ctx.sessionId);
   const [internalDraft, setInternalDraft] =
     useState<HiringDecisionDraft>(defaultDraft);
   const activeDraft = controlledDraft ?? internalDraft;
@@ -331,12 +345,9 @@ export function HiringDecisionPanel({
     queueMicrotask(() => {
       if (!active) return;
       try {
-        const saved = window.sessionStorage.getItem(draftStorageKey);
-        if (!saved) return;
-        const parsed = JSON.parse(saved) as Partial<HiringDecisionDraft>;
-        if (parsed && typeof parsed === 'object') {
-          setInternalDraft({ ...defaultDraft, ...parsed });
-        }
+        setInternalDraft(
+          restoreHiringDecisionDraft(ctx.sessionId, defaultDraft),
+        );
       } catch {
         // Ignore malformed draft cache
       }
@@ -344,7 +355,7 @@ export function HiringDecisionPanel({
     return () => {
       active = false;
     };
-  }, [controlledDraft, defaultDraft, draftStorageKey]);
+  }, [controlledDraft, ctx.sessionId, defaultDraft]);
 
   const isDirtyDraft =
     decision !== defaultDraft.decision ||
@@ -617,6 +628,7 @@ export function HiringDecisionPanel({
 
   const handlePublishDecision = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (decision !== 'accepted' && decision !== 'rejected') return;
     setErrorMsg(null);
     setStatusMsg(null);
     setBusyAction('publish');
@@ -640,6 +652,9 @@ export function HiringDecisionPanel({
       }
       try {
         window.sessionStorage.removeItem(draftStorageKey);
+        window.sessionStorage.removeItem(
+          `hirearchy:eval:decision-draft:v1:${ctx.sessionId}`,
+        );
       } catch {
         // Ignore storage errors
       }
@@ -676,46 +691,13 @@ export function HiringDecisionPanel({
 
   return (
     <div className="hiring-page-shell" data-testid="hiring-decision-panel">
-      <section className="hiring-card hiring-card-animated">
-        <div className="hiring-candidate-identity">
-          <span className="hiring-avatar" aria-hidden="true">
-            {candidateInitials(
-              ctx.candidateName || ctx.candidateEmail || 'Candidate',
-            )}
-          </span>
-          <div>
-            <div className="hiring-candidate-name">
-              <span className="hiring-eyebrow">Candidate Context</span>
-              {ctx.candidateCode ? (
-                <span className="hiring-pill hiring-pill-plum">
-                  {ctx.candidateCode}
-                </span>
-              ) : null}
-              {ctx.decision ? (
-                <span
-                  className={`hiring-pill ${ctx.decision.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
-                >
-                  {ctx.decision.decision === 'accepted'
-                    ? `Accepted · ${ctx.decision.nextStageLabel ?? 'Handoff Ready'}`
-                    : 'Rejected · Feedback Sent'}
-                </span>
-              ) : null}
-            </div>
-            <h3>
-              {ctx.candidateName || ctx.candidateEmail || 'Candidate Session'}
-            </h3>
-            <div className="hiring-candidate-meta">
-              {ctx.candidateEmail ? <span>{ctx.candidateEmail}</span> : null}
-              <span>Role: {ctx.targetRole || 'Software Engineer'}</span>
-              <span>Level: {experienceLevelLabel(ctx.experienceLevel)}</span>
-              {ctx.skills.length > 0 ? (
-                <span>Focus: {ctx.skills.join(', ')}</span>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
-
+      {ctx.decision ? (
+        <p className="hiring-filter-result" role="status">
+          {ctx.decision.decision === 'accepted'
+            ? `Advanced · ${ctx.decision.nextStageLabel ?? 'Handoff ready'}`
+            : 'Rejection published'}
+        </p>
+      ) : null}
       {errorMsg ? (
         <div className="hiring-banner hiring-banner-danger" role="alert">
           {errorMsg}
@@ -830,7 +812,7 @@ export function HiringDecisionPanel({
                     <strong>Requested by {op.requestedByName}</strong>
                     {op.createdAt ? (
                       <span className="hiring-muted-copy">
-                        {formatTimestampShort(op.createdAt)}
+                        {formatLocalDateTime(op.createdAt)}
                       </span>
                     ) : null}
                   </div>
@@ -935,6 +917,212 @@ export function HiringDecisionPanel({
         </section>
       ) : null}
 
+      {ctx.canPublishDecision ? (
+        <section
+          className="hiring-card software-review-decision"
+          aria-labelledby="final-decision-heading"
+        >
+          <div className="hiring-candidate-name">
+            <IconCheck size={18} aria-hidden="true" />
+            <h3 id="final-decision-heading">Decision and feedback</h3>
+          </div>
+          <p className="hiring-muted-copy">
+            {pendingForMe.length > 0
+              ? 'Publish only if you own the final hiring decision.'
+              : 'Choose an outcome to publish feedback.'}
+          </p>
+
+          <form
+            onSubmit={handlePublishDecision}
+            className="hiring-page-shell hiring-mt-md"
+          >
+            <div
+              className="hiring-builder-tabs"
+              role="group"
+              aria-label="Hiring decision"
+            >
+              <button
+                type="button"
+                aria-pressed={decision === 'accepted'}
+                className={`hiring-builder-tab${decision === 'accepted' ? ' is-active' : ''}`}
+                onClick={() => setDecision('accepted')}
+              >
+                Advance candidate
+              </button>
+              <button
+                type="button"
+                aria-pressed={decision === 'rejected'}
+                className={`hiring-builder-tab${decision === 'rejected' ? ' is-active' : ''}`}
+                onClick={() => setDecision('rejected')}
+              >
+                Reject candidate
+              </button>
+            </div>
+
+            <fieldset className="hiring-decision-feedback">
+              <legend>Candidate feedback</legend>
+              <div className="hiring-two-col">
+                <div className="hiring-field">
+                  <label htmlFor="decision-strengths">
+                    Strengths (one per line)
+                  </label>
+                  <textarea
+                    id="decision-strengths"
+                    value={strengthsText}
+                    onChange={(e) => setStrengthsText(e.target.value)}
+                  />
+                </div>
+
+                <div className="hiring-field">
+                  <label htmlFor="decision-weaknesses">
+                    Areas to improve (one per line)
+                  </label>
+                  <textarea
+                    id="decision-weaknesses"
+                    value={weaknessesText}
+                    onChange={(e) => setWeaknessesText(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="hiring-field">
+                <label htmlFor="decision-candidate-note">
+                  Message to candidate
+                </label>
+                <textarea
+                  id="decision-candidate-note"
+                  value={feedbackNote}
+                  onChange={(e) => setFeedbackNote(e.target.value)}
+                />
+              </div>
+            </fieldset>
+
+            <div className="hiring-field">
+              <label htmlFor="decision-internal-notes">
+                Private team notes
+              </label>
+              <textarea
+                id="decision-internal-notes"
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                placeholder="Only your hiring team can see these notes."
+              />
+            </div>
+
+            {decision === 'accepted' ? (
+              <div className="hiring-card-subtle">
+                <div className="hiring-two-col">
+                  <div className="hiring-field">
+                    <label htmlFor="decision-next-stage">
+                      Next hiring stage
+                    </label>
+                    <select
+                      id="decision-next-stage"
+                      value={nextStageLabel}
+                      onChange={(e) => setNextStageLabel(e.target.value)}
+                    >
+                      {NEXT_STAGE_OPTIONS.map((stage) => (
+                        <option key={stage} value={stage}>
+                          {stage}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="hiring-field">
+                    <label htmlFor="decision-handoff-recipient">
+                      Next interviewer
+                    </label>
+                    <select
+                      id="decision-handoff-recipient"
+                      value={handoffRecipientId}
+                      onChange={(e) => setHandoffRecipientId(e.target.value)}
+                    >
+                      {ctx.teamMembers.map((m) => (
+                        <option key={m.principalId} value={m.principalId}>
+                          {m.displayName || m.email} ({formatRoleLabel(m.role)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="hiring-stack-sm hiring-mt-sm">
+                  {canGenerateFitReport ? (
+                    <div className="hiring-header-actions">
+                      <button
+                        type="button"
+                        className="hiring-btn"
+                        disabled={busyAction !== null}
+                        onClick={() => void handleGeneratePerformanceReport()}
+                      >
+                        <IconSparkles size={15} aria-hidden="true" />{' '}
+                        {busyAction === 'report'
+                          ? 'Generating Fit Report…'
+                          : performanceReport
+                            ? 'Refresh Managerial Fit Report'
+                            : 'Generate Managerial Fit Report'}
+                      </button>
+                    </div>
+                  ) : null}
+                  {busyAction === 'report' ? (
+                    <CommonThreadLoader
+                      compact
+                      label="Generating Managerial Fit Report…"
+                    />
+                  ) : null}
+                  {!canGenerateFitReport ? (
+                    <details className="hiring-disclosure">
+                      <summary>Managerial Fit Report</summary>
+                      <p className="hiring-muted-copy">
+                        Available on <a href={`${orgBase}/settings`}>Ultra</a>.
+                      </p>
+                    </details>
+                  ) : null}
+
+                  {performanceReport ? (
+                    <div className="hiring-card hiring-card-compact">
+                      <span className="hiring-eyebrow">
+                        {performanceReport.provider.mode === 'live_ai'
+                          ? 'AI advisory'
+                          : 'Evidence summary'}
+                      </span>
+                      <h4>{performanceReport.fitHeadline}</h4>
+                      <p className="hiring-dossier-bio">
+                        {performanceReport.whyGoodOrBadFit}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="hiring-header-actions">
+              <button
+                type="submit"
+                className={`hiring-btn ${decision === 'rejected' ? 'hiring-btn-danger' : 'hiring-btn-mint'}`}
+                disabled={busyAction !== null || decision === null}
+              >
+                {busyAction === 'publish'
+                  ? 'Publishing decision…'
+                  : decision === 'accepted'
+                    ? 'Publish acceptance'
+                    : decision === 'rejected'
+                      ? 'Publish rejection'
+                      : 'Publish decision'}
+              </button>
+              {ctx.decision?.decision === 'accepted' ? (
+                <a
+                  className="hiring-btn hiring-btn-primary"
+                  href={`${orgBase}/handoffs/${encodeURIComponent(ctx.sessionId)}`}
+                >
+                  Open handoff →
+                </a>
+              ) : null}
+            </div>
+          </form>
+        </section>
+      ) : null}
       <section
         className="hiring-card software-review-consult"
         aria-labelledby="peer-review-team-heading"
@@ -1082,7 +1270,7 @@ export function HiringDecisionPanel({
                       </span>
                     </div>
                     <span className="hiring-muted-copy">
-                      {formatTimestampShort(op.respondedAt ?? op.createdAt)}
+                      {formatLocalDateTime(op.respondedAt ?? op.createdAt)}
                     </span>
                   </div>
 
@@ -1123,217 +1311,6 @@ export function HiringDecisionPanel({
         ) : null}
       </section>
 
-      {ctx.canPublishDecision ? (
-        <section
-          className="hiring-card software-review-decision"
-          aria-labelledby="final-decision-heading"
-        >
-          <div className="hiring-candidate-name">
-            <IconCheck size={18} aria-hidden="true" />
-            <h3 id="final-decision-heading">Decision and feedback</h3>
-          </div>
-          <p className="hiring-muted-copy">
-            {pendingForMe.length > 0
-              ? 'Optional for peer reviewers — only publish a decision if you own the final hiring outcome for this candidate.'
-              : 'Choose the next step and add the feedback the candidate will see.'}
-          </p>
-
-          <form
-            onSubmit={handlePublishDecision}
-            className="hiring-page-shell hiring-mt-md"
-          >
-            <div
-              className="hiring-builder-tabs"
-              role="group"
-              aria-label="Hiring decision"
-            >
-              <button
-                type="button"
-                aria-pressed={decision === 'accepted'}
-                className={`hiring-builder-tab${decision === 'accepted' ? ' is-active' : ''}`}
-                onClick={() => setDecision('accepted')}
-              >
-                Advance candidate
-              </button>
-              <button
-                type="button"
-                aria-pressed={decision === 'rejected'}
-                className={`hiring-builder-tab${decision === 'rejected' ? ' is-active' : ''}`}
-                onClick={() => setDecision('rejected')}
-              >
-                Reject candidate
-              </button>
-            </div>
-
-            <div className="hiring-two-col">
-              <div className="hiring-field">
-                <label htmlFor="decision-strengths">
-                  Strengths (one per line)
-                </label>
-                <textarea
-                  id="decision-strengths"
-                  value={strengthsText}
-                  onChange={(e) => setStrengthsText(e.target.value)}
-                  placeholder="Clean decomposition of idempotency logic&#10;Verified edge cases methodically"
-                />
-              </div>
-
-              <div className="hiring-field">
-                <label htmlFor="decision-weaknesses">
-                  Areas to improve (one per line)
-                </label>
-                <textarea
-                  id="decision-weaknesses"
-                  value={weaknessesText}
-                  onChange={(e) => setWeaknessesText(e.target.value)}
-                  placeholder="Missed negative capacity boundary check&#10;Did not run unit tests after final refactor"
-                />
-              </div>
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="decision-candidate-note">
-                Message to candidate
-              </label>
-              <textarea
-                id="decision-candidate-note"
-                value={feedbackNote}
-                onChange={(e) => setFeedbackNote(e.target.value)}
-                placeholder="Summary feedback the candidate will see alongside strengths and growth areas."
-              />
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="decision-internal-notes">
-                Private team notes
-              </label>
-              <textarea
-                id="decision-internal-notes"
-                value={internalNotes}
-                onChange={(e) => setInternalNotes(e.target.value)}
-                placeholder="Internal calibration notes, salary band notes, or probes for the next interviewer."
-              />
-            </div>
-
-            {decision === 'accepted' ? (
-              <div className="hiring-card-subtle">
-                <div className="hiring-two-col">
-                  <div className="hiring-field">
-                    <label htmlFor="decision-next-stage">
-                      Next hiring stage
-                    </label>
-                    <select
-                      id="decision-next-stage"
-                      value={nextStageLabel}
-                      onChange={(e) => setNextStageLabel(e.target.value)}
-                    >
-                      {NEXT_STAGE_OPTIONS.map((stage) => (
-                        <option key={stage} value={stage}>
-                          {stage}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="hiring-field">
-                    <label htmlFor="decision-handoff-recipient">
-                      Assign next-stage manager / interviewer
-                    </label>
-                    <select
-                      id="decision-handoff-recipient"
-                      value={handoffRecipientId}
-                      onChange={(e) => setHandoffRecipientId(e.target.value)}
-                    >
-                      {ctx.teamMembers.map((m) => (
-                        <option key={m.principalId} value={m.principalId}>
-                          {m.displayName || m.email} ({formatRoleLabel(m.role)})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="hiring-stack-sm hiring-mt-sm">
-                  {canGenerateFitReport ? (
-                    <div className="hiring-header-actions">
-                      <button
-                        type="button"
-                        className="hiring-btn"
-                        disabled={busyAction !== null}
-                        onClick={() => void handleGeneratePerformanceReport()}
-                      >
-                        <IconSparkles size={15} aria-hidden="true" />{' '}
-                        {busyAction === 'report'
-                          ? 'Generating Fit Report…'
-                          : performanceReport
-                            ? 'Refresh Managerial Fit Report'
-                            : 'Generate Managerial Fit Report'}
-                      </button>
-                    </div>
-                  ) : null}
-                  {busyAction === 'report' ? (
-                    <CommonThreadLoader
-                      compact
-                      label="Generating Managerial Fit Report…"
-                    />
-                  ) : null}
-                  {!canGenerateFitReport ? (
-                    <div className="hiring-banner hiring-banner-warning">
-                      <span>
-                        Automated Managerial Fit Reports require the{' '}
-                        <strong>Ultra</strong> plan. You can still publish the
-                        acceptance and handoff with your own notes.
-                      </span>
-                      <a
-                        className="hiring-btn hiring-btn-sm"
-                        href={`${orgBase}/settings`}
-                      >
-                        Upgrade to Ultra
-                      </a>
-                    </div>
-                  ) : null}
-
-                  {performanceReport ? (
-                    <div className="hiring-card hiring-card-compact">
-                      <span className="hiring-eyebrow">
-                        {performanceReport.provider.mode === 'live_ai'
-                          ? 'AI advisory'
-                          : 'Evidence summary'}
-                      </span>
-                      <h4>{performanceReport.fitHeadline}</h4>
-                      <p className="hiring-dossier-bio">
-                        {performanceReport.whyGoodOrBadFit}
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="hiring-header-actions">
-              <button
-                type="submit"
-                className={`hiring-btn ${decision === 'accepted' ? 'hiring-btn-mint' : 'hiring-btn-danger'}`}
-                disabled={busyAction !== null}
-              >
-                {busyAction === 'publish'
-                  ? 'Publishing decision…'
-                  : decision === 'accepted'
-                    ? 'Publish acceptance'
-                    : 'Publish rejection'}
-              </button>
-              {ctx.decision?.decision === 'accepted' ? (
-                <a
-                  className="hiring-btn hiring-btn-primary"
-                  href={`${orgBase}/handoffs/${encodeURIComponent(ctx.sessionId)}`}
-                >
-                  Open handoff →
-                </a>
-              ) : null}
-            </div>
-          </form>
-        </section>
-      ) : null}
       <CommonThreadToast
         message={toast?.message ?? null}
         tone={toast?.tone ?? 'success'}

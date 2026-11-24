@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
   IconCheck,
@@ -373,7 +374,7 @@ export function CandidatePortalClient({
             <h1>{tab === 'assessments' ? 'My assessments' : 'My profile'}</h1>
             <p>
               {tab === 'assessments'
-                ? 'Open invitations and read published feedback from your hiring teams.'
+                ? 'Open an assessment or check for feedback.'
                 : 'Use one profile for assessments across companies.'}
             </p>
             <p className="hiring-portal-mobile-email">Signed in as {email}</p>
@@ -611,25 +612,20 @@ export function CandidatePortalClient({
                               ? 'Launching…'
                               : item.status === 'ACTIVE'
                                 ? 'Resume Assessment'
-                                : 'Start Assessment'}
+                                : 'Open assessment'}
                           </button>
                         ) : item.status === 'SUBMITTED' ? (
                           <div className="hiring-header-actions">
                             <span className="hiring-pill hiring-pill-success">
                               <IconCheck size={13} /> Submitted
                             </span>
-                            <button
-                              type="button"
-                              disabled={busy !== null}
-                              onClick={() =>
-                                void handleLaunchAssessment(item.sessionId)
-                              }
+                            <Link
                               className="hiring-btn hiring-btn-sm"
+                              href={`/candidate/submissions/${encodeURIComponent(item.sessionId)}`}
+                              prefetch={false}
                             >
-                              {busy === `launch:${item.sessionId}`
-                                ? 'Opening…'
-                                : 'View submitted work'}
-                            </button>
+                              View submitted work
+                            </Link>
                           </div>
                         ) : (
                           <span className="hiring-pill hiring-pill-danger">

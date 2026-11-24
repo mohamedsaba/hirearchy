@@ -79,18 +79,24 @@ export function RepositoryInspector({
   workspaceName,
   activePath,
   onSelectPath,
+  label = 'Repository preview',
 }: {
   files: readonly PreviewFile[];
   workspaceName: string;
-  activePath: string;
-  onSelectPath: (path: string) => void;
+  activePath?: string;
+  onSelectPath?: (path: string) => void;
+  label?: string;
 }) {
   const inputId = useId();
+  const [selectedPath, setSelectedPath] = useState('');
+  const changePath = onSelectPath ?? setSelectedPath;
   const [filter, setFilter] = useState('');
   const [wrap, setWrap] = useState(false);
   const [opened, setOpened] = useState<string[]>([]);
   const [copyMessage, setCopyMessage] = useState('');
-  const selected = files.find((file) => file.path === activePath) ?? files[0];
+  const selected =
+    files.find((file) => file.path === (activePath ?? selectedPath)) ??
+    files[0];
   const language = detectSyntaxLanguage(selected?.path ?? '');
   const lines = useMemo(
     () => tokenizeCodeLines(selected?.content ?? '', language),
@@ -115,7 +121,7 @@ export function RepositoryInspector({
 
   function select(path: string) {
     if (!availablePaths.has(path)) return;
-    onSelectPath(path);
+    changePath(path);
     setOpened([...new Set([...tabs, path])]);
     setCopyMessage('');
   }
@@ -125,7 +131,7 @@ export function RepositoryInspector({
     if (remaining.length === 0) return;
     setOpened(remaining);
     if (path === selected?.path) {
-      onSelectPath(remaining[Math.max(0, tabs.indexOf(path) - 1)]);
+      changePath(remaining[Math.max(0, tabs.indexOf(path) - 1)]);
       setCopyMessage('');
     }
   }
@@ -140,7 +146,7 @@ export function RepositoryInspector({
   }
 
   return (
-    <section className="software-repository" aria-label="Repository preview">
+    <section className="software-repository" aria-label={label}>
       <header className="software-repo-bar">
         <div className="software-repo-name">
           <IconCode size={18} aria-hidden="true" />

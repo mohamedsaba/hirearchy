@@ -37,6 +37,9 @@ import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { R27AiReviewPanel } from './ai-review-panel';
 import {
   HiringDecisionPanel,
+  hiringDecisionDraftKey,
+  initialHiringDecisionDraft,
+  restoreHiringDecisionDraft,
   type HiringDecisionDraft,
 } from './hiring-decision-panel';
 import { computeDiffStats } from './code-diff-viewer';
@@ -1071,6 +1074,12 @@ const EvidenceView = ({
   onHiringDraftChange?: (patch: Partial<HiringDecisionDraft>) => void;
   onGoToDecision?: () => void;
 }>) => {
+  const filters =
+    r27Evidence && hasHiringContext
+      ? evidenceFilters.filter(
+          (item) => item !== 'Terminal' && item !== 'Tests',
+        )
+      : evidenceFilters;
   const visibleSources = sourcesForFilter(
     sources,
     filter,
@@ -1080,6 +1089,14 @@ const EvidenceView = ({
   const selectedIsVisible = visibleSources.some(
     (source) => source.key === selectedSourceKey,
   );
+  const noCodeChanges =
+    filter === 'Code changes' &&
+    visibleSources.length > 0 &&
+    visibleSources.every(
+      (source) =>
+        source.r27?.kind === 'file' &&
+        source.r27.file.starterContent === source.r27.file.submittedContent,
+    );
 
   return (
     <div className="evaluator-evidence-workbench">
@@ -1095,7 +1112,7 @@ const EvidenceView = ({
         role="tablist"
         aria-label="Evidence filters"
       >
-        {evidenceFilters.map((item, index) => (
+        {filters.map((item, index) => (
           <button
             key={item}
             id={filterId(item)}
@@ -1108,19 +1125,18 @@ const EvidenceView = ({
             onKeyDown={(event) => {
               const next =
                 event.key === 'ArrowRight'
-                  ? (index + 1) % evidenceFilters.length
+                  ? (index + 1) % filters.length
                   : event.key === 'ArrowLeft'
-                    ? (index + evidenceFilters.length - 1) %
-                      evidenceFilters.length
+                    ? (index + filters.length - 1) % filters.length
                     : event.key === 'Home'
                       ? 0
                       : event.key === 'End'
-                        ? evidenceFilters.length - 1
+                        ? filters.length - 1
                         : -1;
               if (next < 0) return;
               event.preventDefault();
-              onFilterChange(evidenceFilters[next]);
-              document.getElementById(filterId(evidenceFilters[next]))?.focus();
+              onFilterChange(filters[next]);
+              document.getElementById(filterId(filters[next]))?.focus();
             }}
           >
             {iconForFilter(item)}
@@ -1147,6 +1163,11 @@ const EvidenceView = ({
               {visibleSources.length === 1 ? '' : 's'}
             </span>
           </header>
+          {noCodeChanges ? (
+            <p className="evaluator-empty-sources">
+              No code changes. Select a submitted file to read it.
+            </p>
+          ) : null}
           {!selectedIsVisible && selectedSource ? (
             <div className="evaluator-pinned-source">
               <p className="section-kicker">Selected outside this filter</p>
@@ -1239,6 +1260,7 @@ const EvidenceView = ({
               <button
                 type="button"
                 className={`hiring-btn hiring-btn-sm ${hiringDraft.decision === 'accepted' ? 'hiring-btn-mint' : ''}`}
+                aria-pressed={hiringDraft.decision === 'accepted'}
                 onClick={() => onHiringDraftChange({ decision: 'accepted' })}
               >
                 Advance
@@ -1246,6 +1268,7 @@ const EvidenceView = ({
               <button
                 type="button"
                 className={`hiring-btn hiring-btn-sm ${hiringDraft.decision === 'rejected' ? 'hiring-btn-danger' : ''}`}
+                aria-pressed={hiringDraft.decision === 'rejected'}
                 onClick={() => onHiringDraftChange({ decision: 'rejected' })}
               >
                 Reject
@@ -1256,7 +1279,7 @@ const EvidenceView = ({
                   className="evaluator-text-link"
                   onClick={onGoToDecision}
                 >
-                  Open full Decision →
+                  Open decision
                 </button>
               ) : null}
             </div>
@@ -1264,7 +1287,7 @@ const EvidenceView = ({
           <textarea
             rows={2}
             aria-label="Private review scratchpad notes"
-            placeholder="Jot notes while reading the diff — automatically synced with the Decision tab…"
+            placeholder="Private notes, shared with the Decision tab…"
             value={hiringDraft.internalNotes}
             onChange={(event) =>
               onHiringDraftChange({ internalNotes: event.target.value })
@@ -1412,33 +1435,13 @@ export const EvaluatorReviewWorkspace = (
     };
   }, [aiReportStorageKey]);
 
-  const decisionDraftStorageKey = `hirearchy:eval:decision-draft:v1:${sessionId}`;
+  const decisionDraftStorageKey = hiringDecisionDraftKey(sessionId);
   const [hiringDecisionDraft, setHiringDecisionDraft] =
-    useState<HiringDecisionDraft | null>(() => {
-      if (!initialHiringReviewContext) return null;
-      return {
-        decision: initialHiringReviewContext.decision?.decision ?? 'accepted',
-        strengthsText:
-          initialHiringReviewContext.decision?.candidateStrengths.join('\n') ??
-          '',
-        weaknessesText:
-          initialHiringReviewContext.decision?.candidateWeaknesses.join('\n') ??
-          '',
-        feedbackNote:
-          initialHiringReviewContext.decision?.candidateFeedbackNote ?? '',
-        internalNotes: initialHiringReviewContext.decision?.internalNotes ?? '',
-        nextStageLabel:
-          initialHiringReviewContext.decision?.nextStageLabel ??
-          'Managerial Interview',
-        handoffRecipientId:
-          initialHiringReviewContext.decision?.handoffRecipientPrincipalId ??
-          initialHiringReviewContext.teamMembers.find(
-            (m) => m.role === 'cto' || m.isOwner,
-          )?.principalId ??
-          initialHiringReviewContext.teamMembers[0]?.principalId ??
-          '',
-      };
-    });
+    useState<HiringDecisionDraft | null>(() =>
+      initialHiringReviewContext
+        ? initialHiringDecisionDraft(initialHiringReviewContext)
+        : null,
+    );
 
   useEffect(() => {
     if (!initialHiringReviewContext) return;
@@ -1446,22 +1449,19 @@ export const EvaluatorReviewWorkspace = (
     queueMicrotask(() => {
       if (!active) return;
       try {
-        const saved = window.sessionStorage.getItem(decisionDraftStorageKey);
-        if (!saved) return;
-        const parsed = JSON.parse(saved) as Partial<HiringDecisionDraft>;
-        if (parsed && typeof parsed === 'object') {
-          setHiringDecisionDraft((current) =>
-            current ? { ...current, ...parsed } : current,
-          );
-        }
+        const restored = restoreHiringDecisionDraft(
+          sessionId,
+          initialHiringDecisionDraft(initialHiringReviewContext),
+        );
+        setHiringDecisionDraft(restored);
       } catch {
-        // Ignore storage errors
+        // Ignore malformed local drafts.
       }
     });
     return () => {
       active = false;
     };
-  }, [decisionDraftStorageKey, initialHiringReviewContext]);
+  }, [sessionId, initialHiringReviewContext]);
 
   const updateHiringDecisionDraft = (patch: Partial<HiringDecisionDraft>) => {
     setHiringDecisionDraft((current) => {
@@ -1527,7 +1527,10 @@ export const EvaluatorReviewWorkspace = (
       : 'Chronology',
   );
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(
-    () => preferredEvidenceSource(sources)?.key ?? null,
+    () =>
+      (initialHiringReviewContext
+        ? sourcesForFilter(sources, filter, [])[0]?.key
+        : preferredEvidenceSource(sources)?.key) ?? null,
   );
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [quickNoteOpen, setQuickNoteOpen] = useState(false);
@@ -1753,7 +1756,10 @@ export const EvaluatorReviewWorkspace = (
     nextFilter?: EvidenceFilter,
     source?: EvidenceSource,
   ) => {
-    if (nextFilter) setFilter(nextFilter);
+    if (nextFilter) {
+      if (source) setFilter(nextFilter);
+      else handleFilterChange(nextFilter);
+    }
     if (source) setSelectedSourceKey(source.key);
     setMode('Evidence');
     setQuickNoteOpen(false);
@@ -1847,7 +1853,7 @@ export const EvaluatorReviewWorkspace = (
 
   const tabDisplayLabel = (item: WorkbenchMode) => {
     if (!hiringReviewContext) return item;
-    if (item === 'Summary') return 'Overview';
+    if (item === 'Summary') return 'Timeline';
     if (item === 'Evidence') return 'Code & Tests';
     return 'Decision';
   };
@@ -2048,19 +2054,6 @@ export const EvaluatorReviewWorkspace = (
               r27Evidence ? (
                 visitedModes.has('Review') ? (
                   <div className="r27-review-stack" hidden={mode !== 'Review'}>
-                    {hiringReviewContext ? (
-                      <R27AiReviewPanel
-                        organizationId={r27Evidence.organizationId}
-                        sessionId={r27Evidence.sessionId}
-                        evidence={r27Evidence}
-                        report={aiReviewReport}
-                        onReportChange={setAiReviewReport}
-                        onLoadingChange={setAiReviewLoading}
-                        planLocked={aiReviewPlanLocked}
-                        hiring
-                        planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
-                      />
-                    ) : null}
                     <div className="r27-human-review">
                       {hiringReviewContext ? (
                         <HiringDecisionPanel
@@ -2098,19 +2091,17 @@ export const EvaluatorReviewWorkspace = (
                         )
                       ) : null}
                     </div>
-                    {!hiringReviewContext ? (
-                      <R27AiReviewPanel
-                        organizationId={r27Evidence.organizationId}
-                        sessionId={r27Evidence.sessionId}
-                        evidence={r27Evidence}
-                        report={aiReviewReport}
-                        onReportChange={setAiReviewReport}
-                        onLoadingChange={setAiReviewLoading}
-                        planLocked={aiReviewPlanLocked}
-                        hiring={false}
-                        planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
-                      />
-                    ) : null}
+                    <R27AiReviewPanel
+                      organizationId={r27Evidence.organizationId}
+                      sessionId={r27Evidence.sessionId}
+                      evidence={r27Evidence}
+                      report={aiReviewReport}
+                      onReportChange={setAiReviewReport}
+                      onLoadingChange={setAiReviewLoading}
+                      planLocked={aiReviewPlanLocked}
+                      hiring={Boolean(hiringReviewContext)}
+                      planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
+                    />
                   </div>
                 ) : null
               ) : mode === 'Review' ? (

@@ -2257,6 +2257,49 @@ BEGIN
 END
 $function$;
 
+-- Account-authorized reads of frozen submissions never use the invitation envelope.
+CREATE OR REPLACE FUNCTION staging.hiring_candidate_submission_read(
+  p_subject_id pg_catalog.uuid,
+  p_session_id pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_submission pg_catalog.jsonb;
+  v_gate pg_catalog.text;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.assessment_sessions
+    WHERE id = p_session_id AND status = 'SUBMITTED'
+  ) THEN
+    RETURN NULL;
+  END IF;
+
+  v_gate := staging.hiring_candidate_session_verify(p_subject_id, p_session_id) ->> 'gateState';
+  -- The profile requirement applies to starting an assessment. Both states have
+  -- already matched the confirmed email and any bound candidate principal.
+  IF COALESCE(v_gate, '') NOT IN ('ready', 'profile_required') THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT pg_catalog.jsonb_build_object(
+    'title', session.scenario_title,
+    'submittedAt', pg_catalog.to_char(submission.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'files', submission.manifest
+  )
+  INTO v_submission
+  FROM hirearchy.candidate_session_submissions AS submission
+  JOIN hirearchy.assessment_sessions AS session
+    ON session.id = submission.session_id AND session.organization_id = submission.organization_id
+  WHERE session.id = p_session_id AND session.status = 'SUBMITTED';
+
+  RETURN v_submission;
+END
+$function$;
+
 CREATE OR REPLACE FUNCTION staging.hiring_plan_get(
   p_organization_id pg_catalog.uuid,
   p_caller_principal_id pg_catalog.uuid
@@ -3956,6 +3999,7 @@ GRANT EXECUTE ON FUNCTION staging.hiring_candidate_profile_get(pg_catalog.uuid) 
 GRANT EXECUTE ON FUNCTION staging.hiring_candidate_profile_upsert(pg_catalog.uuid, pg_catalog.jsonb) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_candidate_portal_list(pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_candidate_session_verify(pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_candidate_submission_read(pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_plan_get(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_plan_update(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.int4) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_library_list(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
@@ -3991,6 +4035,7 @@ REVOKE ALL ON FUNCTION staging.hiring_candidate_profile_get(pg_catalog.uuid) FRO
 REVOKE ALL ON FUNCTION staging.hiring_candidate_profile_upsert(pg_catalog.uuid, pg_catalog.jsonb) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_candidate_portal_list(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_candidate_session_verify(pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_candidate_submission_read(pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_plan_get(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_plan_update(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.int4) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_library_list(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
@@ -4317,6 +4362,7 @@ def validate_operation_args(operation, args):
         'candidate.profile.upsert': (('profile',), ()),
         'candidate.portal.list': ((), ()),
         'candidate.session.verify_access': (('sessionId',), ()),
+        'candidate.session.submitted_read': (('sessionId',), ()),
         'hiring.team.invitation.create': (('organizationId', 'targetEmail', 'role', 'expiresAt', 'idempotencyKey', 'invitationTokenHash', 'invitationTokenCiphertext'), ()),
         'hiring.plan.get': (('organizationId',), ()),
         'hiring.plan.update': (('organizationId', 'planTier', 'creditsMode', 'creditsAmount'), ()),
@@ -6429,12 +6475,17 @@ def dispatch_pre_principal(op, args, subject_id, auth_session_id, principal_id, 
         )
         return safe_json_value(rows[0]['result'])
 
-    if op == 'candidate.session.verify_access':
+    if op in ('candidate.session.verify_access', 'candidate.session.submitted_read'):
         session_id = args.get('sessionId')
         if not isinstance(session_id, str) or not re.fullmatch(r'sess_[A-Za-z0-9_-]{1,128}', session_id):
             error('Session identifier is invalid', '22023')
+        query = (
+            "SELECT staging.hiring_candidate_submission_read($1::pg_catalog.uuid, $2) AS result"
+            if op == 'candidate.session.submitted_read' else
+            "SELECT staging.hiring_candidate_session_verify($1::pg_catalog.uuid, $2) AS result"
+        )
         rows = run(
-            "SELECT staging.hiring_candidate_session_verify($1::pg_catalog.uuid, $2) AS result",
+            query,
             ['uuid', 'text'],
             [subject_id, session_id],
         )
@@ -6586,6 +6637,7 @@ PRE_PRINCIPAL_OPERATIONS = {
     'candidate.profile.upsert',
     'candidate.portal.list',
     'candidate.session.verify_access',
+    'candidate.session.submitted_read',
 }
 ACCOUNT_OPERATIONS = {'account.profile.get', 'account.profile.update'}
 

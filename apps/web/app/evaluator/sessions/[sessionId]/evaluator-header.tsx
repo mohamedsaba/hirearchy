@@ -2,6 +2,7 @@ import type { BriefingSessionDuration } from '../../../../src/evaluator/evaluato
 import type { SessionClosureReason } from '../../../../src/sessions/session';
 import { formatEvaluatorClosureReason } from '../../../../src/evaluator/evaluator-review-presentation';
 import Link from 'next/link';
+import { LocalTime } from '../../../_components/local-time';
 import { ThemeToggle } from '../../../_components/theme-toggle';
 
 type EvaluatorHeaderProps = Readonly<{
@@ -98,14 +99,7 @@ export const EvaluatorHeader = ({
         {sessionDuration?.status === 'available' ? (
           <span>{sessionDuration.text} recorded</span>
         ) : null}
-        <time dateTime={submittedAt} title={`Submitted ${submittedAt}`}>
-          {new Date(submittedAt).toLocaleString('en-US', {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-            timeZone: 'UTC',
-          })}{' '}
-          UTC
-        </time>
+        <LocalTime timestamp={submittedAt} />
         {!displayName ? (
           <span title={`Candidate session reference: ${sessionId}`}>
             Session {sessionId.slice(0, 8)}…

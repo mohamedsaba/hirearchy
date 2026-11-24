@@ -322,72 +322,44 @@ export function CandidatesPipelineClient({
         </div>
       ) : null}
 
-      <div className="software-directory">
-        <aside className="hiring-filter-bar" aria-label="Filter candidates">
-          <div className="hiring-filter-heading">
-            <h2>Candidate filters</h2>
-            {isFiltered ? (
-              <button
-                type="button"
-                className="hiring-btn hiring-btn-sm"
-                onClick={clearFilters}
-              >
-                Clear filters
-              </button>
-            ) : null}
-          </div>
-          <div className="hiring-filter-grid">
-            <div className="hiring-field">
-              <label htmlFor="candidate-role">Role</label>
-              <select
-                id="candidate-role"
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-              >
-                <option value="all">All roles</option>
-                {choices.roles.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="candidate-status">Pipeline stage</label>
-              <select
-                id="candidate-status"
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as PipelineStatusId)
-                }
-              >
-                {PIPELINE_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="candidate-sort">Sort by</label>
-              <select
-                id="candidate-sort"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as CandidateSortId)}
-              >
-                {CANDIDATE_SORT_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+      <div className="hiring-page-shell">
+        {candidates.length > 0 ? (
+          <section className="hiring-filter-bar" aria-label="Filter candidates">
+            <div className="hiring-filter-primary">
+              <div className="hiring-field">
+                <label htmlFor="candidate-search">Search</label>
+                <input
+                  id="candidate-search"
+                  type="search"
+                  aria-label="Search candidates"
+                  placeholder="Find a candidate…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="hiring-field">
+                <label htmlFor="candidate-status">Pipeline stage</label>
+                <select
+                  id="candidate-status"
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as PipelineStatusId)
+                  }
+                >
+                  {PIPELINE_STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <details
               className="hiring-disclosure hiring-more-filters"
               open={
+                roleFilter !== 'all' ||
+                sortBy !== 'recent' ||
                 experienceFilter !== 'all' ||
                 locationFilter !== 'all' ||
                 yearsFilter !== 'all' ||
@@ -396,6 +368,39 @@ export function CandidatesPipelineClient({
             >
               <summary>More filters</summary>
               <div className="hiring-filter-grid hiring-mt-xs">
+                <div className="hiring-field">
+                  <label htmlFor="candidate-role">Role</label>
+                  <select
+                    id="candidate-role"
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                  >
+                    <option value="all">All roles</option>
+                    {choices.roles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="hiring-field">
+                  <label htmlFor="candidate-sort">Sort by</label>
+                  <select
+                    id="candidate-sort"
+                    value={sortBy}
+                    onChange={(e) =>
+                      setSortBy(e.target.value as CandidateSortId)
+                    }
+                  >
+                    {CANDIDATE_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="hiring-field">
                   <label htmlFor="candidate-experience">Experience level</label>
                   <select
@@ -469,66 +474,41 @@ export function CandidatesPipelineClient({
                 </div>
               </div>
             </details>
-          </div>
 
-          {selectedSkills.length > 0 ? (
-            <div className="hiring-chip-group" aria-label="Selected skills">
-              {selectedSkills.map((skill) => (
-                <button
-                  key={skill}
-                  className="hiring-chip is-active"
-                  type="button"
-                  aria-label={`Remove ${skill} filter`}
-                  onClick={() =>
-                    setSelectedSkills(
-                      selectedSkills.filter((item) => item !== skill),
-                    )
-                  }
-                >
-                  {skill} <IconX size={14} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </aside>
+            {selectedSkills.length > 0 ? (
+              <div className="hiring-chip-group" aria-label="Selected skills">
+                {selectedSkills.map((skill) => (
+                  <button
+                    key={skill}
+                    className="hiring-chip is-active"
+                    type="button"
+                    aria-label={`Remove ${skill} filter`}
+                    onClick={() =>
+                      setSelectedSkills(
+                        selectedSkills.filter((item) => item !== skill),
+                      )
+                    }
+                  >
+                    {skill} <IconX size={14} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {isFiltered ? (
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm hiring-clear-filters"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            ) : null}
+          </section>
+        ) : null}
         <section
           className="software-directory-results"
           aria-label="Matching candidates"
         >
-          <div className="hiring-directory-toolbar">
-            <input
-              type="search"
-              aria-label="Search candidates"
-              placeholder="Search by name, email, role, or task…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <div
-              className="hiring-chip-group"
-              role="group"
-              aria-label="Quick stage filter"
-            >
-              {(
-                [
-                  { id: 'all', label: 'All' },
-                  { id: 'ready_for_review', label: 'Ready for review' },
-                  { id: 'in_progress', label: 'In progress' },
-                  { id: 'accepted', label: 'Accepted' },
-                ] as const
-              ).map((stage) => (
-                <button
-                  key={stage.id}
-                  type="button"
-                  aria-pressed={statusFilter === stage.id}
-                  className={`hiring-chip${statusFilter === stage.id ? ' is-active' : ''}`}
-                  onClick={() => setStatusFilter(stage.id)}
-                >
-                  {stage.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="hiring-filter-result" role="status">
             {filtered.length}{' '}
             {filtered.length === 1 ? 'candidate' : 'candidates'}
@@ -546,19 +526,9 @@ export function CandidatesPipelineClient({
               </h2>
               <p>
                 {candidates.length === 0
-                  ? 'Issue your first assessment from the Assessment Builder to start your candidate pipeline.'
-                  : 'Try broadening your role, skills, location, or stage filters.'}
+                  ? 'Candidates appear here when you send them an assessment.'
+                  : 'Try a different search or clear your filters.'}
               </p>
-              {candidates.length === 0 ? (
-                <div className="hiring-header-actions hiring-mt-sm">
-                  <Link
-                    className="hiring-btn hiring-btn-primary"
-                    href={`${orgBase}/builder`}
-                  >
-                    Issue first assessment
-                  </Link>
-                </div>
-              ) : null}
             </div>
           ) : (
             <div className="hiring-candidate-list">

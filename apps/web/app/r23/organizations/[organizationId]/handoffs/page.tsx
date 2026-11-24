@@ -48,20 +48,13 @@ export default async function OrganizationHandoffsPage({
     >
       <div className="hiring-page-shell">
         <header className="hiring-page-header">
-          <div>
-            <span className="hiring-eyebrow">{workspace.organizationName}</span>
-            <h1>Managerial Handoffs</h1>
-            <p>
-              Hiring briefs for accepted candidates moving to their next
-              interview.
-            </p>
-          </div>
+          <h1>Interview handoffs</h1>
           <div className="hiring-header-actions">
             <Link
               className="hiring-btn"
               href={`/r23/organizations/${encodeURIComponent(workspace.organizationId)}/candidates`}
             >
-              View All Candidates
+              View candidates
             </Link>
           </div>
         </header>

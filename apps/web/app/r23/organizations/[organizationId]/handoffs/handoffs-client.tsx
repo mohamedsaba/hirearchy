@@ -107,86 +107,97 @@ export function HandoffsHubClient({
 
   return (
     <div className="hiring-page-shell">
-      <div className="hiring-directory-toolbar">
-        <input
-          type="search"
-          aria-label="Search handoffs"
-          placeholder="Search by candidate, email, role, or task…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-
-      <section className="hiring-filter-bar" aria-label="Filter handoffs">
-        <div className="hiring-filter-grid">
-          <div className="hiring-field">
-            <label htmlFor="handoff-stage">Next hiring stage</label>
-            <select
-              id="handoff-stage"
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
-            >
-              <option value="all">All stages</option>
-              {NEXT_STAGE_OPTIONS.map((stage) => (
-                <option key={stage} value={stage}>
-                  {stage}
-                </option>
-              ))}
-            </select>
+      {initialHandoffs.length > 0 ? (
+        <section className="hiring-filter-bar" aria-label="Filter handoffs">
+          <div className="hiring-filter-primary">
+            <div className="hiring-field">
+              <label htmlFor="handoff-search">Search</label>
+              <input
+                id="handoff-search"
+                type="search"
+                aria-label="Search handoffs"
+                placeholder="Find a handoff…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="hiring-field">
+              <label htmlFor="handoff-status">Handoff status</label>
+              <select
+                id="handoff-status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value="pending">Needs review</option>
+                <option value="reviewed">Reviewed</option>
+                <option value="completed">Interview done</option>
+              </select>
+            </div>
           </div>
-          <div className="hiring-field">
-            <label htmlFor="handoff-status">Handoff status</label>
-            <select
-              id="handoff-status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All statuses</option>
-              <option value="pending">Needs review</option>
-              <option value="reviewed">Reviewed</option>
-              <option value="completed">Interview done</option>
-            </select>
-          </div>
-          <div className="hiring-field">
-            <label htmlFor="handoff-role">Target role</label>
-            <select
-              id="handoff-role"
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-            >
-              <option value="all">All roles</option>
-              {HIRING_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {isFiltered ? (
-          <div className="hiring-header-actions">
-            <button
-              type="button"
-              className="hiring-btn hiring-btn-sm"
-              onClick={clearFilters}
-            >
-              Clear filters
-            </button>
-          </div>
-        ) : null}
-      </section>
+          <details
+            className="hiring-disclosure hiring-more-filters"
+            open={stageFilter !== 'all' || roleFilter !== 'all'}
+          >
+            <summary>More filters</summary>
+            <div className="hiring-filter-grid hiring-mt-xs">
+              <div className="hiring-field">
+                <label htmlFor="handoff-stage">Next hiring stage</label>
+                <select
+                  id="handoff-stage"
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value)}
+                >
+                  <option value="all">All stages</option>
+                  {NEXT_STAGE_OPTIONS.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="hiring-field">
+                <label htmlFor="handoff-role">Target role</label>
+                <select
+                  id="handoff-role"
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                >
+                  <option value="all">All roles</option>
+                  {HIRING_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </details>
+          {isFiltered ? (
+            <div className="hiring-header-actions">
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {filtered.length === 0 ? (
         <div className="hiring-card">
           <h2>
             {initialHandoffs.length === 0
-              ? 'No managerial handoffs yet'
+              ? 'No interview handoffs yet'
               : 'No handoffs match these filters'}
           </h2>
           <p>
             {initialHandoffs.length === 0
-              ? 'When an evaluator accepts a candidate on the Evidence Review page and sets a next stage, the full managerial dossier appears here.'
-              : 'Try broadening your search or clearing the status and role filters.'}
+              ? 'Advance a candidate and assign their next interview to create a handoff.'
+              : 'Try a different search or clear your filters.'}
           </p>
         </div>
       ) : (

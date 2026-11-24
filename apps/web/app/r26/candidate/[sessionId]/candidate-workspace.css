@@ -2362,59 +2362,74 @@ html[data-theme='dark'] .r26-candidate .r26-conflict p {
   font-size: 0.9em;
 }
 
-/* Pre-start Centered Readiness Card, Left Segmented Tabs & Claude-style AI UX */
+/* Candidate readiness */
 .r26-prestart-stage {
-  max-width: 46rem;
-  margin: clamp(1.5rem, 5vw, 3.5rem) auto;
-  padding: clamp(1.35rem, 3vw, 2.25rem);
+  max-width: 42rem;
+  margin: clamp(0.75rem, 3vh, 2rem) auto;
+  padding: clamp(1rem, 3vw, 1.75rem);
   border: 1px solid var(--r26-line);
-  border-radius: var(--software-radius-surface, 0.75rem);
+  border-radius: var(--software-radius-surface);
   background: var(--r26-surface);
-  box-shadow: var(--software-shadow-card);
   display: grid;
-  gap: 1.25rem;
-}
-
-.r26-prestart-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1.25rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--r26-line);
-}
-
-.r26-prestart-header h1 {
-  margin: 0.25rem 0 0;
-  font-size: clamp(1.35rem, 2.5vw, 1.8rem);
-  letter-spacing: -0.03em;
-}
-
-.r26-prestart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 0.75rem;
 }
 
-.r26-prestart-feature {
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--r26-line);
-  border-radius: var(--software-radius-control, 0.5rem);
-  background: var(--r26-canvas);
-  display: grid;
-  gap: 0.25rem;
+.r26-prestart-header,
+.r26-readiness-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
 }
 
-.r26-prestart-feature strong {
-  font-size: 0.85rem;
-}
-
-.r26-prestart-feature p {
+.r26-prestart-header h1 {
   margin: 0;
-  font-size: 0.79rem;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.r26-prestart-header .r26-time-budget,
+.r26-prestart-stage p {
+  margin: 0;
+}
+
+.r26-readiness-tools,
+.r26-readiness-actions p {
   color: var(--r26-muted);
+  font-size: 0.875rem;
   line-height: 1.45;
+}
+
+.r26-readiness-actions {
+  display: grid;
+  gap: 0.65rem;
+  padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--r26-line);
+}
+
+.r26-readiness-expiry {
+  display: block;
+  margin-block-start: 0.25rem;
+}
+
+.r26-readiness-start {
+  justify-content: flex-end;
+}
+
+.r26-readiness-start label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: var(--software-touch-target, 44px);
+  margin-inline-end: auto;
+  cursor: pointer;
+}
+
+.r26-readiness-start input {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  accent-color: var(--software-status-success);
 }
 
 .r26-left-tabs {
