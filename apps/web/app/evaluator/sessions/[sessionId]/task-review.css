@@ -4409,3 +4409,25 @@ html[data-theme='dark'] .task-assessment-report .task-total {
     }
   }
 }
+
+[data-hiring-review='true'] .evaluator-mobile-inspector-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding-block-end: 8px;
+}
+
+[data-hiring-review='true'] .evaluator-mobile-inspector-navigation {
+  display: flex;
+}
+
+[data-hiring-review='true'] .evaluator-mobile-inspector-navigation button {
+  min-width: 44px;
+  padding-inline: 0;
+}
+
+[data-hiring-review='true']
+  .evaluator-mobile-inspector
+  .evaluator-mode-button[aria-pressed='true'] {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-note);
+}

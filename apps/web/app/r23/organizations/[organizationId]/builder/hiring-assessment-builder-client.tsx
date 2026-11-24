@@ -798,10 +798,10 @@ export function HiringAssessmentBuilderClient({
                       }
                     }}
                   >
-                    <option value={30}>30 minutes</option>
-                    <option value={45}>45 minutes</option>
-                    <option value={60}>60 minutes</option>
-                    <option value={90}>90 minutes</option>
+                    <option value={30}>30 min</option>
+                    <option value={45}>45 min</option>
+                    <option value={60}>60 min</option>
+                    <option value={90}>90 min</option>
                   </select>
                 </div>
                 <div className="hiring-field">
@@ -809,6 +809,7 @@ export function HiringAssessmentBuilderClient({
                     <input
                       type="checkbox"
                       className="hiring-switch-input"
+                      aria-label="Candidate AI assistant"
                       checked={tplIntegratedAi}
                       onChange={(e) => {
                         const checked = e.target.checked;
@@ -822,9 +823,7 @@ export function HiringAssessmentBuilderClient({
                       }}
                     />
                     <span className="hiring-switch-track" aria-hidden="true" />
-                    <span className="hiring-switch-copy">
-                      Candidate AI assistant
-                    </span>
+                    <span className="hiring-switch-copy">AI assistant</span>
                   </label>
                 </div>
               </aside>

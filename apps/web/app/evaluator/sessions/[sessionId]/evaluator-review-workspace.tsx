@@ -8,6 +8,8 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
+  IconChevronLeft,
+  IconChevronRight,
   IconCode,
   IconFile,
   IconListDetails,
@@ -2182,7 +2184,7 @@ export const EvaluatorReviewWorkspace = (
               id="mobile-inspector-back"
               onClick={() => setMobileInspectorOpen(false)}
             >
-              ← Back to evidence
+              {hiringReviewContext ? '← Evidence' : '← Back to evidence'}
             </button>
             <div className="evaluator-mobile-inspector-navigation">
               <button
@@ -2192,9 +2194,13 @@ export const EvaluatorReviewWorkspace = (
                 disabled={!canPrevious}
                 onClick={() => navigateFilteredSource(-1)}
               >
-                Previous
+                {hiringReviewContext ? (
+                  <IconChevronLeft size={17} aria-hidden="true" />
+                ) : (
+                  'Previous'
+                )}
               </button>
-              <span>{filter}</span>
+              {hiringReviewContext ? null : <span>{filter}</span>}
               <button
                 type="button"
                 id="mobile-inspector-next"
@@ -2202,7 +2208,11 @@ export const EvaluatorReviewWorkspace = (
                 disabled={!canNext}
                 onClick={() => navigateFilteredSource(1)}
               >
-                Next
+                {hiringReviewContext ? (
+                  <IconChevronRight size={17} aria-hidden="true" />
+                ) : (
+                  'Next'
+                )}
               </button>
             </div>
           </header>
