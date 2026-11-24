@@ -7454,12 +7454,8 @@ GRANT EXECUTE ON FUNCTION staging.hiring_r212_admit(pg_catalog.text, pg_catalog.
 GRANT EXECUTE ON FUNCTION staging.hiring_r212_complete(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4) TO app_candidate_gateway;
 GRANT EXECUTE ON FUNCTION staging.hiring_r212_fail(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4) TO app_candidate_gateway;
 
--- Ensure existing Hiring Platform sessions always have terminal / test runner enabled
-UPDATE hirearchy.assessment_sessions AS s
-SET terminal_enabled = true
-FROM hirearchy.hiring_session_metadata AS m
-WHERE m.session_id = s.id
-  AND s.terminal_enabled IS NOT TRUE;
+-- terminal_enabled is an immutable session column, so existing sessions are not
+-- rewritten; hiring execution RPCs below treat hiring sessions as always enabled.
 
 -- R2.13 Execution RPCs exposed to app_candidate_gateway strictly inside staging schema
 CREATE OR REPLACE FUNCTION staging.hiring_r213_get_view(
@@ -7556,7 +7552,7 @@ BEGIN
   WHERE op.session_id = p_session_id;
 
   RETURN pg_catalog.jsonb_build_object(
-    'terminalEnabled', COALESCE(v_session.terminal_enabled, true),
+    'terminalEnabled', true,
     'remainingExecutions', GREATEST(0, 10 - v_count),
     'maxExecutions', 10,
     'currentWorkspaceDigest', COALESCE(v_workspace_digest, ''),
