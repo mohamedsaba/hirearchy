@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { CANDIDATE_SUBMISSION_PATH } from './src/hiring/candidate-entry';
+
 import {
   isAuthenticatedStaging,
   isFounderUatEnabled,
@@ -104,6 +106,7 @@ const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
   /^\/candidate$/,
   /^\/candidate\/login$/,
   /^\/candidate\/signup$/,
+  CANDIDATE_SUBMISSION_PATH,
   /^\/api\/candidate-portal$/,
   /^\/r26\/api\/candidate\/[^/]+\/ai$/,
   /^\/r23\/organizations\/[^/]+\/candidates$/,

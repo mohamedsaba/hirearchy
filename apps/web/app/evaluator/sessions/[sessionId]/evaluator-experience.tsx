@@ -50,6 +50,7 @@ export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
           stagingReview={{
             organizationId: props.r27Evidence.organizationId,
             sessionId: props.sessionId,
+            compact: Boolean(props.hiringReviewContext),
           }}
         />
         <div className="evaluator-review-page-content">

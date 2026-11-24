@@ -17,6 +17,7 @@ export interface SoftwareProductHeaderTenantScope {
 export interface SoftwareProductHeaderStagingReview {
   readonly organizationId: string;
   readonly sessionId: string;
+  readonly compact?: boolean;
 }
 
 export const SoftwareProductHeader = ({
@@ -69,17 +70,32 @@ export const SoftwareProductHeader = ({
       ) : null}
       <nav
         aria-label={
-          stagingReview ? 'Related review pages' : 'Evaluator workspace'
+          stagingReview?.compact
+            ? 'Related review pages'
+            : 'Evaluator workspace'
         }
       >
         {stagingReview && sessionSummaryHref ? (
           <>
             <Link
-              className="software-review-related-link"
+              className={
+                stagingReview.compact
+                  ? 'software-review-related-link'
+                  : 'software-nav-link'
+              }
               href={sessionSummaryHref}
             >
-              Session details
+              {stagingReview.compact ? 'Session details' : 'Session summary'}
             </Link>
+            {stagingReview.compact ? null : (
+              <Link
+                className="software-nav-link"
+                href={`/r27/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`}
+                aria-current={active === 'reviews' ? 'page' : undefined}
+              >
+                Evidence review
+              </Link>
+            )}
           </>
         ) : (
           <>

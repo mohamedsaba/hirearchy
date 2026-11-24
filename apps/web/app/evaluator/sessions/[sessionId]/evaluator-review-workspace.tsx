@@ -31,6 +31,7 @@ import {
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
+import { experienceLevelLabel } from '../../../../src/hiring/catalogs';
 import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
 import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
@@ -1883,6 +1884,12 @@ export const EvaluatorReviewWorkspace = (
           candidateEmail={hiringReviewContext?.candidateEmail ?? null}
           candidateCode={hiringReviewContext?.candidateCode ?? null}
           targetRole={hiringReviewContext?.targetRole ?? null}
+          experienceLevel={
+            hiringReviewContext
+              ? experienceLevelLabel(hiringReviewContext.experienceLevel)
+              : null
+          }
+          skills={hiringReviewContext?.skills}
           testSummary={headerStats.testSummary}
           diffSummary={headerStats.diffSummary}
           backHref={

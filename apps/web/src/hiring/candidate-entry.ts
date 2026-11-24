@@ -1,3 +1,6 @@
+export const CANDIDATE_SUBMISSION_PATH =
+  /^\/candidate\/submissions\/sess_[A-Za-z0-9_-]{1,128}$/;
+
 export function candidateAssessmentPath(value: unknown): string | null {
   return typeof value === 'string' &&
     /^\/r26\/candidate\/sess_[A-Za-z0-9_-]{1,128}$/.test(value)
@@ -8,8 +11,7 @@ export function candidateAssessmentPath(value: unknown): string | null {
 export function candidateEntryPath(value: unknown): string | null {
   return (
     candidateAssessmentPath(value) ??
-    (typeof value === 'string' &&
-    /^\/candidate\/submissions\/sess_[A-Za-z0-9_-]{1,128}$/.test(value)
+    (typeof value === 'string' && CANDIDATE_SUBMISSION_PATH.test(value)
       ? value
       : null)
   );

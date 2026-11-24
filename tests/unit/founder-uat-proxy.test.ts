@@ -52,6 +52,23 @@ describe('Founder UAT root routing', () => {
     expect(response.status).toBe(503);
   });
 
+  it('allows only read requests to a submitted-work page in the hiring profile', () => {
+    configureValidFounderUat();
+    const url = 'http://localhost/candidate/submissions/sess_example';
+    expect(proxy(new NextRequest(url)).status).toBe(503);
+    vi.stubEnv('HIREARCHY_HIRING_PLATFORM_ENABLED', 'true');
+
+    for (const method of ['GET', 'HEAD']) {
+      expect(
+        proxy(new NextRequest(url, { method })).headers.get(
+          'x-middleware-next',
+        ),
+      ).toBe('1');
+    }
+    expect(proxy(new NextRequest(url, { method: 'POST' })).status).toBe(503);
+    expect(proxy(new NextRequest(url + '/extra')).status).toBe(503);
+  });
+
   it('allows only the shared software stylesheet and DM Sans font as static UAT assets', () => {
     configureValidFounderUat();
 

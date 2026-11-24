@@ -18,6 +18,8 @@ type EvaluatorHeaderProps = Readonly<{
   candidateEmail?: string | null;
   candidateCode?: string | null;
   targetRole?: string | null;
+  experienceLevel?: string | null;
+  skills?: readonly string[];
   testSummary?: string | null;
   diffSummary?: string | null;
 }>;
@@ -42,6 +44,8 @@ export const EvaluatorHeader = ({
   candidateEmail,
   candidateCode,
   targetRole,
+  experienceLevel,
+  skills,
   testSummary,
   diffSummary,
 }: EvaluatorHeaderProps) => {
@@ -69,8 +73,10 @@ export const EvaluatorHeader = ({
                   {candidateCode}
                 </span>
               ) : null}
-              {targetRole ? (
-                <span className="evaluator-candidate-role">{targetRole}</span>
+              {targetRole || experienceLevel ? (
+                <span className="evaluator-candidate-role">
+                  {[targetRole, experienceLevel].filter(Boolean).join(' · ')}
+                </span>
               ) : null}
             </div>
             <p className="evaluator-candidate-sub">
@@ -100,6 +106,12 @@ export const EvaluatorHeader = ({
           <span>{sessionDuration.text} recorded</span>
         ) : null}
         <LocalTime timestamp={submittedAt} />
+        {skills?.length ? (
+          <details className="software-tech-details">
+            <summary>Skills</summary>
+            <p>{skills.join(' · ')}</p>
+          </details>
+        ) : null}
         {!displayName ? (
           <span title={`Candidate session reference: ${sessionId}`}>
             Session {sessionId.slice(0, 8)}…
