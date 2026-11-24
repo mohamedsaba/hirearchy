@@ -673,9 +673,9 @@ export function HiringAssessmentBuilderClient({
   };
 
   const stages = [
-    { id: 'source', title: 'Choose a problem' },
+    { id: 'source', title: 'Problem' },
     { id: 'preview', title: 'Preview' },
-    { id: 'invite', title: 'Invite candidate' },
+    { id: 'invite', title: 'Invite' },
   ] as const;
 
   return (
@@ -756,19 +756,21 @@ export function HiringAssessmentBuilderClient({
                 type="button"
                 role="tab"
                 aria-selected={mode === 'ai'}
+                aria-label="Generate with AI"
                 className={`hiring-builder-tab${mode === 'ai' ? ' is-active' : ''}`}
                 onClick={() => setMode('ai')}
               >
-                <IconSparkles size={16} /> Generate with AI
+                <IconSparkles size={16} /> Generate
               </button>
               <button
                 type="button"
                 role="tab"
                 aria-selected={mode === 'library'}
+                aria-label="Problem library"
                 className={`hiring-builder-tab${mode === 'library' ? ' is-active' : ''}`}
                 onClick={() => setMode('library')}
               >
-                <IconBookmark size={16} /> Problem library
+                <IconBookmark size={16} /> Library
               </button>
             </div>
           </div>
@@ -779,7 +781,7 @@ export function HiringAssessmentBuilderClient({
                 className="hiring-template-settings"
                 aria-labelledby="template-settings-title"
               >
-                <h2 id="template-settings-title">Assessment settings</h2>
+                <h2 id="template-settings-title">Before you invite</h2>
                 <div className="hiring-field">
                   <label htmlFor="tpl-duration">Time limit</label>
                   <select

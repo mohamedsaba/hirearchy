@@ -3811,70 +3811,52 @@ export function R26CandidateClient({
       </div>
 
       {submitConfirmOpen && isHiringExperience && view ? (
-        <div
-          className="r26-submit-modal-backdrop"
-          role="presentation"
+        <dialog
+          className="r26-submit-modal"
+          aria-labelledby="candidate-submit-modal-title"
+          ref={(dialog) => {
+            if (dialog && !dialog.open) dialog.showModal();
+          }}
+          onCancel={(event) => {
+            event.preventDefault();
+            if (!busy) setSubmitConfirmOpen(false);
+          }}
           onClick={(event) => {
-            if (event.target === event.currentTarget && !busy) {
+            if (event.target !== event.currentTarget || busy) return;
+            const box = event.currentTarget.getBoundingClientRect();
+            if (
+              event.clientX < box.left ||
+              event.clientX > box.right ||
+              event.clientY < box.top ||
+              event.clientY > box.bottom
+            )
               setSubmitConfirmOpen(false);
-            }
           }}
         >
-          <section
-            className="r26-submit-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="candidate-submit-modal-title"
-          >
-            <h2 id="candidate-submit-modal-title">Submit your assessment?</h2>
-            <p className="hiring-gate-note">
-              Once submitted, your workspace becomes read-only and the hiring
-              team receives your final saved files.
-            </p>
-            <div className="r26-submit-summary-grid">
-              <div className="r26-submit-summary-cell">
-                <strong>{view.files.length} files</strong>
-                <span>In workspace</span>
-              </div>
-              <div className="r26-submit-summary-cell">
-                <strong>
-                  {latestExecution
-                    ? latestExecution.exitCode === 0
-                      ? 'Latest passed'
-                      : `Exit ${latestExecution.exitCode ?? '—'}`
-                    : 'Not run'}
-                </strong>
-                <span>Test checks</span>
-              </div>
-              <div className="r26-submit-summary-cell">
-                <strong>
-                  {remainingMs !== null
-                    ? formatDuration(remainingMs)
-                    : 'Active'}
-                </strong>
-                <span>Time left</span>
-              </div>
-            </div>
-            <div className="hiring-gate-actions">
-              <button
-                type="button"
-                className="r26-button r26-button-secondary"
-                disabled={busy}
-                onClick={() => setSubmitConfirmOpen(false)}
-              >
-                Keep working
-              </button>
-              <button
-                type="button"
-                className="r26-button r26-button-primary"
-                disabled={busy}
-                onClick={() => void submit()}
-              >
-                {busy ? 'Submitting…' : 'Confirm submit'}
-              </button>
-            </div>
-          </section>
-        </div>
+          <h2 id="candidate-submit-modal-title">Submit your assessment?</h2>
+          <p className="hiring-gate-note">
+            Your hiring team will receive your saved files. You can view your
+            work after submitting.
+          </p>
+          <div className="hiring-gate-actions">
+            <button
+              type="button"
+              className="r26-button r26-button-secondary"
+              disabled={busy}
+              onClick={() => setSubmitConfirmOpen(false)}
+            >
+              Keep working
+            </button>
+            <button
+              type="button"
+              className="r26-button r26-button-primary"
+              disabled={busy}
+              onClick={() => void submit()}
+            >
+              {busy ? 'Submitting…' : 'Confirm submit'}
+            </button>
+          </div>
+        </dialog>
       ) : null}
       <CommonThreadToast
         message={toastState?.message ?? null}
