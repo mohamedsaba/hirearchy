@@ -1,12 +1,21 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
+  IconBriefcase,
+  IconListDetails,
+  IconSettings,
+  IconSparkles,
+  IconUsers,
+} from '@tabler/icons-react';
+import {
   formatPlanBadge,
   type OrganizationPlanSummary,
 } from '../../../src/plans/entitlements';
+import { isHiringPlatformEnabled } from '../../../src/runtime/profile';
 import type { SoftwareWorkspaceActiveSection } from '../../../src/ui/software-document';
 import { SoundToggle } from '../../_components/sound-toggle';
 import { ThemeToggle } from '../../_components/theme-toggle';
+import { BrandMark } from '../../_components/brand-mark';
 
 function resolveRoleLabel(role: string): string {
   switch (role) {
@@ -43,6 +52,9 @@ export function OrganizationWorkspaceShell({
   children,
 }: OrganizationWorkspaceShellProps) {
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
+  const homeHref = isHiringPlatformEnabled()
+    ? `${orgBase}/candidates`
+    : orgBase;
   const planBadge = plan ? formatPlanBadge(plan) : undefined;
 
   return (
@@ -51,14 +63,15 @@ export function OrganizationWorkspaceShell({
         Skip to main content
       </a>
       <header className="software-document-header">
-        <a
+        <Link
           className="software-document-wordmark"
-          href={orgBase}
+          href={homeHref}
           aria-label="Hirearchy Software home"
         >
+          <BrandMark />
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
-        </a>
+        </Link>
         <div className="software-header-controls">
           <SoundToggle variant="header" />
           <ThemeToggle variant="header" />
@@ -83,32 +96,37 @@ export function OrganizationWorkspaceShell({
               href={`${orgBase}/candidates`}
               aria-current={active === 'candidates' ? 'page' : undefined}
             >
-              Candidates
+              <IconUsers size={16} stroke={1.9} aria-hidden="true" />
+              <span>Candidates</span>
             </Link>
             <Link
               href={`${orgBase}/builder`}
               aria-current={active === 'builder' ? 'page' : undefined}
             >
-              Assessment Builder
+              <IconSparkles size={16} stroke={1.9} aria-hidden="true" />
+              <span>Assessment Builder</span>
             </Link>
             <Link
               href={`${orgBase}/handoffs`}
               aria-current={active === 'handoffs' ? 'page' : undefined}
             >
-              Handoffs
+              <IconBriefcase size={16} stroke={1.9} aria-hidden="true" />
+              <span>Handoffs</span>
             </Link>
             <a
               href={orgBase}
               aria-current={active === 'assessments' ? 'page' : undefined}
             >
-              Sessions
+              <IconListDetails size={16} stroke={1.9} aria-hidden="true" />
+              <span>Sessions</span>
             </a>
             <a
               data-testid="org-settings-link"
               href={`${orgBase}/settings`}
               aria-current={active === 'settings' ? 'page' : undefined}
             >
-              Team &amp; Plan
+              <IconSettings size={16} stroke={1.9} aria-hidden="true" />
+              <span>Team &amp; Plan</span>
             </a>
           </nav>
           <div className="software-workspace-sidebar-footer">

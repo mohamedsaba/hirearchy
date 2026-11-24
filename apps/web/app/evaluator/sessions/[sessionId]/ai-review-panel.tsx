@@ -11,6 +11,8 @@ import {
   type R27AiReviewReport,
 } from '../../../../src/r27-evidence/ai-review-contract';
 import { playHirearchySound } from '../../../../src/ui/sound';
+import { CommonThreadLoader } from '../../../_components/common-thread-loader';
+import { CommonThreadToast } from '../../../_components/common-thread-toast';
 
 export type R27AiReviewPanelProps = Readonly<{
   organizationId?: string;
@@ -18,6 +20,7 @@ export type R27AiReviewPanelProps = Readonly<{
   evidence: R27Evidence;
   report?: R27AiReviewReport | null;
   onReportChange?: (report: R27AiReviewReport | null) => void;
+  onLoadingChange?: (loading: boolean) => void;
   defaultPreset?: AiReviewPresetId;
   planLocked?: boolean;
   hiring?: boolean;
@@ -36,6 +39,7 @@ export const R27AiReviewPanel = ({
   evidence,
   report: controlledReport,
   onReportChange,
+  onLoadingChange,
   defaultPreset = 'nvidia:kimi-k2',
   planLocked = false,
   hiring = false,
@@ -65,7 +69,12 @@ export const R27AiReviewPanel = ({
   const [selectedPreset, setSelectedPreset] =
     useState<AiReviewPresetId>(defaultPreset);
   const [customModelId, setCustomModelId] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoadingState] = useState<boolean>(false);
+  const setLoading = (next: boolean) => {
+    setLoadingState(next);
+    onLoadingChange?.(next);
+  };
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selectedOption =
@@ -83,6 +92,7 @@ export const R27AiReviewPanel = ({
           label: 'Evidence-Grounded Preview (Offline Ready)',
         }),
       );
+      setToastMsg('Evidence summary ready.');
       return;
     }
 
@@ -130,6 +140,7 @@ export const R27AiReviewPanel = ({
         throw new Error('AI review endpoint returned no report payload.');
       }
       setReport(data.report);
+      setToastMsg('Advisory AI review ready.');
       playHirearchySound('complete');
     } catch (err: unknown) {
       playHirearchySound('error');
@@ -147,16 +158,35 @@ export const R27AiReviewPanel = ({
       data-testid="r27-ai-review-panel"
       open={Boolean(report)}
     >
-      <summary>AI Candidate Review</summary>
-      {!report ? (
+      <summary>
+        <span>AI Candidate Review</span>
+        {loading ? (
+          <span className="evaluator-tab-weaving-dot" aria-label="Analyzing" />
+        ) : null}
+      </summary>
+      {loading && !report ? (
+        <div style={{ padding: '1rem 0' }}>
+          <CommonThreadLoader
+            stages={[
+              'Reading workspace diffs…',
+              'Cross-referencing test runs…',
+              'Drafting advisory summary…',
+            ]}
+          />
+        </div>
+      ) : null}
+      {!report && !loading ? (
         <div className="r27-ai-review-launcher">
           <p className="evaluator-muted-copy">
-            Generate an advisory report from the submitted work and recorded
-            evidence. The evaluator owns the final review.
+            {hiring
+              ? 'Advisory summary from diffs and test runs — final decisions belong to you.'
+              : 'Generate an advisory report from the submitted work and recorded evidence. The evaluator owns the final review.'}
           </p>
 
           {hiring ? (
-            <p className="r27-ai-review-context">Kimi K3.1 Pro · NVIDIA</p>
+            <p className="r27-ai-review-context">
+              AI Candidate Review · Advisory
+            </p>
           ) : (
             <div className="r27-ai-review-controls">
               <label className="r27-ai-review-field">
@@ -225,7 +255,7 @@ export const R27AiReviewPanel = ({
             </button>
           </div>
         </div>
-      ) : (
+      ) : report ? (
         <div
           className="r27-ai-review-report"
           data-testid="r27-ai-review-report"
@@ -237,7 +267,11 @@ export const R27AiReviewPanel = ({
           >
             {evidenceSummary ? 'Recorded evidence summary' : report.headline}
           </h3>
-          <p className="r27-ai-review-context">{report.provider.label}</p>
+          <p className="r27-ai-review-context">
+            {hiring && report.provider.mode === 'live_ai'
+              ? 'AI advisory'
+              : report.provider.label}
+          </p>
           {evidenceSummary ? null : (
             <>
               <div className="r27-ai-review-result">
@@ -373,18 +407,22 @@ export const R27AiReviewPanel = ({
               </button>
             </div>
             <p className="r27-ai-review-disclaimer">
-              Advisory summary only. Human evaluators remain authoritative over
-              final review packets.
+              Advisory only — hiring decisions belong to you.
             </p>
           </div>
         </div>
-      )}
+      ) : null}
 
       {error ? (
         <p className="r27-ai-review-error" role="alert">
           {error}
         </p>
       ) : null}
+      <CommonThreadToast
+        message={toastMsg}
+        tone="success"
+        onDismiss={() => setToastMsg(null)}
+      />
     </details>
   );
 };

@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   IconChevronDown,
   IconChevronRight,
+  IconCopy,
   IconMapPin,
   IconUserCheck,
   IconX,
@@ -24,6 +25,12 @@ import type {
   WorkspaceRoleKind,
 } from '../../../../../src/hiring/types';
 import { type OrganizationPlanSummary } from '../../../../../src/plans/entitlements';
+import {
+  formatLocalDateTime,
+  formatRelativeTime,
+} from '../../../../../src/ui/relative-time';
+import { playHirearchySound } from '../../../../../src/ui/sound';
+import { CommonThreadToast } from '../../../../_components/common-thread-toast';
 
 export interface CandidatesPipelineClientProps {
   readonly organizationId: string;
@@ -88,9 +95,51 @@ export function CandidatesPipelineClient({
   const [locationFilter, setLocationFilter] = useState('all');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<CandidateSortId>('recent');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<ReadonlySet<string>>(
     () => new Set(candidates.slice(0, 1).map((c) => c.candidateKey)),
   );
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('q');
+      const st = params.get('status') as PipelineStatusId | null;
+      if (q) setSearchQuery(q);
+      if (st && PIPELINE_STATUS_OPTIONS.some((item) => item.id === st)) {
+        setStatusFilter(st);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (searchQuery.trim()) url.searchParams.set('q', searchQuery.trim());
+    else url.searchParams.delete('q');
+    if (statusFilter !== 'all') url.searchParams.set('status', statusFilter);
+    else url.searchParams.delete('status');
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${url.pathname}${url.search}`,
+    );
+  }, [searchQuery, statusFilter]);
+
+  const copyTextWithToast = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      playHirearchySound('confirm');
+      setToastMsg(label);
+    } catch {
+      setToastMsg('Copy failed — copy manually from this browser.');
+    }
+  };
 
   const choices = useMemo(() => {
     const unique = (values: readonly string[]) =>
@@ -117,7 +166,7 @@ export function CandidatesPipelineClient({
     };
   }, [candidates]);
 
-  const filtered = filterAndSortCandidates(candidates, {
+  const baseFiltered = filterAndSortCandidates(candidates, {
     role: roleFilter,
     status: statusFilter,
     experienceLevel: experienceFilter,
@@ -126,7 +175,22 @@ export function CandidatesPipelineClient({
     skills: selectedSkills,
     sort: sortBy,
   });
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? baseFiltered.filter(
+        (candidate) =>
+          candidate.fullName.toLowerCase().includes(normalizedQuery) ||
+          candidate.email.toLowerCase().includes(normalizedQuery) ||
+          candidate.headlineRole.toLowerCase().includes(normalizedQuery) ||
+          candidate.sessions.some(
+            (sess) =>
+              sess.scenarioTitle.toLowerCase().includes(normalizedQuery) ||
+              sess.targetRole.toLowerCase().includes(normalizedQuery),
+          ),
+      )
+    : baseFiltered;
   const isFiltered =
+    normalizedQuery.length > 0 ||
     selectedSkills.length > 0 ||
     [
       roleFilter,
@@ -154,6 +218,7 @@ export function CandidatesPipelineClient({
     setLocationFilter('all');
     setSelectedSkills([]);
     setSortBy('recent');
+    setSearchQuery('');
   };
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
@@ -306,76 +371,6 @@ export function CandidatesPipelineClient({
             </div>
 
             <div className="hiring-field">
-              <label htmlFor="candidate-experience">Experience level</label>
-              <select
-                id="candidate-experience"
-                value={experienceFilter}
-                onChange={(e) => setExperienceFilter(e.target.value)}
-              >
-                <option value="all">All levels</option>
-                {EXPERIENCE_LEVELS.map((lvl) => (
-                  <option key={lvl.id} value={lvl.id}>
-                    {lvl.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="candidate-location">Location</label>
-              <select
-                id="candidate-location"
-                value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
-              >
-                <option value="all">All locations</option>
-                {choices.locations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="candidate-years">Years of experience</label>
-              <select
-                id="candidate-years"
-                value={yearsFilter}
-                onChange={(e) => setYearsFilter(e.target.value)}
-              >
-                <option value="all">Any experience</option>
-                {choices.years.map((years) => (
-                  <option key={years} value={years}>
-                    {years}+ {years === 1 ? 'year' : 'years'}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="hiring-field">
-              <label htmlFor="candidate-skills">Skills</label>
-              <select
-                id="candidate-skills"
-                value=""
-                onChange={(e) =>
-                  setSelectedSkills([...selectedSkills, e.target.value])
-                }
-              >
-                <option value="" disabled>
-                  {choices.skills.length > 0 ? 'Add a skill' : 'No skills yet'}
-                </option>
-                {choices.skills
-                  .filter((skill) => !selectedSkills.includes(skill))
-                  .map((skill) => (
-                    <option key={skill} value={skill}>
-                      {skill}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div className="hiring-field">
               <label htmlFor="candidate-sort">Sort by</label>
               <select
                 id="candidate-sort"
@@ -389,6 +384,91 @@ export function CandidatesPipelineClient({
                 ))}
               </select>
             </div>
+
+            <details
+              className="hiring-disclosure hiring-more-filters"
+              open={
+                experienceFilter !== 'all' ||
+                locationFilter !== 'all' ||
+                yearsFilter !== 'all' ||
+                selectedSkills.length > 0
+              }
+            >
+              <summary>More filters</summary>
+              <div className="hiring-filter-grid hiring-mt-xs">
+                <div className="hiring-field">
+                  <label htmlFor="candidate-experience">Experience level</label>
+                  <select
+                    id="candidate-experience"
+                    value={experienceFilter}
+                    onChange={(e) => setExperienceFilter(e.target.value)}
+                  >
+                    <option value="all">All levels</option>
+                    {EXPERIENCE_LEVELS.map((lvl) => (
+                      <option key={lvl.id} value={lvl.id}>
+                        {lvl.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="hiring-field">
+                  <label htmlFor="candidate-location">Location</label>
+                  <select
+                    id="candidate-location"
+                    value={locationFilter}
+                    onChange={(e) => setLocationFilter(e.target.value)}
+                  >
+                    <option value="all">All locations</option>
+                    {choices.locations.map((loc) => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="hiring-field">
+                  <label htmlFor="candidate-years">Years of experience</label>
+                  <select
+                    id="candidate-years"
+                    value={yearsFilter}
+                    onChange={(e) => setYearsFilter(e.target.value)}
+                  >
+                    <option value="all">Any experience</option>
+                    {choices.years.map((years) => (
+                      <option key={years} value={years}>
+                        {years}+ {years === 1 ? 'year' : 'years'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="hiring-field">
+                  <label htmlFor="candidate-skills">Skills</label>
+                  <select
+                    id="candidate-skills"
+                    value=""
+                    onChange={(e) =>
+                      setSelectedSkills([...selectedSkills, e.target.value])
+                    }
+                  >
+                    <option value="" disabled>
+                      {choices.skills.length > 0
+                        ? 'Add a skill'
+                        : 'No skills yet'}
+                    </option>
+                    {choices.skills
+                      .filter((skill) => !selectedSkills.includes(skill))
+                      .map((skill) => (
+                        <option key={skill} value={skill}>
+                          {skill}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            </details>
           </div>
 
           {selectedSkills.length > 0 ? (
@@ -415,6 +495,40 @@ export function CandidatesPipelineClient({
           className="software-directory-results"
           aria-label="Matching candidates"
         >
+          <div className="hiring-directory-toolbar">
+            <input
+              type="search"
+              aria-label="Search candidates"
+              placeholder="Search by name, email, role, or task…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <div
+              className="hiring-chip-group"
+              role="group"
+              aria-label="Quick stage filter"
+            >
+              {(
+                [
+                  { id: 'all', label: 'All' },
+                  { id: 'ready_for_review', label: 'Ready for review' },
+                  { id: 'in_progress', label: 'In progress' },
+                  { id: 'accepted', label: 'Accepted' },
+                ] as const
+              ).map((stage) => (
+                <button
+                  key={stage.id}
+                  type="button"
+                  aria-pressed={statusFilter === stage.id}
+                  className={`hiring-chip${statusFilter === stage.id ? ' is-active' : ''}`}
+                  onClick={() => setStatusFilter(stage.id)}
+                >
+                  {stage.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="hiring-filter-result" role="status">
             {filtered.length}{' '}
             {filtered.length === 1 ? 'candidate' : 'candidates'}
@@ -435,6 +549,16 @@ export function CandidatesPipelineClient({
                   ? 'Issue your first assessment from the Assessment Builder to start your candidate pipeline.'
                   : 'Try broadening your role, skills, location, or stage filters.'}
               </p>
+              {candidates.length === 0 ? (
+                <div className="hiring-header-actions hiring-mt-sm">
+                  <Link
+                    className="hiring-btn hiring-btn-primary"
+                    href={`${orgBase}/builder`}
+                  >
+                    Issue first assessment
+                  </Link>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="hiring-candidate-list">
@@ -450,7 +574,7 @@ export function CandidatesPipelineClient({
                 return (
                   <article
                     key={candidate.candidateKey}
-                    className="hiring-candidate-card"
+                    className="hiring-candidate-card hiring-card-animated"
                   >
                     <div className="hiring-candidate-header">
                       <div className="hiring-candidate-identity">
@@ -470,6 +594,22 @@ export function CandidatesPipelineClient({
                           </div>
                           <div className="hiring-candidate-meta">
                             <span>{candidate.email || 'Unassigned email'}</span>
+                            {candidate.email ? (
+                              <button
+                                type="button"
+                                className="hiring-btn hiring-btn-sm"
+                                aria-label={`Copy ${candidate.email}`}
+                                onClick={() =>
+                                  void copyTextWithToast(
+                                    candidate.email,
+                                    `Copied ${candidate.email}.`,
+                                  )
+                                }
+                              >
+                                <IconCopy size={13} aria-hidden="true" /> Copy
+                                email
+                              </button>
+                            ) : null}
                             <span>{candidate.headlineRole}</span>
                             <span>
                               {candidate.experienceLevel
@@ -540,13 +680,22 @@ export function CandidatesPipelineClient({
                                 <strong>{sess.scenarioTitle}</strong>
                                 <div className="hiring-candidate-meta">
                                   <span>Role: {sess.targetRole}</span>
-                                  <span>
-                                    Issued {formatDateShort(sess.createdAt)}
+                                  <span
+                                    title={formatLocalDateTime(sess.createdAt)}
+                                  >
+                                    Issued{' '}
+                                    {formatRelativeTime(sess.createdAt) ||
+                                      formatDateShort(sess.createdAt)}
                                   </span>
                                   {sess.submittedAt ? (
-                                    <span>
+                                    <span
+                                      title={formatLocalDateTime(
+                                        sess.submittedAt,
+                                      )}
+                                    >
                                       Submitted{' '}
-                                      {formatDateShort(sess.submittedAt)}
+                                      {formatRelativeTime(sess.submittedAt) ||
+                                        formatDateShort(sess.submittedAt)}
                                     </span>
                                   ) : null}
                                   <span>
@@ -613,6 +762,21 @@ export function CandidatesPipelineClient({
                               </div>
 
                               <div className="hiring-header-actions">
+                                {sess.candidateLink ? (
+                                  <button
+                                    type="button"
+                                    className="hiring-btn hiring-btn-sm"
+                                    onClick={() =>
+                                      void copyTextWithToast(
+                                        `${window.location.origin}${sess.candidateLink}`,
+                                        'Candidate invite link copied.',
+                                      )
+                                    }
+                                  >
+                                    <IconCopy size={14} aria-hidden="true" />{' '}
+                                    Copy invite link
+                                  </button>
+                                ) : null}
                                 {sess.decision?.decision === 'accepted' ? (
                                   <Link
                                     className="hiring-btn hiring-btn-sm hiring-btn-mint"
@@ -642,6 +806,11 @@ export function CandidatesPipelineClient({
           )}
         </section>
       </div>
+      <CommonThreadToast
+        message={toastMsg}
+        tone="success"
+        onDismiss={() => setToastMsg(null)}
+      />
     </div>
   );
 }

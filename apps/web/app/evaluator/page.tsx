@@ -31,10 +31,7 @@ const EvaluatorAccessPage = async () => {
               <div>
                 <p className="software-eyebrow">Evaluator workspace</p>
                 <h1 id="review-title">Reviews</h1>
-                <p>
-                  Open submitted work, inspect its sources, and record your
-                  decision.
-                </p>
+                <p>Open submitted work and record your hiring decision.</p>
               </div>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <Link

@@ -74,7 +74,9 @@ export default async function AssessmentBuilderPage({
       organizationId,
     );
     if (!workspace) {
-      redirect('/r23/login');
+      redirect(
+        `/r23/login?next=${encodeURIComponent(`/r23/organizations/${organizationId.toLowerCase()}/builder`)}`,
+      );
     }
 
     const [libraryRes, membersRes] = await Promise.all([
@@ -117,9 +119,8 @@ export default async function AssessmentBuilderPage({
               </span>
               <h1>Assessment Builder</h1>
               <p>
-                Choose a curated platform template, generate a role-specific
-                engineering problem with Kimi K3.1 Pro, or reuse a problem from
-                your saved library.
+                Start from a template, generate a custom task with AI, or reuse
+                one from your library.
               </p>
             </div>
           </header>

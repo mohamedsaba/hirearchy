@@ -169,7 +169,7 @@ export async function POST(
                   requiredPlan: 'ultra',
                   currentPlan: plan.planTier,
                   message:
-                    'Automated Managerial Performance & Fit Reports with Kimi K3.1 Pro require the Ultra plan.',
+                    'Automated Managerial Fit Reports require the Ultra plan.',
                 },
               },
               {

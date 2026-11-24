@@ -1,0 +1,141 @@
+@font-face {
+  font-family: 'Hirearchy Sans';
+  src: url('../public/fonts/dm-sans-latin.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Hirearchy Mono';
+  src: url('../public/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.hc-root {
+  font-family: 'Hirearchy Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+  background: #190f22;
+  color: #f5efe6;
+  overflow: hidden;
+}
+
+.hc-mono {
+  font-family: 'Hirearchy Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.hc-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tactile fine archival grain overlay */
+.hc-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.036;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.hc-kicker {
+  font-family: 'Hirearchy Mono', monospace;
+  font-size: 16px;
+  font-weight: 550;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.hc-headline {
+  font-family: 'Hirearchy Sans', sans-serif;
+  font-weight: 580;
+  letter-spacing: -0.055em;
+  line-height: 0.96;
+}
+
+.hc-subcopy {
+  font-family: 'Hirearchy Sans', sans-serif;
+  font-weight: 440;
+  letter-spacing: -0.022em;
+  line-height: 1.38;
+}
+
+.hc-mask {
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  padding-right: 0.06em;
+}
+
+/* Crisp studio product frames */
+.hc-window {
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 32px 90px rgba(21, 11, 31, 0.22),
+    0 8px 24px rgba(21, 11, 31, 0.12),
+    0 0 0 1px rgba(41, 29, 44, 0.11);
+}
+
+.hc-window-dark {
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 40px 110px rgba(6, 2, 11, 0.65),
+    0 0 0 1px rgba(176, 240, 206, 0.16);
+}
+
+.hc-card {
+  border-radius: 14px;
+  background: #fffdf9;
+  border: 1px solid #ddd3c8;
+  box-shadow:
+    0 18px 48px rgba(33, 20, 38, 0.08),
+    0 2px 6px rgba(33, 20, 38, 0.04);
+}
+
+.hc-card-dark {
+  border-radius: 14px;
+  background: rgba(39, 25, 49, 0.88);
+  border: 1px solid rgba(176, 240, 206, 0.14);
+  box-shadow: 0 24px 64px rgba(8, 3, 14, 0.45);
+}
+
+.hc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Code syntax colors — dark plum workbench */
+.py-dark-kw { color: #d8b4fe; font-weight: 550; }
+.py-dark-fn { color: #b0f0ce; }
+.py-dark-str { color: #f9c89b; }
+.py-dark-num { color: #93c5fd; }
+.py-dark-cm { color: #8c7b9c; font-style: italic; }
+.py-dark-type { color: #f0abfc; }
+.py-dark-op { color: #cbbbd8; }
+.py-dark-txt { color: #f2ece4; }
+
+/* Code syntax colors — warm archival paper diff */
+.py-light-kw { color: #6b21a8; font-weight: 600; }
+.py-light-fn { color: #166534; font-weight: 560; }
+.py-light-str { color: #9a3412; }
+.py-light-num { color: #1d4ed8; }
+.py-light-cm { color: #7c6f82; font-style: italic; }
+.py-light-type { color: #7e22ce; }
+.py-light-txt { color: #24182b; }

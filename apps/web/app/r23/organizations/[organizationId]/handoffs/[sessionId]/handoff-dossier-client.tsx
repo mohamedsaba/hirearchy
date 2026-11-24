@@ -10,6 +10,8 @@ import {
   type OrganizationPlanSummary,
 } from '../../../../../../src/plans/entitlements';
 import { playHirearchySound } from '../../../../../../src/ui/sound';
+import { CommonThreadLoader } from '../../../../../_components/common-thread-loader';
+import { CommonThreadToast } from '../../../../../_components/common-thread-toast';
 
 export interface HandoffDossierClientProps {
   readonly organizationId: string;
@@ -21,6 +23,19 @@ function readCsrfCookie(): string {
   if (typeof document === 'undefined') return '';
   const match = document.cookie.match(/(?:^|;\s*)__Host-r23-csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : '';
+}
+
+function handoffStatusLabel(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'Needs review';
+    case 'reviewed':
+      return 'Reviewed';
+    case 'completed':
+      return 'Interview done';
+    default:
+      return status;
+  }
 }
 
 function splitInitials(name: string): string {
@@ -82,7 +97,7 @@ export function HandoffDossierClient({
       );
       if (updated) setDossier(updated);
       playHirearchySound('confirm');
-      setStatusMsg(`Handoff marked as "${nextStatus}".`);
+      setStatusMsg(`Handoff updated: ${handoffStatusLabel(nextStatus)}.`);
     } catch (err) {
       playHirearchySound('error');
       setErrorMsg(err instanceof Error ? err.message : 'Update failed.');
@@ -125,9 +140,7 @@ export function HandoffDossierClient({
       );
       if (updated) setDossier(updated);
       playHirearchySound('complete');
-      setStatusMsg(
-        'Updated Managerial Performance & Fit Report using Kimi K3.1 Pro.',
-      );
+      setStatusMsg('Updated Managerial Fit Report.');
     } catch (err) {
       playHirearchySound('error');
       setErrorMsg(err instanceof Error ? err.message : 'Generation failed.');
@@ -174,7 +187,7 @@ export function HandoffDossierClient({
               <dt>Status</dt>
               <dd>
                 <span className="hiring-pill hiring-pill-plum">
-                  {dossier.decision.handoffStatus}
+                  {handoffStatusLabel(dossier.decision.handoffStatus)}
                 </span>
               </dd>
             </div>
@@ -189,7 +202,7 @@ export function HandoffDossierClient({
                   disabled={busy !== null}
                   onClick={() => void updateStatus(statusOpt)}
                 >
-                  Mark {statusOpt}
+                  {handoffStatusLabel(statusOpt)}
                 </button>
               ),
             )}
@@ -259,7 +272,7 @@ export function HandoffDossierClient({
                   ))}
                 </ul>
                 <strong className="hiring-sublabel">
-                  Weaknesses / Probes (Shared with candidate)
+                  Areas to explore (shared with candidate)
                 </strong>
                 <ul className="hiring-bullet-list">
                   {dossier.decision.candidateWeaknesses.map((w, i) => (
@@ -340,7 +353,7 @@ export function HandoffDossierClient({
                 >
                   <IconSparkles size={15} />{' '}
                   {busy === 'regen'
-                    ? 'Analyzing with Kimi K3.1 Pro...'
+                    ? 'Generating fit report…'
                     : report
                       ? 'Refresh Fit Report'
                       : 'Generate Fit Report'}
@@ -355,7 +368,14 @@ export function HandoffDossierClient({
               )}
             </div>
 
-            {!report ? (
+            {busy === 'regen' ? (
+              <div className="hiring-mt-sm">
+                <CommonThreadLoader
+                  compact
+                  label="Drafting Managerial Fit Report…"
+                />
+              </div>
+            ) : !report ? (
               <p className="hiring-muted-copy hiring-mt-sm">
                 No automated Performance &amp; Fit Report has been generated for
                 this handoff yet.
@@ -365,7 +385,7 @@ export function HandoffDossierClient({
                 <div className="hiring-card-subtle">
                   <span className="hiring-pill hiring-pill-plum">
                     {report.provider.mode === 'live_ai'
-                      ? 'AI advisory · Kimi K3.1 Pro'
+                      ? 'AI advisory'
                       : 'Evidence summary'}
                   </span>
                   <h3 className="hiring-mt-sm">{report.fitHeadline}</h3>
@@ -428,6 +448,11 @@ export function HandoffDossierClient({
           </section>
         </div>
       </div>
+      <CommonThreadToast
+        message={statusMsg}
+        tone="success"
+        onDismiss={() => setStatusMsg(null)}
+      />
     </div>
   );
 }

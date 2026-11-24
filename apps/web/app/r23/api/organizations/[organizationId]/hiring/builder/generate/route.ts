@@ -37,7 +37,7 @@ export async function POST(
                 requiredPlan: 'per_candidate',
                 currentPlan: plan.planTier,
                 message:
-                  'An active plan (Per Candidate, Pro, or Ultra) is required to generate assessments with Kimi K3.1 Pro.',
+                  'An active plan (Per Candidate, Pro, or Ultra) is required to generate assessments with AI.',
               },
             },
             { status: 402, headers: { 'Cache-Control': 'private, no-store' } },
@@ -110,7 +110,7 @@ export async function POST(
           const message =
             err instanceof Error
               ? err.message
-              : 'Unable to generate assessment with Kimi K3.1 Pro.';
+              : 'Unable to generate assessment with AI.';
           return NextResponse.json(
             {
               error: {

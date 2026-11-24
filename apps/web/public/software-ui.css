@@ -285,7 +285,7 @@ body.software-document-body *::after {
   )[data-selected='true'] {
   border-color: var(--software-plum);
   background: var(--software-mint);
-  color: var(--software-ink);
+  color: #160f1d;
 }
 
 .software-product .software-surface,
@@ -395,15 +395,29 @@ body.software-document-body *::after {
   position: static;
 }
 
+.software-document-access .software-document-layout {
+  min-height: calc(100dvh - var(--software-header-height, 4rem));
+  background: var(--software-brand-plum);
+}
+
 .software-document-access .software-document-shell {
   width: min(70rem, 100% - 2 * var(--software-space-page));
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(21rem, 27.5rem);
   align-items: center;
   gap: clamp(2rem, 6vw, 6rem);
   margin-inline: auto;
   padding-block: clamp(2rem, 7vw, 6rem);
-  background: var(--software-brand-plum);
+  background: transparent;
+}
+
+.software-document-access
+  .software-document-shell.software-document-shell--centered {
+  width: min(32rem, 100% - 2 * var(--software-space-page));
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  gap: 1.5rem;
 }
 
 .software-access-principle {
@@ -856,6 +870,9 @@ body.software-document-body *::after {
 }
 
 .software-workspace-sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
   color: #eee8f4;
   padding: 11px 12px;
   border-left: 2px solid transparent;
@@ -1353,53 +1370,74 @@ body.software-document-body *::after {
   .software-workspace-sidebar {
     position: static;
     height: auto;
-    gap: 16px;
-    padding: 18px 20px 0;
+    gap: 12px;
+    padding: 14px 16px 10px;
     border-right: 0;
-    border-bottom: 1px solid var(--software-border);
-    background: var(--software-surface);
-    color: var(--software-plum);
+    border-bottom: 1px solid var(--software-sidebar-border);
+    background: var(--software-sidebar-bg);
+    color: var(--software-sidebar-fg);
   }
   .software-workspace-identity {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding-bottom: 10px;
+  }
+  .software-workspace-identity .software-eyebrow {
     display: none;
   }
+  .software-workspace-identity .hiring-sidebar-plan-badge {
+    margin-block-start: 0;
+    margin-left: auto;
+  }
   .software-workspace-sidebar nav {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
     gap: 0.375rem;
-    overflow: visible;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .software-workspace-sidebar nav::-webkit-scrollbar {
+    display: none;
   }
   .software-workspace-sidebar nav a {
-    display: flex;
+    display: inline-flex;
+    flex: 0 0 auto;
     min-height: var(--software-touch-target);
     align-items: center;
-    padding: 0.5rem;
+    padding: 0.5rem 0.75rem;
     border: 0;
+    border-bottom: 2px solid transparent;
     border-radius: var(--software-radius-control);
     font-size: 0.8125rem;
     line-height: 1.25;
+    white-space: nowrap;
+  }
+  .software-workspace-sidebar nav a[aria-current='page'] {
+    border-bottom-color: var(--software-mint);
+    background: rgba(142, 227, 184, 0.16);
+    color: var(--software-mint);
   }
   .software-workspace-sidebar-footer {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px 12px;
     margin-top: 0;
-    padding: 12px 0;
+    padding: 10px 0 2px;
   }
-  .software-workspace-sidebar-footer > span {
-    display: none;
-  }
-
   .software-workspace-sidebar-footer > a,
   .software-workspace-sidebar-footer button {
-    color: var(--software-muted);
+    color: var(--software-sidebar-link);
   }
   .software-workspace-sidebar :is(a, button):focus-visible {
-    outline-color: var(--software-focus);
+    outline-color: var(--software-mint);
   }
   .software-document-workspace .software-document-shell {
-    padding: 28px 16px 48px;
+    padding: 24px 16px 48px;
   }
   .software-page-heading {
     align-items: flex-start;
@@ -1448,15 +1486,14 @@ body.software-document-body *::after {
   overflow-wrap: anywhere;
 }
 
-.software-document-panel [role='alert'],
-.software-document-panel [role='status'] {
+.software-document-panel :where([role='alert'], [role='status']) {
   padding: 12px 14px;
   border-left: 3px solid var(--software-mint);
   background: var(--software-surface-subtle);
   color: var(--software-ink);
 }
 
-.software-document-panel [role='alert'] {
+.software-document-panel :where([role='alert']) {
   padding: 12px 14px;
   border-left: 3px solid var(--software-status-danger);
   background: var(--software-status-danger-surface);
@@ -1719,6 +1756,11 @@ html[data-theme='dark'] body.software-document-body {
   background: #160f1d;
   color: #f2ecf6;
   color-scheme: dark;
+}
+
+html[data-theme='dark'] body.software-document-body.software-document-access,
+body.software-document-body.software-document-access {
+  background: var(--software-brand-plum);
 }
 
 html[data-theme='dark'] .software-product,
@@ -2044,10 +2086,365 @@ html[data-theme='dark'] .software-role-badge {
     background: var(--software-sidebar-bg);
   }
   .software-workspace-sidebar nav a[aria-current='page'] {
-    border-bottom-color: var(--software-mint);
-    background: transparent;
+    background: rgba(142, 227, 184, 0.16);
     color: var(--software-mint);
   }
+}
+
+.software-brand-mark {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+
+.software-tech-details {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--software-muted);
+}
+
+.software-tech-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--software-muted);
+}
+
+.software-skeleton {
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--software-surface-subtle) 25%,
+    var(--software-border-subtle) 50%,
+    var(--software-surface-subtle) 75%
+  );
+  background-size: 200% 100%;
+  animation: hiringShimmer 1.5s linear infinite;
+}
+
+.hiring-theme-toggle--pill,
+.hiring-theme-toggle--header,
+.hiring-theme-toggle--floating {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .software-product {
+    --ct-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ct-snappy: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .hiring-card-animated {
+    animation: hiringFadeUp 240ms var(--ct-snappy) both;
+  }
+
+  .software-product
+    :where(
+      button,
+      .button,
+      .software-button,
+      .software-control,
+      .hiring-btn,
+      .hiring-builder-tab,
+      .hiring-preview-subtab,
+      .hiring-chip,
+      .software-workspace-sidebar nav a,
+      .software-organization-picker button,
+      .r26-button,
+      .r26-pref-btn,
+      .r26-header-tool,
+      .r26-editor-tab,
+      .r26-tree-item
+    ) {
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      box-shadow 180ms var(--ct-snappy),
+      transform 260ms var(--ct-spring);
+  }
+
+  .software-product
+    :where(
+      button,
+      .button,
+      .software-button,
+      .software-control,
+      .hiring-btn,
+      .hiring-builder-tab,
+      .hiring-preview-subtab,
+      .hiring-chip,
+      .software-workspace-sidebar nav a,
+      .software-organization-picker button,
+      .r26-button,
+      .r26-pref-btn,
+      .r26-header-tool,
+      .r26-editor-tab,
+      .r26-tree-item
+    ):hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .software-product
+    :where(
+      button,
+      .button,
+      .software-button,
+      .software-control,
+      .hiring-btn,
+      .hiring-builder-tab,
+      .hiring-preview-subtab,
+      .hiring-chip,
+      .software-workspace-sidebar nav a,
+      .software-organization-picker button,
+      .r26-button,
+      .r26-pref-btn,
+      .r26-header-tool,
+      .r26-editor-tab,
+      .r26-tree-item
+    ):active:not(:disabled) {
+    transform: scale(0.96, 0.935) translateY(0.5px);
+    transition-duration: 90ms;
+  }
+
+  .software-product .hiring-switch-thumb,
+  .software-product .hiring-switch-track::after {
+    transition:
+      transform 280ms var(--ct-spring),
+      width 160ms var(--ct-snappy);
+  }
+
+  .software-product input[type='checkbox']:not(.hiring-switch-input):active {
+    transform: scale(0.88);
+    transition-duration: 90ms;
+  }
+}
+
+/* Common Thread Brand Loader & Skeleton Shimmer */
+.ct-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.95rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface-note);
+  color: var(--software-ink);
+  max-width: 100%;
+}
+
+.ct-loader--compact {
+  padding: 0.55rem 0.8rem;
+  gap: 0.65rem;
+  border-radius: var(--software-radius-control);
+}
+
+.ct-loader-mark {
+  flex-shrink: 0;
+}
+
+.ct-loader-copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ct-loader-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.ct-loader-headline strong {
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--software-ink);
+}
+
+.ct-loader--compact .ct-loader-headline strong {
+  font-size: 0.8125rem;
+}
+
+.ct-loader-elapsed {
+  font-family: var(--software-mono);
+  font-size: 0.75rem;
+  color: var(--software-muted);
+}
+
+.ct-loader-sublabel {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--software-muted);
+  line-height: 1.45;
+}
+
+.ct-loader-thread-track {
+  margin-top: 0.2rem;
+  height: 5px;
+  width: min(18rem, 100%);
+  border-radius: 999px;
+  background: var(--software-border-subtle);
+  overflow: hidden;
+}
+
+.ct-loader-thread-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--software-mint);
+  transition: width 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ct-loader-shuttle {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: ctShuttleWeave 1.35s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+  }
+
+  .ct-loader-pillar-left {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: ctPillarBumpLeft 1.35s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+  }
+
+  .ct-loader-pillar-right {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: ctPillarBumpRight 1.35s cubic-bezier(0.34, 1.56, 0.64, 1)
+      infinite;
+  }
+}
+
+@keyframes ctShuttleWeave {
+  0%,
+  100% {
+    transform: translateX(0) scaleX(0.92) scaleY(1.06);
+  }
+  50% {
+    transform: translateX(8px) scaleX(1.1) scaleY(0.94);
+  }
+}
+
+@keyframes ctPillarBumpLeft {
+  0%,
+  100% {
+    transform: scaleY(1.04) scaleX(0.96);
+  }
+  50% {
+    transform: scaleY(0.98) scaleX(1);
+  }
+}
+
+@keyframes ctPillarBumpRight {
+  0%,
+  100% {
+    transform: scaleY(0.98) scaleX(1);
+  }
+  50% {
+    transform: scaleY(1.04) scaleX(0.96);
+  }
+}
+
+/* Common Thread Toast (Solid Brand Surface — Zero Glassmorphism) */
+.ct-toast {
+  position: fixed;
+  inset-block-end: 1.25rem;
+  inset-inline-end: 1.25rem;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(26rem, calc(100vw - 2rem));
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--software-radius-surface);
+  border: 1px solid var(--software-border-strong);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  box-shadow: var(--software-shadow-elevated);
+  font-size: 0.84rem;
+  font-weight: 600;
+  animation: ctToastEnter 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.ct-toast--success {
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+
+.ct-toast--error {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+.ct-toast--warning {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
+}
+
+.ct-toast--info {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-note);
+  color: var(--software-ink);
+}
+
+.ct-toast-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.ct-toast-message {
+  line-height: 1.35;
+}
+
+.ct-toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-inline-start: 0.25rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: currentColor;
+  opacity: 0.72;
+  cursor: pointer;
+}
+
+.ct-toast-close:hover {
+  opacity: 1;
+}
+
+@keyframes ctToastEnter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ct-skeleton-shell {
+  display: grid;
+  gap: 1.25rem;
+  padding: clamp(1rem, 2.5vw, 2rem);
+}
+
+.ct-skeleton-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
 }
 
 @keyframes hiringFadeUp {

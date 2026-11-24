@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BrandMark } from '../_components/brand-mark';
 import { SoundToggle } from '../_components/sound-toggle';
 import { ThemeToggle } from '../_components/theme-toggle';
 import './software-product-header.css';
@@ -44,6 +45,7 @@ export const SoftwareProductHeader = ({
         }
         aria-label="Hirearchy Software home"
       >
+        <BrandMark />
         <span>Hirearchy</span>
         <span className="software-product-capsule">Software</span>
       </Link>

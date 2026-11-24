@@ -221,7 +221,21 @@
   cursor: pointer;
   transition:
     background-color 140ms ease,
-    border-color 140ms ease;
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.software-product
+  :is(
+    .hiring-btn,
+    .hiring-builder-tab,
+    .hiring-preview-subtab,
+    .hiring-chip,
+    .hiring-theme-toggle
+  ):not(:disabled):active {
+  transform: scale(0.98) translateY(0.5px);
+  transition-duration: 90ms;
 }
 
 .software-product
@@ -648,7 +662,9 @@
 
 .software-builder-next {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding-block-start: 0.8rem;
   border-block-start: 1px solid var(--software-border);
 }
@@ -1267,6 +1283,35 @@
   margin: 0;
 }
 
+.hiring-gate-note {
+  margin: 0;
+  color: var(--software-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.hiring-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.hiring-inline-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.hiring-portal-mobile-email {
+  display: none;
+  margin: 0.35rem 0 0;
+  color: var(--software-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 63rem) {
   .software-directory {
     grid-template-columns: 1fr;
@@ -1307,6 +1352,15 @@
   }
   .hiring-portal-email {
     display: none;
+  }
+  .hiring-portal-mobile-email {
+    display: block;
+  }
+  .software-product button.hiring-password-reveal {
+    min-height: 2.5rem;
+    block-size: 2.5rem;
+    inline-size: 2.5rem;
+    inset-inline-end: 0.15rem;
   }
 }
 
@@ -1694,6 +1748,23 @@
   color: var(--software-ink);
   font-size: 0.82rem;
   font-style: italic;
+}
+
+.hiring-directory-toolbar {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface);
+}
+
+.hiring-directory-toolbar input[type='search'] {
+  width: 100%;
+  min-inline-size: 0;
+  min-height: 2.625rem;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
 }
 
 @media (max-width: 45rem) {

@@ -103,7 +103,7 @@ export function ThemeToggle({
       aria-label={`Switch to ${nextTheme} theme`}
       aria-pressed={isDark}
       data-theme-state={theme}
-      title={`Switch to ${nextTheme === 'dark' ? 'Obsidian Plum Dark' : 'Warm Ivory Light'} theme`}
+      title={`Switch to ${nextTheme} theme`}
     >
       <span className="hiring-theme-toggle-icon" aria-hidden="true">
         {isDark ? (

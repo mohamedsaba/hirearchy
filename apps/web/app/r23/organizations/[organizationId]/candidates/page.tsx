@@ -7,7 +7,10 @@ import {
   type RawHiringCandidateSessionRow,
 } from '../../../../../src/hiring/candidates-view';
 import { isHiringPlatformEnabled } from '../../../../../src/runtime/profile';
-import { loadHiringOrganizationWorkspaceFromCookie } from '../../../../../src/staging/browser';
+import {
+  decryptCandidateLinkToken,
+  loadHiringOrganizationWorkspaceFromCookie,
+} from '../../../../../src/staging/browser';
 import { OrganizationWorkspaceShell } from '../../../_components/workspace-shell';
 import { CandidatesPipelineClient } from './candidates-client';
 
@@ -30,14 +33,38 @@ export default async function OrganizationCandidatesPage({
     organizationId,
   );
   if (!workspace) {
-    redirect('/r23/login');
+    redirect(
+      `/r23/login?next=${encodeURIComponent(`/r23/organizations/${organizationId.toLowerCase()}/candidates`)}`,
+    );
   }
 
   const raw = (await workspace.dispatch('hiring.candidates.list', {
     organizationId: workspace.organizationId,
   })) as { rows?: RawHiringCandidateSessionRow[] };
 
-  const initialCandidates = groupCandidateSessions(raw?.rows ?? []);
+  const hydratedRows = (raw?.rows ?? []).map((row) => {
+    if (
+      row.lifecycleStatus !== 'CREATED' ||
+      !row.invitationActive ||
+      !row.candidateTokenCiphertext
+    ) {
+      return row;
+    }
+    try {
+      const token = decryptCandidateLinkToken(
+        row.candidateTokenCiphertext,
+        row.sessionId,
+      );
+      return {
+        ...row,
+        candidateLink: `/r26/candidate/${encodeURIComponent(row.sessionId)}#${encodeURIComponent(token)}`,
+      };
+    } catch {
+      return row;
+    }
+  });
+
+  const initialCandidates = groupCandidateSessions(hydratedRows);
 
   return (
     <OrganizationWorkspaceShell
@@ -55,8 +82,8 @@ export default async function OrganizationCandidatesPage({
             <span className="hiring-eyebrow">{workspace.organizationName}</span>
             <h1>Candidates</h1>
             <p>
-              Track every candidate across assessments, inspect profiles and
-              status, and filter by role, skills, seniority, or location.
+              Track candidates across every assessment stage and filter by role,
+              skills, or status.
             </p>
           </div>
           <div className="hiring-header-actions">

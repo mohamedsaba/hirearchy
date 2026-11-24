@@ -1,11 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import {
   IconArrowRight,
   IconBookmark,
   IconCheck,
   IconCopy,
+  IconMail,
   IconSend,
   IconSparkles,
   IconTemplate,
@@ -37,7 +40,20 @@ import {
 import type { R211AssessmentDraftInput } from '../../../../../src/r211-builder/contract';
 import { ScenarioBrief } from '../../../../../src/ui/scenario-brief';
 import { playHirearchySound } from '../../../../../src/ui/sound';
-import { RepositoryInspector } from './repository-inspector';
+import { CommonThreadLoader } from '../../../../_components/common-thread-loader';
+import { CommonThreadToast } from '../../../../_components/common-thread-toast';
+
+const RepositoryInspector = dynamic(
+  () => import('./repository-inspector').then((m) => m.RepositoryInspector),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ padding: '1rem' }}>
+        <CommonThreadLoader compact label="Loading repository preview…" />
+      </div>
+    ),
+  },
+);
 
 export interface HiringAssessmentBuilderClientProps {
   readonly organizationId: string;
@@ -192,6 +208,93 @@ export function HiringAssessmentBuilderClient({
     creditsPurchased: number;
   } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedEmailMsg, setCopiedEmailMsg] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const builderDraftStorageKey = `hirearchy:builder:draft:v1:${organizationId}`;
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const params = new URLSearchParams(window.location.search);
+      const urlMode = params.get('mode') as BuilderMode | null;
+      const urlStage = params.get('stage') as BuilderStage | null;
+      if (
+        urlMode === 'templates' ||
+        urlMode === 'ai' ||
+        urlMode === 'library'
+      ) {
+        setMode(urlMode);
+      }
+      if (
+        urlStage === 'source' ||
+        urlStage === 'preview' ||
+        urlStage === 'invite'
+      ) {
+        setStage(urlStage);
+      }
+      try {
+        const saved = window.sessionStorage.getItem(builderDraftStorageKey);
+        if (!saved) return;
+        const parsed = JSON.parse(saved) as {
+          draft?: R211AssessmentDraftInput;
+          meta?: typeof activeSourceMeta;
+        };
+        if (parsed?.draft && parsed.draft.title && parsed.draft.starterFiles) {
+          setActiveDraft(parsed.draft);
+          setPreviewFilePath(parsed.draft.primaryFilePath);
+        }
+        if (parsed?.meta) {
+          setActiveSourceMeta(parsed.meta);
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [builderDraftStorageKey]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', mode);
+    url.searchParams.set('stage', stage);
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${url.pathname}${url.search}`,
+    );
+  }, [mode, stage]);
+
+  useEffect(() => {
+    if (activeSourceMeta.sourceKind === 'ai_generated' && !savedIds) {
+      try {
+        window.sessionStorage.setItem(
+          builderDraftStorageKey,
+          JSON.stringify({ draft: activeDraft, meta: activeSourceMeta }),
+        );
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [activeDraft, activeSourceMeta, builderDraftStorageKey, savedIds]);
+
+  const hasUnsavedAiDraft = Boolean(
+    activeSourceMeta.sourceKind === 'ai_generated' &&
+    !savedIds &&
+    !issuedResult,
+  );
+  useEffect(() => {
+    if (!hasUnsavedAiDraft) return;
+    const warnUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnUnload);
+    return () => window.removeEventListener('beforeunload', warnUnload);
+  }, [hasUnsavedAiDraft]);
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
   const canUseAiBuilder = hasPlanFeature(plan.planTier, 'aiAssessmentBuilder');
@@ -328,7 +431,7 @@ export function HiringAssessmentBuilderClient({
         const message = data?.error?.message;
         throw new Error(
           response.status === 503 && /timeout|timed out/i.test(message ?? '')
-            ? 'Kimi took too long to respond. Try again or choose a template.'
+            ? 'AI generation timed out. Try again or start from a template.'
             : (message ??
                 `Unable to generate assessment (HTTP ${response.status}).`),
         );
@@ -356,7 +459,7 @@ export function HiringAssessmentBuilderClient({
       setStage('preview');
       playHirearchySound('complete');
       setStatusBanner(
-        `Generated "${data.draft.title}" with ${data.modelId ?? 'Kimi K3.1 Pro'}. Save to Library or issue directly below.`,
+        `Generated "${data.draft.title}". Review it below, save to your library, or invite a candidate.`,
       );
     } catch (err) {
       playHirearchySound('error');
@@ -543,7 +646,29 @@ export function HiringAssessmentBuilderClient({
     if (!issuedResult) return;
     const absoluteUrl = `${window.location.origin}${issuedResult.candidateLink}`;
     await navigator.clipboard.writeText(absoluteUrl).catch(() => {});
+    playHirearchySound('confirm');
     setCopiedLink(true);
+    setToastMsg('Candidate invite link copied.');
+    window.setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const copyInviteEmailMessage = async () => {
+    if (!issuedResult) return;
+    const absoluteUrl = `${window.location.origin}${issuedResult.candidateLink}`;
+    const body = `Hi,\n\nYou’ve been invited to complete the "${activeDraft.title}" engineering assessment (${activeDraft.durationMinutes} min).\n\nOpen your workspace link below whenever you’re ready (your timer starts only after clicking Start):\n${absoluteUrl}\n\nBest regards,\nThe Hiring Team`;
+    await navigator.clipboard.writeText(body).catch(() => {});
+    playHirearchySound('confirm');
+    setCopiedEmailMsg(true);
+    setToastMsg('Ready-to-send email message copied.');
+    window.setTimeout(() => setCopiedEmailMsg(false), 2000);
+  };
+
+  const resetForAnotherCandidate = () => {
+    setCandidateEmail('');
+    setInvitationNote('');
+    setIssuedResult(null);
+    setStatusBanner(null);
+    setErrorBanner(null);
   };
 
   const stages = [
@@ -669,6 +794,12 @@ export function HiringAssessmentBuilderClient({
                     onChange={(e) => {
                       const next = Number(e.target.value) as 30 | 45 | 60 | 90;
                       setTplDuration(next);
+                      if (activeSourceMeta.sourceKind === 'template') {
+                        setActiveDraft((prev) => ({
+                          ...prev,
+                          durationMinutes: next,
+                        }));
+                      }
                     }}
                   >
                     <option value={30}>30 minutes</option>
@@ -686,13 +817,25 @@ export function HiringAssessmentBuilderClient({
                       type="checkbox"
                       className="hiring-switch-input"
                       checked={tplIntegratedAi}
-                      onChange={(e) => setTplIntegratedAi(e.target.checked)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setTplIntegratedAi(checked);
+                        if (activeSourceMeta.sourceKind === 'template') {
+                          setActiveDraft((prev) => ({
+                            ...prev,
+                            integratedAi: checked,
+                          }));
+                        }
+                      }}
                     />
                     <span className="hiring-switch-track" aria-hidden="true" />
                     <span className="hiring-switch-copy">
-                      Enable Kimi K3.1 Pro assistant inside Candidate IDE
+                      Allow AI Assistant inside the candidate workspace
                     </span>
                   </label>
+                  <p className="hiring-field-hint">
+                    Integrated Terminal &amp; Test Runner are always enabled.
+                  </p>
                 </div>
               </div>
 
@@ -769,7 +912,7 @@ export function HiringAssessmentBuilderClient({
               <div className="hiring-ai-studio">
                 <div className="hiring-ai-studio-head">
                   <div className="hiring-ai-studio-badge">
-                    <IconSparkles size={15} /> Kimi K3.1 Pro Studio
+                    <IconSparkles size={15} /> AI Assessment Studio
                   </div>
                   <span className="hiring-muted-copy">
                     Review the generated brief, code and rubric before issuing
@@ -911,7 +1054,7 @@ export function HiringAssessmentBuilderClient({
                         aria-hidden="true"
                       />
                       <span className="hiring-switch-copy">
-                        Enable Kimi K3.1 Pro inside workspace
+                        Allow AI Assistant in workspace
                       </span>
                     </label>
                   </div>
@@ -919,7 +1062,7 @@ export function HiringAssessmentBuilderClient({
 
                 <div className="hiring-field">
                   <span className="hiring-field-label">
-                    Priority skills to test ({aiSkills.length}/10 selected)
+                    Priority skills to test
                   </span>
                   <div className="hiring-chip-group">
                     {CURATED_SKILLS.map((skill) => {
@@ -948,7 +1091,7 @@ export function HiringAssessmentBuilderClient({
                     id="ai-guidance"
                     value={aiGuidance}
                     onChange={(e) => setAiGuidance(e.target.value)}
-                    placeholder="Optional architectural context or tricky edge cases you want Kimi K3.1 Pro to include..."
+                    placeholder="Optional context or edge cases to focus on (e.g. idempotency, retries, timezone math)..."
                   />
                 </div>
 
@@ -961,10 +1104,21 @@ export function HiringAssessmentBuilderClient({
                   >
                     <IconSparkles size={16} />{' '}
                     {generating
-                      ? 'Generating problem with Kimi K3.1 Pro...'
-                      : 'Generate Assessment with Kimi K3.1 Pro'}
+                      ? 'Generating assessment…'
+                      : 'Generate assessment with AI'}
                   </button>
                 </div>
+                {generating ? (
+                  <div className="hiring-mt-xs">
+                    <CommonThreadLoader
+                      stages={[
+                        'Designing scenario & starter repository…',
+                        'Writing unit tests & verification suite…',
+                        'Validating problem quality…',
+                      ]}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -998,9 +1152,7 @@ export function HiringAssessmentBuilderClient({
                   >
                     <option value="all">All sources</option>
                     <option value="template">Platform Templates</option>
-                    <option value="ai_generated">
-                      AI Generated (Kimi K3.1 Pro)
-                    </option>
+                    <option value="ai_generated">AI Generated</option>
                   </select>
                 </div>
                 <div className="hiring-field">
@@ -1022,9 +1174,8 @@ export function HiringAssessmentBuilderClient({
 
               {filteredLibrary.length === 0 ? (
                 <p className="hiring-muted-copy">
-                  No saved problems match these filters yet. Load a Platform
-                  Template or generate a problem with Kimi K3.1 Pro and save it
-                  for reuse.
+                  No saved problems match these filters yet. Load a template or
+                  generate a custom problem with AI and save it for reuse.
                 </p>
               ) : (
                 <div className="software-problem-list">
@@ -1041,7 +1192,7 @@ export function HiringAssessmentBuilderClient({
                             <span className="hiring-pill hiring-pill-plum">
                               {problem.sourceKind === 'template'
                                 ? 'Template'
-                                : 'Kimi K3.1 Pro AI'}
+                                : 'AI Generated'}
                             </span>
                             <span className="hiring-pill">
                               {problem.targetRole || 'General'}
@@ -1102,9 +1253,7 @@ export function HiringAssessmentBuilderClient({
                 </span>
                 <span className="hiring-pill">
                   Candidate AI:{' '}
-                  {activeDraft.integratedAi
-                    ? 'Enabled (Kimi K3.1 Pro)'
-                    : 'Disabled'}
+                  {activeDraft.integratedAi ? 'Enabled' : 'Disabled'}
                 </span>
                 {savedIds ? (
                   <span className="hiring-pill hiring-pill-success">
@@ -1209,6 +1358,13 @@ export function HiringAssessmentBuilderClient({
             </div>
           )}
           <footer className="software-builder-next">
+            <button
+              type="button"
+              className="hiring-btn"
+              onClick={() => setStage('source')}
+            >
+              ← Change problem
+            </button>
             <button
               type="button"
               className="hiring-btn hiring-btn-primary"
@@ -1336,6 +1492,13 @@ export function HiringAssessmentBuilderClient({
 
             <div className="hiring-header-actions">
               <button
+                type="button"
+                className="hiring-btn"
+                onClick={() => setStage('preview')}
+              >
+                ← Back to preview
+              </button>
+              <button
                 type="submit"
                 className="hiring-btn hiring-btn-primary"
                 disabled={issuing || creditsBlocked}
@@ -1355,9 +1518,9 @@ export function HiringAssessmentBuilderClient({
                 </span>
               </div>
               <p className="hiring-muted-copy">
-                Share this direct invitation link with{' '}
-                <strong>{trimmedEmail}</strong> (they can also start it directly
-                from <code>/candidate</code>):
+                Share this direct link with <strong>{trimmedEmail}</strong> or
+                copy the ready-to-send email message. They’ll also see it when
+                signing in to their candidate portal.
               </p>
               <div className="hiring-issued-link-row">
                 <input
@@ -1375,10 +1538,41 @@ export function HiringAssessmentBuilderClient({
                   <IconCopy size={15} /> {copiedLink ? 'Copied' : 'Copy link'}
                 </button>
               </div>
+              <div className="hiring-header-actions hiring-mt-sm">
+                <button
+                  type="button"
+                  className="hiring-btn hiring-btn-sm"
+                  onClick={() => void copyInviteEmailMessage()}
+                >
+                  <IconMail size={14} aria-hidden="true" />{' '}
+                  {copiedEmailMsg ? 'Message copied' : 'Copy email message'}
+                </button>
+                <button
+                  type="button"
+                  className="hiring-btn hiring-btn-sm"
+                  onClick={resetForAnotherCandidate}
+                >
+                  Invite another candidate
+                </button>
+                <Link
+                  className="hiring-btn hiring-btn-sm hiring-btn-primary"
+                  href={`${orgBase}/candidates`}
+                >
+                  View in Candidates →
+                </Link>
+              </div>
             </div>
           ) : null}
         </section>
       </div>
+      <CommonThreadToast
+        message={toastMsg ?? statusBanner}
+        tone="success"
+        onDismiss={() => {
+          setToastMsg(null);
+          setStatusBanner(null);
+        }}
+      />
     </div>
   );
 }

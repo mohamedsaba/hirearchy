@@ -1,10 +1,18 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { notFound, redirect } from 'next/navigation';
 
-import { isAuthenticatedStaging } from '../../../src/runtime/profile';
+import {
+  isAuthenticatedStaging,
+  isHiringPlatformEnabled,
+} from '../../../src/runtime/profile';
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
 import { r23IsEnabled } from '../../../src/r23-auth/config';
-import { sanitizePostLoginPath } from '../../../src/staging/browser';
+import {
+  sanitizePostLoginPath,
+  tryResolveSignedInLandingPath,
+} from '../../../src/staging/browser';
+import { BrandMark } from '../../_components/brand-mark';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
 
@@ -16,6 +24,7 @@ type SearchParams = {
   reset?: string;
   error?: string;
   next?: string;
+  redirect?: string;
 };
 
 export default async function R23LoginPage({
@@ -24,7 +33,18 @@ export default async function R23LoginPage({
   const founderUat = isFounderUatEnabled();
   if (!founderUat && !isAuthenticatedStaging() && !r23IsEnabled()) notFound();
   const params = await searchParams;
-  const safeNext = sanitizePostLoginPath(params.next);
+  const safeNext = sanitizePostLoginPath(params.next ?? params.redirect);
+
+  if (isHiringPlatformEnabled() && isAuthenticatedStaging()) {
+    const jar = await cookies();
+    const signedInTarget = await tryResolveSignedInLandingPath(
+      jar.toString(),
+      safeNext,
+    ).catch(() => null);
+    if (signedInTarget) {
+      redirect(signedInTarget);
+    }
+  }
   const nextIsPeerReview = Boolean(
     safeNext && safeNext.includes('peerReview='),
   );
@@ -57,6 +77,7 @@ export default async function R23LoginPage({
           prefetch={false}
           aria-label="Hirearchy Software"
         >
+          <BrandMark />
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </Link>
@@ -92,7 +113,14 @@ export default async function R23LoginPage({
             />
             <div className="software-field-heading">
               <label htmlFor="password">Password</label>
-              <Link href="/r23/recover" prefetch={false}>
+              <Link
+                href={
+                  safeNext
+                    ? `/r23/recover?next=${encodeURIComponent(safeNext)}`
+                    : '/r23/recover'
+                }
+                prefetch={false}
+              >
                 Reset your password
               </Link>
             </div>
@@ -109,7 +137,14 @@ export default async function R23LoginPage({
             <nav aria-label="Account help">
               <p>
                 New to Hirearchy?{' '}
-                <Link href="/r23/signup" prefetch={false}>
+                <Link
+                  href={
+                    safeNext
+                      ? `/r23/signup?next=${encodeURIComponent(safeNext)}`
+                      : '/r23/signup'
+                  }
+                  prefetch={false}
+                >
                   Create an account
                 </Link>
               </p>

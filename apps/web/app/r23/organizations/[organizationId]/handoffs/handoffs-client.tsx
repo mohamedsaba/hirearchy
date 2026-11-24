@@ -9,6 +9,10 @@ import {
   experienceLevelLabel,
 } from '../../../../../src/hiring/catalogs';
 import type { HandoffDossierItem } from '../../../../../src/hiring/types';
+import {
+  formatLocalDateTime,
+  formatRelativeTime,
+} from '../../../../../src/ui/relative-time';
 
 export interface HandoffsHubClientProps {
   readonly organizationId: string;
@@ -26,6 +30,19 @@ function handoffPillClass(status: string): string {
   }
 }
 
+function handoffStatusLabel(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'Needs review';
+    case 'reviewed':
+      return 'Reviewed';
+    case 'completed':
+      return 'Interview done';
+    default:
+      return status;
+  }
+}
+
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
@@ -40,6 +57,14 @@ export function HandoffsHubClient({
   const [stageFilter, setStageFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const isFiltered =
+    stageFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    roleFilter !== 'all' ||
+    normalizedQuery.length > 0;
 
   const filtered = useMemo(() => {
     return initialHandoffs.filter((item) => {
@@ -58,14 +83,40 @@ export function HandoffsHubClient({
       if (roleFilter !== 'all' && item.targetRole !== roleFilter) {
         return false;
       }
+      if (
+        normalizedQuery &&
+        !item.candidateName.toLowerCase().includes(normalizedQuery) &&
+        !item.candidateEmail.toLowerCase().includes(normalizedQuery) &&
+        !item.targetRole.toLowerCase().includes(normalizedQuery) &&
+        !item.scenarioTitle.toLowerCase().includes(normalizedQuery)
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [initialHandoffs, stageFilter, statusFilter, roleFilter]);
+  }, [initialHandoffs, stageFilter, statusFilter, roleFilter, normalizedQuery]);
+
+  const clearFilters = () => {
+    setStageFilter('all');
+    setStatusFilter('all');
+    setRoleFilter('all');
+    setSearchQuery('');
+  };
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
 
   return (
     <div className="hiring-page-shell">
+      <div className="hiring-directory-toolbar">
+        <input
+          type="search"
+          aria-label="Search handoffs"
+          placeholder="Search by candidate, email, role, or task…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
       <section className="hiring-filter-bar" aria-label="Filter handoffs">
         <div className="hiring-filter-grid">
           <div className="hiring-field">
@@ -91,9 +142,9 @@ export function HandoffsHubClient({
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="all">All statuses</option>
-              <option value="pending">Pending manager review</option>
+              <option value="pending">Needs review</option>
               <option value="reviewed">Reviewed</option>
-              <option value="completed">Interview completed</option>
+              <option value="completed">Interview done</option>
             </select>
           </div>
           <div className="hiring-field">
@@ -112,20 +163,39 @@ export function HandoffsHubClient({
             </select>
           </div>
         </div>
+        {isFiltered ? (
+          <div className="hiring-header-actions">
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-sm"
+              onClick={clearFilters}
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {filtered.length === 0 ? (
         <div className="hiring-card">
-          <h2>No managerial handoffs yet</h2>
+          <h2>
+            {initialHandoffs.length === 0
+              ? 'No managerial handoffs yet'
+              : 'No handoffs match these filters'}
+          </h2>
           <p>
-            When an evaluator accepts a candidate on the Evidence Review page
-            and sets a next stage, the full managerial dossier appears here.
+            {initialHandoffs.length === 0
+              ? 'When an evaluator accepts a candidate on the Evidence Review page and sets a next stage, the full managerial dossier appears here.'
+              : 'Try broadening your search or clearing the status and role filters.'}
           </p>
         </div>
       ) : (
         <div className="hiring-candidate-list">
           {filtered.map((item) => (
-            <article key={item.sessionId} className="hiring-candidate-card">
+            <article
+              key={item.sessionId}
+              className="hiring-candidate-card hiring-card-animated"
+            >
               <div className="hiring-candidate-header">
                 <div className="hiring-candidate-identity">
                   <span className="hiring-avatar" aria-hidden="true">
@@ -139,7 +209,7 @@ export function HandoffsHubClient({
                           item.decision.handoffStatus,
                         )}
                       >
-                        {item.decision.handoffStatus}
+                        {handoffStatusLabel(item.decision.handoffStatus)}
                       </span>
                       <span className="hiring-pill hiring-pill-plum">
                         {item.decision.nextStageLabel ?? 'Managerial Interview'}
@@ -188,6 +258,16 @@ export function HandoffsHubClient({
                       <span>
                         Manager:{' '}
                         {item.decision.handoffRecipientName ?? 'Team manager'}
+                      </span>
+                      <span
+                        title={formatLocalDateTime(
+                          item.decision.updatedAt ?? item.submittedAt,
+                        )}
+                      >
+                        Updated{' '}
+                        {formatRelativeTime(
+                          item.decision.updatedAt ?? item.submittedAt,
+                        )}
                       </span>
                     </div>
                     {item.decision.performanceReport ? (

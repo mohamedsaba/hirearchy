@@ -7,6 +7,7 @@ import {
   candidateSignInPath,
 } from '../../../src/hiring/candidate-entry';
 import { useRouter } from 'next/navigation';
+import { BrandMark } from '../../_components/brand-mark';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
 
@@ -113,6 +114,7 @@ export function CandidateAuthClient({
           href="/candidate"
           aria-label="Hirearchy Software for candidates"
         >
+          <BrandMark />
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </Link>
@@ -193,7 +195,16 @@ export function CandidateAuthClient({
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
-                <label htmlFor="cand-password">Password</label>
+                {signIn ? (
+                  <div className="software-field-heading">
+                    <label htmlFor="cand-password">Password</label>
+                    <Link href="/r23/recover" prefetch={false}>
+                      Forgot password?
+                    </Link>
+                  </div>
+                ) : (
+                  <label htmlFor="cand-password">Password</label>
+                )}
                 <PasswordToggleInput
                   id="cand-password"
                   name="password"
@@ -203,6 +214,9 @@ export function CandidateAuthClient({
                   value={password}
                   onChange={setPassword}
                 />
+                {!signIn ? (
+                  <p className="hiring-field-hint">At least 6 characters.</p>
+                ) : null}
                 <button type="submit" disabled={busy}>
                   {busy
                     ? signIn

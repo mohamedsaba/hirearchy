@@ -27,7 +27,9 @@ export default async function OrganizationHandoffsPage({
     organizationId,
   );
   if (!workspace) {
-    redirect('/r23/login');
+    redirect(
+      `/r23/login?next=${encodeURIComponent(`/r23/organizations/${organizationId.toLowerCase()}/handoffs`)}`,
+    );
   }
 
   const res = (await workspace.dispatch('hiring.handoffs.list', {
@@ -50,8 +52,8 @@ export default async function OrganizationHandoffsPage({
             <span className="hiring-eyebrow">{workspace.organizationName}</span>
             <h1>Managerial Handoffs</h1>
             <p>
-              Structured transition packets for accepted candidates moving to
-              managerial or follow-up technical interviews.
+              Hiring briefs for accepted candidates moving to their next
+              interview.
             </p>
           </div>
           <div className="hiring-header-actions">

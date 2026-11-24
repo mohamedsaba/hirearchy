@@ -901,7 +901,14 @@ function failureResponse(request: Request, error: unknown): Response {
     details.status === 401
       ? `<p role="alert">${safeHtml(details.message)}</p><p><a href="/r23/login">Sign in</a></p>`
       : `<p role="alert">${safeHtml(details.message)}</p>`;
-  return htmlResponse('Request denied', content, details.status);
+  return htmlResponse(
+    'Request denied',
+    content,
+    details.status,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+  );
 }
 
 export function stagingCapabilityDisabledJsonResponse(
@@ -1261,18 +1268,30 @@ function toR23SessionShim(
   };
 }
 
-export function stagingLoginGet(): Response {
+export function stagingLoginGet(request?: Request): Response {
   if (!isAuthenticatedStaging()) {
     return htmlResponse('Not found', '<p>Not found.</p>', 404);
   }
   try {
     loadStagingConfiguration();
-    return htmlResponse('Sign in to Hirearchy', loginForm());
+    return htmlResponse(
+      'Sign in to Hirearchy',
+      loginForm(),
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/login',
+    );
   } catch {
     return htmlResponse(
       'Sign in unavailable',
       '<p role="alert">The sign-in service is temporarily unavailable.</p>',
       503,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/login',
     );
   }
 }
@@ -1347,12 +1366,16 @@ export async function stagingLoginPost(request: Request): Promise<Response> {
         );
       }
       return htmlResponse(
-        'Evaluator sign in',
+        'Team sign in',
         loginForm(
           'Invalid email or password. Check credentials and try again.',
           requestedNextPath,
         ),
         401,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        '/r23/login',
       );
     }
     return failureResponse(request, error);
@@ -1412,6 +1435,49 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
           destination = '/r23/organizations';
         }
       }
+    } else if (isHiringPlatformEnabled()) {
+      try {
+        const statusResult = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'onboarding.status',
+          {},
+        )) as OnboardingStatusResponse | null;
+        if (statusResult?.status === 'has_active_membership') {
+          const membershipRes = (await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'membership.list',
+            {},
+          )) as { memberships?: StagingMembershipItem[] } | null;
+          const memberships = membershipRes?.memberships ?? [];
+          const lastOrgCookie = cookieValue(
+            request,
+            'hirearchy-last-org',
+          )?.toLowerCase();
+          const preferredOrg =
+            (lastOrgCookie &&
+              UUID.test(lastOrgCookie) &&
+              memberships
+                .find((m) => m.organizationId.toLowerCase() === lastOrgCookie)
+                ?.organizationId.toLowerCase()) ||
+            (memberships.length === 1
+              ? memberships[0].organizationId.toLowerCase()
+              : null);
+          if (preferredOrg) {
+            await dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              'session.open',
+              { organizationId: preferredOrg },
+            );
+            selectedOrganizationId = preferredOrg;
+            destination = `/r23/organizations/${preferredOrg}/candidates`;
+          }
+        }
+      } catch {
+        // Fall back safely to workspace picker if membership lookup fails
+      }
     }
 
     const updatedSession: StagingBrowserSessionPayload = Object.freeze({
@@ -1434,6 +1500,11 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
         true,
       ),
       clearCookieHeader(R23_CALLBACK_COOKIE, true),
+      ...(selectedOrganizationId
+        ? [
+            `hirearchy-last-org=${encodeURIComponent(selectedOrganizationId)}; Path=/; Max-Age=2592000; SameSite=Lax`,
+          ]
+        : []),
     ]);
   } catch (error) {
     const response = failureResponse(request, error);
@@ -1520,8 +1591,8 @@ export async function stagingOrganizationsGet(
               <section aria-labelledby="create-org-title">
                 <h1 id="create-org-title">Create your workspace</h1>
                 <p>Create your first organization, then prepare an assessment and invite your team.</p>
-                <div role="note" aria-label="Governance notice">
-                  <p>You will be the workspace owner and recruiter. Ownership cannot be transferred in this version.</p>
+                <div role="note" aria-label="Workspace owner note">
+                  <p>You&apos;ll be set up as the workspace owner. Owner transfer isn&apos;t available in this version.</p>
                 </div>
                 <form action="/r23/organization/bootstrap" method="post">
                   <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
@@ -1584,12 +1655,16 @@ export async function stagingOrganizationPost(
           ...session,
           selectedOrganizationId: organizationId,
         });
-        return redirect(origin, `/r23/organizations/${organizationId}`, [
+        const landingPath = isHiringPlatformEnabled()
+          ? `/r23/organizations/${organizationId}/candidates`
+          : `/r23/organizations/${organizationId}`;
+        return redirect(origin, landingPath, [
           cookieHeader(
             R23_SESSION_COOKIE,
             encryptSessionPayload(updatedSession, sessionKey),
             true,
           ),
+          `hirearchy-last-org=${encodeURIComponent(organizationId)}; Path=/; Max-Age=2592000; SameSite=Lax`,
         ]);
       },
     );
@@ -1612,6 +1687,7 @@ export async function stagingLoadOrganizationSessionList(
   refresh: 'automatic' | 'defer' = 'automatic',
 ): Promise<
   AuthenticatedSessionListContext & {
+    isOwner: boolean;
     reviewers: StagingReviewerItem[];
     draft: R211AssessmentDraft | null;
     validatedVersions: R211ValidatedVersion[];
@@ -1688,6 +1764,7 @@ export async function stagingLoadOrganizationSessionList(
           slug: orgDisplay.slug,
           role: orgContext.role,
         },
+        isOwner: Boolean(orgContext.isOwner),
         reviewers: orgContext.reviewers ?? [],
         draft: orgContext.draft ?? null,
         validatedVersions: orgContext.validatedVersions ?? [],
@@ -1706,6 +1783,7 @@ export async function stagingLoadOrganizationSessionSummary(
   sessionId: string,
 ): Promise<
   AuthenticatedSessionSummaryContext & {
+    isOwner: boolean;
     refreshedSessionCookie: string | null;
   }
 > {
@@ -1783,6 +1861,7 @@ export async function stagingLoadOrganizationSessionSummary(
           slug: orgDisplay.slug,
           role: orgContext.role,
         },
+        isOwner: Boolean(orgContext.isOwner),
         reviewers: orgContext.reviewers ?? [],
         assignments: match?.assignments ?? [],
         refreshedSessionCookie,
@@ -1844,7 +1923,7 @@ export async function stagingOrganizationGet(
       const emptyExplanation = filtered
         ? 'Try a different search or clear the filters.'
         : isOrgManager || hiring
-          ? 'Choose a platform template or generate a role-tailored problem with Kimi K3.1 Pro.'
+          ? 'Start from a platform template, generate a task with AI, or reuse one from your library.'
           : 'When your team assigns a session to you, it will appear here.';
 
       sessionsHtml = `
@@ -1865,9 +1944,9 @@ export async function stagingOrganizationGet(
             s.status === 'SUBMITTED' && s.closureReason === 'timeout';
           const lifecycleLabel =
             s.status === 'CREATED'
-              ? 'Issued'
+              ? 'Invited'
               : s.status === 'ACTIVE'
-                ? 'Active'
+                ? 'In progress'
                 : 'Submitted';
           const reviewLabel =
             s.status !== 'SUBMITTED'
@@ -1897,6 +1976,11 @@ export async function stagingOrganizationGet(
                 ? s.activatedAt
                 : s.submittedAt;
           const inspectUrl = `/r23/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(s.sessionId)}`;
+          const reviewUrl = `/r27/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(s.sessionId)}`;
+          const actionLinkHtml =
+            hiring && s.status === 'SUBMITTED'
+              ? `<a href="${safeHtml(reviewUrl)}">Review submission →</a>`
+              : `<a href="${safeHtml(inspectUrl)}">Inspect session</a>`;
 
           return `
             <li class="software-session-row" data-session-id="${safeHtml(s.sessionId)}">
@@ -1914,7 +1998,7 @@ export async function stagingOrganizationGet(
                 <span>${safeHtml(reviewLabel)}</span>
               </div>
               <div class="software-session-actions">
-                <a href="${safeHtml(inspectUrl)}">Inspect session</a>
+                ${actionLinkHtml}
                 <details>
                   <summary aria-label="Session details for ${safeHtml(s.scenarioTitle)}">Details</summary>
                   <div>
@@ -2009,7 +2093,7 @@ export async function stagingOrganizationGet(
       {
         organizationId: organizationId.toLowerCase(),
         organizationName: organization.name,
-        role: membership.role,
+        role: context.isOwner ? 'cto' : membership.role,
         email: identity.email ?? '',
         csrf: csrfToken,
         active: 'assessments',
@@ -2175,8 +2259,11 @@ export async function stagingOrganizationSessionPageGet(
       return attachRefreshedCookie(
         htmlResponse(
           'Session not found',
-          `<p role="alert">Session not available in your authorized organization scope.</p><p><a href="/r23/organizations/${safeHtml(organizationId.toLowerCase())}">Back to organization sessions</a></p>`,
+          `<p role="alert">We couldn&apos;t find that assessment in this workspace.</p><p><a href="/r23/organizations/${safeHtml(organizationId.toLowerCase())}">Back to organization sessions</a></p>`,
           404,
+          securityHeaders(),
+          undefined,
+          readRequestTheme(request),
         ),
         context.refreshedSessionCookie,
       );
@@ -2185,15 +2272,14 @@ export async function stagingOrganizationSessionPageGet(
     const { organization, membership, identity, csrfToken } = context;
     const s = sessionRecord;
     const safeOrgId = safeHtml(organizationId.toLowerCase());
-    const safeOrgName = safeHtml(organization.name);
 
     const isTimedOut =
       s.status === 'SUBMITTED' && s.closureReason === 'timeout';
     const lifecycleLabel =
       s.status === 'CREATED'
-        ? 'Issued'
+        ? 'Invited'
         : s.status === 'ACTIVE'
-          ? 'Active'
+          ? 'In progress'
           : 'Submitted';
     const reviewLabel =
       s.status !== 'SUBMITTED'
@@ -2252,11 +2338,9 @@ export async function stagingOrganizationSessionPageGet(
           <dt><strong>Scenario ID:</strong></dt><dd><code>${safeHtml(
             s.scenarioId,
           )}</code> (v${safeHtml(s.scenarioVersion.replace(/^v/i, ''))})</dd>
-          <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(
+          <dt><strong>Status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(
             lifecycleLabel,
-          )} (${safeHtml(s.status)})</span> ${
-            isTimedOut ? '<span>(Timed out)</span>' : ''
-          }</dd>
+          )}</span> ${isTimedOut ? '<span>(Timed out)</span>' : ''}</dd>
           <dt><strong>Review progress:</strong></dt><dd>${safeHtml(
             reviewLabel,
           )}</dd>
@@ -2294,24 +2378,33 @@ export async function stagingOrganizationSessionPageGet(
           }</dd>
           
         </dl>
-        <details class="software-session-reference"><summary>Session reference</summary><p><code>${safeHtml(
+        <details class="software-session-reference"><summary>Technical details</summary><p>Session: <code>${safeHtml(
           s.sessionId,
-        )}</code></p><p>Visibility: ${safeHtml(
+        )}</code></p><p>Status key: <code>${safeHtml(s.status)}</code> · Visibility: <code>${safeHtml(
           s.visibilityScope ?? 'authorized_scope',
-        )}</p></details>
+        )}</code></p></details>
 
         <section aria-labelledby="reviewer-assignments-title">
           <h2 id="reviewer-assignments-title">Assigned reviewers</h2>
           ${
             context.assignments && context.assignments.length > 0
               ? `<ul class="software-reviewer-list" data-testid="assigned-reviewers-list">${context.assignments
-                  .map(
-                    (a) => `
+                  .map((a) => {
+                    const reviewerInfo = context.reviewers?.find(
+                      (r) => r.principalId === a.reviewerPrincipalId,
+                    );
+                    const reviewerRole =
+                      reviewerInfo?.role === 'cto'
+                        ? 'CTO / Owner'
+                        : reviewerInfo?.role === 'recruiter'
+                          ? 'Recruiter'
+                          : 'Evaluator';
+                    return `
                 <li>
-                  <span>Reviewer <code>${safeHtml(a.reviewerPrincipalId)}</code></span>
+                  <span>${safeHtml(reviewerRole)} (<code title="${safeHtml(a.reviewerPrincipalId)}">${safeHtml(a.reviewerPrincipalId.slice(0, 8))}</code>)</span>
                   <span class="software-reviewer-status ${a.revokedAt ? 'is-revoked' : 'is-active'}">${a.revokedAt ? 'Revoked' : 'Active'}</span>
-                </li>`,
-                  )
+                </li>`;
+                  })
                   .join('')}</ul>`
               : '<p>No reviewers currently assigned.</p>'
           }
@@ -2338,10 +2431,12 @@ export async function stagingOrganizationSessionPageGet(
         {
           organizationId: organizationId.toLowerCase(),
           organizationName: organization.name,
-          role: membership.role,
+          role: context.isOwner ? 'cto' : membership.role,
           email: identity.email ?? '',
           csrf: csrfToken,
           active: 'assessments',
+          theme: readRequestTheme(request),
+          currentPath: `/r23/organizations/${organizationId.toLowerCase()}/sessions/${encodeURIComponent(s.sessionId)}`,
         },
       ),
       context.refreshedSessionCookie,
@@ -3698,6 +3793,7 @@ type RawStagingEvidencePayload = {
     recordedAt: string;
   }>;
   aiInteractions?: R27Evidence['aiInteractions'];
+  executions?: R27Evidence['executions'];
   captureLimitation?: string;
 };
 
@@ -3896,23 +3992,24 @@ function mapStagingEvidenceToR27(
       provenance: 'hirearchy.candidate_session_events',
     })),
     aiInteractions: Array.isArray(raw.aiInteractions) ? raw.aiInteractions : [],
-    executions: [],
+    executions: Array.isArray(raw.executions) ? raw.executions : [],
     pagination: {
       limit,
       nextAfterSequence,
     },
     availability: {
-      terminal: 'unavailable',
+      terminal:
+        s.terminalEnabled ||
+        (Array.isArray(raw.executions) && raw.executions.length > 0)
+          ? 'available'
+          : 'unavailable',
       ai:
         Array.isArray(raw.aiInteractions) && raw.aiInteractions.length > 0
           ? 'available'
           : 'unavailable',
       verification: 'unavailable',
       history: 'metadata_only',
-      limitations: [
-        raw.captureLimitation ??
-          'Candidate execution is disabled in this staging lane; no new candidate work is being captured.',
-      ],
+      limitations: raw.captureLimitation ? [raw.captureLimitation] : [],
     },
   };
 }
@@ -4102,7 +4199,7 @@ async function loadHiringAiReviewGuardAndContext(
                 requiredPlan: 'ultra',
                 currentPlan: plan.planTier,
                 message:
-                  'AI Candidate Review with Kimi K3.1 Pro requires the Ultra plan. Upgrade in Team & Plan settings.',
+                  'AI Candidate Review requires the Ultra plan. Upgrade in Team & Plan settings.',
               },
             },
             {
@@ -5193,15 +5290,17 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
       'Self-service registration disabled',
       `
         <section aria-labelledby="gated-signup-heading">
-        <h1 id="gated-signup-heading">Self-service registration disabled</h1>
-          <p>Public self-service signup is gated off in this environment. Registration will open when self-service release gates are met.</p>
-          <div role="note" aria-label="Environment restrictions">
-            <p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>).</p>
-          </div>
+          <h1 id="gated-signup-heading">Self-service registration disabled</h1>
+          <p>Account signup isn&apos;t open here yet. Ask your workspace admin for an invite link.</p>
+          <details class="software-tech-details"><summary>Environment details</summary><p>Automated email delivery is off (<code>emailDeliveryEnabled: false</code>).</p></details>
           <p><a href="/r23/login">Return to sign in</a></p>
         </section>
       `,
       403,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/signup',
     );
   }
 
@@ -5209,7 +5308,7 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
   const emailParam = url.searchParams.get('email') ?? '';
   const deliveryNotice = isFounderUatEnabled()
     ? 'A confirmation message will appear in the local inbox after you sign up. No email leaves this machine.'
-    : '<p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). After registration, verify your email to activate your account.</p>';
+    : '<p>Email isn&apos;t connected here yet — verify your account directly after signing up.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details>';
 
   return htmlResponse(
     'Create your account',
@@ -5242,11 +5341,16 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
     process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
 
   if (!enabled) {
-    return htmlResponse(
-      'Self-service registration disabled',
+    const response = htmlResponse(
+      'Create your account',
       '<p role="alert">Self-service onboarding is disabled in this environment.</p><p><a href="/r23/login">Return to sign in</a></p>',
       403,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/signup',
     );
+    return response;
   }
 
   try {
@@ -5260,6 +5364,10 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
         'Create your account',
         '<p role="alert">Invalid email or password (password must be at least 6 characters).</p><p><a href="/r23/signup">Try again</a></p>',
         400,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        '/r23/signup',
       );
     }
 
@@ -5291,6 +5399,10 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
         'Create your account',
         `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Signup failed'))}</p><p><a href="/r23/signup">Try again</a></p>`,
         authResponse.status,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        '/r23/signup',
       );
     }
 
@@ -5299,7 +5411,7 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
       : null;
     const confirmation = inboxUrl
       ? `<p>Open the local inbox to confirm your email and finish setting up your account.</p><p><a href="${safeHtml(inboxUrl)}">Open local inbox for ${safeHtml(email)}</a></p>`
-      : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p></div><p>Please proceed to verify your email address before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
+      : `<div role="note" aria-label="Email delivery notice"><p>Email isn&apos;t connected here, so we didn&apos;t send a confirmation message.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details></div><p>Verify your email below before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
 
     return htmlResponse(
       'Confirm your email',
@@ -5313,6 +5425,11 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
           </div>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/signup',
     );
   } catch (error) {
     return failureResponse(request, error);
@@ -5394,6 +5511,11 @@ export async function stagingVerifyEmailGet(
           <p><a href="/r23/login">Return to sign in</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/verify-email',
     );
   }
 
@@ -5423,12 +5545,17 @@ export async function stagingVerifyEmailGet(
         return htmlResponse(
           'Email confirmed',
           `
-            <section aria-labelledby="confirmed-heading">
-              <h2 id="confirmed-heading">Email verified successfully</h2>
-              <p>Your identity has been confirmed. You may now sign in and set up your organization.</p>
-              <p><a href="/r23/login">Proceed to sign in</a></p>
-            </section>
-          `,
+          <section aria-labelledby="confirmed-heading">
+            <h2 id="confirmed-heading">Email verified successfully</h2>
+            <p>Your account is confirmed. Sign in below to continue.</p>
+            <p><a href="/r23/login">Proceed to sign in</a></p>
+          </section>
+        `,
+          200,
+          securityHeaders(),
+          undefined,
+          readRequestTheme(request),
+          '/r23/verify-email',
         );
       }
     } catch {
@@ -5442,17 +5569,22 @@ export async function stagingVerifyEmailGet(
       <section aria-labelledby="verify-heading">
         <h1 id="verify-heading">Confirm your email address</h1>
         <div role="note" aria-label="Verification instructions">
-          <p>Enter the verification token provided for your account to confirm your email.</p>
+          <p>Enter the verification code for your account to confirm your email.</p>
         </div>
         <form action="/r23/verify-email" method="post">
-          <label for="token">Verification token</label>
-          <input id="token" name="token" type="text" required placeholder="Verification token" value="${safeHtml(token ?? '')}">
+          <label for="token">Verification code</label>
+          <input id="token" name="token" type="text" required placeholder="Verification code" value="${safeHtml(token ?? '')}">
           <input type="hidden" name="type" value="${safeHtml(type)}">
           <button type="submit">Confirm email</button>
         </form>
         <p><a href="/r23/login">Return to sign in</a></p>
       </section>
     `,
+    200,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+    '/r23/verify-email',
   );
 }
 
@@ -5561,7 +5693,7 @@ export async function stagingVerifyEmailPost(
 export function stagingRecoverGet(request?: Request): Response {
   const recoveryNotice = isFounderUatEnabled()
     ? '<p>Recovery messages for this local test appear in the local inbox. No email leaves this machine.</p>'
-    : '<p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Recovery tokens are generated by the identity provider.</p>';
+    : '<p>Reset emails aren&apos;t sent automatically in this environment. Ask your admin for a reset code.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details>';
   return htmlResponse(
     'Reset your password',
     `
@@ -5613,6 +5745,10 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
         'Reset your password',
         `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Password recovery request failed'))}</p><p><a href="/r23/recover">Try again</a></p>`,
         authResponse.status,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        '/r23/recover',
       );
     }
 
@@ -5621,7 +5757,7 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
       : null;
     const recoveryNextStep = inboxUrl
       ? `<p>Open the local inbox and choose the recovery message for this account.</p><p><a href="${safeHtml(inboxUrl)}">Open local inbox for ${safeHtml(email)}</a></p>`
-      : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> Automated recovery emails are not sent in this environment (<code>emailDeliveryEnabled: false</code>).</p></div><p>If you have received a recovery token, you can set your new password below:</p><p><a href="/r23/reset-password">Enter recovery token and set new password</a></p>`;
+      : `<div role="note" aria-label="Email delivery notice"><p>Reset emails aren&apos;t sent in this environment.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details></div><p>If you have a reset code, enter it below to set your new password:</p><p><a href="/r23/reset-password">Enter reset code and set new password</a></p>`;
 
     return htmlResponse(
       'Password recovery initiated',
@@ -5633,6 +5769,11 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
           <p><a href="/r23/login">Return to sign in</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/recover',
     );
   } catch (error) {
     return failureResponse(request, error);
@@ -5684,11 +5825,11 @@ export function stagingResetPasswordGet(request: Request): Response {
     `
       <section aria-labelledby="reset-password-heading">
         <h1 id="reset-password-heading">Set new password</h1>
-        <div role="note" aria-label="Quarantine notice">
-          <p><strong>Security notice:</strong> Password reset uses a dedicated recovery credential. After resetting your password, you will be directed to sign in with your standard credentials.</p>
+        <div role="note" aria-label="Reset note">
+          <p><strong>Security notice:</strong> Enter your reset code and choose a new password, then sign in again.</p>
         </div>
         <form action="/r23/reset-password" method="post">
-          <label for="token">Recovery token / access token</label>
+          <label for="token">Reset code</label>
           <input id="token" name="token" type="password" required value="${safeHtml(token)}">
           <label for="password">New password</label>
           <input id="password" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="1024">
@@ -5818,12 +5959,17 @@ export async function stagingOrganizationBootstrapPost(
           selectedOrganizationId: organizationId,
         });
 
-        return redirect(origin, `/r23/organizations/${organizationId}`, [
+        const landingPath = isHiringPlatformEnabled()
+          ? `/r23/organizations/${organizationId}/candidates`
+          : `/r23/organizations/${organizationId}`;
+
+        return redirect(origin, landingPath, [
           cookieHeader(
             R23_SESSION_COOKIE,
             encryptSessionPayload(updatedSession, sessionKey),
             true,
           ),
+          `hirearchy-last-org=${encodeURIComponent(organizationId)}; Path=/; Max-Age=2592000; SameSite=Lax`,
         ]);
       },
     );
@@ -5959,8 +6105,11 @@ export async function stagingOrganizationSettingsGet(
                 orgIdLower,
                 candidateEncryptionKey,
               );
-              const acceptUrl = `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`;
-              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this link and share it with your teammate.</span></label>`;
+              const acceptUrl = new URL(
+                `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`,
+                resolvePublicOrigin(request),
+              ).toString();
+              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this full link and share it with your teammate.</span></label>`;
             } catch {
               // decryption fallback
             }
@@ -6038,11 +6187,11 @@ export async function stagingOrganizationSettingsGet(
                   <select id="planTier" name="planTier">
                     <option value="per_candidate"${planSummary.planTier === 'per_candidate' || planSummary.planTier === 'none' ? ' selected' : ''}>Per Candidate (pay per candidate slot)</option>
                     <option value="pro"${planSummary.planTier === 'pro' ? ' selected' : ''}>Pro (unlimited candidates + AI builder)</option>
-                    <option value="ultra"${planSummary.planTier === 'ultra' ? ' selected' : ''}>Ultra (Pro + Kimi K3.1 Pro AI Review &amp; Fit Reports)</option>
+                    <option value="ultra"${planSummary.planTier === 'ultra' ? ' selected' : ''}>Ultra (Pro + AI Review &amp; Fit Reports)</option>
                   </select>
                 </div>
                 <div class="hiring-field">
-                  <label for="creditsMode">Candidate credit update</label>
+                  <label for="creditsMode">Slot update</label>
                   <select id="creditsMode" name="creditsMode">
                     <option value="add">Add candidate slots</option>
                     <option value="set">Set total purchased slots</option>
@@ -6053,9 +6202,11 @@ export async function stagingOrganizationSettingsGet(
                 <label for="creditsAmount">Candidate slots (used when Per Candidate plan is active)</label>
                 <input id="creditsAmount" name="creditsAmount" type="number" min="0" max="10000" value="${planSummary.planTier === 'per_candidate' ? 5 : 10}">
               </div>
-              <button type="submit">Save plan &amp; credits</button>
+              <button type="submit">Save plan &amp; slots</button>
             </form>`
-            : '<p class="software-field-help">Only a CTO / Owner can modify the organization plan and candidate credits.</p>';
+            : isCtoOrOwner
+              ? '<p class="software-field-help">Plan updates are managed externally in this environment.</p>'
+              : '<p class="software-field-help">Ask a CTO / Owner on your team to change your plan or add candidate slots.</p>';
 
         planSectionHtml = `
           <section class="software-settings-section software-team-section" aria-labelledby="plan-credits-heading">
@@ -6071,12 +6222,29 @@ export async function stagingOrganizationSettingsGet(
         ? `<div><label for="inviteRole">Workspace role</label><select id="inviteRole" name="role"><option value="reviewer" selected>Evaluator (Reviews &amp; hiring decision)</option><option value="recruiter">Recruiter (Pipeline &amp; invitations)</option><option value="cto">CTO / Owner (Full workspace &amp; plan)</option></select></div>`
         : '';
 
+      const noticeParam = new URL(request.url).searchParams.get('notice');
+      const noticeBannerHtml =
+        noticeParam === 'update_plan'
+          ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Plan and candidate slots updated.</span></div>'
+          : noticeParam === 'update_account_profile'
+            ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Profile display name updated.</span></div>'
+            : noticeParam === 'update_organization_profile'
+              ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Workspace name updated.</span></div>'
+              : noticeParam === 'create_invitation'
+                ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Team invitation created — copy the link in the invitations list below.</span></div>'
+                : noticeParam === 'revoke_invitation'
+                  ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Invitation revoked.</span></div>'
+                  : noticeParam === 'remove_member'
+                    ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Member removed from workspace.</span></div>'
+                    : '';
+
       const content = `
         <header class="software-page-heading">
           <div><p class="software-eyebrow">${safeOrgName}</p><h1>${hiring ? 'Team &amp; plan' : 'Team &amp; settings'}</h1></div>
-          <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
+          <a class="software-text-link" href="/r23/organizations/${safeOrgId}${hiring ? '/candidates' : ''}">Back to ${hiring ? 'Candidates' : 'organization sessions'}</a>
         </header>
 
+        ${noticeBannerHtml}
         ${planSectionHtml}
 
         <div class="software-settings-grid">
@@ -6125,7 +6293,7 @@ export async function stagingOrganizationSettingsGet(
           ${
             isOrgAdmin
               ? `
-            <p class="software-field-help">Create an invitation, then share its link with the invited teammate. Invitations are not emailed automatically.</p>
+            <p class="software-field-help">Create an invite link to share with your teammate. Invitations aren&apos;t emailed automatically.</p>
             <form class="software-invite-form" action="/r23/organizations/${safeOrgId}/settings" method="post">
               <input type="hidden" name="csrf" value="${safeCsrf}">
               <input type="hidden" name="action" value="create_invitation">
@@ -6148,7 +6316,7 @@ export async function stagingOrganizationSettingsGet(
         {
           organizationId: orgIdLower,
           organizationName: orgDisplay.name,
-          role: orgContext.role,
+          role: orgContext.isOwner ? 'cto' : orgContext.role,
           email: profile.email || identity.email || '',
           csrf: csrfToken,
           active: 'settings',
@@ -6286,7 +6454,10 @@ export async function stagingOrganizationSettingsPost(
         throw new StagingBadRequest();
       }
 
-      return redirect(origin, `/r23/organizations/${orgIdLower}/settings`);
+      return redirect(
+        origin,
+        `/r23/organizations/${orgIdLower}/settings?notice=${encodeURIComponent(action)}`,
+      );
     },
   );
 }
@@ -6320,12 +6491,12 @@ export async function stagingInvitationAcceptGet(
           if (!invitation) throw new StagingForbidden();
 
           return htmlResponse(
-            'Accept reviewer invitation',
+            'Accept workspace invitation',
             `
               <section aria-labelledby="accept-invitation-title">
-                <h2 id="accept-invitation-title">Join as a reviewer</h2>
+                <h2 id="accept-invitation-title">Join this workspace</h2>
                 <p>You are signed in as <strong>${safeHtml(identity.email ?? '')}</strong>.</p>
-                <p>Accept the invitation to join the organization and review its assessments.</p>
+                <p>Accept the invitation to join the organization and collaborate with your team.</p>
                 <form action="/r23/invitations/accept" method="post">
                   <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
                   <button type="submit">Accept invitation and join organization</button>
@@ -6333,6 +6504,10 @@ export async function stagingInvitationAcceptGet(
                 <p><a href="/r23/organizations">Cancel</a></p>
               </section>
             `,
+            200,
+            securityHeaders(),
+            undefined,
+            readRequestTheme(request),
           );
         },
       );
@@ -6341,6 +6516,9 @@ export async function stagingInvitationAcceptGet(
         'Invitation could not be opened',
         '<p role="alert">This invitation is unavailable for the signed-in account. Sign in with the invited email address or ask the inviter for a new link.</p><p><a href="/r23/login">Sign in</a></p>',
         403,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
       );
     }
   }
@@ -6351,6 +6529,9 @@ export async function stagingInvitationAcceptGet(
         'Reviewer invitation',
         '<p role="alert">An invitation link is required.</p><p><a href="/r23/login">Sign in</a></p>',
         400,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
       );
     }
 
@@ -6394,6 +6575,10 @@ export async function stagingInvitationAcceptGet(
           }
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 
@@ -6402,6 +6587,9 @@ export async function stagingInvitationAcceptGet(
       'Invitation link required',
       '<p role="alert">An invitation token is required in the link.</p><p><a href="/r23/login">Sign in</a></p>',
       400,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 
@@ -6410,18 +6598,22 @@ export async function stagingInvitationAcceptGet(
 
   if (!encodedSession || !csrf) {
     return htmlResponse(
-      'Reviewer Invitation',
+      'Team Invitation',
       `
         <section aria-labelledby="invitation-intro-title">
           <h2 id="invitation-intro-title">Join organization as reviewer</h2>
-          <p>You have been invited to join an engineering organization on Hirearchy as an active reviewer.</p>
+          <p>You have been invited to join an engineering organization on Hirearchy.</p>
           <div role="note" aria-label="Invitation instructions">
-            <p>Please sign in or create an account using the email address the invitation was issued to.</p>
+            <p>Sign in or create an account using the email address your invite was sent to.</p>
           </div>
-          <p><a href="/r23/login?redirect=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in with invited account</a></p>
+          <p><a href="/r23/login?next=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in with invited account</a></p>
           <p><a href="/r23/signup">Create new account</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 
@@ -6435,10 +6627,10 @@ export async function stagingInvitationAcceptGet(
         const safeCsrf = safeHtml(csrfToken);
 
         return htmlResponse(
-          'Accept Reviewer Invitation',
+          'Accept Team Invitation',
           `
             <section aria-labelledby="accept-invitation-title">
-              <h2 id="accept-invitation-title">Accept Reviewer Invitation</h2>
+              <h2 id="accept-invitation-title">Accept Team Invitation</h2>
               <p>You are signed in as <strong>${safeEmail}</strong>.</p>
               <form action="/r23/invitations/accept" method="post">
                 <input type="hidden" name="csrf" value="${safeCsrf}">
@@ -6448,17 +6640,24 @@ export async function stagingInvitationAcceptGet(
               <p><a href="/r23/organizations">Cancel</a></p>
             </section>
           `,
+          200,
+          securityHeaders(),
+          undefined,
+          readRequestTheme(request),
         );
       },
     );
   } catch {
     return htmlResponse(
-      'Reviewer Invitation',
+      'Team Invitation',
       `
-        <p>Your session has expired or is invalid. Please sign in to accept the invitation.</p>
-        <p><a href="/r23/login?redirect=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in</a></p>
+        <p>Your session has expired. Please sign in to accept the invitation.</p>
+        <p><a href="/r23/login?next=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in</a></p>
       `,
       401,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 }
@@ -6791,6 +6990,50 @@ export async function withHiringCandidateSession(
     });
   } catch (error) {
     return hiringFailureJsonResponse(request, error);
+  }
+}
+
+export async function tryResolveSignedInLandingPath(
+  cookieHeaderValue: string,
+  requestedNextPath: string | null = null,
+): Promise<string | null> {
+  if (!isAuthenticatedStaging() || !isHiringPlatformEnabled()) return null;
+  const request = buildHiringSyntheticRequest(cookieHeaderValue);
+  const csrf = cookieValue(request, R23_CSRF_COOKIE);
+  if (!csrf || !RANDOM_VALUE.test(csrf)) return null;
+
+  try {
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ session, config, identity }) => {
+        if (requestedNextPath) {
+          const targetOrgId = extractOrganizationIdFromPath(requestedNextPath);
+          if (
+            targetOrgId &&
+            session.selectedOrganizationId?.toLowerCase() === targetOrgId
+          ) {
+            return requestedNextPath;
+          }
+        }
+        if (session.selectedOrganizationId) {
+          return `/r23/organizations/${session.selectedOrganizationId.toLowerCase()}/candidates`;
+        }
+        const statusResult = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'onboarding.status',
+          {},
+        )) as OnboardingStatusResponse | null;
+        if (statusResult?.status === 'has_active_membership') {
+          return '/r23/organizations';
+        }
+        return null;
+      },
+      'defer',
+    );
+  } catch {
+    return null;
   }
 }
 

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 import './styles.css';
 import '../public/software-ui.css';
@@ -17,6 +18,13 @@ export const metadata: Metadata = {
   title: { default: 'Hirearchy', template: '%s | Hirearchy' },
   description:
     'A family of tools for seeing work clearly. Evidence informs. People decide.',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 };
 const THEME_BOOTSTRAP_SCRIPT = `(() => {
   try {
@@ -29,11 +37,21 @@ const THEME_BOOTSTRAP_SCRIPT = `(() => {
   } catch (e) {}
 })();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
+  const cookieStore = await cookies();
+  const rawTheme = cookieStore.get('hirearchy-theme')?.value;
+  const serverTheme =
+    rawTheme === 'dark' || rawTheme === 'light' ? rawTheme : undefined;
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      data-theme={serverTheme}
+      style={serverTheme ? { colorScheme: serverTheme } : undefined}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>

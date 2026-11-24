@@ -13,7 +13,20 @@ type EvaluatorHeaderProps = Readonly<{
   backHref?: string;
   backLabel?: string;
   showTheme?: boolean;
+  candidateName?: string | null;
+  candidateEmail?: string | null;
+  candidateCode?: string | null;
+  targetRole?: string | null;
+  testSummary?: string | null;
+  diffSummary?: string | null;
 }>;
+
+function candidateInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
 
 export const EvaluatorHeader = ({
   sessionId,
@@ -24,32 +37,81 @@ export const EvaluatorHeader = ({
   backHref = '/evaluator',
   backLabel = '← Back to reviews',
   showTheme,
-}: EvaluatorHeaderProps) => (
-  <header className="evaluator-report-heading">
-    <div className="evaluator-report-toolbar">
-      <Link className="evaluator-back-link" href={backHref}>
-        {backLabel}
-      </Link>
-      {showTheme ? <ThemeToggle /> : null}
-    </div>
-    <h1>{scenarioTitle}</h1>
-    <div className="evaluator-report-metadata">
-      <span className="evaluator-report-status">Submitted</span>
-      <span>{formatEvaluatorClosureReason(closureReason)}</span>
-      {sessionDuration?.status === 'available' ? (
-        <span>{sessionDuration.text} recorded</span>
-      ) : null}
-      <span title={`Candidate session reference: ${sessionId}`}>
-        Session {sessionId.slice(0, 8)}…
-      </span>
-      <time dateTime={submittedAt} title={`Submitted ${submittedAt}`}>
-        {new Date(submittedAt).toLocaleString('en-US', {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-          timeZone: 'UTC',
-        })}{' '}
-        UTC
-      </time>
-    </div>
-  </header>
-);
+  candidateName,
+  candidateEmail,
+  candidateCode,
+  targetRole,
+  testSummary,
+  diffSummary,
+}: EvaluatorHeaderProps) => {
+  const displayName = candidateName?.trim() || candidateEmail?.trim() || null;
+
+  return (
+    <header className="evaluator-report-heading">
+      <div className="evaluator-report-toolbar">
+        <Link className="evaluator-back-link" href={backHref}>
+          {backLabel}
+        </Link>
+        {showTheme ? <ThemeToggle /> : null}
+      </div>
+
+      {displayName ? (
+        <div className="evaluator-candidate-hero">
+          <span className="evaluator-avatar-pill" aria-hidden="true">
+            {candidateInitials(displayName)}
+          </span>
+          <div className="evaluator-candidate-hero-text">
+            <div className="evaluator-candidate-hero-top">
+              <h1>{displayName}</h1>
+              {candidateCode ? (
+                <span className="evaluator-candidate-code">
+                  {candidateCode}
+                </span>
+              ) : null}
+              {targetRole ? (
+                <span className="evaluator-candidate-role">{targetRole}</span>
+              ) : null}
+            </div>
+            <p className="evaluator-candidate-sub">
+              <span>{scenarioTitle}</span>
+              {candidateEmail && candidateEmail !== displayName ? (
+                <span> · {candidateEmail}</span>
+              ) : null}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <h1>{scenarioTitle}</h1>
+      )}
+
+      <div className="evaluator-report-metadata">
+        <span className="evaluator-report-status">Submitted</span>
+        {testSummary ? (
+          <span className="evaluator-meta-pill">{testSummary}</span>
+        ) : null}
+        {diffSummary ? (
+          <span className="evaluator-meta-pill">{diffSummary}</span>
+        ) : null}
+        {!displayName ? (
+          <span>{formatEvaluatorClosureReason(closureReason)}</span>
+        ) : null}
+        {sessionDuration?.status === 'available' ? (
+          <span>{sessionDuration.text} recorded</span>
+        ) : null}
+        <time dateTime={submittedAt} title={`Submitted ${submittedAt}`}>
+          {new Date(submittedAt).toLocaleString('en-US', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: 'UTC',
+          })}{' '}
+          UTC
+        </time>
+        {!displayName ? (
+          <span title={`Candidate session reference: ${sessionId}`}>
+            Session {sessionId.slice(0, 8)}…
+          </span>
+        ) : null}
+      </div>
+    </header>
+  );
+};

@@ -60,7 +60,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     canIssueAssessments: true,
     highlights: [
       '1 credit per distinct candidate email (re-issuing to the same candidate reuses their slot)',
-      'Platform templates & Kimi K3.1 Pro AI Assessment Builder',
+      'Platform templates & AI Assessment Builder',
       'Reusable saved problem library & Candidate Workspace AI assistant',
       'Peer second-opinion reviews & managerial handoff dossiers',
     ],
@@ -85,7 +85,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     canIssueAssessments: true,
     highlights: [
       'Unlimited candidate invitations across your hiring pipeline',
-      'Platform templates & Kimi K3.1 Pro AI Assessment Builder',
+      'Platform templates & AI Assessment Builder',
       'Reusable saved problem library & Candidate Workspace AI assistant',
       'Peer second-opinion reviews & structured managerial handoffs',
     ],
@@ -104,15 +104,15 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     name: 'Ultra',
     badgeLabel: 'Ultra',
     tagline:
-      'Full Hirearchy intelligence: everything in Pro plus deep Kimi K3.1 Pro AI Candidate Reviews and Managerial Fit Reports.',
+      'Everything in Pro, plus AI-assisted review summaries and hiring manager fit reports.',
     billingModel: 'subscription',
     priceLabel: 'Ultra Subscription',
     canIssueAssessments: true,
     highlights: [
       'Everything in Pro with unlimited candidate assessments',
-      'Deep Kimi K3.1 Pro AI Candidate Review (chronology, timing deltas & diff synthesis)',
-      'Automated Kimi K3.1 Pro Managerial Performance & Fit Report on acceptance',
-      'Priority team handoffs & full evidence reconstruction',
+      'AI-assisted session summaries (work timeline, key edits, and pacing)',
+      'Automated Hiring Manager Fit Report on candidate acceptance',
+      'Priority team handoffs & full evidence inspection',
     ],
     features: {
       aiCandidateReview: true,

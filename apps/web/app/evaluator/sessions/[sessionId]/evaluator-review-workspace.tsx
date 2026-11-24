@@ -35,7 +35,10 @@ import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
 import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { R27AiReviewPanel } from './ai-review-panel';
-import { HiringDecisionPanel } from './hiring-decision-panel';
+import {
+  HiringDecisionPanel,
+  type HiringDecisionDraft,
+} from './hiring-decision-panel';
 import { computeDiffStats } from './code-diff-viewer';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
@@ -255,6 +258,7 @@ const R27SummaryView = ({
   evidence,
   presentation,
   sources,
+  hiring = false,
   onOpenEvidence,
   onLoadMore,
   loadingMore,
@@ -263,6 +267,7 @@ const R27SummaryView = ({
   evidence: R27Evidence;
   presentation: R27Presentation;
   sources: readonly EvidenceSource[];
+  hiring?: boolean;
   onOpenEvidence: (filter?: EvidenceFilter, source?: EvidenceSource) => void;
   onLoadMore: () => void;
   loadingMore: boolean;
@@ -363,34 +368,56 @@ const R27SummaryView = ({
             </div>
           </header>
           {termsPatternObservation ? (
-            <section
-              className="evaluator-source-details"
-              aria-labelledby="r27-terms-pattern-title"
-            >
-              <h3 id="r27-terms-pattern-title">
-                Coding patterns in added Python lines
-              </h3>
-              <ul>
-                <li>
-                  <code>snake_case</code> identifier{' '}
-                  {termsPatternObservation.snakeCaseIdentifierFound
-                    ? 'was observed'
-                    : 'was not observed'}
-                  .
-                </li>
-                <li>
-                  Nested object return{' '}
-                  {termsPatternObservation.nestedObjectReturnFound
-                    ? 'was observed'
-                    : 'was not observed'}
-                  .
-                </li>
-              </ul>
-              <p className="evaluator-muted-copy">
-                These observations cannot establish external AI use, authorship,
-                intent, or competence.
-              </p>
-            </section>
+            hiring ? (
+              <details className="evaluator-source-details">
+                <summary>Automated Python pattern notes</summary>
+                <ul>
+                  <li>
+                    <code>snake_case</code> identifier{' '}
+                    {termsPatternObservation.snakeCaseIdentifierFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                  <li>
+                    Nested object return{' '}
+                    {termsPatternObservation.nestedObjectReturnFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                </ul>
+              </details>
+            ) : (
+              <section
+                className="evaluator-source-details"
+                aria-labelledby="r27-terms-pattern-title"
+              >
+                <h3 id="r27-terms-pattern-title">
+                  Coding patterns in added Python lines
+                </h3>
+                <ul>
+                  <li>
+                    <code>snake_case</code> identifier{' '}
+                    {termsPatternObservation.snakeCaseIdentifierFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                  <li>
+                    Nested object return{' '}
+                    {termsPatternObservation.nestedObjectReturnFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                </ul>
+                <p className="evaluator-muted-copy">
+                  These observations cannot establish external AI use,
+                  authorship, intent, or competence.
+                </p>
+              </section>
+            )
           ) : null}
           <details className="evaluator-source-details">
             <summary>Read task brief and acceptance criteria</summary>
@@ -1020,6 +1047,10 @@ const EvidenceView = ({
   onLoadMoreR27,
   loadingMoreR27,
   r27PageError,
+  hasHiringContext = false,
+  hiringDraft,
+  onHiringDraftChange,
+  onGoToDecision,
 }: Readonly<{
   evidence?: EvaluatorReviewEvidence;
   review?: EvaluatorReviewPresentation;
@@ -1035,6 +1066,10 @@ const EvidenceView = ({
   onLoadMoreR27?: () => void;
   loadingMoreR27?: boolean;
   r27PageError?: string | null;
+  hasHiringContext?: boolean;
+  hiringDraft?: HiringDecisionDraft | null;
+  onHiringDraftChange?: (patch: Partial<HiringDecisionDraft>) => void;
+  onGoToDecision?: () => void;
 }>) => {
   const visibleSources = sourcesForFilter(
     sources,
@@ -1188,13 +1223,62 @@ const EvidenceView = ({
           />
         ) : null}
       </div>
+      {hasHiringContext &&
+      filter === 'Code changes' &&
+      hiringDraft &&
+      onHiringDraftChange ? (
+        <section
+          className="evaluator-scratchpad-card"
+          aria-label="Decision scratchpad"
+        >
+          <div className="evaluator-report-toolbar">
+            <h3>Decision Scratchpad</h3>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <button
+                type="button"
+                className={`hiring-btn hiring-btn-sm ${hiringDraft.decision === 'accepted' ? 'hiring-btn-mint' : ''}`}
+                onClick={() => onHiringDraftChange({ decision: 'accepted' })}
+              >
+                Advance
+              </button>
+              <button
+                type="button"
+                className={`hiring-btn hiring-btn-sm ${hiringDraft.decision === 'rejected' ? 'hiring-btn-danger' : ''}`}
+                onClick={() => onHiringDraftChange({ decision: 'rejected' })}
+              >
+                Reject
+              </button>
+              {onGoToDecision ? (
+                <button
+                  type="button"
+                  className="evaluator-text-link"
+                  onClick={onGoToDecision}
+                >
+                  Open full Decision →
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <textarea
+            rows={2}
+            aria-label="Private review scratchpad notes"
+            placeholder="Jot notes while reading the diff — automatically synced with the Decision tab…"
+            value={hiringDraft.internalNotes}
+            onChange={(event) =>
+              onHiringDraftChange({ internalNotes: event.target.value })
+            }
+          />
+        </section>
+      ) : null}
       {r27Evidence?.pagination.nextAfterSequence !== null && r27Evidence ? (
         <button type="button" onClick={onLoadMoreR27} disabled={loadingMoreR27}>
           {loadingMoreR27 ? 'Loading events…' : 'Load more recorded events'}
         </button>
       ) : null}
       {r27Evidence && r27PageError ? <p role="alert">{r27PageError}</p> : null}
-      {review?.notices.map((notice) => (
+      {(review?.notices ?? []).map((notice) => (
         <p className="evaluator-evidence-notice" key={notice.title}>
           {notice.message}
         </p>
@@ -1292,8 +1376,109 @@ export const EvaluatorReviewWorkspace = (
   );
   const [loadingMoreR27, setLoadingMoreR27] = useState(false);
   const [r27PageError, setR27PageError] = useState<string | null>(null);
-  const [aiReviewReport, setAiReviewReport] =
+  const [aiReviewReport, setAiReviewReportState] =
     useState<R27AiReviewReport | null>(null);
+  const [aiReviewLoading, setAiReviewLoading] = useState(false);
+  const aiReportStorageKey = `hirearchy:eval:ai-report:v1:${sessionId}`;
+  const setAiReviewReport = (next: R27AiReviewReport | null) => {
+    setAiReviewReportState(next);
+    try {
+      if (next) {
+        window.sessionStorage.setItem(aiReportStorageKey, JSON.stringify(next));
+      } else {
+        window.sessionStorage.removeItem(aiReportStorageKey);
+      }
+    } catch {
+      // Ignore storage quota errors
+    }
+  };
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const saved = window.sessionStorage.getItem(aiReportStorageKey);
+        if (!saved) return;
+        const parsed = JSON.parse(saved) as R27AiReviewReport;
+        if (parsed && typeof parsed === 'object' && parsed.headline) {
+          setAiReviewReportState(parsed);
+        }
+      } catch {
+        // Ignore malformed cache
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [aiReportStorageKey]);
+
+  const decisionDraftStorageKey = `hirearchy:eval:decision-draft:v1:${sessionId}`;
+  const [hiringDecisionDraft, setHiringDecisionDraft] =
+    useState<HiringDecisionDraft | null>(() => {
+      if (!initialHiringReviewContext) return null;
+      return {
+        decision: initialHiringReviewContext.decision?.decision ?? 'accepted',
+        strengthsText:
+          initialHiringReviewContext.decision?.candidateStrengths.join('\n') ??
+          '',
+        weaknessesText:
+          initialHiringReviewContext.decision?.candidateWeaknesses.join('\n') ??
+          '',
+        feedbackNote:
+          initialHiringReviewContext.decision?.candidateFeedbackNote ?? '',
+        internalNotes: initialHiringReviewContext.decision?.internalNotes ?? '',
+        nextStageLabel:
+          initialHiringReviewContext.decision?.nextStageLabel ??
+          'Managerial Interview',
+        handoffRecipientId:
+          initialHiringReviewContext.decision?.handoffRecipientPrincipalId ??
+          initialHiringReviewContext.teamMembers.find(
+            (m) => m.role === 'cto' || m.isOwner,
+          )?.principalId ??
+          initialHiringReviewContext.teamMembers[0]?.principalId ??
+          '',
+      };
+    });
+
+  useEffect(() => {
+    if (!initialHiringReviewContext) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const saved = window.sessionStorage.getItem(decisionDraftStorageKey);
+        if (!saved) return;
+        const parsed = JSON.parse(saved) as Partial<HiringDecisionDraft>;
+        if (parsed && typeof parsed === 'object') {
+          setHiringDecisionDraft((current) =>
+            current ? { ...current, ...parsed } : current,
+          );
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [decisionDraftStorageKey, initialHiringReviewContext]);
+
+  const updateHiringDecisionDraft = (patch: Partial<HiringDecisionDraft>) => {
+    setHiringDecisionDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      try {
+        window.sessionStorage.setItem(
+          decisionDraftStorageKey,
+          JSON.stringify(next),
+        );
+      } catch {
+        // Ignore quota errors
+      }
+      return next;
+    });
+  };
+
   const evidence = 'evidence' in props ? props.evidence : null;
   const review = 'review' in props ? props.review : null;
   const projection = 'projection' in props ? props.projection : null;
@@ -1312,8 +1497,35 @@ export const EvaluatorReviewWorkspace = (
         : buildEvidenceSources(review!, projection!, aiConversations),
     [aiConversations, projection, r27Evidence, r27Presentation, review],
   );
-  const [mode, setMode] = useState<WorkbenchMode>(initialTab);
-  const [filter, setFilter] = useState<EvidenceFilter>('Chronology');
+  const [mode, setModeState] = useState<WorkbenchMode>(initialTab);
+  const [visitedModes, setVisitedModes] = useState<ReadonlySet<WorkbenchMode>>(
+    () => new Set([initialTab]),
+  );
+  const setMode = (nextMode: WorkbenchMode) => {
+    setModeState(nextMode);
+    setVisitedModes((current) => {
+      if (current.has(nextMode)) return current;
+      const next = new Set(current);
+      next.add(nextMode);
+      return next;
+    });
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', nextMode.toLowerCase());
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${url.pathname}${url.search}`,
+      );
+    }
+  };
+  const [filter, setFilter] = useState<EvidenceFilter>(() =>
+    initialR27Evidence &&
+    (initialR27Evidence.revisions.length > 0 ||
+      Boolean(initialR27Evidence.submission))
+      ? 'Code changes'
+      : 'Chronology',
+  );
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(
     () => preferredEvidenceSource(sources)?.key ?? null,
   );
@@ -1604,6 +1816,42 @@ export const EvaluatorReviewWorkspace = (
   const canNext =
     currentIndex >= 0 && currentIndex < activeFilterSources.length - 1;
 
+  const headerStats = useMemo(() => {
+    if (!r27Presentation) {
+      return { testSummary: null, diffSummary: null };
+    }
+    const execSources = sources.filter(
+      (s) => s.r27?.kind === 'execution' && s.execution,
+    );
+    let testSummary: string | null = null;
+    if (execSources.length > 0) {
+      const latestExec = execSources[execSources.length - 1].execution;
+      if (latestExec) {
+        testSummary =
+          latestExec.exitCode === 0
+            ? `Tests passed (${execSources.length} run${execSources.length === 1 ? '' : 's'})`
+            : `Tests exit ${latestExec.exitCode ?? '—'} (${execSources.length} run${execSources.length === 1 ? '' : 's'})`;
+      }
+    }
+    let totalAdd = 0;
+    let totalDel = 0;
+    for (const file of r27Presentation.files) {
+      const stats = computeDiffStats(file.diff);
+      totalAdd += stats.additions;
+      totalDel += stats.deletions;
+    }
+    const diffSummary =
+      totalAdd > 0 || totalDel > 0 ? `+${totalAdd} / -${totalDel} lines` : null;
+    return { testSummary, diffSummary };
+  }, [r27Presentation, sources]);
+
+  const tabDisplayLabel = (item: WorkbenchMode) => {
+    if (!hiringReviewContext) return item;
+    if (item === 'Summary') return 'Overview';
+    if (item === 'Evidence') return 'Code & Tests';
+    return 'Decision';
+  };
+
   return (
     <div
       className="evaluator-review-layout evaluator-workbench"
@@ -1625,12 +1873,26 @@ export const EvaluatorReviewWorkspace = (
           closureReason={
             review?.session.closureReason ?? r27Evidence!.closureReason
           }
+          candidateName={hiringReviewContext?.candidateName ?? null}
+          candidateEmail={hiringReviewContext?.candidateEmail ?? null}
+          candidateCode={hiringReviewContext?.candidateCode ?? null}
+          targetRole={hiringReviewContext?.targetRole ?? null}
+          testSummary={headerStats.testSummary}
+          diffSummary={headerStats.diffSummary}
           backHref={
-            r27Evidence
-              ? `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId.toLowerCase())}/sessions/${encodeURIComponent(r27Evidence.sessionId)}`
-              : undefined
+            hiringReviewContext
+              ? `/r23/organizations/${encodeURIComponent(hiringReviewContext.organizationId.toLowerCase())}/candidates`
+              : r27Evidence
+                ? `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId.toLowerCase())}/sessions/${encodeURIComponent(r27Evidence.sessionId)}`
+                : undefined
           }
-          backLabel={r27Evidence ? '← Back to session summary' : undefined}
+          backLabel={
+            hiringReviewContext
+              ? '← Back to Candidates'
+              : r27Evidence
+                ? '← Back to session summary'
+                : undefined
+          }
         />
         <div className="evaluator-workbench-topline">
           <nav
@@ -1657,7 +1919,14 @@ export const EvaluatorReviewWorkspace = (
                 }}
                 onKeyDown={(event) => onModeKeyDown(event, index)}
               >
-                <span>{item}</span>
+                <span>{tabDisplayLabel(item)}</span>
+                {item === 'Review' && aiReviewLoading ? (
+                  <span
+                    className="evaluator-tab-weaving-dot"
+                    aria-label="AI review running"
+                    title="AI review running"
+                  />
+                ) : null}
                 {item === 'Review' && pendingPeerReviewsForMeCount > 0 ? (
                   <span
                     className="evaluator-tab-badge"
@@ -1693,50 +1962,60 @@ export const EvaluatorReviewWorkspace = (
           tabIndex={0}
         >
           <section className="evaluator-workbench-main">
-            {mode === 'Summary' ? (
-              r27Evidence ? (
-                <R27SummaryView
-                  evidence={r27Evidence}
-                  presentation={r27Presentation!}
+            {visitedModes.has('Summary') ? (
+              <div hidden={mode !== 'Summary'}>
+                {r27Evidence ? (
+                  <R27SummaryView
+                    evidence={r27Evidence}
+                    presentation={r27Presentation!}
+                    sources={sources}
+                    hiring={Boolean(hiringReviewContext)}
+                    onOpenEvidence={openEvidence}
+                    onLoadMore={loadMoreR27Events}
+                    loadingMore={loadingMoreR27}
+                    pageError={r27PageError}
+                  />
+                ) : evidence && review && projection ? (
+                  <SummaryView
+                    sessionId={sessionId}
+                    evidence={evidence}
+                    review={review}
+                    projection={projection}
+                    conversations={aiConversations}
+                    sources={sources}
+                    selectedSource={selectedSource}
+                    onSelectSource={selectSource}
+                    onOpenEvidence={openEvidence}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {visitedModes.has('Evidence') ? (
+              <div hidden={mode !== 'Evidence'}>
+                <EvidenceView
+                  evidence={evidence ?? undefined}
+                  review={review ?? undefined}
+                  projection={projection ?? undefined}
+                  r27Evidence={r27Evidence ?? undefined}
                   sources={sources}
-                  onOpenEvidence={openEvidence}
-                  onLoadMore={loadMoreR27Events}
-                  loadingMore={loadingMoreR27}
-                  pageError={r27PageError}
-                />
-              ) : evidence && review && projection ? (
-                <SummaryView
-                  sessionId={sessionId}
-                  evidence={evidence}
-                  review={review}
-                  projection={projection}
-                  conversations={aiConversations}
-                  sources={sources}
+                  filter={filter}
                   selectedSource={selectedSource}
+                  selectedSourceKey={effectiveSelectedSourceKey}
+                  onFilterChange={handleFilterChange}
                   onSelectSource={selectSource}
-                  onOpenEvidence={openEvidence}
+                  registerRow={(key, element) => {
+                    if (element) sourceRows.current.set(key, element);
+                    else sourceRows.current.delete(key);
+                  }}
+                  onLoadMoreR27={loadMoreR27Events}
+                  loadingMoreR27={loadingMoreR27}
+                  r27PageError={r27PageError}
+                  hasHiringContext={Boolean(hiringReviewContext)}
+                  hiringDraft={hiringDecisionDraft}
+                  onHiringDraftChange={updateHiringDecisionDraft}
+                  onGoToDecision={() => setMode('Review')}
                 />
-              ) : null
-            ) : mode === 'Evidence' ? (
-              <EvidenceView
-                evidence={evidence ?? undefined}
-                review={review ?? undefined}
-                projection={projection ?? undefined}
-                r27Evidence={r27Evidence ?? undefined}
-                sources={sources}
-                filter={filter}
-                selectedSource={selectedSource}
-                selectedSourceKey={effectiveSelectedSourceKey}
-                onFilterChange={handleFilterChange}
-                onSelectSource={selectSource}
-                registerRow={(key, element) => {
-                  if (element) sourceRows.current.set(key, element);
-                  else sourceRows.current.delete(key);
-                }}
-                onLoadMoreR27={loadMoreR27Events}
-                loadingMoreR27={loadingMoreR27}
-                r27PageError={r27PageError}
-              />
+              </div>
             ) : null}
           </section>
 
@@ -1765,42 +2044,76 @@ export const EvaluatorReviewWorkspace = (
                 identity.
               </p>
             ) : null}
-            {mode === 'Review' && readOnly ? (
+            {readOnly ? (
               r27Evidence ? (
-                <div className="r27-review-stack">
-                  <div className="r27-human-review">
+                visitedModes.has('Review') ? (
+                  <div className="r27-review-stack" hidden={mode !== 'Review'}>
                     {hiringReviewContext ? (
-                      <HiringDecisionPanel
-                        initialContext={hiringReviewContext}
-                        aiReviewReport={aiReviewReport}
-                        initialPeerReviewId={initialPeerReviewId}
-                        onOpenEvidence={openEvidence}
-                        onContextChange={setHiringReviewContext}
-                      />
-                    ) : null}
-                    {r210IsEnabled() ? (
-                      <R210ReviewPacketPanel
+                      <R27AiReviewPanel
                         organizationId={r27Evidence.organizationId}
                         sessionId={r27Evidence.sessionId}
-                        reviewer={r27Evidence.reviewer}
-                        r27Evidence={r27Evidence}
-                        sources={sources}
-                        onOpenEvidence={openEvidence}
+                        evidence={r27Evidence}
+                        report={aiReviewReport}
+                        onReportChange={setAiReviewReport}
+                        onLoadingChange={setAiReviewLoading}
+                        planLocked={aiReviewPlanLocked}
+                        hiring
+                        planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
+                      />
+                    ) : null}
+                    <div className="r27-human-review">
+                      {hiringReviewContext ? (
+                        <HiringDecisionPanel
+                          initialContext={hiringReviewContext}
+                          aiReviewReport={aiReviewReport}
+                          initialPeerReviewId={initialPeerReviewId}
+                          draft={hiringDecisionDraft}
+                          onDraftChange={setHiringDecisionDraft}
+                          onOpenEvidence={openEvidence}
+                          onContextChange={setHiringReviewContext}
+                        />
+                      ) : null}
+                      {r210IsEnabled() ? (
+                        hiringReviewContext ? (
+                          <details className="evaluator-source-details">
+                            <summary>Formal audit packet (optional)</summary>
+                            <R210ReviewPacketPanel
+                              organizationId={r27Evidence.organizationId}
+                              sessionId={r27Evidence.sessionId}
+                              reviewer={r27Evidence.reviewer}
+                              r27Evidence={r27Evidence}
+                              sources={sources}
+                              onOpenEvidence={openEvidence}
+                            />
+                          </details>
+                        ) : (
+                          <R210ReviewPacketPanel
+                            organizationId={r27Evidence.organizationId}
+                            sessionId={r27Evidence.sessionId}
+                            reviewer={r27Evidence.reviewer}
+                            r27Evidence={r27Evidence}
+                            sources={sources}
+                            onOpenEvidence={openEvidence}
+                          />
+                        )
+                      ) : null}
+                    </div>
+                    {!hiringReviewContext ? (
+                      <R27AiReviewPanel
+                        organizationId={r27Evidence.organizationId}
+                        sessionId={r27Evidence.sessionId}
+                        evidence={r27Evidence}
+                        report={aiReviewReport}
+                        onReportChange={setAiReviewReport}
+                        onLoadingChange={setAiReviewLoading}
+                        planLocked={aiReviewPlanLocked}
+                        hiring={false}
+                        planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
                       />
                     ) : null}
                   </div>
-                  <R27AiReviewPanel
-                    organizationId={r27Evidence.organizationId}
-                    sessionId={r27Evidence.sessionId}
-                    evidence={r27Evidence}
-                    report={aiReviewReport}
-                    onReportChange={setAiReviewReport}
-                    planLocked={aiReviewPlanLocked}
-                    hiring={Boolean(hiringReviewContext)}
-                    planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
-                  />
-                </div>
-              ) : (
+                ) : null
+              ) : mode === 'Review' ? (
                 <section
                   className="evaluator-review-card"
                   aria-label="Read-only review boundary"
@@ -1812,7 +2125,7 @@ export const EvaluatorReviewWorkspace = (
                     reconstructed claims.
                   </p>
                 </section>
-              )
+              ) : null
             ) : null}
             {!readOnly ? (
               <ReviewWorkflowPanel

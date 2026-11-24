@@ -1,0 +1,278 @@
+@font-face {
+  font-family: 'First Look DM Sans';
+  src: url('../public/dm-sans-latin.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-display: block;
+}
+@font-face {
+  font-family: 'First Look Mono';
+  src: url('../public/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: block;
+}
+.fl-film {
+  font-family: 'First Look DM Sans', sans-serif;
+  background: #201528;
+  overflow: hidden;
+}
+.fl-night {
+  color: #f5efe6;
+  background: #201528;
+  overflow: hidden;
+}
+.fl-paper {
+  color: #291e36;
+  background: #f5efe6;
+  overflow: hidden;
+}
+.fl-photo {
+  background: #291e36;
+  overflow: hidden;
+}
+.fl-daylight,
+.fl-ide-light,
+.fl-ide-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.fl-daylight {
+  background: radial-gradient(
+    ellipse at 24% 32%,
+    #fff9ed 4%,
+    #f5efe6 55%,
+    #e5d7e8 122%
+  );
+}
+.fl-ide-light {
+  background: radial-gradient(ellipse at 66% 31%, #372845 0%, #211426 70%);
+}
+.fl-ide-vignette {
+  background: linear-gradient(
+    0deg,
+    #1c1225 3%,
+    #1c122500 35%,
+    #1c122500 69%,
+    #1c1225d0 100%
+  );
+}
+.fl-type {
+  position: absolute;
+  font-weight: 570;
+  letter-spacing: -0.073em;
+  line-height: 0.94;
+}
+.fl-mask {
+  overflow: hidden;
+  padding: 0.04em 0.08em 0.08em 0;
+}
+.fl-label,
+.fl-topline,
+.fl-macro-caption span:first-child {
+  font-family: 'First Look Mono', monospace;
+  letter-spacing: 0.19em;
+  font-size: 23px;
+  font-weight: 530;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.fl-label {
+  margin: 0 0 35px 6px;
+}
+.fl-night .fl-label,
+.fl-accent {
+  color: #b0f0ce;
+}
+.fl-paper .fl-label,
+.fl-question .fl-label {
+  color: #365c4d;
+}
+.fl-open-title {
+  font-size: 163px;
+}
+.fl-task-title {
+  font-size: 106px;
+}
+.fl-trace-title,
+.fl-compare-title {
+  font-size: 109px;
+}
+.fl-question {
+  font-size: 80px;
+}
+.fl-close-title {
+  font-size: 106px;
+}
+.fl-caption {
+  position: absolute;
+  font-size: 34px;
+  line-height: 1.28;
+  font-weight: 470;
+  letter-spacing: -0.034em;
+  color: #4b3e51;
+}
+.fl-filament {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.fl-crop {
+  position: absolute;
+  overflow: hidden;
+  box-sizing: content-box;
+}
+.fl-edit-frame {
+  position: absolute;
+  overflow: hidden;
+  border: 1px solid;
+  box-shadow: 0 29px 96px #11091bc7;
+}
+.fl-topline {
+  position: absolute;
+  left: 127px;
+  top: 87px;
+  width: 1666px;
+  color: #b0f0ce;
+  display: flex;
+  justify-content: space-between;
+  font-size: 20px;
+}
+.fl-topline span:last-child {
+  color: #d8ccdf;
+  font-size: 19px;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+.fl-topline i {
+  margin: 0 11px;
+  font-style: normal;
+  color: #b0f0ce;
+}
+.fl-editor-anchor {
+  position: absolute;
+  height: 2px;
+  background: #b0f0ce;
+  pointer-events: none;
+}
+.fl-macro-caption {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  left: 126px;
+  top: 860px;
+  color: #f5efe6;
+  font-size: 35px;
+  letter-spacing: -0.035em;
+  font-weight: 520;
+}
+.fl-macro-caption span:first-child {
+  color: #b0f0ce;
+  text-transform: none;
+  letter-spacing: 0.065em;
+  font-size: 21px;
+}
+.fl-editor-copy,
+.fl-submit-copy {
+  position: absolute;
+  color: #f5efe6;
+  font-size: 59px;
+  font-weight: 540;
+  letter-spacing: -0.06em;
+  left: 603px;
+  top: 850px;
+}
+.fl-submit-copy {
+  left: 126px;
+  top: 921px;
+  font-size: 38px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.fl-submit-copy span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #b0f0ce;
+}
+.fl-real-timeline-label {
+  width: 690px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-left: 50px;
+  padding: 0 0 15px;
+  border-bottom: 1px solid #c9bbc9;
+  color: #291e36;
+  font-weight: 610;
+  font-size: 34px;
+  letter-spacing: -0.055em;
+}
+.fl-real-timeline-label span:last-child {
+  font-family: 'First Look Mono', monospace;
+  font-size: 18px;
+  letter-spacing: 0.01em;
+  color: #65536e;
+}
+.fl-timeline-pin {
+  position: absolute;
+  left: -38px;
+  top: 57px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #47765c;
+}
+.fl-wordmark {
+  position: absolute;
+  left: 127px;
+  top: 234px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #f5efe6;
+  font-size: 53px;
+  letter-spacing: -0.072em;
+  font-weight: 750;
+}
+.fl-wordmark span {
+  display: inline-block;
+  color: #291e36;
+  background: #b0f0ce;
+  padding: 6px 12px 8px;
+  font-size: 23px;
+  border-radius: 7px;
+  letter-spacing: -0.04em;
+  font-weight: 715;
+  line-height: 1;
+}
+.fl-cta {
+  position: absolute;
+  left: 129px;
+  top: 735px;
+  color: #f5efe6;
+  display: grid;
+  justify-items: start;
+  gap: 23px;
+}
+.fl-cta > span {
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.033em;
+  color: #291e36;
+  background: #b0f0ce;
+  padding: 17px 22px 18px 24px;
+  border-radius: 7px;
+}
+.fl-cta b {
+  margin-left: 12px;
+  font-weight: 460;
+}
+.fl-cta > div {
+  font-size: 25px;
+  letter-spacing: -0.025em;
+  color: #e9dee9;
+}

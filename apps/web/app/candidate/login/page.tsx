@@ -1,7 +1,9 @@
+import { cookies } from 'next/headers';
 import { candidateAssessmentPath } from '../../../src/hiring/candidate-entry';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import { isHiringPlatformEnabled } from '../../../src/runtime/profile';
+import { tryReadHiringAccountFromCookie } from '../../../src/staging/browser';
 import { CandidateAuthClient } from './candidate-auth-client';
 
 export const dynamic = 'force-dynamic';
@@ -15,10 +17,18 @@ export default async function CandidateLoginPage({
 }) {
   if (!isHiringPlatformEnabled()) notFound();
   const params = await searchParams;
+  const targetPath = candidateAssessmentPath(params.next) ?? '/candidate';
+  const jar = await cookies();
+  const account = await tryReadHiringAccountFromCookie(jar.toString()).catch(
+    () => null,
+  );
+  if (account) {
+    redirect(targetPath);
+  }
   return (
     <CandidateAuthClient
       mode="login"
-      nextPath={candidateAssessmentPath(params.next) ?? '/candidate'}
+      nextPath={targetPath}
       verified={params.verified === '1'}
     />
   );

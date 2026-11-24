@@ -70,6 +70,11 @@ export function renderSoftwareDocument(
   const organizationPath = workspace
     ? `/r23/organizations/${encodeURIComponent(workspace.organizationId)}`
     : '/r23/login';
+  const homeBrandHref = workspace
+    ? hiringEnabled
+      ? `${organizationPath}/candidates`
+      : organizationPath
+    : '/r23/login';
 
   const derivedWorkspacePath = workspace
     ? (workspace.currentPath ??
@@ -142,7 +147,14 @@ export function renderSoftwareDocument(
     : '';
   const htmlThemeAttr = resolvedTheme === 'dark' ? ' data-theme="dark"' : '';
 
-  return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${
-    workspace ? ' software-document-workspace' : ' software-document-access'
-  }"><a class="software-skip-link" href="#main-content">Skip to main content</a><header class="software-document-header"><a class="software-document-wordmark" href="${organizationPath}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a>${themeToggleForm}</header><div class="software-document-layout">${navigation}<main class="software-document-shell" id="main-content" tabindex="-1">${workspace ? '' : '<p class="software-access-principle">Evidence informs.<br><span>People decide.</span></p>'}<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
+  const brandMark =
+    '<svg class="software-brand-mark" width="22" height="22" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#211426"/><rect x="0.75" y="0.75" width="62.5" height="62.5" rx="15.25" stroke="#f5efe6" stroke-opacity="0.16" stroke-width="1.5"/><rect x="17.5" y="15.5" width="7.5" height="33" rx="2.6" fill="#f5efe6"/><rect x="39" y="15.5" width="7.5" height="33" rx="2.6" fill="#f5efe6"/><path d="M 21 28.5 H 30.5 C 35.8 28.5 39 25.3 39 20 H 42 V 44 H 39 C 39 38.7 35.8 35.5 30.5 35.5 H 21 Z" fill="#f5efe6"/><rect x="26" y="29.8" width="12" height="4.4" rx="2.2" fill="#8ee3b8"/></svg>';
+
+  const isCenteredWorkspacePicker =
+    !workspace && resolvedNextPath === '/r23/organizations';
+  const bodyAccessClasses = workspace
+    ? ' software-document-workspace'
+    : ' software-document-access software-team-access';
+
+  return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/apple-icon.png"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${bodyAccessClasses}"><a class="software-skip-link" href="#main-content">Skip to main content</a><header class="software-document-header"><a class="software-document-wordmark" href="${homeBrandHref}" aria-label="Hirearchy Software home">${brandMark}<span>Hirearchy</span><span class="software-document-product">Software</span></a>${themeToggleForm}</header><div class="software-document-layout">${navigation}<main class="software-document-shell${isCenteredWorkspacePicker ? ' software-document-shell--centered' : ''}" id="main-content" tabindex="-1">${workspace ? '' : isCenteredWorkspacePicker ? '' : '<p class="software-access-principle">Evidence informs.<br><span>People decide.</span></p>'}<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
 }

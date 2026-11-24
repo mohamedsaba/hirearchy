@@ -31,6 +31,8 @@ export interface RawHiringCandidateSessionRow {
   readonly assignedReviewerName?: string | null;
   readonly invitationActive?: boolean;
   readonly invitationExpiresAt?: string | null;
+  readonly candidateTokenCiphertext?: string | null;
+  readonly candidateLink?: string | null;
   readonly profile?: {
     readonly candidateCode?: string | null;
     readonly fullName?: string | null;
@@ -158,6 +160,7 @@ export function groupCandidateSessions(
       submittedAt: row.submittedAt ?? null,
       invitationActive: Boolean(row.invitationActive),
       invitationExpiresAt: row.invitationExpiresAt ?? null,
+      candidateLink: row.candidateLink ?? null,
       decision: row.decision ?? null,
       secondOpinions,
     };

@@ -5,6 +5,7 @@ node_modules
 coverage/
 dist/
 out/
+/launch-renders/
 playwright-report/
 test-results/
 *.tsbuildinfo

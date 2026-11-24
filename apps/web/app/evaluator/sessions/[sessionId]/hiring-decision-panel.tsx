@@ -31,12 +31,29 @@ import type {
 import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
 import { playHirearchySound } from '../../../../src/ui/sound';
+import { CommonThreadLoader } from '../../../_components/common-thread-loader';
+import {
+  CommonThreadToast,
+  type CommonThreadToastTone,
+} from '../../../_components/common-thread-toast';
 import type { EvidenceFilter } from './evidence-workbench';
+
+export interface HiringDecisionDraft {
+  readonly decision: 'accepted' | 'rejected';
+  readonly strengthsText: string;
+  readonly weaknessesText: string;
+  readonly feedbackNote: string;
+  readonly internalNotes: string;
+  readonly nextStageLabel: string;
+  readonly handoffRecipientId: string;
+}
 
 export interface HiringDecisionPanelProps {
   readonly initialContext: SessionHiringReviewContext;
   readonly aiReviewReport?: R27AiReviewReport | null;
   readonly initialPeerReviewId?: string | null;
+  readonly draft?: HiringDecisionDraft | null;
+  readonly onDraftChange?: (next: HiringDecisionDraft) => void;
   readonly onOpenEvidence?: (filter: EvidenceFilter) => void;
   readonly onContextChange?: (next: SessionHiringReviewContext) => void;
 }
@@ -216,6 +233,8 @@ export function HiringDecisionPanel({
   initialContext,
   aiReviewReport = null,
   initialPeerReviewId = null,
+  draft: controlledDraft,
+  onDraftChange,
   onOpenEvidence,
   onContextChange,
 }: HiringDecisionPanelProps) {
@@ -235,6 +254,9 @@ export function HiringDecisionPanel({
   const selectableTeammates =
     otherTeammates.length > 0 ? otherTeammates : ctx.teamMembers;
 
+  const [peerFormOpen, setPeerFormOpen] = useState(
+    initialContext.secondOpinions.length > 0,
+  );
   const [opinionReviewerId, setOpinionReviewerId] = useState<string>(
     selectableTeammates[0]?.principalId ?? '',
   );
@@ -250,31 +272,97 @@ export function HiringDecisionPanel({
     useState<PeerReviewEmailDelivery | null>(null);
   const [copiedReviewLink, setCopiedReviewLink] = useState(false);
 
-  const [decision, setDecision] = useState<'accepted' | 'rejected'>(
-    initialContext.decision?.decision ?? 'accepted',
+  const defaultDraft: HiringDecisionDraft = useMemo(
+    () => ({
+      decision: initialContext.decision?.decision ?? 'accepted',
+      strengthsText:
+        initialContext.decision?.candidateStrengths.join('\n') ?? '',
+      weaknessesText:
+        initialContext.decision?.candidateWeaknesses.join('\n') ?? '',
+      feedbackNote: initialContext.decision?.candidateFeedbackNote ?? '',
+      internalNotes: initialContext.decision?.internalNotes ?? '',
+      nextStageLabel:
+        initialContext.decision?.nextStageLabel ?? NEXT_STAGE_OPTIONS[0],
+      handoffRecipientId:
+        initialContext.decision?.handoffRecipientPrincipalId ??
+        initialContext.teamMembers.find((m) => m.role === 'cto' || m.isOwner)
+          ?.principalId ??
+        initialContext.teamMembers[0]?.principalId ??
+        '',
+    }),
+    [initialContext],
   );
-  const [strengthsText, setStrengthsText] = useState(
-    initialContext.decision?.candidateStrengths.join('\n') ?? '',
-  );
-  const [weaknessesText, setWeaknessesText] = useState(
-    initialContext.decision?.candidateWeaknesses.join('\n') ?? '',
-  );
-  const [feedbackNote, setFeedbackNote] = useState(
-    initialContext.decision?.candidateFeedbackNote ?? '',
-  );
-  const [internalNotes, setInternalNotes] = useState(
-    initialContext.decision?.internalNotes ?? '',
-  );
-  const [nextStageLabel, setNextStageLabel] = useState(
-    initialContext.decision?.nextStageLabel ?? NEXT_STAGE_OPTIONS[0],
-  );
-  const [handoffRecipientId, setHandoffRecipientId] = useState(
-    initialContext.decision?.handoffRecipientPrincipalId ??
-      initialContext.teamMembers.find((m) => m.role === 'cto' || m.isOwner)
-        ?.principalId ??
-      initialContext.teamMembers[0]?.principalId ??
-      '',
-  );
+  const draftStorageKey = `hirearchy:eval:decision-draft:v1:${ctx.sessionId}`;
+  const [internalDraft, setInternalDraft] =
+    useState<HiringDecisionDraft>(defaultDraft);
+  const activeDraft = controlledDraft ?? internalDraft;
+  const updateDraft = (patch: Partial<HiringDecisionDraft>) => {
+    const next = { ...activeDraft, ...patch };
+    setInternalDraft(next);
+    onDraftChange?.(next);
+    try {
+      window.sessionStorage.setItem(draftStorageKey, JSON.stringify(next));
+    } catch {
+      // Ignore storage quota errors
+    }
+  };
+  const decision = activeDraft.decision;
+  const strengthsText = activeDraft.strengthsText;
+  const weaknessesText = activeDraft.weaknessesText;
+  const feedbackNote = activeDraft.feedbackNote;
+  const internalNotes = activeDraft.internalNotes;
+  const nextStageLabel = activeDraft.nextStageLabel;
+  const handoffRecipientId = activeDraft.handoffRecipientId;
+  const setDecision = (val: 'accepted' | 'rejected') =>
+    updateDraft({ decision: val });
+  const setStrengthsText = (val: string) => updateDraft({ strengthsText: val });
+  const setWeaknessesText = (val: string) =>
+    updateDraft({ weaknessesText: val });
+  const setFeedbackNote = (val: string) => updateDraft({ feedbackNote: val });
+  const setInternalNotes = (val: string) => updateDraft({ internalNotes: val });
+  const setNextStageLabel = (val: string) =>
+    updateDraft({ nextStageLabel: val });
+  const setHandoffRecipientId = (val: string) =>
+    updateDraft({ handoffRecipientId: val });
+
+  useEffect(() => {
+    if (controlledDraft) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const saved = window.sessionStorage.getItem(draftStorageKey);
+        if (!saved) return;
+        const parsed = JSON.parse(saved) as Partial<HiringDecisionDraft>;
+        if (parsed && typeof parsed === 'object') {
+          setInternalDraft({ ...defaultDraft, ...parsed });
+        }
+      } catch {
+        // Ignore malformed draft cache
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [controlledDraft, defaultDraft, draftStorageKey]);
+
+  const isDirtyDraft =
+    decision !== defaultDraft.decision ||
+    strengthsText !== defaultDraft.strengthsText ||
+    weaknessesText !== defaultDraft.weaknessesText ||
+    feedbackNote !== defaultDraft.feedbackNote ||
+    internalNotes !== defaultDraft.internalNotes;
+
+  useEffect(() => {
+    if (!isDirtyDraft) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirtyDraft]);
+
   const [performanceReport, setPerformanceReport] =
     useState<PerformanceFitReport | null>(
       initialContext.decision?.performanceReport ?? null,
@@ -283,6 +371,10 @@ export function HiringDecisionPanel({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    tone: CommonThreadToastTone;
+  } | null>(null);
 
   const peerReviewRefs = useRef(new Map<string, HTMLElement>());
 
@@ -546,13 +638,25 @@ export function HiringDecisionPanel({
           setPerformanceReport(data.reviewContext.decision.performanceReport);
         }
       }
+      try {
+        window.sessionStorage.removeItem(draftStorageKey);
+      } catch {
+        // Ignore storage errors
+      }
       if (data?.reportError) setErrorMsg(data.reportError);
       playHirearchySound('submit');
-      setStatusMsg(
+      const publishedMsg =
         decision === 'accepted'
           ? 'Acceptance published to the candidate’s account. The handoff is ready.'
-          : 'Rejection decision and candidate feedback published to their Candidate Portal.',
-      );
+          : 'Rejection decision and candidate feedback published to their Candidate Portal.';
+      setStatusMsg(publishedMsg);
+      setToast({
+        message:
+          decision === 'accepted'
+            ? 'Acceptance published & handoff ready.'
+            : 'Decision published to candidate portal.',
+        tone: 'success',
+      });
     } catch (err) {
       playHirearchySound('error');
       setErrorMsg(
@@ -855,93 +959,100 @@ export function HiringDecisionPanel({
           </div>
         </div>
         <p className="hiring-muted-copy">
-          Request a GitHub-PR-style peer review from a tech lead, evaluator,
-          recruiter, or CTO on your team. We email them a direct link straight
-          to this candidate&apos;s evidence and your notes.
+          Invite a teammate for a second review and verdict.
         </p>
 
-        <form
-          onSubmit={handleRequestOpinion}
-          className="hiring-page-shell hiring-mt-sm"
+        <details
+          className="hiring-disclosure hiring-mt-sm"
+          open={peerFormOpen}
+          onToggle={(event) =>
+            setPeerFormOpen((event.currentTarget as HTMLDetailsElement).open)
+          }
         >
-          <div className="hiring-two-col">
-            <div className="hiring-field">
-              <label htmlFor="opinion-colleague">Teammate to review</label>
-              <select
-                id="opinion-colleague"
-                value={opinionReviewerId}
-                onChange={(e) => setOpinionReviewerId(e.target.value)}
-              >
-                {selectableTeammates.map((m) => (
-                  <option key={m.principalId} value={m.principalId}>
-                    {m.displayName || m.email} · {formatRoleLabel(m.role)}
-                    {m.principalId === ctx.currentPrincipalId ? ' (you)' : ''}
-                  </option>
-                ))}
-              </select>
-              {otherTeammates.length === 0 ? (
-                <p className="hiring-field-hint">
-                  Only your account is in this workspace so far.{' '}
-                  <a href={`${orgBase}/settings`}>
-                    Invite teammates in Team &amp; Plan →
-                  </a>
-                </p>
-              ) : null}
-            </div>
-            <div className="hiring-field">
-              <label htmlFor="opinion-request-note">
-                What should they focus on?
-              </label>
-              <input
-                id="opinion-request-note"
-                type="text"
-                value={opinionRequestNote}
-                onChange={(e) => setOpinionRequestNote(e.target.value)}
-                placeholder="e.g. Check concurrency edge cases in moves.py before we advance"
-              />
-            </div>
-          </div>
-
-          {hasAttachableContext ? (
-            <label className="hiring-peer-checkbox">
-              <input
-                type="checkbox"
-                checked={attachContext}
-                onChange={(e) => setAttachContext(e.target.checked)}
-              />
-              <span>
-                Include my draft notes &amp; advisory AI summary in the email
-                {attachmentPreviewParts.length > 0 ? (
-                  <small className="hiring-peer-checkbox-meta">
-                    {' '}
-                    ({attachmentPreviewParts.join(' · ')})
-                  </small>
+          <summary>+ Request peer review</summary>
+          <form
+            onSubmit={handleRequestOpinion}
+            className="hiring-page-shell hiring-mt-sm"
+          >
+            <div className="hiring-two-col">
+              <div className="hiring-field">
+                <label htmlFor="opinion-colleague">Teammate to review</label>
+                <select
+                  id="opinion-colleague"
+                  value={opinionReviewerId}
+                  onChange={(e) => setOpinionReviewerId(e.target.value)}
+                >
+                  {selectableTeammates.map((m) => (
+                    <option key={m.principalId} value={m.principalId}>
+                      {m.displayName || m.email} · {formatRoleLabel(m.role)}
+                      {m.principalId === ctx.currentPrincipalId ? ' (you)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {otherTeammates.length === 0 ? (
+                  <p className="hiring-field-hint">
+                    Only your account is in this workspace so far.{' '}
+                    <a href={`${orgBase}/settings`}>
+                      Invite teammates in Team &amp; Plan →
+                    </a>
+                  </p>
                 ) : null}
-              </span>
-            </label>
-          ) : null}
+              </div>
+              <div className="hiring-field">
+                <label htmlFor="opinion-request-note">
+                  What should they focus on?
+                </label>
+                <input
+                  id="opinion-request-note"
+                  type="text"
+                  value={opinionRequestNote}
+                  onChange={(e) => setOpinionRequestNote(e.target.value)}
+                  placeholder="e.g. Check concurrency edge cases in moves.py before we advance"
+                />
+              </div>
+            </div>
 
-          <div className="hiring-header-actions">
-            <button
-              type="submit"
-              className="hiring-btn hiring-btn-primary"
-              disabled={busyAction !== null || !opinionReviewerId}
-            >
-              <IconMail size={15} aria-hidden="true" />{' '}
-              {busyAction === 'opinion'
-                ? 'Sending peer review email…'
-                : 'Request peer review & send email'}
-            </button>
-            <button
-              type="button"
-              className="hiring-btn"
-              onClick={() => void handleCopyReviewLink()}
-            >
-              <IconCopy size={14} aria-hidden="true" />{' '}
-              {copiedReviewLink ? 'Link copied' : 'Copy review link'}
-            </button>
-          </div>
-        </form>
+            {hasAttachableContext ? (
+              <label className="hiring-peer-checkbox">
+                <input
+                  type="checkbox"
+                  checked={attachContext}
+                  onChange={(e) => setAttachContext(e.target.checked)}
+                />
+                <span>
+                  Include my draft notes &amp; advisory AI summary in the email
+                  {attachmentPreviewParts.length > 0 ? (
+                    <small className="hiring-peer-checkbox-meta">
+                      {' '}
+                      ({attachmentPreviewParts.join(' · ')})
+                    </small>
+                  ) : null}
+                </span>
+              </label>
+            ) : null}
+
+            <div className="hiring-header-actions">
+              <button
+                type="submit"
+                className="hiring-btn hiring-btn-primary"
+                disabled={busyAction !== null || !opinionReviewerId}
+              >
+                <IconMail size={15} aria-hidden="true" />{' '}
+                {busyAction === 'opinion'
+                  ? 'Sending peer review email…'
+                  : 'Request peer review & send email'}
+              </button>
+              <button
+                type="button"
+                className="hiring-btn"
+                onClick={() => void handleCopyReviewLink()}
+              >
+                <IconCopy size={14} aria-hidden="true" />{' '}
+                {copiedReviewLink ? 'Link copied' : 'Copy review link'}
+              </button>
+            </div>
+          </form>
+        </details>
 
         {ctx.secondOpinions.length > 0 ? (
           <div className="hiring-opinion-list hiring-mt-md">
@@ -1153,18 +1264,25 @@ export function HiringDecisionPanel({
                       >
                         <IconSparkles size={15} aria-hidden="true" />{' '}
                         {busyAction === 'report'
-                          ? 'Generating Kimi K3.1 Pro Fit Report…'
+                          ? 'Generating Fit Report…'
                           : performanceReport
-                            ? 'Regenerate Kimi K3.1 Pro Managerial Fit Report'
-                            : 'Generate Kimi K3.1 Pro Managerial Fit Report'}
+                            ? 'Refresh Managerial Fit Report'
+                            : 'Generate Managerial Fit Report'}
                       </button>
                     </div>
-                  ) : (
+                  ) : null}
+                  {busyAction === 'report' ? (
+                    <CommonThreadLoader
+                      compact
+                      label="Generating Managerial Fit Report…"
+                    />
+                  ) : null}
+                  {!canGenerateFitReport ? (
                     <div className="hiring-banner hiring-banner-warning">
                       <span>
-                        Automated Kimi K3.1 Pro Managerial Fit Reports require
-                        the <strong>Ultra</strong> plan. You can still publish
-                        the acceptance and handoff with your own notes.
+                        Automated Managerial Fit Reports require the{' '}
+                        <strong>Ultra</strong> plan. You can still publish the
+                        acceptance and handoff with your own notes.
                       </span>
                       <a
                         className="hiring-btn hiring-btn-sm"
@@ -1173,13 +1291,13 @@ export function HiringDecisionPanel({
                         Upgrade to Ultra
                       </a>
                     </div>
-                  )}
+                  ) : null}
 
                   {performanceReport ? (
                     <div className="hiring-card hiring-card-compact">
                       <span className="hiring-eyebrow">
                         {performanceReport.provider.mode === 'live_ai'
-                          ? 'AI advisory · Kimi K3.1 Pro'
+                          ? 'AI advisory'
                           : 'Evidence summary'}
                       </span>
                       <h4>{performanceReport.fitHeadline}</h4>
@@ -1216,6 +1334,11 @@ export function HiringDecisionPanel({
           </form>
         </section>
       ) : null}
+      <CommonThreadToast
+        message={toast?.message ?? null}
+        tone={toast?.tone ?? 'success'}
+        onDismiss={() => setToast(null)}
+      />
     </div>
   );
 }

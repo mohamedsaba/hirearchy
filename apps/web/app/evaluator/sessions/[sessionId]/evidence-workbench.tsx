@@ -745,7 +745,7 @@ const R29ObservationPanel = ({
               setWritesEnabled(false);
               setWritesUnavailableReason(
                 data.writesUnavailableReason ??
-                  'Private observation creation and editing are disabled in the R2.15 internal staging slice (read-only access).',
+                  'Adding or editing private notes is disabled for this session.',
               );
             }
             setLoading(false);
@@ -1461,9 +1461,9 @@ const R29ObservationPanel = ({
             color: 'var(--software-status-warning)',
           }}
         >
-          <strong>Read-Only Staging Slice:</strong>{' '}
+          <strong>Read-only view:</strong>{' '}
           {writesUnavailableReason ??
-            'Private observation creation and editing are disabled in the R2.15 internal staging slice.'}
+            'Adding or editing private notes is disabled for this session.'}
         </div>
       )}
     </section>
@@ -1640,40 +1640,44 @@ const R28WorkspaceRevisionView = ({
           >
             <button
               type="button"
+              aria-label="View file content at this revision"
               aria-pressed={mode === 'content'}
               onClick={() => setMode('content')}
               className={`evaluator-mode-button${mode === 'content' ? ' is-active' : ''}`}
             >
-              View file content at this revision
+              Snapshot
             </button>
             {presentation.hasPrevious ? (
               <button
                 type="button"
+                aria-label="Diff with previous revision"
                 aria-pressed={mode === 'previous'}
                 onClick={() => setMode('previous')}
                 className={`evaluator-mode-button${mode === 'previous' ? ' is-active' : ''}`}
               >
-                Diff with previous revision
+                vs. Previous
               </button>
             ) : null}
             {presentation.hasStarter ? (
               <button
                 type="button"
+                aria-label="Diff with starter baseline"
                 aria-pressed={mode === 'starter'}
                 onClick={() => setMode('starter')}
                 className={`evaluator-mode-button${mode === 'starter' ? ' is-active' : ''}`}
               >
-                Diff with starter baseline
+                vs. Starter
               </button>
             ) : null}
             {presentation.hasSubmitted ? (
               <button
                 type="button"
+                aria-label="Diff with submitted code"
                 aria-pressed={mode === 'submitted'}
                 onClick={() => setMode('submitted')}
                 className={`evaluator-mode-button${mode === 'submitted' ? ' is-active' : ''}`}
               >
-                Diff with submitted code
+                vs. Submitted
               </button>
             ) : null}
           </div>
@@ -3262,7 +3266,7 @@ export const R210ReviewPacketPanel = ({
               setWritesEnabled(false);
               setWritesUnavailableReason(
                 data.writesUnavailableReason ??
-                  'Review packet draft saving and finalization are disabled in the R2.15 internal staging slice (read-only access).',
+                  'Editing and finalizing the review packet is disabled for this session.',
               );
             }
           }
@@ -3682,67 +3686,22 @@ export const R210ReviewPacketPanel = ({
 
   return (
     <div
-      className="evaluator-review-card evaluator-review-packet"
+      className="evaluator-review-card evaluator-review-packet r210-packet-card"
       data-testid="evaluator-review-packet"
-      style={{
-        padding: 'clamp(16px, 2.5vw, 28px)',
-        border: '1px solid var(--software-border)',
-        borderRadius: '12px',
-        backgroundColor: 'var(--software-surface, #ffffff)',
-        minWidth: 0,
-        maxWidth: '100%',
-        boxSizing: 'border-box',
-        overflowWrap: 'anywhere',
-      }}
     >
       {/* Top Header */}
-      <header
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: '12px',
-          marginBottom: '20px',
-          borderBottom: '1px solid var(--software-border)',
-          paddingBottom: '16px',
-        }}
-      >
+      <header className="r210-packet-header">
         <div>
           <p
-            className="section-kicker"
+            className="section-kicker r210-packet-kicker"
             title={`Reviewer: ${reviewer.principalId}`}
-            style={{
-              margin: '0 0 4px 0',
-              fontSize: '11px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: 'var(--software-muted)',
-            }}
           >
             Assigned evaluator
           </p>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 'clamp(18px, 2vw, 22px)',
-              fontWeight: 700,
-              color: 'var(--software-ink)',
-            }}
-          >
-            Structured Human Review Packet
-          </h2>
+          <h2 className="r210-packet-title">Structured Human Review Packet</h2>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="r210-packet-badges">
           <span
             data-testid="review-packet-status"
             style={{
@@ -3898,9 +3857,9 @@ export const R210ReviewPacketPanel = ({
             fontWeight: 500,
           }}
         >
-          <strong>Read-Only Staging Slice:</strong>{' '}
+          <strong>Read-only view:</strong>{' '}
           {writesUnavailableReason ??
-            'Review packet draft saving and finalization are disabled in the R2.15 internal staging slice (read-only access).'}
+            'Editing and finalizing the review packet is disabled for this session.'}
         </div>
       ) : null}
 
@@ -4273,20 +4232,11 @@ export const R210ReviewPacketPanel = ({
             e.preventDefault();
             void handleSaveDraft();
           }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+          className="r210-form"
         >
           {/* Summary Input */}
           <div>
-            <label
-              htmlFor="review-packet-summary"
-              style={{
-                display: 'block',
-                fontWeight: 700,
-                fontSize: '14px',
-                marginBottom: '6px',
-                color: 'var(--software-ink)',
-              }}
-            >
+            <label htmlFor="review-packet-summary" className="r210-field-label">
               Review summary{' '}
               <span
                 style={{
@@ -4305,19 +4255,7 @@ export const R210ReviewPacketPanel = ({
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Summarize your assessment and cite the recorded work."
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid var(--software-border)',
-                background: 'var(--software-surface)',
-                color: 'var(--software-ink)',
-                fontSize: '14px',
-                lineHeight: 1.5,
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
+              className="r210-textarea"
             />
           </div>
 
@@ -4815,29 +4753,9 @@ export const R210ReviewPacketPanel = ({
           role="dialog"
           aria-modal="true"
           aria-label="Confirm Review Packet Finalization"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(10, 5, 16, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '16px',
-          }}
+          className="r210-modal-backdrop"
         >
-          <div
-            style={{
-              backgroundColor: 'var(--software-surface)',
-              border: '1px solid var(--software-border)',
-              color: 'var(--software-ink)',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '480px',
-              width: '100%',
-              boxShadow: 'var(--software-shadow-elevated)',
-            }}
-          >
+          <div className="r210-modal-dialog">
             <h3
               style={{
                 margin: '0 0 12px 0',

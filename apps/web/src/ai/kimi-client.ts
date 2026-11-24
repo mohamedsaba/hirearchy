@@ -13,6 +13,7 @@ export interface NvidiaKimiChatOptions {
   readonly maxTokens?: number;
   readonly timeoutMs?: number;
   readonly modelId?: string;
+  readonly responseFormat?: 'json_object' | 'text';
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -36,8 +37,8 @@ export function extractJsonFromLlmText(
   rawText: string,
 ): Record<string, unknown> | null {
   const trimmed = rawText.trim();
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const candidate = fencedMatch ? fencedMatch[1].trim() : trimmed;
+  const outerFenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = outerFenceMatch ? outerFenceMatch[1].trim() : trimmed;
   try {
     const parsed: unknown = JSON.parse(candidate);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -86,7 +87,12 @@ export async function callNvidiaKimiChat(
     body: JSON.stringify({
       model: modelId,
       stream: false,
-      reasoning_effort: 'low',
+      ...(modelId.includes('nemotron')
+        ? { chat_template_kwargs: { enable_thinking: false } }
+        : { reasoning_effort: 'low' }),
+      ...(options.responseFormat === 'json_object'
+        ? { response_format: { type: 'json_object' } }
+        : {}),
       temperature: options.temperature ?? 0.2,
       max_tokens: options.maxTokens ?? 2400,
       messages: [

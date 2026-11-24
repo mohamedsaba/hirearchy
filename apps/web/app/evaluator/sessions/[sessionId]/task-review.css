@@ -115,7 +115,7 @@
   gap: 14px;
   width: 100%;
   padding: 12px 18px;
-  border: 1px solid #e1d8ec;
+  border: 1px solid var(--software-border);
   border-radius: 10px;
   background: var(--software-lilac);
   text-align: left;
@@ -504,16 +504,17 @@
 .reviewer-workflow-panel .review-workflow-card button {
   min-height: 44px;
   padding: 8px 14px;
-  border: 1px solid var(--software-plum);
+  border: 1px solid var(--software-btn-primary-bg);
   border-radius: 8px;
-  background: var(--software-plum);
-  color: #fff;
+  background: var(--software-btn-primary-bg);
+  color: var(--software-btn-primary-fg);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
   transition:
     color 140ms ease,
     background-color 140ms ease,
-    border-color 140ms ease;
+    border-color 140ms ease,
+    transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .reviewer-workflow-panel .review-workflow-card button:disabled {
@@ -2001,6 +2002,10 @@
   color: var(--software-muted);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .evaluator-tab-badge {
@@ -2473,7 +2478,7 @@
 
 .evaluator-source-row[aria-pressed='true'] {
   border-left-color: var(--software-plum) !important;
-  background: #e8f4ed !important;
+  background: #e8f4ed;
 }
 
 .evaluator-source-row-mark {
@@ -2766,8 +2771,9 @@
 
 .review-note-state[data-note-state='error'],
 .review-note-state[data-note-state='conflict'] {
-  border-color: #9d3c3c;
-  color: #8b2c2c;
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
 }
 
 .evaluator-mobile-inspector {
@@ -3710,13 +3716,14 @@
 }
 
 .r27-ai-review-card .r27-ai-review-primary-btn {
-  border-color: var(--software-plum);
-  background: var(--software-plum);
-  color: var(--software-on-plum);
+  border-color: var(--software-btn-primary-bg);
+  background: var(--software-btn-primary-bg);
+  color: var(--software-btn-primary-fg);
 }
 
 .r27-ai-review-primary-btn:hover:not(:disabled) {
-  background: var(--software-plum-line);
+  background: var(--software-btn-primary-bg-hover);
+  border-color: var(--software-btn-primary-bg-hover);
 }
 
 .r27-ai-review-secondary-btn:hover:not(:disabled) {
@@ -3777,6 +3784,12 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   font-size: 0.9375rem;
+}
+
+@media (min-width: 70rem) {
+  .r27-review-stack:has(> .r27-human-review) .r27-ai-review-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .r27-ai-review-list-card ul {
@@ -3898,9 +3911,11 @@ html[data-theme='dark'] .task-assessment-report .task-evidence-link:hover,
 html[data-theme='dark']
   .task-assessment-report
   .task-evidence-link[aria-pressed='true'],
-html[data-theme='dark'] .evaluator-source-list button[aria-pressed='true'] {
-  background: var(--software-surface-note);
-  border-color: var(--software-mint);
+html[data-theme='dark']
+  .evaluator-source-list
+  button.evaluator-source-row[aria-pressed='true'] {
+  background: rgba(142, 227, 184, 0.16);
+  border-left-color: var(--software-mint) !important;
   color: var(--software-ink);
 }
 
@@ -4007,4 +4022,239 @@ html[data-theme='dark'] .code-diff-stat-neutral {
 html[data-theme='dark'] .r27-ai-review-card {
   background: var(--software-surface);
   border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .task-assessment-report .task-total {
+  border-color: var(--software-border);
+  background: var(--software-lilac);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .evaluator-workbench-modes button:active:not(:disabled),
+  .evaluator-evidence-filter-bar button:active:not(:disabled),
+  .evaluator-source-row:active:not(:disabled),
+  .r27-ai-review-primary-btn:active:not(:disabled),
+  .r27-ai-review-secondary-btn:active:not(:disabled) {
+    transform: scale(0.985) translateY(0.5px);
+    transition-duration: 90ms;
+  }
+}
+
+/* Evaluator Candidate Identity Hero, Scratchpad, Weaving Indicator & R210 Classes */
+.evaluator-candidate-hero {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 0.45rem;
+}
+
+.evaluator-avatar-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 999px;
+  background: var(--software-plum);
+  color: var(--software-mint);
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+  border: 1px solid var(--software-border);
+}
+
+.evaluator-candidate-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.evaluator-candidate-hero-top h1 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.2vw, 1.65rem);
+  letter-spacing: -0.02em;
+}
+
+.evaluator-candidate-code {
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--software-lilac);
+  color: var(--software-plum);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.evaluator-candidate-role {
+  font-size: 0.82rem;
+  color: var(--software-muted);
+  font-weight: 600;
+}
+
+.evaluator-candidate-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--software-muted);
+}
+
+.evaluator-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.evaluator-tab-weaving-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: var(--software-mint);
+  animation: ct-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes ct-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.evaluator-workbench-main [hidden] {
+  display: none !important;
+}
+
+.evaluator-scratchpad-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface, 0.75rem);
+  background: var(--software-surface);
+}
+
+.evaluator-scratchpad-card h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--software-plum);
+}
+
+.evaluator-scratchpad-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--software-border);
+  border-radius: 8px;
+  background: var(--software-canvas);
+  color: var(--software-ink);
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.r210-packet-card {
+  padding: clamp(16px, 2.5vw, 28px);
+  border: 1px solid var(--software-border);
+  border-radius: 12px;
+  background: var(--software-surface);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.r210-packet-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--software-border);
+  padding-bottom: 14px;
+}
+
+.r210-packet-kicker {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--software-muted);
+}
+
+.r210-packet-title {
+  margin: 0;
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 700;
+  color: var(--software-ink);
+}
+
+.r210-packet-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.r210-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.r210-field-label {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--software-ink);
+}
+
+.r210-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  box-sizing: border-box;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.r210-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 15, 29, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.r210-modal-dialog {
+  background: var(--software-surface);
+  border: 1px solid var(--software-border);
+  color: var(--software-ink);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: var(--software-shadow-elevated);
 }

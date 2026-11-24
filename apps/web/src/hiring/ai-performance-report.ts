@@ -152,7 +152,7 @@ export async function generateAcceptancePerformanceReport(
     if (!parsed) {
       return buildDeterministicPerformanceFitReport(
         input,
-        'Kimi K3.1 Pro response could not be parsed as JSON; showing structured summary.',
+        'AI assistant response could not be parsed as JSON; showing structured summary.',
       );
     }
 

@@ -262,7 +262,6 @@ export async function generateR27AiCandidateReview(
       ({ content } = await callNvidiaKimiChat({
         systemPrompt,
         userPrompt,
-        modelId: resolved.modelId,
         maxTokens: 2800,
         timeoutMs: 65_000,
         fetchImpl,
