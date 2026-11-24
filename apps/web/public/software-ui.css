@@ -932,7 +932,12 @@ body.software-document-body *::after {
   padding-block-start: clamp(1.25rem, 4vh, 2.25rem);
 }
 
-.software-workspace-rail-control {
+.software-workspace-rail-control,
+.software-document-mobile-nav-control {
+  display: none;
+}
+
+.software-workspace-mobile-name {
   display: none;
 }
 
@@ -1512,6 +1517,92 @@ body.software-document-body *::after {
   .software-document-workspace .software-document-shell {
     padding: 24px 16px 48px;
   }
+  :is(.software-document-compact-nav, .software-document-mobile-nav)
+    .software-document-header {
+    gap: 0.75rem;
+  }
+
+  :is(.software-document-compact-nav, .software-document-mobile-nav)
+    .software-workspace-sidebar {
+    gap: 0.5rem;
+    padding: 0.25rem 1rem;
+  }
+
+  :is(.software-document-compact-nav, .software-document-mobile-nav)
+    .software-workspace-sidebar:not(:has(input:checked))
+    :is(.software-workspace-identity, nav, .software-workspace-sidebar-footer) {
+    display: none;
+  }
+
+  :is(.software-document-compact-nav, .software-document-mobile-nav)
+    .software-workspace-sidebar:has(input:checked)
+    nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  }
+
+  :is(.software-document-compact-nav, .software-document-mobile-nav)
+    .software-workspace-sidebar
+    .software-workspace-identity
+    strong {
+    display: none;
+  }
+
+  .software-workspace-rail-control {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: var(--software-touch-target);
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--software-sidebar-link);
+    cursor: pointer;
+  }
+
+  .software-workspace-rail-control input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .software-workspace-rail-control:focus-within {
+    outline: 2px solid var(--software-mint);
+    outline-offset: 2px;
+  }
+
+  .software-workspace-rail-control:has(input:checked) svg:first-of-type,
+  .software-workspace-rail-control:not(:has(input:checked)) svg:last-of-type {
+    display: none;
+  }
+
+  .software-document-mobile-nav-control::before {
+    content: '';
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-inline: 0.2rem;
+    border-inline-end: 1.5px solid currentColor;
+    border-block-end: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+  }
+
+  .software-document-mobile-nav-control:has(input:checked)::before {
+    transform: rotate(45deg);
+  }
+
+  .software-workspace-mobile-name {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+
   .software-page-heading {
     align-items: flex-start;
     flex-direction: column;

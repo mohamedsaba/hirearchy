@@ -28,7 +28,6 @@ import type {
 import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
 import { formatLocalDateTime } from '../../../../src/ui/relative-time';
-import { playHirearchySound } from '../../../../src/ui/sound';
 import { CommonThreadLoader } from '../../../_components/common-thread-loader';
 import {
   CommonThreadToast,
@@ -525,14 +524,13 @@ export function HiringDecisionPanel({
       if (data?.reviewContext) setCtx(data.reviewContext);
       if (data?.emailDelivery) setLastEmailDelivery(data.emailDelivery);
       setOpinionRequestNote('');
-      playHirearchySound('dispatch');
+
       setStatusMsg(
         data?.emailDelivery?.status === 'sent'
           ? `Peer review requested and emailed to ${data.emailDelivery.recipientEmail}.`
           : 'Peer review request saved in the workspace.',
       );
     } catch (err) {
-      playHirearchySound('error');
       setErrorMsg(
         err instanceof Error
           ? err.message
@@ -565,14 +563,13 @@ export function HiringDecisionPanel({
         delete next[opinionId];
         return next;
       });
-      playHirearchySound('confirm');
+
       setStatusMsg(
         data?.emailDelivery?.status === 'sent'
           ? `Peer review submitted and emailed back to ${data.emailDelivery.recipientEmail}.`
           : 'Peer review submitted.',
       );
     } catch (err) {
-      playHirearchySound('error');
       setErrorMsg(
         err instanceof Error ? err.message : 'Unable to submit peer review.',
       );
@@ -608,7 +605,7 @@ export function HiringDecisionPanel({
       });
       if (data?.performanceReport) {
         setPerformanceReport(data.performanceReport);
-        playHirearchySound('complete');
+
         setStatusMsg(
           data.performanceReport.provider.mode === 'live_ai'
             ? 'Fit report ready for the next interviewer.'
@@ -617,7 +614,6 @@ export function HiringDecisionPanel({
         );
       }
     } catch (err) {
-      playHirearchySound('error');
       setErrorMsg(
         err instanceof Error ? err.message : 'Unable to generate fit report.',
       );
@@ -659,7 +655,7 @@ export function HiringDecisionPanel({
         // Ignore storage errors
       }
       if (data?.reportError) setErrorMsg(data.reportError);
-      playHirearchySound('submit');
+
       const publishedMsg =
         decision === 'accepted'
           ? 'Acceptance published to the candidate’s account. The handoff is ready.'
@@ -673,7 +669,6 @@ export function HiringDecisionPanel({
         tone: 'success',
       });
     } catch (err) {
-      playHirearchySound('error');
       setErrorMsg(
         err instanceof Error ? err.message : 'Unable to publish decision.',
       );

@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { BrandMark } from '../_components/brand-mark';
-import { SoundToggle } from '../_components/sound-toggle';
 import { ThemeToggle } from '../_components/theme-toggle';
 import './software-product-header.css';
 
@@ -147,7 +146,6 @@ export const SoftwareProductHeader = ({
         {allowIssuance ? null : null}
       </nav>
       <div className="software-header-controls">
-        <SoundToggle variant="header" />
         <ThemeToggle variant="header" />
       </div>
     </header>

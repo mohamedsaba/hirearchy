@@ -15,7 +15,6 @@ import {
 } from '../../../src/plans/entitlements';
 import { isHiringPlatformEnabled } from '../../../src/runtime/profile';
 import type { SoftwareWorkspaceActiveSection } from '../../../src/ui/software-document';
-import { SoundToggle } from '../../_components/sound-toggle';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { BrandMark } from '../../_components/brand-mark';
 
@@ -75,7 +74,6 @@ export function OrganizationWorkspaceShell({
           <span className="software-document-product">Software</span>
         </Link>
         <div className="software-header-controls">
-          <SoundToggle variant="header" />
           <ThemeToggle variant="header" />
         </div>
       </header>
@@ -88,6 +86,9 @@ export function OrganizationWorkspaceShell({
             <input type="checkbox" aria-label="Expand workspace navigation" />
             <IconLayoutSidebarLeftExpand size={20} aria-hidden="true" />
             <IconLayoutSidebarLeftCollapse size={20} aria-hidden="true" />
+            <span className="software-workspace-mobile-name">
+              {organizationName}
+            </span>
           </label>
           <div
             className="software-workspace-identity"

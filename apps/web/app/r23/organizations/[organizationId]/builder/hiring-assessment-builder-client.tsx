@@ -37,7 +37,6 @@ import {
 } from '../../../../../src/plans/entitlements';
 import type { R211AssessmentDraftInput } from '../../../../../src/r211-builder/contract';
 import { ScenarioBrief } from '../../../../../src/ui/scenario-brief';
-import { playHirearchySound } from '../../../../../src/ui/sound';
 import { CommonThreadLoader } from '../../../../_components/common-thread-loader';
 import { CommonThreadToast } from '../../../../_components/common-thread-toast';
 
@@ -462,12 +461,11 @@ export function HiringAssessmentBuilderClient({
       setSavedIds(null);
       setPreviewFilePath(data.draft.primaryFilePath);
       goToStage('preview');
-      playHirearchySound('complete');
+
       setStatusBanner(
         `Generated "${data.draft.title}". Review it below, save to your library, or invite a candidate.`,
       );
     } catch (err) {
-      playHirearchySound('error');
       setErrorBanner(
         err instanceof Error
           ? err.message
@@ -537,12 +535,11 @@ export function HiringAssessmentBuilderClient({
     setSavingLibrary(true);
     try {
       await ensureSavedToLibrary();
-      playHirearchySound('confirm');
+
       setStatusBanner(
         `Saved "${activeDraft.title}" to your organization's Problem Library.`,
       );
     } catch (err) {
-      playHirearchySound('error');
       setErrorBanner(
         err instanceof Error ? err.message : 'Unable to save to library.',
       );
@@ -634,7 +631,6 @@ export function HiringAssessmentBuilderClient({
         }));
       }
 
-      playHirearchySound('dispatch');
       setStatusBanner(
         `Assessment issued to ${trimmedEmail}. It is now visible in their Candidate Portal and ready via direct link.`,
       );
@@ -651,7 +647,7 @@ export function HiringAssessmentBuilderClient({
     if (!issuedResult) return;
     const absoluteUrl = `${window.location.origin}${issuedResult.candidateLink}`;
     await navigator.clipboard.writeText(absoluteUrl).catch(() => {});
-    playHirearchySound('confirm');
+
     setCopiedLink(true);
     setToastMsg('Candidate invite link copied.');
     window.setTimeout(() => setCopiedLink(false), 2000);
@@ -662,7 +658,7 @@ export function HiringAssessmentBuilderClient({
     const absoluteUrl = `${window.location.origin}${issuedResult.candidateLink}`;
     const body = `Hi,\n\nYou’ve been invited to complete the "${activeDraft.title}" engineering assessment (${activeDraft.durationMinutes} min).\n\nOpen your workspace link below whenever you’re ready (your timer starts only after clicking Start):\n${absoluteUrl}\n\nBest regards,\nThe Hiring Team`;
     await navigator.clipboard.writeText(body).catch(() => {});
-    playHirearchySound('confirm');
+
     setCopiedEmailMsg(true);
     setToastMsg('Ready-to-send email message copied.');
     window.setTimeout(() => setCopiedEmailMsg(false), 2000);
@@ -677,9 +673,9 @@ export function HiringAssessmentBuilderClient({
   };
 
   const stages = [
-    { id: 'source', title: 'Problem' },
+    { id: 'source', title: 'Choose a problem' },
     { id: 'preview', title: 'Preview' },
-    { id: 'invite', title: 'Invitation' },
+    { id: 'invite', title: 'Invite candidate' },
   ] as const;
 
   return (
@@ -778,8 +774,12 @@ export function HiringAssessmentBuilderClient({
           </div>
 
           {mode === 'templates' ? (
-            <div className="hiring-builder-pane">
-              <div className="hiring-template-settings">
+            <div className="hiring-builder-pane hiring-template-picker">
+              <aside
+                className="hiring-template-settings"
+                aria-labelledby="template-settings-title"
+              >
+                <h2 id="template-settings-title">Assessment settings</h2>
                 <div className="hiring-field">
                   <label htmlFor="tpl-duration">Time limit</label>
                   <select
@@ -821,60 +821,50 @@ export function HiringAssessmentBuilderClient({
                     />
                     <span className="hiring-switch-track" aria-hidden="true" />
                     <span className="hiring-switch-copy">
-                      Allow candidate AI assistant
+                      Candidate AI assistant
                     </span>
                   </label>
                 </div>
-              </div>
+              </aside>
 
-              <div className="software-problem-list">
-                {initialTemplates.map((tpl) => {
-                  const selected =
-                    activeSourceMeta.sourceKind === 'template' &&
-                    activeDraft.templateId === tpl.templateId;
-                  return (
-                    <article
-                      key={tpl.templateId}
-                      className={`software-problem-row${selected ? ' is-selected' : ''}`}
-                    >
-                      <div className="hiring-stack-xs">
-                        <div className="hiring-chip-group">
-                          <span className="hiring-pill hiring-pill-plum">
-                            {tpl.targetRole}
-                          </span>
-                          <span className="hiring-pill">
-                            {experienceLevelLabel(tpl.experienceLevel)}
-                          </span>
-                          <span className="hiring-pill">
+              <div className="hiring-template-library">
+                <h2>Choose a template</h2>
+                <div className="software-problem-list">
+                  {initialTemplates.map((tpl) => {
+                    const selected =
+                      activeSourceMeta.sourceKind === 'template' &&
+                      activeDraft.templateId === tpl.templateId;
+                    return (
+                      <article
+                        key={tpl.templateId}
+                        className={`software-problem-row${selected ? ' is-selected' : ''}`}
+                      >
+                        <div className="hiring-stack-xs">
+                          <h3>{tpl.title}</h3>
+                          <p className="hiring-muted-copy">{tpl.summary}</p>
+                          <p className="hiring-candidate-meta">
+                            {tpl.targetRole} ·{' '}
+                            {experienceLevelLabel(tpl.experienceLevel)} ·{' '}
                             {tpl.problemStructure === 'multi_file'
                               ? 'Multi-file'
                               : 'Single-module'}
-                          </span>
+                          </p>
                         </div>
-                        <h3>{tpl.title}</h3>
-                        <p className="hiring-muted-copy">{tpl.summary}</p>
-                        <div className="hiring-chip-group">
-                          {tpl.skills.map((s) => (
-                            <span key={s} className="hiring-pill">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className={`hiring-btn${selected ? ' hiring-btn-primary' : ''}`}
-                        onClick={() => {
-                          selectTemplate(tpl);
-                          goToStage('preview');
-                        }}
-                      >
-                        Preview template{' '}
-                        <IconArrowRight size={15} aria-hidden="true" />
-                      </button>
-                    </article>
-                  );
-                })}
+                        <button
+                          type="button"
+                          className="hiring-btn"
+                          onClick={() => {
+                            selectTemplate(tpl);
+                            goToStage('preview');
+                          }}
+                        >
+                          Preview template{' '}
+                          <IconArrowRight size={15} aria-hidden="true" />
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ) : null}

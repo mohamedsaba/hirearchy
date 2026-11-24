@@ -2,12 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import {
-  IconCheck,
-  IconLogout,
-  IconPlayerPlay,
-  IconUser,
-} from '@tabler/icons-react';
+import { IconLogout, IconPlayerPlay, IconUser } from '@tabler/icons-react';
 
 import {
   CURATED_COUNTRIES,
@@ -31,9 +26,7 @@ import {
 } from '../../src/ui/relative-time';
 import { BrandMark } from '../_components/brand-mark';
 import { CommonThreadToast } from '../_components/common-thread-toast';
-import { SoundToggle } from '../_components/sound-toggle';
 import { ThemeToggle } from '../_components/theme-toggle';
-import { playHirearchySound } from '../../src/ui/sound';
 
 export interface CandidatePortalClientProps {
   readonly email: string;
@@ -268,14 +261,13 @@ export function CandidatePortalClient({
       }
 
       setProfile(data.profile);
-      playHirearchySound('confirm');
+
       setStatusMsg('Profile saved.');
       setToast({ message: 'Profile saved.', tone: 'success' });
       if (setupMode && nextPath) {
         await handleLaunchAssessment(nextPath.split('/').at(-1) ?? '');
       }
     } catch (err) {
-      playHirearchySound('error');
       const msg = err instanceof Error ? err.message : 'Save failed.';
       setErrorMsg(msg);
       setToast({ message: msg, tone: 'error' });
@@ -352,7 +344,7 @@ export function CandidatePortalClient({
         </div>
         <div className="hiring-header-actions">
           <span className="hiring-portal-email">{email}</span>
-          <SoundToggle variant="header" />
+
           <ThemeToggle variant="header" />
           <button
             type="button"
@@ -372,16 +364,9 @@ export function CandidatePortalClient({
         <div className="hiring-page-header">
           <div>
             <h1>{tab === 'assessments' ? 'My assessments' : 'My profile'}</h1>
-            <p>
-              {tab === 'assessments'
-                ? 'Open an assessment or check for feedback.'
-                : 'Use one profile for assessments across companies.'}
-            </p>
             <p className="hiring-portal-mobile-email">Signed in as {email}</p>
           </div>
-          {tab === 'assessments' &&
-          assessments.length > 0 &&
-          assessments.length <= 2 ? (
+          {tab === 'assessments' && assessments.length === 2 ? (
             <button
               type="button"
               className="hiring-btn hiring-btn-sm"
@@ -411,7 +396,7 @@ export function CandidatePortalClient({
             className={`hiring-builder-tab${tab === 'assessments' ? ' is-active' : ''}`}
             onClick={() => setTab('assessments')}
           >
-            <IconPlayerPlay size={16} /> My Assessments ({assessments.length})
+            <IconPlayerPlay size={16} /> Assessments
           </button>
           <button
             type="button"
@@ -437,7 +422,7 @@ export function CandidatePortalClient({
                 className="hiring-btn hiring-btn-sm hiring-btn-mint"
                 onClick={() => setTab('assessments')}
               >
-                Go to My Assessments →
+                Back to assessments
               </button>
             ) : null}
           </div>
@@ -446,12 +431,14 @@ export function CandidatePortalClient({
         {tab === 'assessments' ? (
           <div
             className={
-              assessments.length > 2 || showFilters
+              assessments.length > 2 ||
+              (assessments.length === 2 && showFilters)
                 ? 'software-directory'
                 : 'hiring-page-shell'
             }
           >
-            {assessments.length > 2 || showFilters ? (
+            {assessments.length > 2 ||
+            (assessments.length === 2 && showFilters) ? (
               <section
                 className="hiring-filter-bar"
                 aria-label="Filter your assessments"
@@ -570,13 +557,11 @@ export function CandidatePortalClient({
                             {item.scenarioTitle}
                           </h2>
                           <div className="hiring-candidate-meta">
-                            <span>Role: {item.targetRole}</span>
+                            <span>{item.targetRole}</span>
                             <span>
-                              Level:{' '}
                               {experienceLevelLabel(item.experienceLevel)}
                             </span>
                             <span>
-                              Time limit:{' '}
                               {item.durationSeconds
                                 ? `${Math.round(item.durationSeconds / 60)} min`
                                 : 'Untimed'}
@@ -615,23 +600,14 @@ export function CandidatePortalClient({
                                 : 'Open assessment'}
                           </button>
                         ) : item.status === 'SUBMITTED' ? (
-                          <div className="hiring-header-actions">
-                            <span className="hiring-pill hiring-pill-success">
-                              <IconCheck size={13} /> Submitted
-                            </span>
-                            <Link
-                              className="hiring-btn hiring-btn-sm"
-                              href={`/candidate/submissions/${encodeURIComponent(item.sessionId)}`}
-                              prefetch={false}
-                            >
-                              View submitted work
-                            </Link>
-                          </div>
-                        ) : (
-                          <span className="hiring-pill hiring-pill-danger">
-                            Invitation expired
-                          </span>
-                        )}
+                          <Link
+                            className="hiring-btn"
+                            href={`/candidate/submissions/${encodeURIComponent(item.sessionId)}`}
+                            prefetch={false}
+                          >
+                            View submitted work
+                          </Link>
+                        ) : null}
                       </div>
 
                       {item.publishedOutcome ? (

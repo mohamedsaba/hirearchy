@@ -128,6 +128,7 @@ const SourceRow = ({
     <button
       ref={(element) => register(source.key, element)}
       className="evaluator-source-row"
+      data-file={source.r27?.kind === 'file' || undefined}
       type="button"
       data-source-ref={source.evidenceRef ?? source.key}
       aria-pressed={selected}
@@ -138,14 +139,15 @@ const SourceRow = ({
         <strong>
           {source.r27?.kind === 'file' ? source.r27.file.path : source.title}
         </strong>
-        <span>{source.summary}</span>
-        <small>
-          {sourceLabel(source)} · {sourceTime(source, activatedAt)}
-        </small>
+        {source.r27?.kind === 'file' ? null : (
+          <>
+            <span>{source.summary}</span>
+            <small>
+              {sourceLabel(source)} · {sourceTime(source, activatedAt)}
+            </small>
+          </>
+        )}
       </span>
-      {selected ? (
-        <span className="evaluator-source-row-current">Current</span>
-      ) : null}
     </button>
   </li>
 );
@@ -312,8 +314,8 @@ const R27SummaryView = ({
           aria-labelledby="r27-timeline-title"
         >
           <header className="evaluator-review-section-heading">
-            <h2 id="r27-timeline-title">Recorded timeline</h2>
-            <span>{eventSources.length} events available</span>
+            <h2 id="r27-timeline-title">Timeline</h2>
+            <span>{eventSources.length} events</span>
           </header>
           {eventSources.length ? (
             <ol className="workbench-progression-list">
@@ -328,7 +330,8 @@ const R27SummaryView = ({
                     </time>
                     <div>
                       <p className="workbench-timeline-title">
-                        <code>#{event.sequence}</code> {source.title}
+                        {hiring ? null : <code>#{event.sequence}</code>}{' '}
+                        {source.title}
                       </p>
                       <small className="workbench-timeline-subtitle">
                         {source.summary}
@@ -338,7 +341,7 @@ const R27SummaryView = ({
                         className="evaluator-text-link"
                         onClick={() => onOpenEvidence('Chronology', source)}
                       >
-                        Inspect event metadata →
+                        View event →
                       </button>
                     </div>
                   </li>
@@ -346,9 +349,7 @@ const R27SummaryView = ({
               })}
             </ol>
           ) : (
-            <p className="evaluator-muted-copy">
-              No candidate event is present on this evidence page.
-            </p>
+            <p className="evaluator-muted-copy">No recorded events.</p>
           )}
           {pageError ? <p role="alert">{pageError}</p> : null}
           {evidence.pagination.nextAfterSequence !== null ? (
@@ -367,7 +368,6 @@ const R27SummaryView = ({
               <IconFile size={21} stroke={1.8} />
             </span>
             <div>
-              <p className="section-kicker">Versioned scenario snapshot</p>
               <h2 id="r27-snapshot-title">Task context</h2>
             </div>
           </header>
@@ -1077,10 +1077,20 @@ const EvidenceView = ({
 }>) => {
   const filters =
     r27Evidence && hasHiringContext
-      ? evidenceFilters.filter(
-          (item) => item !== 'Terminal' && item !== 'Tests',
-        )
+      ? ([
+          'Code changes',
+          'Execution runs',
+          'AI conversations',
+          'Chronology',
+        ] as const)
       : evidenceFilters;
+  const filterLabel = (item: EvidenceFilter) => {
+    if (!hasHiringContext) return item;
+    if (item === 'Code changes') return 'Files';
+    if (item === 'Execution runs') return 'Tests';
+    if (item === 'Chronology') return 'Events';
+    return item;
+  };
   const visibleSources = sourcesForFilter(
     sources,
     filter,
@@ -1141,7 +1151,7 @@ const EvidenceView = ({
             }}
           >
             {iconForFilter(item)}
-            <span>{item}</span>
+            <span>{filterLabel(item)}</span>
           </button>
         ))}
       </div>
@@ -1158,15 +1168,18 @@ const EvidenceView = ({
           aria-label={`${filter} source list`}
         >
           <header>
-            <h2>{filter}</h2>
+            <h2>{filterLabel(filter)}</h2>
             <span>
-              {visibleSources.length} source
+              {visibleSources.length}{' '}
+              {filter === 'Code changes' && hasHiringContext
+                ? 'file'
+                : 'record'}
               {visibleSources.length === 1 ? '' : 's'}
             </span>
           </header>
           {noCodeChanges ? (
             <p className="evaluator-empty-sources">
-              No code changes. Select a submitted file to read it.
+              Matches the starter repository.
             </p>
           ) : null}
           {!selectedIsVisible && selectedSource ? (
@@ -1859,9 +1872,12 @@ export const EvaluatorReviewWorkspace = (
     return 'Decision';
   };
 
+  const reviewNextMode = mode === 'Summary' ? 'Evidence' : 'Review';
+
   return (
     <div
       className="evaluator-review-layout evaluator-workbench"
+      data-hiring-review={Boolean(hiringReviewContext)}
       data-role-lens={activeRole}
       data-workbench-mode={mode.toLowerCase()}
     >
@@ -1951,6 +1967,19 @@ export const EvaluatorReviewWorkspace = (
               </button>
             ))}
           </nav>
+          {hiringReviewContext && mode !== 'Review' ? (
+            <button
+              type="button"
+              className="evaluator-review-next"
+              onClick={() => {
+                setMode(reviewNextMode);
+                modeRefs.current[modes.indexOf(reviewNextMode)]?.focus();
+              }}
+            >
+              {mode === 'Summary' ? 'Review code' : 'Go to decision'}
+              <span aria-hidden="true"> →</span>
+            </button>
+          ) : null}
           {mode !== 'Review' && !readOnly ? (
             <button
               type="button"

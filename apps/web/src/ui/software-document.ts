@@ -120,6 +120,11 @@ export function renderSoftwareDocument(
 
   const navigation = workspace
     ? `<aside class="software-workspace-sidebar">
+        ${
+          hiringEnabled
+            ? `<label class="software-workspace-rail-control software-document-mobile-nav-control"><input type="checkbox" aria-label="Expand workspace navigation"><span class="software-workspace-mobile-name">${escapeHtml(workspace.organizationName)}</span></label>`
+            : ''
+        }
         <div class="software-workspace-identity" role="region" aria-label="Active organization"><span class="software-eyebrow">Your workspace</span><strong>${escapeHtml(
           workspace.organizationName,
         )}</strong><span>${resolveRoleLabel(workspace.role, hiringEnabled)}</span>${planChip}</div>
@@ -153,7 +158,7 @@ export function renderSoftwareDocument(
   const isCenteredWorkspacePicker =
     !workspace && resolvedNextPath === '/r23/organizations';
   const bodyAccessClasses = workspace
-    ? ' software-document-workspace'
+    ? ` software-document-workspace${hiringEnabled ? ' software-document-mobile-nav' : ''}`
     : ' software-document-access software-team-access';
 
   return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/apple-icon.png"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${bodyAccessClasses}"><a class="software-skip-link" href="#main-content">Skip to main content</a><header class="software-document-header"><a class="software-document-wordmark" href="${homeBrandHref}" aria-label="Hirearchy Software home">${brandMark}<span>Hirearchy</span><span class="software-document-product">Software</span></a>${themeToggleForm}</header><div class="software-document-layout">${navigation}<main class="software-document-shell${isCenteredWorkspacePicker ? ' software-document-shell--centered' : ''}" id="main-content" tabindex="-1">${workspace ? '' : isCenteredWorkspacePicker ? '' : '<p class="software-access-principle">Evidence informs.<br><span>People decide.</span></p>'}<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;

@@ -19,6 +19,7 @@ import {
   IconFolder,
   IconFolderOpen,
   IconPlayerPlay,
+  IconSettings2,
   IconSparkles,
   IconTerminal2,
   IconX,
@@ -42,12 +43,10 @@ import {
   CommonThreadToast,
   type CommonThreadToastTone,
 } from '../../../_components/common-thread-toast';
-import { SoundToggle } from '../../../_components/sound-toggle';
 import {
   ThemeToggle,
   useHirearchyTheme,
 } from '../../../_components/theme-toggle';
-import { playHirearchySound } from '../../../../src/ui/sound';
 import './candidate-workspace.css';
 
 const CodeEditorSurface = dynamic(
@@ -518,9 +517,6 @@ export function R26CandidateClient({
   const [openTabPaths, setOpenTabPaths] = useState<string[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [draftsByPath, setDraftsByPath] = useState<Record<string, Draft>>({});
-  const [leftSidebarTab, setLeftSidebarTab] = useState<'task' | 'files'>(
-    'task',
-  );
   const [checkedCriteria, setCheckedCriteria] = useState<
     Record<number, boolean>
   >({});
@@ -536,11 +532,28 @@ export function R26CandidateClient({
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const [showExecutionDrawer, setShowExecutionDrawer] = useState(true);
-  const [showAiDrawer, setShowAiDrawer] = useState(true);
+  const [showExecutionDrawer, setShowExecutionDrawer] =
+    useState(!isHiringExperience);
+  const [showAiDrawer, setShowAiDrawer] = useState(!isHiringExperience);
   const [mobileTab, setMobileTab] = useState<'code' | 'task' | 'tests' | 'ai'>(
     'code',
   );
+  const assistantTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileAssistantRef = useRef<HTMLButtonElement>(null);
+  const editorTabsRef = useRef<HTMLElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const setAssistantOpen = useCallback((open: boolean) => {
+    setShowAiDrawer(open);
+    setMobileTab((current) =>
+      open ? 'ai' : current === 'ai' ? 'code' : current,
+    );
+  }, []);
+  const closeAssistant = () => {
+    setAssistantOpen(false);
+    const mobileTrigger = mobileAssistantRef.current;
+    if (mobileTrigger?.getClientRects().length) mobileTrigger.focus();
+    else assistantTriggerRef.current?.focus();
+  };
   const [editorFontSize, setEditorFontSize] = useState<EditorFontSize>(14);
   const [lineWrap, setLineWrap] = useState(true);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
@@ -1270,7 +1283,6 @@ export function R26CandidateClient({
         if (saved?.content === intent.content) {
           setConflictLatest(null);
           if (!automatic) {
-            playHirearchySound('confirm');
             setMessage('Work saved.');
           }
           return true;
@@ -1428,11 +1440,10 @@ export function R26CandidateClient({
       if (result?.operationId) {
         setSelectedExecutionId(result.operationId);
       }
-      playHirearchySound('complete');
+
       setToastState({ message: 'Test run finished.', tone: 'success' });
       executionRequestIdRef.current = requestId();
     } catch {
-      playHirearchySound('error');
       setExecutionError('Network error executing checks. Please retry.');
     } finally {
       setExecutionRunning(false);
@@ -1455,6 +1466,7 @@ export function R26CandidateClient({
       ) {
         if (canRunChecks) {
           event.preventDefault();
+          setShowExecutionDrawer(true);
           void runChecks();
         }
         return;
@@ -1465,12 +1477,12 @@ export function R26CandidateClient({
         viewRef.current?.status !== 'CREATED'
       ) {
         event.preventDefault();
-        setShowAiDrawer((current) => !current);
+        setAssistantOpen(!showAiDrawer);
       }
     };
     window.addEventListener('keydown', handleShortcuts);
     return () => window.removeEventListener('keydown', handleShortcuts);
-  }, [canEdit, canRunChecks, runChecks, save]);
+  }, [canEdit, canRunChecks, runChecks, save, setAssistantOpen, showAiDrawer]);
 
   useEffect(() => {
     if (
@@ -1584,12 +1596,11 @@ export function R26CandidateClient({
       applyView(next);
       setPendingSubmit(null);
       setSubmitConfirmOpen(false);
-      playHirearchySound('submit');
+
       setMessage('Assessment submitted. Your saved work is now read-only.');
       void fetchAiView(next.capabilities.ai);
       void fetchExecutionView(next.capabilities.execution);
     } catch (error) {
-      playHirearchySound('error');
       const failure = error as ApiFailure;
       if (isCandidateAccessUnavailable(failure)) {
         setPendingSubmit(null);
@@ -1620,12 +1631,28 @@ export function R26CandidateClient({
     () => buildFileTree(view?.files ?? []),
     [view?.files],
   );
+  useEffect(() => {
+    const tabs = editorTabsRef.current;
+    const activeTab = tabs?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!tabs || !activeTab) return;
+    const viewport = tabs.getBoundingClientRect();
+    const active =
+      activeTab.parentElement?.getBoundingClientRect() ??
+      activeTab.getBoundingClientRect();
+    if (active.left < viewport.left)
+      tabs.scrollLeft += active.left - viewport.left;
+    else if (active.right > viewport.right)
+      tabs.scrollLeft += active.right - viewport.right;
+  }, [selectedPath]);
+
   const resolvedOpenTabPaths = useMemo(() => {
     if (!view || view.files.length === 0) return [];
     const existingSet = new Set(view.files.map((file) => file.path));
     const ordered = openTabPaths.filter((path) => existingSet.has(path));
     if (ordered.length === 0) {
-      return view.files.map((file) => file.path);
+      return isHiringExperience
+        ? [selectedPath || view.files[0].path]
+        : view.files.map((file) => file.path);
     }
     if (
       selectedPath &&
@@ -1635,13 +1662,17 @@ export function R26CandidateClient({
       return [...ordered, selectedPath];
     }
     return ordered;
-  }, [openTabPaths, selectedPath, view]);
+  }, [isHiringExperience, openTabPaths, selectedPath, view]);
 
   const canSwitchFile = Boolean(
     !busy && !pendingSubmit && !saveConflict && !conflictLatest,
   );
   const selectWorkspaceFile = async (nextPath: string) => {
-    if (nextPath === selectedPath || !canSwitchFile) return;
+    if (!canSwitchFile) return;
+    if (nextPath === selectedPath) {
+      setMobileTab('code');
+      return;
+    }
     if (currentDraft) {
       setDraftsByPath((current) => ({
         ...current,
@@ -1649,13 +1680,15 @@ export function R26CandidateClient({
       }));
     }
     if (pendingSave || isDirty) {
-      await save(false);
+      if (!(await save(false))) return;
     }
     setOpenTabPaths((current) => {
       const base =
         current.length > 0
           ? current
-          : (view?.files ?? []).map((file) => file.path);
+          : isHiringExperience
+            ? [selectedPath].filter(Boolean)
+            : (view?.files ?? []).map((file) => file.path);
       return base.includes(nextPath) ? base : [...base, nextPath];
     });
     const nextFile = view?.files.find((file) => file.path === nextPath);
@@ -1671,6 +1704,7 @@ export function R26CandidateClient({
       setDraft(makeDraft(nextFile));
     }
     setSelectedPath(nextPath);
+    setMobileTab('code');
     setConflictLatest(null);
     setMessage('');
   };
@@ -1909,7 +1943,6 @@ export function R26CandidateClient({
               <span className="hiring-eyebrow">Hirearchy Software</span>
             </span>
             <div className="software-header-controls">
-              <SoundToggle variant="pill" />
               <ThemeToggle variant="pill" />
             </div>
           </div>
@@ -2003,7 +2036,12 @@ export function R26CandidateClient({
   }
 
   return (
-    <main className="r26-candidate software-product">
+    <main
+      className="r26-candidate software-product"
+      data-active-workspace={
+        isHiringExperience && view?.status === 'ACTIVE' ? 'true' : undefined
+      }
+    >
       <header className="r26-header">
         <div className="r26-brand">
           <BrandMark size={22} />
@@ -2016,7 +2054,6 @@ export function R26CandidateClient({
           </span>
         </div>
         <div className="r26-header-status">
-          <SoundToggle variant="header" />
           <ThemeToggle variant="header" />
           {view?.status === 'ACTIVE' && remainingMs !== null ? (
             <div
@@ -2051,16 +2088,17 @@ export function R26CandidateClient({
               onClick={() => setShowExecutionDrawer((current) => !current)}
             >
               <IconTerminal2 size={15} stroke={1.9} aria-hidden="true" />
-              <span>Terminal</span>
+              <span>{isHiringExperience ? 'Tests' : 'Terminal'}</span>
             </button>
           ) : null}
           {view && view.status !== 'CREATED' && view.capabilities.ai ? (
             <button
               type="button"
+              ref={assistantTriggerRef}
               className={`r26-header-tool ${showAiDrawer ? 'is-active' : ''}`}
               aria-expanded={showAiDrawer}
               aria-controls="candidate-assistant-panel"
-              onClick={() => setShowAiDrawer((current) => !current)}
+              onClick={() => setAssistantOpen(!showAiDrawer)}
             >
               <IconSparkles size={15} stroke={1.9} aria-hidden="true" />
               <span>Assistant</span>
@@ -2096,6 +2134,7 @@ export function R26CandidateClient({
                 (!pendingSubmit &&
                   (isDirty || Boolean(pendingSave) || saveConflict))
               }
+              aria-label={!pendingSubmit ? 'Submit assessment' : undefined}
               aria-describedby={
                 pendingSave || saveConflict
                   ? 'candidate-submit-save-status'
@@ -2119,7 +2158,9 @@ export function R26CandidateClient({
                 ? 'Submitting…'
                 : pendingSubmit
                   ? 'Retry submission'
-                  : 'Submit assessment'}
+                  : isHiringExperience
+                    ? 'Submit'
+                    : 'Submit assessment'}
             </button>
           ) : null}
         </div>
@@ -2159,13 +2200,11 @@ export function R26CandidateClient({
           {view.status !== 'CREATED' && view.capabilities.ai ? (
             <button
               type="button"
+              ref={mobileAssistantRef}
               aria-pressed={mobileTab === 'ai'}
-              onClick={() => {
-                setShowAiDrawer(true);
-                setMobileTab('ai');
-              }}
+              onClick={() => setAssistantOpen(true)}
             >
-              AI
+              Assistant
             </button>
           ) : null}
         </nav>
@@ -2290,7 +2329,10 @@ export function R26CandidateClient({
                     </p>
                   </div>
                   <p className="r26-readiness-tools">
-                    Code editor with autosave · Terminal and tests
+                    Code editor with autosave
+                    {view.capabilities.execution
+                      ? ' · Tests'
+                      : ' · Tests unavailable'}
                     {view.capabilities.ai ? ' · AI assistant' : ''}
                   </p>
                   <div
@@ -2301,7 +2343,8 @@ export function R26CandidateClient({
                   >
                     {view.dataNotice ? (
                       <p>
-                        Your saved files, test runs
+                        Your saved files
+                        {view.capabilities.execution ? ', test runs' : ''}
                         {view.capabilities.ai ? ', AI conversations,' : ''} and
                         final submission are recorded for your hiring team.
                       </p>
@@ -2381,97 +2424,71 @@ export function R26CandidateClient({
 
                   {isHiringExperience && view.status !== 'CREATED' ? (
                     <>
-                      <div
-                        className="r26-left-tabs"
-                        role="tablist"
-                        aria-label="Workspace sidebar"
-                      >
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={leftSidebarTab === 'task'}
-                          className={`r26-left-tab ${leftSidebarTab === 'task' ? 'is-active' : ''}`}
-                          onClick={() => setLeftSidebarTab('task')}
-                        >
-                          Task
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={leftSidebarTab === 'files'}
-                          className={`r26-left-tab ${leftSidebarTab === 'files' ? 'is-active' : ''}`}
-                          onClick={() => setLeftSidebarTab('files')}
-                        >
-                          Files ({view.files.length})
-                        </button>
-                      </div>
-
-                      {leftSidebarTab === 'task' ? (
-                        <>
-                          <div
-                            id="candidate-brief-content"
-                            className="r26-task-reading"
+                      {view.files.length ? (
+                        <details className="r26-workspace-files" open>
+                          <summary>Files</summary>
+                          <ul
+                            className="r26-tree-list r26-tree-root"
+                            aria-label="Workspace files"
                           >
-                            {brief ? (
-                              <ScenarioBrief markdown={brief} />
-                            ) : (
-                              <p className="r26-brief">
-                                The issued task details are not available in
-                                this snapshot.
-                              </p>
-                            )}
-                          </div>
-                          {criteria.length > 0 ? (
-                            <section
-                              className="r26-criteria"
-                              aria-label="Checklist"
-                              style={{ marginTop: '0.85rem' }}
-                            >
-                              <p className="r26-eyebrow">Checklist</p>
-                              <ul className="r26-criteria-checklist">
-                                {criteria.map((criterion, index) => {
-                                  const isChecked = Boolean(
-                                    checkedCriteria[index],
-                                  );
-                                  return (
-                                    <li key={`${index}-${criterion}`}>
-                                      <label
-                                        className={`r26-criteria-check-label ${isChecked ? 'is-checked' : ''}`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={isChecked}
-                                          onChange={(event) =>
-                                            setCheckedCriteria((current) => ({
-                                              ...current,
-                                              [index]: event.target.checked,
-                                            }))
-                                          }
-                                        />
-                                        <span>{criterion}</span>
-                                      </label>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </section>
-                          ) : null}
-                        </>
-                      ) : view.files.length > 0 ? (
-                        <section
-                          className="r26-file-explorer"
-                          aria-label="Files explorer"
-                          style={{ borderBottom: 0 }}
-                        >
-                          <div className="r26-explorer-header">
-                            <p className="r26-eyebrow">Workspace files</p>
-                            <span>{view.files.length} files</span>
-                          </div>
-                          <ul className="r26-tree-list r26-tree-root">
                             {renderTreeNodes(fileTree)}
                           </ul>
-                        </section>
+                        </details>
                       ) : null}
+                      <section
+                        className="r26-workspace-task"
+                        aria-labelledby="workspace-task-heading"
+                      >
+                        <h1 id="workspace-task-heading">Task</h1>
+                        <div
+                          id="candidate-brief-content"
+                          className="r26-task-reading"
+                        >
+                          {brief ? (
+                            <ScenarioBrief markdown={brief} />
+                          ) : (
+                            <p className="r26-brief">
+                              The issued task details are not available in this
+                              snapshot.
+                            </p>
+                          )}
+                        </div>
+                        {criteria.length > 0 ? (
+                          <section
+                            className="r26-criteria"
+                            aria-label="Checklist"
+                            style={{ marginTop: '0.85rem' }}
+                          >
+                            <p className="r26-eyebrow">Checklist</p>
+                            <ul className="r26-criteria-checklist">
+                              {criteria.map((criterion, index) => {
+                                const isChecked = Boolean(
+                                  checkedCriteria[index],
+                                );
+                                return (
+                                  <li key={`${index}-${criterion}`}>
+                                    <label
+                                      className={`r26-criteria-check-label ${isChecked ? 'is-checked' : ''}`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={(event) =>
+                                          setCheckedCriteria((current) => ({
+                                            ...current,
+                                            [index]: event.target.checked,
+                                          }))
+                                        }
+                                      />
+                                      <span>{criterion}</span>
+                                    </label>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </section>
+                        ) : null}
+                      </section>
                     </>
                   ) : (
                     <>
@@ -2617,7 +2634,28 @@ export function R26CandidateClient({
                       ? 'Wait for the current action to finish before switching files.'
                       : 'Changes save automatically after you pause editing.'}
                 </span>
-                <nav className="r26-editor-tabs" aria-label="Open file tabs">
+                <label className="r26-file-switcher-label">
+                  <span className="sr-only">Workspace file</span>
+                  <select
+                    className="r26-file-switcher"
+                    value={selectedPath}
+                    disabled={!canSwitchFile}
+                    onChange={(event) =>
+                      void selectWorkspaceFile(event.target.value)
+                    }
+                  >
+                    {view.files.map((file) => (
+                      <option value={file.path} key={file.path}>
+                        {file.path}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <nav
+                  ref={editorTabsRef}
+                  className="r26-editor-tabs"
+                  aria-label="Open file tabs"
+                >
                   {resolvedOpenTabPaths.map((tabPath) => {
                     const isSelected = tabPath === selectedPath;
                     const tabHasDraft =
@@ -2676,59 +2714,69 @@ export function R26CandidateClient({
               </span>
             )}
             <div className="r26-editor-tabbar-actions">
-              <div
-                className="r26-editor-prefs"
-                role="group"
-                aria-label="Editor preferences"
+              <details
+                className="r26-editor-settings"
+                open={
+                  !isHiringExperience || view?.status !== 'ACTIVE' || undefined
+                }
               >
-                <button
-                  type="button"
-                  className="r26-pref-btn"
-                  disabled={editorFontSize <= EDITOR_FONT_SIZES[0]}
-                  aria-label="Decrease code font size"
-                  title="Decrease code font size"
-                  onClick={() =>
-                    setEditorFontSize((current) => {
-                      const idx = EDITOR_FONT_SIZES.indexOf(current);
-                      return idx > 0 ? EDITOR_FONT_SIZES[idx - 1] : current;
-                    })
-                  }
+                <summary aria-label="Editor settings" title="Editor settings">
+                  <IconSettings2 size={17} stroke={1.7} aria-hidden="true" />
+                </summary>
+                <div
+                  className="r26-editor-prefs"
+                  role="group"
+                  aria-label="Editor preferences"
                 >
-                  A-
-                </button>
-                <span className="r26-font-readout" aria-live="polite">
-                  {editorFontSize}px
-                </span>
-                <button
-                  type="button"
-                  className="r26-pref-btn"
-                  disabled={
-                    editorFontSize >=
-                    EDITOR_FONT_SIZES[EDITOR_FONT_SIZES.length - 1]
-                  }
-                  aria-label="Increase code font size"
-                  title="Increase code font size"
-                  onClick={() =>
-                    setEditorFontSize((current) => {
-                      const idx = EDITOR_FONT_SIZES.indexOf(current);
-                      return idx >= 0 && idx < EDITOR_FONT_SIZES.length - 1
-                        ? EDITOR_FONT_SIZES[idx + 1]
-                        : current;
-                    })
-                  }
-                >
-                  A+
-                </button>
-                <button
-                  type="button"
-                  className="r26-pref-btn"
-                  aria-pressed={lineWrap}
-                  title="Toggle line wrapping"
-                  onClick={() => setLineWrap((current) => !current)}
-                >
-                  Wrap
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    className="r26-pref-btn"
+                    disabled={editorFontSize <= EDITOR_FONT_SIZES[0]}
+                    aria-label="Decrease code font size"
+                    title="Decrease code font size"
+                    onClick={() =>
+                      setEditorFontSize((current) => {
+                        const idx = EDITOR_FONT_SIZES.indexOf(current);
+                        return idx > 0 ? EDITOR_FONT_SIZES[idx - 1] : current;
+                      })
+                    }
+                  >
+                    A-
+                  </button>
+                  <span className="r26-font-readout" aria-live="polite">
+                    {editorFontSize}px
+                  </span>
+                  <button
+                    type="button"
+                    className="r26-pref-btn"
+                    disabled={
+                      editorFontSize >=
+                      EDITOR_FONT_SIZES[EDITOR_FONT_SIZES.length - 1]
+                    }
+                    aria-label="Increase code font size"
+                    title="Increase code font size"
+                    onClick={() =>
+                      setEditorFontSize((current) => {
+                        const idx = EDITOR_FONT_SIZES.indexOf(current);
+                        return idx >= 0 && idx < EDITOR_FONT_SIZES.length - 1
+                          ? EDITOR_FONT_SIZES[idx + 1]
+                          : current;
+                      })
+                    }
+                  >
+                    A+
+                  </button>
+                  <button
+                    type="button"
+                    className="r26-pref-btn"
+                    aria-pressed={lineWrap}
+                    title="Toggle line wrapping"
+                    onClick={() => setLineWrap((current) => !current)}
+                  >
+                    Wrap
+                  </button>
+                </div>
+              </details>
               {canEdit && !pendingSubmit && activeFile ? (
                 isHiringExperience ? (
                   pendingSave || saveConflict ? (
@@ -2740,14 +2788,7 @@ export function R26CandidateClient({
                     >
                       {busy ? 'Saving…' : 'Retry save'}
                     </button>
-                  ) : (
-                    <span
-                      className={`r26-save-pill ${!isDirty ? 'is-saved' : ''}`}
-                      role="status"
-                    >
-                      {isDirty ? 'Saving…' : 'All changes saved'}
-                    </span>
-                  )
+                  ) : null
                 ) : (
                   <button
                     className={`r26-button ${isDirty || pendingSave ? 'r26-button-primary' : 'r26-button-secondary'} r26-save-button`}
@@ -3416,15 +3457,15 @@ export function R26CandidateClient({
             id="candidate-assistant-panel"
             aria-label="AI assistance"
             data-testid="candidate-ai-panel"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') closeAssistant();
+            }}
           >
             <div className="r26-ai-heading">
               <div>
-                <p
-                  className="r26-eyebrow"
-                  style={{ opacity: 0.82, margin: 0, color: 'inherit' }}
-                >
-                  AI Assistance
-                </p>
+                {!isHiringExperience ? (
+                  <p className="r26-eyebrow">AI Assistance</p>
+                ) : null}
                 <h2>
                   {!view.capabilities.ai
                     ? isHiringExperience
@@ -3448,8 +3489,7 @@ export function R26CandidateClient({
                     data-testid="ai-panel-budget"
                     title="Remaining questions in budget"
                   >
-                    {aiView.remainingInteractions} of{' '}
-                    {aiView.totalInteractionsAllowed} remaining
+                    {aiView.remainingInteractions} left
                   </span>
                 ) : null}
                 <button
@@ -3457,7 +3497,7 @@ export function R26CandidateClient({
                   className="r26-ai-close-btn"
                   aria-label="Close Assistant panel"
                   title="Close Assistant panel (Cmd/Ctrl + J)"
-                  onClick={() => setShowAiDrawer(false)}
+                  onClick={closeAssistant}
                 >
                   <IconX size={15} stroke={2} aria-hidden="true" />
                 </button>
@@ -3497,24 +3537,24 @@ export function R26CandidateClient({
                   {aiView.interactions.length === 0 &&
                   !(aiSubmitting && pendingAiPrompt) ? (
                     <div className="r26-ai-empty">
-                      <p>Ask anything about this workspace or task.</p>
-                      <p className="r26-ai-hint">
-                        {isSyntheticAiLane
-                          ? 'Ask questions regarding the task, requirements, or architecture. Answers are generated factually by the Synthetic Assistant test lane.'
-                          : 'Ask about requirements, edge cases, or error messages. Your questions stay neutral.'}
-                      </p>
+                      <p>Ask about the task, repository, or an error.</p>
                       {!aiInputDisabled ? (
                         <div className="r26-ai-starters">
                           {[
-                            'Explain how the files in this workspace fit together',
-                            'What edge cases should I test carefully?',
-                            'Help me debug the latest test output',
+                            'How do these files fit together?',
+                            'Which edge cases should I check?',
+                            ...(view.capabilities.execution
+                              ? ['Help me understand the test output']
+                              : []),
                           ].map((starter) => (
                             <button
                               key={starter}
                               type="button"
                               className="r26-ai-starter-btn"
-                              onClick={() => void sendAiPrompt(starter)}
+                              onClick={() => {
+                                setAiPrompt(starter);
+                                promptRef.current?.focus();
+                              }}
                             >
                               {starter}
                             </button>
@@ -3723,7 +3763,8 @@ export function R26CandidateClient({
                     <textarea
                       id="r26-ai-prompt-input"
                       className="r26-ai-textarea"
-                      placeholder="Ask a question… (Enter to send, Shift+Enter for new line)"
+                      placeholder="Ask a question…"
+                      ref={promptRef}
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       onKeyDown={(e) => {

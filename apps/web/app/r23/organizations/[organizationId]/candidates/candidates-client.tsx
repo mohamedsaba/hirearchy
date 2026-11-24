@@ -29,7 +29,6 @@ import {
   formatLocalDateTime,
   formatRelativeTime,
 } from '../../../../../src/ui/relative-time';
-import { playHirearchySound } from '../../../../../src/ui/sound';
 import { CommonThreadToast } from '../../../../_components/common-thread-toast';
 
 export interface CandidatesPipelineClientProps {
@@ -134,7 +133,7 @@ export function CandidatesPipelineClient({
   const copyTextWithToast = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      playHirearchySound('confirm');
+
       setToastMsg(label);
     } catch {
       setToastMsg('Copy failed — copy manually from this browser.');
@@ -649,7 +648,7 @@ export function CandidatesPipelineClient({
                               <div>
                                 <strong>{sess.scenarioTitle}</strong>
                                 <div className="hiring-candidate-meta">
-                                  <span>Role: {sess.targetRole}</span>
+                                  <span>{sess.targetRole}</span>
                                   <span
                                     title={formatLocalDateTime(sess.createdAt)}
                                   >

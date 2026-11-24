@@ -9,7 +9,6 @@ import {
   hasPlanFeature,
   type OrganizationPlanSummary,
 } from '../../../../../../src/plans/entitlements';
-import { playHirearchySound } from '../../../../../../src/ui/sound';
 import { CommonThreadLoader } from '../../../../../_components/common-thread-loader';
 import { CommonThreadToast } from '../../../../../_components/common-thread-toast';
 
@@ -96,10 +95,9 @@ export function HandoffDossierClient({
         (h) => h.sessionId === dossier.sessionId,
       );
       if (updated) setDossier(updated);
-      playHirearchySound('confirm');
+
       setStatusMsg(`Handoff updated: ${handoffStatusLabel(nextStatus)}.`);
     } catch (err) {
-      playHirearchySound('error');
       setErrorMsg(err instanceof Error ? err.message : 'Update failed.');
     } finally {
       setBusy(null);
@@ -139,10 +137,9 @@ export function HandoffDossierClient({
         (h) => h.sessionId === dossier.sessionId,
       );
       if (updated) setDossier(updated);
-      playHirearchySound('complete');
+
       setStatusMsg('Updated Managerial Fit Report.');
     } catch (err) {
-      playHirearchySound('error');
       setErrorMsg(err instanceof Error ? err.message : 'Generation failed.');
     } finally {
       setBusy(null);

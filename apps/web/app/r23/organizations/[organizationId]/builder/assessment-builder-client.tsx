@@ -28,7 +28,6 @@ import {
   DRAFT_SAVED_MESSAGE,
   VALIDATION_FAILED_MESSAGE,
 } from '../../../../../src/r211-builder/presentation';
-import { playHirearchySound } from '../../../../../src/ui/sound';
 
 import '../../../../evaluator/assessments/new/assessment-builder.css';
 import '../../../../evaluator/assessments/new/assessment-choice.css';
@@ -747,7 +746,6 @@ export function AssessmentBuilderClient({
         error: null,
       });
 
-      playHirearchySound('dispatch');
       setIssuedSession({
         sessionId: data.sessionId,
         candidatePath:

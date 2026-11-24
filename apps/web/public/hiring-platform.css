@@ -85,7 +85,7 @@
 .software-product .hiring-page-header h1 {
   margin: 0;
   color: var(--software-ink);
-  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
   font-weight: 650;
   letter-spacing: -0.06em;
   line-height: 1.05;
@@ -606,6 +606,10 @@
   align-items: center;
 }
 
+.hiring-template-settings label {
+  white-space: nowrap;
+}
+
 .software-builder-stage,
 .hiring-builder-pane,
 .hiring-preview-panel,
@@ -629,7 +633,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.7rem 1.2rem;
-  padding: 1rem 0;
+  padding: 0.9rem 0;
   min-inline-size: 0;
 }
 
@@ -1098,6 +1102,13 @@
 
 .software-directory-results {
   gap: 0.65rem;
+}
+
+.software-document-panel .hiring-filter-result {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .hiring-filter-result {
@@ -1805,4 +1816,69 @@
 .hiring-decision-feedback legend {
   padding-inline: 0.3rem;
   font-weight: 650;
+}
+
+.hiring-template-picker {
+  grid-template-areas: 'templates' 'settings';
+  align-items: start;
+  gap: clamp(1rem, 2.4vw, 2rem);
+}
+
+.hiring-template-picker .hiring-template-library {
+  grid-area: templates;
+  min-inline-size: 0;
+}
+
+.hiring-template-picker .hiring-template-settings {
+  grid-area: settings;
+  display: grid;
+  align-content: start;
+  align-items: start;
+  gap: 0.875rem;
+  padding: 1rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface);
+  background: var(--software-surface-subtle);
+}
+
+.hiring-template-picker h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.hiring-template-picker .hiring-template-library h2 {
+  margin-block-end: 0.625rem;
+}
+
+.hiring-template-picker .hiring-template-settings .hiring-field {
+  display: grid;
+}
+
+.hiring-template-picker .software-problem-row {
+  gap: 0.65rem;
+}
+
+.hiring-template-picker .software-problem-row p {
+  margin: 0;
+}
+
+.hiring-template-picker .software-problem-row .hiring-btn {
+  min-block-size: 44px;
+}
+
+@media (min-width: 71rem) {
+  .hiring-template-picker {
+    grid-template-columns: minmax(0, 1fr) minmax(13.75rem, 0.33fr);
+    grid-template-areas: 'templates settings';
+  }
+}
+
+@media (max-width: 36rem) {
+  .hiring-template-picker .software-problem-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hiring-template-picker .software-problem-row .hiring-btn {
+    justify-self: start;
+  }
 }

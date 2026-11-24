@@ -10,7 +10,6 @@ import {
   type AiReviewPresetId,
   type R27AiReviewReport,
 } from '../../../../src/r27-evidence/ai-review-contract';
-import { playHirearchySound } from '../../../../src/ui/sound';
 import { CommonThreadLoader } from '../../../_components/common-thread-loader';
 import { CommonThreadToast } from '../../../_components/common-thread-toast';
 
@@ -141,9 +140,7 @@ export const R27AiReviewPanel = ({
       }
       setReport(data.report);
       setToastMsg('Advisory AI review ready.');
-      playHirearchySound('complete');
     } catch (err: unknown) {
-      playHirearchySound('error');
       setError(
         err instanceof Error ? err.message : 'Unable to generate AI review.',
       );

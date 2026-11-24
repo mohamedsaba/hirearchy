@@ -1912,7 +1912,7 @@ const R27FileInspector = ({
     diffStats.deletions > 0 ||
     file.starterContent !== file.submittedContent;
   const [viewMode, setViewMode] = useState<'diff' | 'submitted' | 'starter'>(
-    () => (file.diff !== null ? 'diff' : 'submitted'),
+    () => (file.diff !== null && hasNetChanges ? 'diff' : 'submitted'),
   );
 
   const matchingEvent = [...r27Evidence.events]
@@ -1950,15 +1950,14 @@ const R27FileInspector = ({
       aria-labelledby={headingId}
       data-source-inspector="true"
       data-source-ref={source.key}
+      data-file-inspector="true"
       style={{ minWidth: 0, maxWidth: '100%' }}
     >
       <header className="evaluator-source-inspector-heading">
         <div>
-          <p className="section-kicker">Submitted file · Selected source</p>
           <h2 id={headingId} ref={headingRef} tabIndex={-1}>
             {file.path}
           </h2>
-          <p className="evaluator-source-summary">{source.summary}</p>
         </div>
         <div className="evaluator-source-status-group">
           {hasNetChanges ? (
@@ -1977,9 +1976,11 @@ const R27FileInspector = ({
           ) : (
             <span className="code-diff-stat-neutral">Unchanged</span>
           )}
-          <span className="evaluator-source-status">
-            {captureStatus(source)}
-          </span>
+          {file.starterContent === null || file.submittedContent === null ? (
+            <span className="evaluator-source-status">
+              {captureStatus(source)}
+            </span>
+          ) : null}
         </div>
       </header>
 
@@ -2020,7 +2021,7 @@ const R27FileInspector = ({
       >
         {viewMode === 'diff' ? (
           <>
-            <h3>Derived starter-to-submission diff</h3>
+            <h3 className="visually-hidden">Changes from starter</h3>
             {file.diff === null ? (
               <p className="evaluator-muted-copy">
                 The starter baseline is unavailable, so a diff is not derived.
@@ -2036,7 +2037,7 @@ const R27FileInspector = ({
           </>
         ) : viewMode === 'submitted' ? (
           <>
-            <h3>Submitted content</h3>
+            <h3 className="visually-hidden">Submitted code</h3>
             <CodeFileViewer
               content={file.submittedContent}
               ariaLabel={`Submitted content for ${file.path}`}
