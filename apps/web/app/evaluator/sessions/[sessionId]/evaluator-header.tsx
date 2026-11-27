@@ -68,7 +68,11 @@ export const EvaluatorHeader = ({
     return (
       <header className="evaluator-report-heading review-desk-heading">
         <nav className="review-desk-breadcrumb" aria-label="Candidate review">
-          <Link className="evaluator-back-link" href={backHref}>
+          <Link
+            className="evaluator-back-link"
+            href={backHref}
+            prefetch={false}
+          >
             Candidates
           </Link>
           <IconChevronRight size={14} aria-hidden="true" />
@@ -135,7 +139,7 @@ export const EvaluatorHeader = ({
   return (
     <header className="evaluator-report-heading">
       <div className="evaluator-report-toolbar">
-        <Link className="evaluator-back-link" href={backHref}>
+        <Link className="evaluator-back-link" href={backHref} prefetch={false}>
           {backLabel}
         </Link>
         {showTheme ? <ThemeToggle /> : null}
