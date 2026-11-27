@@ -22,6 +22,8 @@ const routes = [
   '/',
   '/products',
   '/products/software',
+  '/demo',
+  '/trust',
   '/thinking',
   '/about',
   '/contact',

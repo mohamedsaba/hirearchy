@@ -2,6 +2,11 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../apps/web/src/telemetry/client', () => ({
+  trackClientEvent: vi.fn(),
+  flushClientTelemetry: vi.fn(),
+}));
 import type { R27Evidence } from '../../database/postgres/r27/contract.mjs';
 import { EvaluatorReviewWorkspace } from '../../apps/web/app/evaluator/sessions/[sessionId]/evaluator-review-workspace';
 import type { AiInteraction } from '../../apps/web/src/ai/ai-interaction';
