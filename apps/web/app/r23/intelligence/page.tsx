@@ -2,7 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { isFounderUatEnabled } from '../../../src/runtime/founder-uat';
-import { loadProductIntelligenceReport } from '../../../src/telemetry/server';
+import {
+  loadLifecycleReport,
+  loadProductIntelligenceReport,
+} from '../../../src/telemetry/server';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { IntelligenceDashboardClient } from './intelligence-dashboard-client';
 
@@ -22,7 +25,10 @@ export default async function ProductIntelligencePage() {
     notFound();
   }
 
-  const initialReport = await loadProductIntelligenceReport(30);
+  const [initialReport, initialLifecycle] = await Promise.all([
+    loadProductIntelligenceReport(30),
+    loadLifecycleReport(),
+  ]);
 
   return (
     <div className="software-product software-document-body intel-page-shell">
@@ -46,7 +52,10 @@ export default async function ProductIntelligencePage() {
         </div>
       </header>
       <main className="intel-main" id="intelligence-main" tabIndex={-1}>
-        <IntelligenceDashboardClient initialReport={initialReport} />
+        <IntelligenceDashboardClient
+          initialReport={initialReport}
+          initialLifecycle={initialLifecycle}
+        />
       </main>
     </div>
   );

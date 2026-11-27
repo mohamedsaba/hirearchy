@@ -3,15 +3,25 @@
 import { useState } from 'react';
 import {
   IconActivityHeartbeat,
+  IconBolt,
   IconChartBar,
+  IconCheck,
+  IconClock,
+  IconCopy,
   IconDownload,
   IconMessageStar,
   IconRefresh,
+  IconRepeat,
   IconSparkles,
   IconTrendingUp,
 } from '@tabler/icons-react';
 
-import type { ProductIntelligenceReport } from '../../../src/telemetry/catalog';
+import type {
+  LifecycleActionQueueItem,
+  NudgeKey,
+  ProductIntelligenceReport,
+  ProductLifecycleReport,
+} from '../../../src/telemetry/catalog';
 
 const HEALTH_BADGE_MAP: Readonly<
   Record<
@@ -42,12 +52,76 @@ const WINDOW_OPTIONS = [
   { days: 3650, label: 'All time' },
 ] as const;
 
+const QUEUE_FILTERS: readonly { key: 'all' | NudgeKey; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'unreviewed_submission_48h', label: 'Unreviewed >48h' },
+  { key: 'no_assessment_48h', label: 'No Assessment >48h' },
+  { key: 'plan_gate_no_upgrade', label: 'Plan Gate Hits' },
+  { key: 'problem_health_alert', label: 'Problem Alerts' },
+];
+
+const NUDGE_STATUS_BADGE: Readonly<
+  Record<
+    LifecycleActionQueueItem['nudgeStatus'],
+    { label: string; className: string }
+  >
+> = {
+  active: {
+    label: 'Needs action',
+    className: 'hiring-pill hiring-pill-warning',
+  },
+  contacted: {
+    label: 'Contacted',
+    className: 'hiring-pill hiring-pill-success',
+  },
+  snoozed: { label: 'Snoozed 7d', className: 'hiring-pill' },
+  resolved: { label: 'Resolved', className: 'hiring-pill hiring-pill-success' },
+  dismissed: { label: 'Dismissed', className: 'hiring-pill' },
+};
+
+function buildOutreachTemplate(item: LifecycleActionQueueItem): string {
+  switch (item.nudgeKey) {
+    case 'unreviewed_submission_48h':
+      return `Hi ${item.organizationName} team — ${item.affectedCount} candidate submission(s) in your Hirearchy workspace have been waiting over ${Math.round(item.hoursAge)}h for an evaluator verdict. Sharing timely human feedback keeps candidate fairness high; happy to help unblock your review queue if needed.`;
+    case 'no_assessment_48h':
+      return `Hi ${item.organizationName} team — noticed you set up your Hirearchy workspace about ${Math.round(item.hoursAge)}h ago. If you'd like a quick walkthrough of our pre-built backend templates or candidate preview mode, reply here and I can help you launch your first evaluation in 5 minutes.`;
+    case 'plan_gate_no_upgrade':
+      return `Hi ${item.organizationName} team — saw your team recently hit a candidate slot / plan limit in Hirearchy. Happy to help calibrate whether Per Candidate slots, Pro, or Ultra fits your upcoming hiring loop.`;
+    case 'problem_health_alert':
+      return `Hi ${item.organizationName} team — our diagnostics flagged drop-off or sandbox errors on one of your active assessments. Let me know if you want a hand tuning the starter repo or time budget.`;
+    case 'connect_slack_webhook':
+      return `Hi ${item.organizationName} team — you can now connect a Slack incoming webhook in Workspace Settings to get instant alerts whenever candidates submit work.`;
+  }
+}
+
+function retentionCellStyle(
+  pct: number | null,
+): React.CSSProperties | undefined {
+  if (pct === null) return undefined;
+  const alpha = Math.min(0.32, Math.max(0.04, (pct / 100) * 0.32));
+  return {
+    backgroundColor: `rgba(15, 118, 110, ${alpha.toFixed(2)})`,
+    fontVariantNumeric: 'tabular-nums',
+  };
+}
+
 export function IntelligenceDashboardClient({
   initialReport,
-}: Readonly<{ initialReport: ProductIntelligenceReport | null }>) {
+  initialLifecycle = null,
+}: Readonly<{
+  initialReport: ProductIntelligenceReport | null;
+  initialLifecycle?: ProductLifecycleReport | null;
+}>) {
   const [report, setReport] = useState<ProductIntelligenceReport | null>(
     initialReport,
   );
+  const [lifecycle, setLifecycle] = useState<ProductLifecycleReport | null>(
+    initialLifecycle,
+  );
+  const [queueFilter, setQueueFilter] = useState<'all' | NudgeKey>('all');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [actionBusyKey, setActionBusyKey] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState<number>(
     initialReport?.windowDays ?? 30,
   );
@@ -56,6 +130,76 @@ export function IntelligenceDashboardClient({
   const [feedbackFilter, setFeedbackFilter] = useState<
     'all' | 'candidate' | 'team_member'
   >('all');
+
+  const itemRowKey = (item: LifecycleActionQueueItem) =>
+    `${item.organizationId}:${item.nudgeKey}:${item.targetRef}`;
+
+  const copyOutreach = async (item: LifecycleActionQueueItem) => {
+    const key = itemRowKey(item);
+    const text = buildOutreachTemplate(item);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      window.setTimeout(() => {
+        setCopiedKey((curr) => (curr === key ? null : curr));
+      }, 2000);
+    } catch {
+      setError('Clipboard unavailable in this browser context.');
+    }
+  };
+
+  const applyQueueAction = async (
+    item: LifecycleActionQueueItem,
+    status: 'contacted' | 'snoozed' | 'resolved',
+  ) => {
+    const key = itemRowKey(item);
+    const note = (noteDrafts[key] ?? item.founderNote ?? '').trim();
+    setActionBusyKey(key);
+    setError(null);
+    try {
+      const response = await fetch('/api/intelligence/action', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          organizationId: item.organizationId,
+          nudgeKey: item.nudgeKey,
+          targetRef: item.targetRef,
+          status,
+          founderNote: note,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      setLifecycle((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          actionQueue: prev.actionQueue.map((row) =>
+            itemRowKey(row) === key
+              ? {
+                  ...row,
+                  nudgeStatus: status,
+                  founderNote: note || row.founderNote,
+                  contactedAt:
+                    status === 'contacted'
+                      ? new Date().toISOString()
+                      : row.contactedAt,
+                }
+              : row,
+          ),
+        };
+      });
+    } catch {
+      setError('Unable to update outreach status right now.');
+    } finally {
+      setActionBusyKey(null);
+    }
+  };
 
   const refreshWindow = async (days: number) => {
     setWindowDays(days);
@@ -128,6 +272,11 @@ export function IntelligenceDashboardClient({
     feedbackFilter === 'all' ? true : item.actorType === feedbackFilter,
   );
 
+  const actionQueueItems = (lifecycle?.actionQueue ?? []).filter((item) =>
+    queueFilter === 'all' ? true : item.nudgeKey === queueFilter,
+  );
+  const cohortRows = lifecycle?.cohortRetention ?? [];
+
   return (
     <div className="intel-stack">
       <header className="intel-header">
@@ -190,6 +339,138 @@ export function IntelligenceDashboardClient({
           {error}
         </p>
       ) : null}
+
+      <section
+        aria-labelledby="intel-action-queue-title"
+        className="hiring-card intel-section"
+      >
+        <div className="team-section-header-row">
+          <div className="intel-section-head">
+            <IconBolt size={18} aria-hidden="true" />
+            <h2 id="intel-action-queue-title">
+              Lifecycle Action Queue ({actionQueueItems.length})
+            </h2>
+          </div>
+          <div
+            className="hiring-builder-tabs"
+            role="group"
+            aria-label="Filter action queue"
+          >
+            {QUEUE_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`hiring-builder-tab${queueFilter === f.key ? ' is-active' : ''}`}
+                aria-pressed={queueFilter === f.key}
+                onClick={() => setQueueFilter(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {actionQueueItems.length === 0 ? (
+          <p className="hiring-muted-copy">
+            No organizations currently match this action filter.
+          </p>
+        ) : (
+          <div className="software-overflow-region" tabIndex={0}>
+            <table className="software-members-table intel-table">
+              <thead>
+                <tr>
+                  <th>Organization</th>
+                  <th>Plan</th>
+                  <th>Trigger</th>
+                  <th>Age</th>
+                  <th>Count</th>
+                  <th>Status</th>
+                  <th>Note &amp; Outreach</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actionQueueItems.map((item) => {
+                  const key = itemRowKey(item);
+                  const badge = NUDGE_STATUS_BADGE[item.nudgeStatus];
+                  const isBusy = actionBusyKey === key;
+                  return (
+                    <tr key={key}>
+                      <td>
+                        <strong>{item.organizationName}</strong>
+                        <div className="hiring-muted-copy">
+                          {item.ownerEmail || item.organizationId.slice(0, 8)}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="hiring-pill">{item.planTier}</span>
+                      </td>
+                      <td>{item.summary}</td>
+                      <td>{item.hoursAge}h</td>
+                      <td>{item.affectedCount}</td>
+                      <td>
+                        <span className={badge.className}>{badge.label}</span>
+                      </td>
+                      <td>
+                        <div className="hiring-header-actions">
+                          <input
+                            type="text"
+                            aria-label={`Outreach note for ${item.organizationName}`}
+                            placeholder="Outreach note…"
+                            value={noteDrafts[key] ?? item.founderNote}
+                            onChange={(e) =>
+                              setNoteDrafts((prev) => ({
+                                ...prev,
+                                [key]: e.target.value,
+                              }))
+                            }
+                            style={{ minWidth: '10rem' }}
+                          />
+                          <button
+                            type="button"
+                            className="hiring-btn hiring-btn-sm"
+                            onClick={() => void copyOutreach(item)}
+                          >
+                            {copiedKey === key ? (
+                              <>
+                                <IconCheck size={14} aria-hidden="true" />{' '}
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <IconCopy size={14} aria-hidden="true" /> Copy
+                                outreach
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className="hiring-btn hiring-btn-primary hiring-btn-sm"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void applyQueueAction(item, 'contacted')
+                            }
+                          >
+                            Mark contacted
+                          </button>
+                          <button
+                            type="button"
+                            className="hiring-btn hiring-btn-sm"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void applyQueueAction(item, 'snoozed')
+                            }
+                          >
+                            <IconClock size={14} aria-hidden="true" /> Snooze 7d
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section aria-labelledby="intel-proof-title" className="intel-section">
         <div className="intel-section-head">
@@ -501,6 +782,74 @@ export function IntelligenceDashboardClient({
           </div>
         </section>
       </div>
+
+      <section
+        aria-labelledby="intel-cohorts-title"
+        className="hiring-card intel-section"
+      >
+        <div className="intel-section-head">
+          <IconRepeat size={18} aria-hidden="true" />
+          <h2 id="intel-cohorts-title">Repeat-Cycle Cohort Retention</h2>
+        </div>
+        {cohortRows.length === 0 ? (
+          <p className="hiring-muted-copy">
+            No monthly workspace cohorts recorded yet.
+          </p>
+        ) : (
+          <div className="software-overflow-region" tabIndex={0}>
+            <table className="software-members-table intel-table">
+              <thead>
+                <tr>
+                  <th>Cohort</th>
+                  <th>Orgs</th>
+                  <th>7d Activated</th>
+                  <th>M+1</th>
+                  <th>M+2</th>
+                  <th>M+3</th>
+                  <th>Repeat-Wave %</th>
+                  <th>Median Time-to-1st-Invite</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cohortRows.map((row) => (
+                  <tr key={row.cohortMonth}>
+                    <td>
+                      <strong>{row.cohortMonth}</strong>
+                    </td>
+                    <td>{row.orgsCreated}</td>
+                    <td style={retentionCellStyle(row.activated7dPct)}>
+                      {row.activated7dPct}%
+                    </td>
+                    <td style={retentionCellStyle(row.retainedM1Pct)}>
+                      {row.retainedM1Pct !== null
+                        ? `${row.retainedM1Pct}%`
+                        : '—'}
+                    </td>
+                    <td style={retentionCellStyle(row.retainedM2Pct)}>
+                      {row.retainedM2Pct !== null
+                        ? `${row.retainedM2Pct}%`
+                        : '—'}
+                    </td>
+                    <td style={retentionCellStyle(row.retainedM3Pct)}>
+                      {row.retainedM3Pct !== null
+                        ? `${row.retainedM3Pct}%`
+                        : '—'}
+                    </td>
+                    <td>
+                      {row.repeatWavePct}% ({row.repeatWaveOrgsCount})
+                    </td>
+                    <td>
+                      {row.medianHoursToFirstInvite !== null
+                        ? `${row.medianHoursToFirstInvite}h`
+                        : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section
         aria-labelledby="intel-feedback-title"

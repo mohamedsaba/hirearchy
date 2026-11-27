@@ -4417,6 +4417,15 @@ def validate_operation_args(operation, args):
         'hiring.decision.publish': (('organizationId', 'sessionId', 'input'), ()),
         'hiring.handoffs.list': (('organizationId',), ()),
         'hiring.handoff.update': (('organizationId', 'sessionId', 'input'), ()),
+        'hiring.dossier.share.create': (('organizationId', 'sessionId', 'tokenHash', 'input'), ()),
+        'hiring.dossier.share.list': (('organizationId', 'sessionId'), ()),
+        'hiring.dossier.share.revoke': (('organizationId', 'shareId'), ()),
+        'hiring.webhook.list': (('organizationId',), ()),
+        'hiring.webhook.upsert': (('organizationId', 'input'), ()),
+        'hiring.webhook.delete': (('organizationId', 'webhookId'), ()),
+        'hiring.library.health': (('organizationId',), ()),
+        'hiring.nudges.get': (('organizationId',), ()),
+        'hiring.nudge.dismiss': (('organizationId', 'nudgeKey', 'action'), ('targetRef',)),
     }
     if operation not in schemas:
         error('Staging operation is unavailable', '22023')
@@ -6440,6 +6449,107 @@ def dispatch(operation, args, subject_id, auth_session_id, principal_id, auth_ex
             "SELECT staging.hiring_handoff_update($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4::pg_catalog.jsonb) AS result",
             ['uuid', 'uuid', 'text', 'text'],
             [organization_id, principal_id, session_id, json.dumps(payload, ensure_ascii=False)],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.dossier.share.create':
+        session_id = args.get('sessionId')
+        token_hash = args.get('tokenHash')
+        payload = args.get('input')
+        if (
+            not isinstance(session_id, str)
+            or not re.fullmatch(r'sess_[A-Za-z0-9_-]{1,128}', session_id)
+            or not isinstance(token_hash, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', token_hash)
+            or not isinstance(payload, dict)
+        ):
+            error('Staging request is invalid', '22023')
+        rows = run(
+            "SELECT staging.hiring_dossier_share_create($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4, $5::pg_catalog.jsonb) AS result",
+            ['uuid', 'uuid', 'text', 'text', 'text'],
+            [organization_id, principal_id, session_id, token_hash, json.dumps(payload, ensure_ascii=False)],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.dossier.share.list':
+        session_id = args.get('sessionId')
+        if not isinstance(session_id, str) or not re.fullmatch(r'sess_[A-Za-z0-9_-]{1,128}', session_id):
+            error('Staging request is invalid', '22023')
+        rows = run(
+            "SELECT staging.hiring_dossier_share_list($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3) AS result",
+            ['uuid', 'uuid', 'text'],
+            [organization_id, principal_id, session_id],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.dossier.share.revoke':
+        share_id = require_uuid(args.get('shareId'), 'share ID')
+        rows = run(
+            "SELECT staging.hiring_dossier_share_revoke($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS result",
+            ['uuid', 'uuid', 'uuid'],
+            [organization_id, principal_id, share_id],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.webhook.list':
+        rows = run(
+            "SELECT staging.hiring_webhook_list($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS result",
+            ['uuid', 'uuid'],
+            [organization_id, principal_id],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.webhook.upsert':
+        payload = args.get('input')
+        if not isinstance(payload, dict):
+            error('Staging request is invalid', '22023')
+        rows = run(
+            "SELECT staging.hiring_webhook_upsert($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.jsonb) AS result",
+            ['uuid', 'uuid', 'text'],
+            [organization_id, principal_id, json.dumps(payload, ensure_ascii=False)],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.webhook.delete':
+        webhook_id = require_uuid(args.get('webhookId'), 'webhook ID')
+        rows = run(
+            "SELECT staging.hiring_webhook_delete($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid) AS result",
+            ['uuid', 'uuid', 'uuid'],
+            [organization_id, principal_id, webhook_id],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.library.health':
+        rows = run(
+            "SELECT staging.hiring_org_problem_health($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS result",
+            ['uuid', 'uuid'],
+            [organization_id, principal_id],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.nudges.get':
+        rows = run(
+            "SELECT staging.hiring_org_nudges_get($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS result",
+            ['uuid', 'uuid'],
+            [organization_id, principal_id],
+        )
+        return safe_json_value(rows[0]['result'])
+
+    if operation == 'hiring.nudge.dismiss':
+        nudge_key = args.get('nudgeKey')
+        action = args.get('action')
+        target_ref = args.get('targetRef') if 'targetRef' in args else ''
+        if (
+            nudge_key not in ('no_assessment_48h', 'unreviewed_submission_48h', 'plan_gate_no_upgrade', 'problem_health_alert', 'connect_slack_webhook')
+            or action not in ('snooze', 'dismiss')
+            or not isinstance(target_ref, str)
+            or len(target_ref) > 200
+        ):
+            error('Staging request is invalid', '22023')
+        rows = run(
+            "SELECT staging.hiring_org_nudge_dismiss($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3, $4, $5) AS result",
+            ['uuid', 'uuid', 'text', 'text', 'text'],
+            [organization_id, principal_id, nudge_key, target_ref, action],
         )
         return safe_json_value(rows[0]['result'])
 
@@ -8936,5 +9046,1652 @@ REVOKE ALL ON FUNCTION staging.telemetry_insights_report(pg_catalog.int4)
 GRANT EXECUTE ON FUNCTION staging.telemetry_record_events(pg_catalog.jsonb) TO r23_gateway;
 GRANT EXECUTE ON FUNCTION staging.telemetry_record_feedback(pg_catalog.jsonb) TO r23_gateway;
 GRANT EXECUTE ON FUNCTION staging.telemetry_insights_report(pg_catalog.int4) TO r23_gateway;
+
+-- ============================================================================
+-- Migration 0023 Launch Maturity RPCs (Dossier Sharing, Webhooks, Diagnostics, Nudges)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION staging.hiring_dossier_share_create(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_session_id pg_catalog.text,
+  p_token_hash pg_catalog.text,
+  p_payload pg_catalog.jsonb
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_visibility pg_catalog.text;
+  v_include_ai boolean;
+  v_include_q boolean;
+  v_expires_days pg_catalog.int4;
+  v_expires_at pg_catalog.timestamptz;
+  v_id pg_catalog.uuid;
+  v_created_at pg_catalog.timestamptz;
+BEGIN
+  IF NOT staging.hiring_can_access_session(p_organization_id, p_caller_principal_id, p_session_id) THEN
+    RAISE EXCEPTION 'Session dossier share permission denied' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'Invalid dossier share token hash' USING ERRCODE = '22023';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.hiring_decisions
+    WHERE organization_id = p_organization_id AND session_id = p_session_id
+  ) THEN
+    RAISE EXCEPTION 'A published hiring decision is required before sharing a dossier' USING ERRCODE = '22023';
+  END IF;
+
+  v_visibility := CASE
+    WHEN COALESCE(p_payload ->> 'visibilityMode', 'redacted') = 'named' THEN 'named'
+    ELSE 'redacted'
+  END;
+  v_include_ai := COALESCE((p_payload ->> 'includeAiAdvisory')::boolean, true);
+  v_include_q := COALESCE((p_payload ->> 'includeVerificationQuestions')::boolean, true);
+  v_expires_days := GREATEST(1, LEAST(90, COALESCE((p_payload ->> 'expiresDays')::pg_catalog.int4, 14)));
+  v_created_at := pg_catalog.clock_timestamp();
+  v_expires_at := v_created_at + pg_catalog.make_interval(days => v_expires_days);
+
+  INSERT INTO hirearchy.dossier_share_links (
+    organization_id, session_id, created_by_principal_id, token_hash,
+    visibility_mode, include_ai_advisory, include_verification_questions,
+    expires_at, created_at
+  ) VALUES (
+    p_organization_id, p_session_id, p_caller_principal_id, p_token_hash,
+    v_visibility, v_include_ai, v_include_q,
+    v_expires_at, v_created_at
+  )
+  RETURNING id INTO v_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'id', v_id::pg_catalog.text,
+    'visibilityMode', v_visibility,
+    'includeAiAdvisory', v_include_ai,
+    'includeVerificationQuestions', v_include_q,
+    'expiresAt', pg_catalog.to_char(v_expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'revokedAt', NULL,
+    'viewCount', 0,
+    'lastViewedAt', NULL,
+    'createdAt', pg_catalog.to_char(v_created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_dossier_share_list(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_session_id pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_links pg_catalog.jsonb;
+BEGIN
+  IF NOT staging.hiring_can_access_session(p_organization_id, p_caller_principal_id, p_session_id) THEN
+    RAISE EXCEPTION 'Session dossier list permission denied' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'id', l.id::pg_catalog.text,
+        'visibilityMode', l.visibility_mode,
+        'includeAiAdvisory', l.include_ai_advisory,
+        'includeVerificationQuestions', l.include_verification_questions,
+        'expiresAt', pg_catalog.to_char(l.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'revokedAt', CASE WHEN l.revoked_at IS NULL THEN NULL ELSE pg_catalog.to_char(l.revoked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'viewCount', l.view_count,
+        'lastViewedAt', CASE WHEN l.last_viewed_at IS NULL THEN NULL ELSE pg_catalog.to_char(l.last_viewed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'createdAt', pg_catalog.to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      ) ORDER BY l.created_at DESC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_links
+  FROM hirearchy.dossier_share_links AS l
+  WHERE l.organization_id = p_organization_id
+    AND l.session_id = p_session_id;
+
+  RETURN pg_catalog.jsonb_build_object('links', v_links);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_dossier_share_revoke(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_share_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_session_id pg_catalog.text;
+BEGIN
+  SELECT session_id INTO v_session_id
+  FROM hirearchy.dossier_share_links
+  WHERE id = p_share_id AND organization_id = p_organization_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Share link not found' USING ERRCODE = '22023';
+  END IF;
+
+  IF NOT staging.hiring_can_access_session(p_organization_id, p_caller_principal_id, v_session_id) THEN
+    RAISE EXCEPTION 'Session dossier revoke permission denied' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE hirearchy.dossier_share_links
+  SET revoked_at = COALESCE(revoked_at, pg_catalog.clock_timestamp())
+  WHERE id = p_share_id AND organization_id = p_organization_id;
+
+  RETURN pg_catalog.jsonb_build_object('ok', true);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_dossier_share_resolve(
+  p_token_hash pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, pg_temp
+AS $function$
+DECLARE
+  v_link hirearchy.dossier_share_links%ROWTYPE;
+  v_dec record;
+  v_sess hirearchy.assessment_sessions%ROWTYPE;
+  v_meta hirearchy.hiring_session_metadata%ROWTYPE;
+  v_cp hirearchy.candidate_profiles%ROWTYPE;
+  v_has_cp boolean := false;
+  v_org_name pg_catalog.text;
+  v_files_changed pg_catalog.int4 := 0;
+  v_revision_count pg_catalog.int4 := 0;
+  v_exec_passed pg_catalog.int4 := 0;
+  v_exec_total pg_catalog.int4 := 0;
+  v_ai_count pg_catalog.int4 := 0;
+  v_duration_minutes pg_catalog.int4;
+  v_display_name pg_catalog.text;
+  v_first_name pg_catalog.text;
+  v_last_part pg_catalog.text;
+  v_parts pg_catalog.text[];
+  v_report pg_catalog.jsonb;
+BEGIN
+  IF p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$' THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT * INTO v_link
+  FROM hirearchy.dossier_share_links
+  WHERE token_hash = p_token_hash
+    AND revoked_at IS NULL
+    AND expires_at > pg_catalog.clock_timestamp()
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  UPDATE hirearchy.dossier_share_links
+  SET view_count = view_count + 1,
+      last_viewed_at = pg_catalog.clock_timestamp()
+  WHERE id = v_link.id;
+
+  SELECT COALESCE(NULLIF(trim(display_name), ''), 'Organization')
+  INTO v_org_name
+  FROM hirearchy.organizations
+  WHERE id = v_link.organization_id;
+
+  SELECT d.*,
+         COALESCE(NULLIF(trim(dp.display_name), ''), du.email, 'Evaluator') AS decided_by_name
+  INTO v_dec
+  FROM hirearchy.hiring_decisions AS d
+  LEFT JOIN hirearchy.application_principals AS dp ON dp.id = d.decided_by_principal_id
+  LEFT JOIN auth.users AS du ON du.id = dp.auth_user_id
+  WHERE d.session_id = v_link.session_id
+    AND d.organization_id = v_link.organization_id;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT * INTO v_sess
+  FROM hirearchy.assessment_sessions
+  WHERE id = v_link.session_id
+    AND organization_id = v_link.organization_id;
+
+  SELECT * INTO v_meta
+  FROM hirearchy.hiring_session_metadata
+  WHERE session_id = v_link.session_id
+    AND organization_id = v_link.organization_id;
+
+  IF FOUND THEN
+    SELECT * INTO v_cp
+    FROM hirearchy.candidate_profiles
+    WHERE principal_id = COALESCE(
+      v_meta.candidate_principal_id,
+      (SELECT cp2.principal_id FROM hirearchy.candidate_profiles AS cp2 WHERE lower(cp2.email) = v_meta.candidate_email LIMIT 1)
+    );
+    v_has_cp := FOUND;
+  END IF;
+
+  SELECT COUNT(DISTINCT file_path)::pg_catalog.int4, COUNT(*)::pg_catalog.int4
+  INTO v_files_changed, v_revision_count
+  FROM hirearchy.candidate_file_revisions
+  WHERE organization_id = v_link.organization_id
+    AND session_id = v_link.session_id;
+
+  SELECT
+    COUNT(*) FILTER (WHERE status = 'COMPLETED' AND exit_code = 0)::pg_catalog.int4,
+    COUNT(*)::pg_catalog.int4
+  INTO v_exec_passed, v_exec_total
+  FROM hirearchy.candidate_execution_operations
+  WHERE organization_id = v_link.organization_id
+    AND session_id = v_link.session_id;
+
+  SELECT COUNT(*)::pg_catalog.int4
+  INTO v_ai_count
+  FROM hirearchy.candidate_ai_interactions
+  WHERE organization_id = v_link.organization_id
+    AND session_id = v_link.session_id;
+
+  v_duration_minutes := CASE
+    WHEN v_sess.activated_at IS NOT NULL AND v_sess.submitted_at IS NOT NULL AND v_sess.submitted_at >= v_sess.activated_at
+      THEN GREATEST(1, ROUND(EXTRACT(EPOCH FROM (v_sess.submitted_at - v_sess.activated_at)) / 60.0)::pg_catalog.int4)
+    ELSE NULL
+  END;
+
+  IF v_link.visibility_mode = 'named' THEN
+    v_display_name := CASE
+      WHEN v_has_cp AND NULLIF(trim(v_cp.full_name), '') IS NOT NULL THEN trim(v_cp.full_name)
+      WHEN v_has_cp AND v_cp.candidate_code IS NOT NULL THEN 'Candidate ' || v_cp.candidate_code
+      ELSE 'Candidate'
+    END;
+  ELSE
+    IF v_has_cp AND NULLIF(trim(v_cp.full_name), '') IS NOT NULL THEN
+      v_parts := pg_catalog.regexp_split_to_array(trim(v_cp.full_name), '\s+');
+      v_first_name := COALESCE(v_parts[1], 'Candidate');
+      IF pg_catalog.array_length(v_parts, 1) >= 2 THEN
+        v_last_part := pg_catalog.left(v_parts[pg_catalog.array_length(v_parts, 1)], 1) || '.';
+        v_display_name := v_first_name || ' ' || v_last_part;
+      ELSE
+        v_display_name := v_first_name;
+      END IF;
+    ELSIF v_has_cp AND v_cp.candidate_code IS NOT NULL THEN
+      v_display_name := 'Candidate ' || v_cp.candidate_code;
+    ELSE
+      v_display_name := 'Redacted Candidate';
+    END IF;
+  END IF;
+
+  IF NOT v_link.include_ai_advisory OR v_dec.performance_report IS NULL THEN
+    v_report := NULL;
+  ELSIF NOT v_link.include_verification_questions THEN
+    v_report := v_dec.performance_report || pg_catalog.jsonb_build_object('suggestedNextInterviewQuestions', '[]'::pg_catalog.jsonb);
+  ELSE
+    v_report := v_dec.performance_report;
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'shareId', v_link.id::pg_catalog.text,
+    'visibilityMode', v_link.visibility_mode,
+    'includeAiAdvisory', v_link.include_ai_advisory,
+    'includeVerificationQuestions', v_link.include_verification_questions,
+    'expiresAt', pg_catalog.to_char(v_link.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'viewCount', v_link.view_count + 1,
+    'createdAt', pg_catalog.to_char(v_link.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'organizationName', v_org_name,
+    'sessionId', v_link.session_id,
+    'scenarioTitle', COALESCE(v_sess.scenario_title, 'Engineering Assessment'),
+    'targetRole', COALESCE(v_meta.target_role, ''),
+    'experienceLevel', COALESCE(v_meta.experience_level, 'mid'),
+    'skills', COALESCE(v_meta.skills, '[]'::pg_catalog.jsonb),
+    'submittedAt', CASE WHEN v_sess.submitted_at IS NULL THEN NULL ELSE pg_catalog.to_char(v_sess.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+    'candidate', pg_catalog.jsonb_build_object(
+      'candidateCode', CASE WHEN v_has_cp THEN v_cp.candidate_code ELSE NULL END,
+      'displayName', v_display_name,
+      'headlineRole', CASE WHEN v_link.visibility_mode = 'named' AND v_has_cp THEN NULLIF(trim(v_cp.headline_role), '') ELSE NULL END,
+      'locationCity', CASE WHEN v_link.visibility_mode = 'named' AND v_has_cp THEN NULLIF(trim(v_cp.location_city), '') ELSE NULL END,
+      'locationCountry', CASE WHEN v_link.visibility_mode = 'named' AND v_has_cp THEN NULLIF(trim(v_cp.location_country), '') ELSE NULL END
+    ),
+    'decision', pg_catalog.jsonb_build_object(
+      'decision', v_dec.decision,
+      'decidedByName', v_dec.decided_by_name,
+      'nextStageLabel', v_dec.next_stage_label,
+      'publishedAt', pg_catalog.to_char(v_dec.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      'candidateStrengths', v_dec.candidate_strengths,
+      'candidateWeaknesses', v_dec.candidate_weaknesses,
+      'candidateFeedbackNote', v_dec.candidate_feedback_note
+    ),
+    'evidenceSummary', pg_catalog.jsonb_build_object(
+      'durationMinutes', v_duration_minutes,
+      'filesChanged', v_files_changed,
+      'revisionCount', v_revision_count,
+      'executionRunsPassed', v_exec_passed,
+      'executionRunsTotal', v_exec_total,
+      'aiInteractionsCount', v_ai_count
+    ),
+    'performanceReport', v_report
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_webhook_list(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+  v_role pg_catalog.text;
+  v_webhooks pg_catalog.jsonb;
+  v_deliveries pg_catalog.jsonb;
+BEGIN
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations WHERE id = p_organization_id;
+
+  SELECT role INTO v_role
+  FROM hirearchy.organization_memberships
+  WHERE organization_id = p_organization_id
+    AND principal_id = p_caller_principal_id
+    AND status = 'active'
+    AND revoked_at IS NULL;
+
+  IF NOT FOUND OR (v_owner_id IS DISTINCT FROM p_caller_principal_id AND v_role <> 'cto') THEN
+    RAISE EXCEPTION 'Webhook management requires CTO or owner permission' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'id', w.id::pg_catalog.text,
+        'label', w.label,
+        'targetUrl', w.target_url,
+        'payloadMode', w.payload_mode,
+        'eventTypes', w.event_types,
+        'signingSecretPrefix', w.signing_secret_prefix,
+        'isActive', w.is_active,
+        'consecutiveFailures', w.consecutive_failures,
+        'disabledReason', w.disabled_reason,
+        'lastDeliveredAt', CASE WHEN w.last_delivered_at IS NULL THEN NULL ELSE pg_catalog.to_char(w.last_delivered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'createdAt', pg_catalog.to_char(w.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      ) ORDER BY w.created_at DESC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_webhooks
+  FROM hirearchy.organization_webhooks AS w
+  WHERE w.organization_id = p_organization_id;
+
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      d_obj ORDER BY d_created DESC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_deliveries
+  FROM (
+    SELECT d.created_at AS d_created,
+      pg_catalog.jsonb_build_object(
+        'id', d.id::pg_catalog.text,
+        'webhookId', d.webhook_id::pg_catalog.text,
+        'eventType', d.event_type,
+        'status', d.status,
+        'httpStatus', d.http_status,
+        'latencyMs', d.latency_ms,
+        'errorSummary', d.error_summary,
+        'createdAt', pg_catalog.to_char(d.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      ) AS d_obj
+    FROM hirearchy.webhook_deliveries AS d
+    WHERE d.organization_id = p_organization_id
+    ORDER BY d.created_at DESC
+    LIMIT 25
+  ) AS recent_del;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'webhooks', v_webhooks,
+    'deliveries', v_deliveries
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_webhook_upsert(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_payload pg_catalog.jsonb
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+  v_role pg_catalog.text;
+  v_webhook_id pg_catalog.uuid;
+  v_label pg_catalog.text;
+  v_target_url pg_catalog.text;
+  v_payload_mode pg_catalog.text;
+  v_event_types pg_catalog.jsonb;
+  v_ciphertext pg_catalog.text;
+  v_prefix pg_catalog.text;
+  v_is_active boolean;
+  v_count pg_catalog.int4;
+  v_row hirearchy.organization_webhooks%ROWTYPE;
+BEGIN
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations WHERE id = p_organization_id;
+
+  SELECT role INTO v_role
+  FROM hirearchy.organization_memberships
+  WHERE organization_id = p_organization_id
+    AND principal_id = p_caller_principal_id
+    AND status = 'active'
+    AND revoked_at IS NULL;
+
+  IF NOT FOUND OR (v_owner_id IS DISTINCT FROM p_caller_principal_id AND v_role <> 'cto') THEN
+    RAISE EXCEPTION 'Webhook management requires CTO or owner permission' USING ERRCODE = '42501';
+  END IF;
+
+  v_webhook_id := NULLIF(trim(COALESCE(p_payload ->> 'webhookId', '')), '')::pg_catalog.uuid;
+  v_label := NULLIF(left(trim(COALESCE(p_payload ->> 'label', '')), 80), '');
+  v_target_url := NULLIF(trim(COALESCE(p_payload ->> 'targetUrl', '')), '');
+  v_payload_mode := COALESCE(NULLIF(trim(p_payload ->> 'payloadMode'), ''), 'json');
+  v_ciphertext := NULLIF(trim(COALESCE(p_payload ->> 'signingSecretCiphertext', '')), '');
+  v_prefix := NULLIF(left(trim(COALESCE(p_payload ->> 'signingSecretPrefix', '')), 16), '');
+  v_event_types := CASE
+    WHEN pg_catalog.jsonb_typeof(p_payload -> 'eventTypes') = 'array' THEN p_payload -> 'eventTypes'
+    ELSE NULL
+  END;
+
+  IF v_webhook_id IS NULL THEN
+    SELECT COUNT(*)::pg_catalog.int4 INTO v_count
+    FROM hirearchy.organization_webhooks
+    WHERE organization_id = p_organization_id;
+
+    IF v_count >= 10 THEN
+      RAISE EXCEPTION 'Maximum of 10 webhook endpoints per organization reached' USING ERRCODE = '22023';
+    END IF;
+
+    IF v_label IS NULL OR v_target_url IS NULL OR v_target_url !~ '^https?://' OR length(v_target_url) < 12 OR length(v_target_url) > 500 THEN
+      RAISE EXCEPTION 'Valid label and target URL are required' USING ERRCODE = '22023';
+    END IF;
+
+    IF v_payload_mode NOT IN ('json', 'slack_block_kit') THEN
+      RAISE EXCEPTION 'Invalid webhook payload mode' USING ERRCODE = '22023';
+    END IF;
+
+    IF v_ciphertext IS NULL OR v_prefix IS NULL THEN
+      RAISE EXCEPTION 'Webhook signing secret material is required' USING ERRCODE = '22023';
+    END IF;
+
+    INSERT INTO hirearchy.organization_webhooks (
+      organization_id, created_by_principal_id, label, target_url,
+      payload_mode, event_types, signing_secret_ciphertext, signing_secret_prefix,
+      is_active
+    ) VALUES (
+      p_organization_id,
+      p_caller_principal_id,
+      v_label,
+      v_target_url,
+      v_payload_mode,
+      COALESCE(v_event_types, '["candidate.started","candidate.submitted","verdict.published","handoff.updated"]'::pg_catalog.jsonb),
+      v_ciphertext,
+      v_prefix,
+      COALESCE((p_payload ->> 'isActive')::boolean, true)
+    )
+    RETURNING * INTO v_row;
+  ELSE
+    SELECT * INTO v_row
+    FROM hirearchy.organization_webhooks
+    WHERE id = v_webhook_id AND organization_id = p_organization_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Webhook not found' USING ERRCODE = '22023';
+    END IF;
+
+    IF v_target_url IS NOT NULL AND (v_target_url !~ '^https?://' OR length(v_target_url) < 12 OR length(v_target_url) > 500) THEN
+      RAISE EXCEPTION 'Invalid webhook target URL' USING ERRCODE = '22023';
+    END IF;
+
+    IF p_payload ? 'payloadMode' AND v_payload_mode NOT IN ('json', 'slack_block_kit') THEN
+      RAISE EXCEPTION 'Invalid webhook payload mode' USING ERRCODE = '22023';
+    END IF;
+
+    v_is_active := COALESCE((p_payload ->> 'isActive')::boolean, v_row.is_active);
+
+    UPDATE hirearchy.organization_webhooks
+    SET label = COALESCE(v_label, label),
+        target_url = COALESCE(v_target_url, target_url),
+        payload_mode = CASE WHEN p_payload ? 'payloadMode' THEN v_payload_mode ELSE payload_mode END,
+        event_types = COALESCE(v_event_types, event_types),
+        signing_secret_ciphertext = COALESCE(v_ciphertext, signing_secret_ciphertext),
+        signing_secret_prefix = COALESCE(v_prefix, signing_secret_prefix),
+        is_active = v_is_active,
+        consecutive_failures = CASE WHEN v_is_active AND NOT v_row.is_active THEN 0 ELSE consecutive_failures END,
+        disabled_reason = CASE WHEN v_is_active THEN '' ELSE disabled_reason END,
+        updated_at = pg_catalog.clock_timestamp()
+    WHERE id = v_webhook_id AND organization_id = p_organization_id
+    RETURNING * INTO v_row;
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'webhook', pg_catalog.jsonb_build_object(
+      'id', v_row.id::pg_catalog.text,
+      'label', v_row.label,
+      'targetUrl', v_row.target_url,
+      'payloadMode', v_row.payload_mode,
+      'eventTypes', v_row.event_types,
+      'signingSecretPrefix', v_row.signing_secret_prefix,
+      'isActive', v_row.is_active,
+      'consecutiveFailures', v_row.consecutive_failures,
+      'disabledReason', v_row.disabled_reason,
+      'lastDeliveredAt', CASE WHEN v_row.last_delivered_at IS NULL THEN NULL ELSE pg_catalog.to_char(v_row.last_delivered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+      'createdAt', pg_catalog.to_char(v_row.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+    )
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_webhook_delete(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_webhook_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_owner_id pg_catalog.uuid;
+  v_role pg_catalog.text;
+BEGIN
+  SELECT owner_principal_id INTO v_owner_id
+  FROM hirearchy.organizations WHERE id = p_organization_id;
+
+  SELECT role INTO v_role
+  FROM hirearchy.organization_memberships
+  WHERE organization_id = p_organization_id
+    AND principal_id = p_caller_principal_id
+    AND status = 'active'
+    AND revoked_at IS NULL;
+
+  IF NOT FOUND OR (v_owner_id IS DISTINCT FROM p_caller_principal_id AND v_role <> 'cto') THEN
+    RAISE EXCEPTION 'Webhook management requires CTO or owner permission' USING ERRCODE = '42501';
+  END IF;
+
+  DELETE FROM hirearchy.organization_webhooks
+  WHERE id = p_webhook_id AND organization_id = p_organization_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Webhook not found' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object('ok', true);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.webhook_enqueue_session_event(
+  p_session_id pg_catalog.text,
+  p_event_type pg_catalog.text,
+  p_payload pg_catalog.jsonb DEFAULT '{}'::pg_catalog.jsonb
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+DECLARE
+  v_sess record;
+  v_wh record;
+  v_event_id pg_catalog.uuid;
+  v_del_id pg_catalog.uuid;
+  v_envelope pg_catalog.jsonb;
+  v_out pg_catalog.jsonb := '[]'::pg_catalog.jsonb;
+BEGIN
+  IF p_event_type NOT IN ('candidate.started', 'candidate.submitted', 'verdict.published', 'handoff.updated') THEN
+    RAISE EXCEPTION 'Invalid webhook event type' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT
+    s.id,
+    s.organization_id,
+    s.scenario_title,
+    s.status AS lifecycle_status,
+    COALESCE(NULLIF(trim(o.display_name), ''), 'Organization') AS org_name,
+    COALESCE(m.target_role, '') AS target_role,
+    COALESCE(m.experience_level, 'mid') AS experience_level,
+    d.decision,
+    d.next_stage_label,
+    d.handoff_status
+  INTO v_sess
+  FROM hirearchy.assessment_sessions AS s
+  JOIN hirearchy.organizations AS o ON o.id = s.organization_id
+  LEFT JOIN hirearchy.hiring_session_metadata AS m ON m.session_id = s.id
+  LEFT JOIN hirearchy.hiring_decisions AS d ON d.session_id = s.id
+  WHERE s.id = p_session_id;
+
+  IF NOT FOUND THEN
+    RETURN '[]'::pg_catalog.jsonb;
+  END IF;
+
+  FOR v_wh IN
+    SELECT *
+    FROM hirearchy.organization_webhooks
+    WHERE organization_id = v_sess.organization_id
+      AND is_active = true
+      AND event_types ? p_event_type
+    ORDER BY created_at ASC
+  LOOP
+    v_event_id := pg_catalog.gen_random_uuid();
+    v_envelope := pg_catalog.jsonb_build_object(
+      'eventId', v_event_id::pg_catalog.text,
+      'eventType', p_event_type,
+      'occurredAt', pg_catalog.to_char(pg_catalog.clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      'organizationId', v_sess.organization_id::pg_catalog.text,
+      'organizationName', v_sess.org_name,
+      'sessionId', v_sess.id,
+      'scenarioTitle', v_sess.scenario_title,
+      'targetRole', v_sess.target_role,
+      'experienceLevel', v_sess.experience_level,
+      'lifecycleStatus', v_sess.lifecycle_status,
+      'decision', v_sess.decision,
+      'nextStageLabel', v_sess.next_stage_label,
+      'handoffStatus', v_sess.handoff_status
+    ) || COALESCE(p_payload, '{}'::pg_catalog.jsonb);
+
+    INSERT INTO hirearchy.webhook_deliveries (
+      webhook_id, organization_id, event_id, event_type, session_id,
+      status, attempt_count, request_payload
+    ) VALUES (
+      v_wh.id, v_sess.organization_id, v_event_id, p_event_type, v_sess.id,
+      'pending', 0, v_envelope
+    )
+    RETURNING id INTO v_del_id;
+
+    v_out := v_out || pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'deliveryId', v_del_id::pg_catalog.text,
+        'webhookId', v_wh.id::pg_catalog.text,
+        'organizationId', v_sess.organization_id::pg_catalog.text,
+        'targetUrl', v_wh.target_url,
+        'payloadMode', v_wh.payload_mode,
+        'signingSecretCiphertext', v_wh.signing_secret_ciphertext,
+        'eventId', v_event_id::pg_catalog.text,
+        'eventType', p_event_type,
+        'sessionId', v_sess.id,
+        'payload', v_envelope
+      )
+    );
+  END LOOP;
+
+  RETURN v_out;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.webhook_enqueue_ping(
+  p_organization_id pg_catalog.uuid,
+  p_webhook_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+DECLARE
+  v_wh hirearchy.organization_webhooks%ROWTYPE;
+  v_org_name pg_catalog.text;
+  v_event_id pg_catalog.uuid;
+  v_del_id pg_catalog.uuid;
+  v_envelope pg_catalog.jsonb;
+BEGIN
+  SELECT * INTO v_wh
+  FROM hirearchy.organization_webhooks
+  WHERE id = p_webhook_id AND organization_id = p_organization_id;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT COALESCE(NULLIF(trim(display_name), ''), 'Organization')
+  INTO v_org_name
+  FROM hirearchy.organizations
+  WHERE id = p_organization_id;
+
+  v_event_id := pg_catalog.gen_random_uuid();
+  v_envelope := pg_catalog.jsonb_build_object(
+    'eventId', v_event_id::pg_catalog.text,
+    'eventType', 'webhook.ping',
+    'occurredAt', pg_catalog.to_char(pg_catalog.clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'organizationId', p_organization_id::pg_catalog.text,
+    'organizationName', COALESCE(v_org_name, 'Organization'),
+    'webhookLabel', v_wh.label
+  );
+
+  INSERT INTO hirearchy.webhook_deliveries (
+    webhook_id, organization_id, event_id, event_type, session_id,
+    status, attempt_count, request_payload
+  ) VALUES (
+    v_wh.id, p_organization_id, v_event_id, 'webhook.ping', NULL,
+    'pending', 0, v_envelope
+  )
+  RETURNING id INTO v_del_id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'deliveryId', v_del_id::pg_catalog.text,
+    'webhookId', v_wh.id::pg_catalog.text,
+    'organizationId', p_organization_id::pg_catalog.text,
+    'targetUrl', v_wh.target_url,
+    'payloadMode', v_wh.payload_mode,
+    'signingSecretCiphertext', v_wh.signing_secret_ciphertext,
+    'eventId', v_event_id::pg_catalog.text,
+    'eventType', 'webhook.ping',
+    'sessionId', NULL,
+    'payload', v_envelope
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.webhook_mark_delivery(
+  p_delivery_id pg_catalog.uuid,
+  p_status pg_catalog.text,
+  p_http_status pg_catalog.int4,
+  p_latency_ms pg_catalog.int4,
+  p_error_summary pg_catalog.text,
+  p_next_attempt_at pg_catalog.timestamptz DEFAULT NULL
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+DECLARE
+  v_del hirearchy.webhook_deliveries%ROWTYPE;
+  v_safe_err pg_catalog.text := left(COALESCE(p_error_summary, ''), 400);
+BEGIN
+  IF p_status NOT IN ('pending', 'delivered', 'failed', 'blocked_ssrf') THEN
+    RAISE EXCEPTION 'Invalid delivery status' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_del
+  FROM hirearchy.webhook_deliveries
+  WHERE id = p_delivery_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN pg_catalog.jsonb_build_object('ok', false);
+  END IF;
+
+  UPDATE hirearchy.webhook_deliveries
+  SET status = p_status,
+      attempt_count = attempt_count + 1,
+      http_status = p_http_status,
+      latency_ms = CASE WHEN p_latency_ms IS NULL THEN NULL ELSE GREATEST(0, p_latency_ms) END,
+      error_summary = v_safe_err,
+      next_attempt_at = COALESCE(p_next_attempt_at, next_attempt_at),
+      delivered_at = CASE WHEN p_status = 'delivered' THEN pg_catalog.clock_timestamp() ELSE delivered_at END
+  WHERE id = p_delivery_id;
+
+  IF p_status = 'delivered' THEN
+    UPDATE hirearchy.organization_webhooks
+    SET consecutive_failures = 0,
+        disabled_reason = '',
+        last_delivered_at = pg_catalog.clock_timestamp(),
+        updated_at = pg_catalog.clock_timestamp()
+    WHERE id = v_del.webhook_id;
+  ELSIF p_status IN ('failed', 'blocked_ssrf') AND p_next_attempt_at IS NULL THEN
+    UPDATE hirearchy.organization_webhooks
+    SET consecutive_failures = consecutive_failures + 1,
+        is_active = CASE WHEN consecutive_failures + 1 >= 10 THEN false ELSE is_active END,
+        disabled_reason = CASE
+          WHEN consecutive_failures + 1 >= 10 THEN COALESCE(NULLIF(v_safe_err, ''), 'Disabled after 10 consecutive delivery failures')
+          ELSE disabled_reason
+        END,
+        updated_at = pg_catalog.clock_timestamp()
+    WHERE id = v_del.webhook_id;
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object('ok', true);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_org_problem_health(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_problems pg_catalog.jsonb;
+  v_benchmarks pg_catalog.jsonb;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.organization_memberships
+    WHERE organization_id = p_organization_id
+      AND principal_id = p_caller_principal_id
+      AND status = 'active'
+      AND revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
+  END IF;
+
+  WITH session_rows AS (
+    SELECT
+      m.definition_id,
+      s.id AS session_id,
+      s.activated_at,
+      s.submitted_at,
+      COALESCE(op_stats.total_ops, 0) AS total_ops,
+      COALESCE(op_stats.err_ops, 0) AS err_ops,
+      fb.avg_rating
+    FROM hirearchy.hiring_session_metadata AS m
+    JOIN hirearchy.assessment_sessions AS s ON s.id = m.session_id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*) AS total_ops,
+        COUNT(*) FILTER (WHERE eo.status IN ('FAILED', 'TIMED_OUT', 'UNKNOWN')) AS err_ops
+      FROM hirearchy.candidate_execution_operations AS eo
+      WHERE eo.session_id = s.id
+    ) AS op_stats ON true
+    LEFT JOIN LATERAL (
+      SELECT AVG(f.rating)::numeric AS avg_rating
+      FROM hirearchy.product_feedback AS f
+      WHERE f.session_id = s.id AND f.actor_type = 'candidate'
+    ) AS fb ON true
+    WHERE m.organization_id = p_organization_id
+      AND m.definition_id IS NOT NULL
+  ),
+  agg AS (
+    SELECT
+      lib.definition_id,
+      d.title,
+      lib.source_kind,
+      COALESCE(NULLIF(trim(lib.target_role), ''), 'General') AS target_role,
+      lib.experience_level,
+      d.duration_minutes,
+      COUNT(sr.session_id)::pg_catalog.int4 AS issued,
+      COUNT(sr.session_id) FILTER (WHERE sr.activated_at IS NOT NULL)::pg_catalog.int4 AS started,
+      COUNT(sr.session_id) FILTER (WHERE sr.submitted_at IS NOT NULL)::pg_catalog.int4 AS submitted,
+      COALESCE(ROUND((COUNT(sr.session_id) FILTER (WHERE sr.submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(sr.session_id) FILTER (WHERE sr.activated_at IS NOT NULL), 0), 1), 0) AS completion_pct,
+      ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN sr.submitted_at IS NOT NULL AND sr.activated_at IS NOT NULL AND sr.submitted_at >= sr.activated_at THEN EXTRACT(EPOCH FROM (sr.submitted_at - sr.activated_at)) / 60.0 ELSE NULL END))::numeric, 1) AS median_minutes,
+      COALESCE(ROUND((SUM(sr.err_ops) * 100.0) / NULLIF(SUM(sr.total_ops), 0), 1), 0) AS err_pct,
+      ROUND(AVG(sr.avg_rating)::numeric, 2) AS avg_rating
+    FROM hirearchy.assessment_library_entries AS lib
+    JOIN hirearchy.assessment_definitions AS def ON def.id = lib.definition_id
+    JOIN hirearchy.assessment_drafts AS d
+      ON d.definition_id = def.id
+     AND d.organization_id = def.organization_id
+     AND d.version = def.draft_version
+    LEFT JOIN session_rows AS sr ON sr.definition_id = lib.definition_id
+    WHERE lib.organization_id = p_organization_id
+    GROUP BY lib.definition_id, d.title, lib.source_kind, lib.target_role, lib.experience_level, d.duration_minutes, lib.updated_at
+    ORDER BY lib.updated_at DESC
+  )
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'definitionId', a.definition_id::pg_catalog.text,
+        'title', a.title,
+        'sourceKind', a.source_kind,
+        'targetRole', a.target_role,
+        'experienceLevel', a.experience_level,
+        'durationMinutes', a.duration_minutes,
+        'issued', a.issued,
+        'started', a.started,
+        'submitted', a.submitted,
+        'completionRatePct', a.completion_pct,
+        'medianMinutes', a.median_minutes,
+        'executionErrorRatePct', a.err_pct,
+        'avgCandidateRating', a.avg_rating,
+        'healthFlag', flag,
+        'diagnosticHint', CASE flag
+          WHEN 'low_sample' THEN 'Collect at least 3 started candidate sessions to calibrate completion and timing.'
+          WHEN 'runner_errors' THEN ROUND(a.err_pct, 0)::pg_catalog.text || '% of sandbox runs failed — inspect starter tests or recipe setup.'
+          WHEN 'high_dropoff' THEN 'Completion is ' || ROUND(a.completion_pct, 0)::pg_catalog.text || '% — review brief clarity or trim scope.'
+          WHEN 'time_pressure' THEN 'Median solve (' || COALESCE(ROUND(a.median_minutes, 0)::pg_catalog.text, '—') || 'm) is near the ' || a.duration_minutes::pg_catalog.text || 'm cap — consider extending duration.'
+          ELSE 'Healthy calibration across completion, timing, and execution stability.'
+        END
+      )
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_problems
+  FROM (
+    SELECT agg.*,
+      CASE
+        WHEN agg.started < 3 THEN 'low_sample'
+        WHEN agg.err_pct >= 35 THEN 'runner_errors'
+        WHEN agg.completion_pct < 55 THEN 'high_dropoff'
+        WHEN COALESCE(agg.median_minutes, 0) >= agg.duration_minutes * 0.9 THEN 'time_pressure'
+        ELSE 'healthy'
+      END AS flag
+    FROM agg
+  ) AS a;
+
+  WITH org_buckets AS (
+    SELECT DISTINCT
+      COALESCE(NULLIF(trim(target_role), ''), 'General') AS target_role,
+      experience_level
+    FROM (
+      SELECT target_role, experience_level
+      FROM hirearchy.assessment_library_entries
+      WHERE organization_id = p_organization_id
+      UNION ALL
+      SELECT target_role, experience_level
+      FROM hirearchy.hiring_session_metadata
+      WHERE organization_id = p_organization_id
+    ) AS raw_b
+    WHERE COALESCE(NULLIF(trim(target_role), ''), '') <> ''
+  ),
+  org_stats AS (
+    SELECT
+      COALESCE(NULLIF(trim(m.target_role), ''), 'General') AS target_role,
+      m.experience_level,
+      ROUND((COUNT(*) FILTER (WHERE s.submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL), 0), 1) AS org_completion_pct,
+      ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN s.submitted_at IS NOT NULL AND s.activated_at IS NOT NULL AND s.submitted_at >= s.activated_at THEN EXTRACT(EPOCH FROM (s.submitted_at - s.activated_at)) / 60.0 ELSE NULL END))::numeric, 1) AS org_median_minutes
+    FROM hirearchy.hiring_session_metadata AS m
+    JOIN hirearchy.assessment_sessions AS s ON s.id = m.session_id
+    WHERE m.organization_id = p_organization_id
+    GROUP BY COALESCE(NULLIF(trim(m.target_role), ''), 'General'), m.experience_level
+  ),
+  plat_role_level AS (
+    SELECT
+      COALESCE(NULLIF(trim(m.target_role), ''), 'General') AS target_role,
+      m.experience_level,
+      COUNT(DISTINCT s.organization_id)::pg_catalog.int4 AS org_cnt,
+      COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL)::pg_catalog.int4 AS started_cnt,
+      ROUND((COUNT(*) FILTER (WHERE s.submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL), 0), 1) AS completion_pct,
+      ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN s.submitted_at IS NOT NULL AND s.activated_at IS NOT NULL AND s.submitted_at >= s.activated_at THEN EXTRACT(EPOCH FROM (s.submitted_at - s.activated_at)) / 60.0 ELSE NULL END))::numeric, 1) AS median_minutes,
+      ROUND((COUNT(*) FILTER (WHERE dec.decision = 'accepted') * 100.0) / NULLIF(COUNT(dec.session_id), 0), 1) AS acceptance_pct
+    FROM hirearchy.hiring_session_metadata AS m
+    JOIN hirearchy.assessment_sessions AS s ON s.id = m.session_id
+    LEFT JOIN hirearchy.hiring_decisions AS dec ON dec.session_id = s.id
+    GROUP BY COALESCE(NULLIF(trim(m.target_role), ''), 'General'), m.experience_level
+    HAVING COUNT(DISTINCT s.organization_id) >= 5 AND COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL) >= 15
+  ),
+  plat_role AS (
+    SELECT
+      COALESCE(NULLIF(trim(m.target_role), ''), 'General') AS target_role,
+      COUNT(DISTINCT s.organization_id)::pg_catalog.int4 AS org_cnt,
+      COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL)::pg_catalog.int4 AS started_cnt,
+      ROUND((COUNT(*) FILTER (WHERE s.submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL), 0), 1) AS completion_pct,
+      ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN s.submitted_at IS NOT NULL AND s.activated_at IS NOT NULL AND s.submitted_at >= s.activated_at THEN EXTRACT(EPOCH FROM (s.submitted_at - s.activated_at)) / 60.0 ELSE NULL END))::numeric, 1) AS median_minutes,
+      ROUND((COUNT(*) FILTER (WHERE dec.decision = 'accepted') * 100.0) / NULLIF(COUNT(dec.session_id), 0), 1) AS acceptance_pct
+    FROM hirearchy.hiring_session_metadata AS m
+    JOIN hirearchy.assessment_sessions AS s ON s.id = m.session_id
+    LEFT JOIN hirearchy.hiring_decisions AS dec ON dec.session_id = s.id
+    GROUP BY COALESCE(NULLIF(trim(m.target_role), ''), 'General')
+    HAVING COUNT(DISTINCT s.organization_id) >= 5 AND COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL) >= 15
+  )
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'targetRole', ob.target_role,
+        'experienceLevel', ob.experience_level,
+        'benchmarkScope', CASE WHEN prl.target_role IS NOT NULL THEN 'role_level' ELSE 'role' END,
+        'orgCompletionRatePct', os.org_completion_pct,
+        'orgMedianMinutes', os.org_median_minutes,
+        'platformMedianCompletionRatePct', COALESCE(prl.completion_pct, pr.completion_pct),
+        'platformMedianMinutes', COALESCE(prl.median_minutes, pr.median_minutes),
+        'platformAcceptanceRatePct', COALESCE(prl.acceptance_pct, pr.acceptance_pct),
+        'sampleSessions', COALESCE(prl.started_cnt, pr.started_cnt, 0)
+      ) ORDER BY ob.target_role ASC, ob.experience_level ASC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_benchmarks
+  FROM org_buckets AS ob
+  LEFT JOIN org_stats AS os
+    ON os.target_role = ob.target_role AND os.experience_level = ob.experience_level
+  LEFT JOIN plat_role_level AS prl
+    ON prl.target_role = ob.target_role AND prl.experience_level = ob.experience_level
+  LEFT JOIN plat_role AS pr
+    ON pr.target_role = ob.target_role;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'problems', v_problems,
+    'benchmarks', v_benchmarks
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_org_nudges_get(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_org_id_text pg_catalog.text := p_organization_id::pg_catalog.text;
+  v_unreviewed_cnt pg_catalog.int4 := 0;
+  v_plan_tier pg_catalog.text := 'none';
+  v_credits_purchased pg_catalog.int4 := 0;
+  v_credits_used pg_catalog.int4 := 0;
+  v_gate_hits pg_catalog.int4 := 0;
+  v_first_joined pg_catalog.timestamptz;
+  v_session_cnt pg_catalog.int4 := 0;
+  v_webhook_cnt pg_catalog.int4 := 0;
+  v_health_alerts pg_catalog.int4 := 0;
+  v_first_alert_def pg_catalog.text := '';
+  v_nudges pg_catalog.jsonb;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.organization_memberships
+    WHERE organization_id = p_organization_id
+      AND principal_id = p_caller_principal_id
+      AND status = 'active'
+      AND revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT MIN(joined_at) INTO v_first_joined
+  FROM hirearchy.organization_memberships
+  WHERE organization_id = p_organization_id;
+
+  SELECT COUNT(*)::pg_catalog.int4 INTO v_session_cnt
+  FROM hirearchy.assessment_sessions
+  WHERE organization_id = p_organization_id;
+
+  SELECT COUNT(*)::pg_catalog.int4 INTO v_unreviewed_cnt
+  FROM hirearchy.assessment_sessions AS s
+  WHERE s.organization_id = p_organization_id
+    AND s.status = 'SUBMITTED'
+    AND s.submitted_at <= pg_catalog.clock_timestamp() - INTERVAL '48 hours'
+    AND NOT EXISTS (
+      SELECT 1 FROM hirearchy.hiring_decisions AS d
+      WHERE d.session_id = s.id
+    );
+
+  SELECT COALESCE(plan_tier, 'none'), COALESCE(candidate_credits_purchased, 0)
+  INTO v_plan_tier, v_credits_purchased
+  FROM hirearchy.organization_plans
+  WHERE organization_id = p_organization_id;
+
+  SELECT COUNT(*)::pg_catalog.int4 INTO v_credits_used
+  FROM hirearchy.organization_candidate_credits
+  WHERE organization_id = p_organization_id;
+
+  SELECT COUNT(*)::pg_catalog.int4 INTO v_gate_hits
+  FROM hirearchy.product_events
+  WHERE organization_id = p_organization_id
+    AND event_name = 'monetization.plan_gate_hit'
+    AND occurred_at >= pg_catalog.clock_timestamp() - INTERVAL '14 days'
+    AND NOT EXISTS (
+      SELECT 1 FROM hirearchy.product_events AS pe2
+      WHERE pe2.organization_id = p_organization_id
+        AND pe2.event_name IN ('monetization.plan_changed', 'monetization.slots_added')
+        AND pe2.occurred_at >= product_events.occurred_at
+    );
+
+  SELECT COUNT(*)::pg_catalog.int4 INTO v_webhook_cnt
+  FROM hirearchy.organization_webhooks
+  WHERE organization_id = p_organization_id;
+
+  WITH problem_stats AS (
+    SELECT
+      m.definition_id::pg_catalog.text AS def_id,
+      COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL) AS started_cnt,
+      COALESCE((COUNT(*) FILTER (WHERE s.submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL), 0), 0) AS comp_pct,
+      COALESCE((SUM(op_stats.err_ops) * 100.0) / NULLIF(SUM(op_stats.total_ops), 0), 0) AS err_pct
+    FROM hirearchy.hiring_session_metadata AS m
+    JOIN hirearchy.assessment_sessions AS s ON s.id = m.session_id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*) AS total_ops,
+        COUNT(*) FILTER (WHERE eo.status IN ('FAILED', 'TIMED_OUT', 'UNKNOWN')) AS err_ops
+      FROM hirearchy.candidate_execution_operations AS eo
+      WHERE eo.session_id = s.id
+    ) AS op_stats ON true
+    WHERE m.organization_id = p_organization_id AND m.definition_id IS NOT NULL
+    GROUP BY m.definition_id
+    HAVING COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL) >= 3
+       AND (
+         COALESCE((SUM(op_stats.err_ops) * 100.0) / NULLIF(SUM(op_stats.total_ops), 0), 0) >= 35
+         OR COALESCE((COUNT(*) FILTER (WHERE s.submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL), 0), 0) < 55
+       )
+  )
+  SELECT COUNT(*)::pg_catalog.int4, COALESCE(MIN(def_id), '')
+  INTO v_health_alerts, v_first_alert_def
+  FROM problem_stats;
+
+  WITH candidates AS (
+    SELECT
+      'unreviewed_submission_48h'::pg_catalog.text AS nudge_key,
+      ''::pg_catalog.text AS target_ref,
+      1 AS priority,
+      v_unreviewed_cnt || ' submitted ' || CASE WHEN v_unreviewed_cnt = 1 THEN 'candidate has' ELSE 'candidates have' END || ' waited over 48 hours' AS title,
+      'Fast human feedback lifts candidate fairness scores and protects conversion.' AS detail,
+      'Review ready submissions' AS cta_label,
+      '/r23/organizations/' || v_org_id_text || '/candidates?status=awaiting_review' AS cta_href,
+      v_unreviewed_cnt AS cnt
+    WHERE v_unreviewed_cnt >= 1
+
+    UNION ALL
+
+    SELECT
+      'plan_gate_no_upgrade'::pg_catalog.text,
+      ''::pg_catalog.text,
+      2,
+      CASE
+        WHEN v_plan_tier = 'per_candidate' AND (v_credits_purchased - v_credits_used) <= 1
+          THEN 'Only ' || GREATEST(0, v_credits_purchased - v_credits_used)::pg_catalog.text || ' candidate slot remaining'
+        ELSE 'Team members hit a plan limit recently'
+      END,
+      'Review Per Candidate slots, Pro, or Ultra so assessment invitations are not blocked.',
+      'Review plan options',
+      '/r23/organizations/' || v_org_id_text || '/upgrade',
+      GREATEST(1, v_gate_hits)
+    WHERE v_gate_hits > 0
+       OR (v_plan_tier = 'per_candidate' AND (v_credits_purchased - v_credits_used) <= 1)
+
+    UNION ALL
+
+    SELECT
+      'problem_health_alert'::pg_catalog.text,
+      v_first_alert_def,
+      3,
+      v_health_alerts || ' saved ' || CASE WHEN v_health_alerts = 1 THEN 'problem shows' ELSE 'problems show' END || ' drop-off or runner errors',
+      'Inspect completion rate, timing, and sandbox failure diagnostics in your Problem Library.',
+      'Inspect problem health',
+      '/r23/organizations/' || v_org_id_text || '/problems',
+      v_health_alerts
+    WHERE v_health_alerts > 0
+
+    UNION ALL
+
+    SELECT
+      'no_assessment_48h'::pg_catalog.text,
+      ''::pg_catalog.text,
+      4,
+      'Issue your first candidate assessment',
+      'Your workspace has been active for over 48 hours without an issued session. Preview a template or invite a candidate.',
+      'Open Assessment Builder',
+      '/r23/organizations/' || v_org_id_text || '/builder?mode=new',
+      1
+    WHERE v_session_cnt = 0
+      AND v_first_joined IS NOT NULL
+      AND v_first_joined <= pg_catalog.clock_timestamp() - INTERVAL '48 hours'
+
+    UNION ALL
+
+    SELECT
+      'connect_slack_webhook'::pg_catalog.text,
+      ''::pg_catalog.text,
+      5,
+      'Connect Slack or outbound webhooks',
+      'Get instant alerts when candidates start, submit work, or receive a published verdict.',
+      'Connect Slack / Webhook',
+      '/r23/organizations/' || v_org_id_text || '/settings#webhooks',
+      1
+    WHERE v_session_cnt >= 1 AND v_webhook_cnt = 0
+  )
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'nudgeKey', c.nudge_key,
+        'targetRef', c.target_ref,
+        'priority', c.priority,
+        'title', c.title,
+        'detail', c.detail,
+        'ctaLabel', c.cta_label,
+        'ctaHref', c.cta_href,
+        'count', c.cnt
+      ) ORDER BY c.priority ASC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_nudges
+  FROM candidates AS c
+  WHERE NOT EXISTS (
+    SELECT 1 FROM hirearchy.organization_nudges AS n
+    WHERE n.organization_id = p_organization_id
+      AND n.nudge_key = c.nudge_key
+      AND n.target_ref = c.target_ref
+      AND (
+        n.status IN ('dismissed', 'resolved')
+        OR (n.status = 'snoozed' AND n.snoozed_until > pg_catalog.clock_timestamp())
+      )
+  );
+
+  RETURN pg_catalog.jsonb_build_object('nudges', v_nudges);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.hiring_org_nudge_dismiss(
+  p_organization_id pg_catalog.uuid,
+  p_caller_principal_id pg_catalog.uuid,
+  p_nudge_key pg_catalog.text,
+  p_target_ref pg_catalog.text,
+  p_action pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, staging, pg_temp
+AS $function$
+DECLARE
+  v_status pg_catalog.text;
+  v_snoozed_until pg_catalog.timestamptz;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM hirearchy.organization_memberships
+    WHERE organization_id = p_organization_id
+      AND principal_id = p_caller_principal_id
+      AND status = 'active'
+      AND revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Organization access denied' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_nudge_key NOT IN ('no_assessment_48h', 'unreviewed_submission_48h', 'plan_gate_no_upgrade', 'problem_health_alert', 'connect_slack_webhook')
+     OR p_action NOT IN ('snooze', 'dismiss') THEN
+    RAISE EXCEPTION 'Invalid nudge action' USING ERRCODE = '22023';
+  END IF;
+
+  v_status := CASE WHEN p_action = 'snooze' THEN 'snoozed' ELSE 'dismissed' END;
+  v_snoozed_until := CASE WHEN p_action = 'snooze' THEN pg_catalog.clock_timestamp() + INTERVAL '7 days' ELSE NULL END;
+
+  INSERT INTO hirearchy.organization_nudges (
+    organization_id, nudge_key, target_ref, status, snoozed_until, updated_by_principal_id, updated_at
+  ) VALUES (
+    p_organization_id,
+    p_nudge_key,
+    left(COALESCE(p_target_ref, ''), 200),
+    v_status,
+    v_snoozed_until,
+    p_caller_principal_id,
+    pg_catalog.clock_timestamp()
+  )
+  ON CONFLICT (organization_id, nudge_key, target_ref) DO UPDATE SET
+    status = EXCLUDED.status,
+    snoozed_until = EXCLUDED.snoozed_until,
+    updated_by_principal_id = EXCLUDED.updated_by_principal_id,
+    updated_at = pg_catalog.clock_timestamp();
+
+  RETURN pg_catalog.jsonb_build_object('ok', true);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.telemetry_lifecycle_report()
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, auth, pg_temp
+AS $function$
+DECLARE
+  v_action_queue pg_catalog.jsonb;
+  v_cohorts pg_catalog.jsonb;
+BEGIN
+  WITH org_base AS (
+    SELECT
+      o.id AS org_id,
+      COALESCE(NULLIF(trim(o.display_name), ''), 'Workspace') AS org_name,
+      o.owner_principal_id,
+      COALESCE(u.email, '') AS owner_email,
+      COALESCE(p.plan_tier, 'none') AS plan_tier,
+      COALESCE(p.candidate_credits_purchased, 0) AS credits_purchased,
+      (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.organization_candidate_credits c WHERE c.organization_id = o.id) AS credits_used,
+      MIN(om.joined_at) AS first_joined_at
+    FROM hirearchy.organizations AS o
+    JOIN hirearchy.organization_memberships AS om ON om.organization_id = o.id
+    LEFT JOIN hirearchy.application_principals AS ap ON ap.id = o.owner_principal_id
+    LEFT JOIN auth.users AS u ON u.id = ap.auth_user_id
+    LEFT JOIN hirearchy.organization_plans AS p ON p.organization_id = o.id
+    GROUP BY o.id, o.display_name, o.owner_principal_id, u.email, p.plan_tier, p.candidate_credits_purchased
+  ),
+  raw_items AS (
+    SELECT
+      ob.org_id,
+      ob.org_name,
+      ob.owner_email,
+      ob.plan_tier,
+      'no_assessment_48h'::pg_catalog.text AS nudge_key,
+      ''::pg_catalog.text AS target_ref,
+      ROUND((EXTRACT(EPOCH FROM (pg_catalog.clock_timestamp() - ob.first_joined_at)) / 3600.0)::numeric, 1) AS hours_age,
+      1 AS affected_count,
+      'Created >48h ago with 0 issued assessments' AS summary
+    FROM org_base AS ob
+    WHERE ob.first_joined_at <= pg_catalog.clock_timestamp() - INTERVAL '48 hours'
+      AND NOT EXISTS (SELECT 1 FROM hirearchy.assessment_sessions AS s WHERE s.organization_id = ob.org_id)
+
+    UNION ALL
+
+    SELECT
+      ob.org_id,
+      ob.org_name,
+      ob.owner_email,
+      ob.plan_tier,
+      'unreviewed_submission_48h'::pg_catalog.text,
+      ''::pg_catalog.text,
+      ROUND((MAX(EXTRACT(EPOCH FROM (pg_catalog.clock_timestamp() - s.submitted_at)) / 3600.0))::numeric, 1),
+      COUNT(*)::pg_catalog.int4,
+      COUNT(*)::pg_catalog.text || ' submitted candidate(s) waiting >48h for verdict'
+    FROM org_base AS ob
+    JOIN hirearchy.assessment_sessions AS s ON s.organization_id = ob.org_id
+    WHERE s.status = 'SUBMITTED'
+      AND s.submitted_at <= pg_catalog.clock_timestamp() - INTERVAL '48 hours'
+      AND NOT EXISTS (SELECT 1 FROM hirearchy.hiring_decisions AS d WHERE d.session_id = s.id)
+    GROUP BY ob.org_id, ob.org_name, ob.owner_email, ob.plan_tier
+
+    UNION ALL
+
+    SELECT
+      ob.org_id,
+      ob.org_name,
+      ob.owner_email,
+      ob.plan_tier,
+      'plan_gate_no_upgrade'::pg_catalog.text,
+      ''::pg_catalog.text,
+      ROUND((COALESCE(EXTRACT(EPOCH FROM (pg_catalog.clock_timestamp() - MAX(pe.occurred_at))) / 3600.0, 0))::numeric, 1),
+      GREATEST(1, COUNT(pe.id)::pg_catalog.int4),
+      CASE
+        WHEN ob.plan_tier = 'per_candidate' AND (ob.credits_purchased - ob.credits_used) <= 1
+          THEN 'Per-candidate slots nearly exhausted (' || GREATEST(0, ob.credits_purchased - ob.credits_used)::pg_catalog.text || ' left)'
+        ELSE 'Hit plan gate without upgrading in last 14d'
+      END
+    FROM org_base AS ob
+    LEFT JOIN hirearchy.product_events AS pe
+      ON pe.organization_id = ob.org_id
+     AND pe.event_name = 'monetization.plan_gate_hit'
+     AND pe.occurred_at >= pg_catalog.clock_timestamp() - INTERVAL '14 days'
+     AND NOT EXISTS (
+       SELECT 1 FROM hirearchy.product_events AS pe2
+       WHERE pe2.organization_id = ob.org_id
+         AND pe2.event_name IN ('monetization.plan_changed', 'monetization.slots_added')
+         AND pe2.occurred_at >= pe.occurred_at
+     )
+    GROUP BY ob.org_id, ob.org_name, ob.owner_email, ob.plan_tier, ob.credits_purchased, ob.credits_used
+    HAVING COUNT(pe.id) > 0 OR (ob.plan_tier = 'per_candidate' AND (ob.credits_purchased - ob.credits_used) <= 1)
+
+    UNION ALL
+
+    SELECT
+      ob.org_id,
+      ob.org_name,
+      ob.owner_email,
+      ob.plan_tier,
+      'problem_health_alert'::pg_catalog.text,
+      COALESCE(m.definition_id::pg_catalog.text, ''),
+      ROUND((EXTRACT(EPOCH FROM (pg_catalog.clock_timestamp() - MAX(s.created_at))) / 3600.0)::numeric, 1),
+      COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL)::pg_catalog.int4,
+      'Problem "' || MAX(s.scenario_title) || '" flagged for high drop-off or runner errors'
+    FROM org_base AS ob
+    JOIN hirearchy.hiring_session_metadata AS m ON m.organization_id = ob.org_id
+    JOIN hirearchy.assessment_sessions AS s ON s.id = m.session_id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*) AS total_ops,
+        COUNT(*) FILTER (WHERE eo.status IN ('FAILED', 'TIMED_OUT', 'UNKNOWN')) AS err_ops
+      FROM hirearchy.candidate_execution_operations AS eo
+      WHERE eo.session_id = s.id
+    ) AS op_stats ON true
+    GROUP BY ob.org_id, ob.org_name, ob.owner_email, ob.plan_tier, m.definition_id
+    HAVING COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL) >= 3
+       AND (
+         COALESCE((SUM(op_stats.err_ops) * 100.0) / NULLIF(SUM(op_stats.total_ops), 0), 0) >= 35
+         OR COALESCE((COUNT(*) FILTER (WHERE s.submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE s.activated_at IS NOT NULL), 0), 0) < 55
+       )
+  )
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'organizationId', ri.org_id::pg_catalog.text,
+        'organizationName', ri.org_name,
+        'ownerEmail', ri.owner_email,
+        'planTier', ri.plan_tier,
+        'nudgeKey', ri.nudge_key,
+        'targetRef', ri.target_ref,
+        'hoursAge', ri.hours_age,
+        'affectedCount', ri.affected_count,
+        'summary', ri.summary,
+        'nudgeStatus', COALESCE(n.status, 'active'),
+        'snoozedUntil', CASE WHEN n.snoozed_until IS NULL THEN NULL ELSE pg_catalog.to_char(n.snoozed_until AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END,
+        'founderNote', COALESCE(n.founder_note, ''),
+        'contactedAt', CASE WHEN n.contacted_at IS NULL THEN NULL ELSE pg_catalog.to_char(n.contacted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END
+      ) ORDER BY ri.hours_age DESC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_action_queue
+  FROM raw_items AS ri
+  LEFT JOIN hirearchy.organization_nudges AS n
+    ON n.organization_id = ri.org_id
+   AND n.nudge_key = ri.nudge_key
+   AND n.target_ref = ri.target_ref;
+
+  WITH org_dates AS (
+    SELECT
+      o.id AS org_id,
+      MIN(om.joined_at) AS first_joined_at,
+      date_trunc('month', MIN(om.joined_at)) AS cohort_month
+    FROM hirearchy.organizations AS o
+    JOIN hirearchy.organization_memberships AS om ON om.organization_id = o.id
+    GROUP BY o.id
+  ),
+  recent_cohorts AS (
+    SELECT *
+    FROM org_dates
+    WHERE cohort_month >= date_trunc('month', pg_catalog.clock_timestamp()) - INTERVAL '5 months'
+  ),
+  org_activity AS (
+    SELECT organization_id AS org_id, created_at AS act_at FROM hirearchy.assessment_sessions
+    UNION ALL
+    SELECT organization_id AS org_id, published_at AS act_at FROM hirearchy.hiring_decisions
+    UNION ALL
+    SELECT organization_id AS org_id, created_at AS act_at FROM hirearchy.hiring_second_opinions
+  ),
+  org_rollup AS (
+    SELECT
+      rc.org_id,
+      rc.cohort_month,
+      rc.first_joined_at,
+      MIN(s.created_at) AS first_session_at,
+      EXISTS (
+        SELECT 1 FROM hirearchy.assessment_sessions AS s7
+        WHERE s7.organization_id = rc.org_id
+          AND s7.created_at <= rc.first_joined_at + INTERVAL '7 days'
+      ) AS activated_7d,
+      EXISTS (
+        SELECT 1 FROM org_activity AS oa
+        WHERE oa.org_id = rc.org_id
+          AND oa.act_at >= rc.cohort_month + INTERVAL '1 month'
+          AND oa.act_at < rc.cohort_month + INTERVAL '2 months'
+      ) AS retained_m1,
+      EXISTS (
+        SELECT 1 FROM org_activity AS oa
+        WHERE oa.org_id = rc.org_id
+          AND oa.act_at >= rc.cohort_month + INTERVAL '2 months'
+          AND oa.act_at < rc.cohort_month + INTERVAL '3 months'
+      ) AS retained_m2,
+      EXISTS (
+        SELECT 1 FROM org_activity AS oa
+        WHERE oa.org_id = rc.org_id
+          AND oa.act_at >= rc.cohort_month + INTERVAL '3 months'
+          AND oa.act_at < rc.cohort_month + INTERVAL '4 months'
+      ) AS retained_m3,
+      (
+        SELECT COUNT(DISTINCT floor(EXTRACT(EPOCH FROM (sw.created_at - min_s.first_s)) / (21 * 86400.0))) >= 2
+        FROM hirearchy.assessment_sessions AS sw
+        CROSS JOIN (
+          SELECT MIN(created_at) AS first_s
+          FROM hirearchy.assessment_sessions
+          WHERE organization_id = rc.org_id
+        ) AS min_s
+        WHERE sw.organization_id = rc.org_id
+          AND min_s.first_s IS NOT NULL
+      ) AS is_repeat_wave
+    FROM recent_cohorts AS rc
+    LEFT JOIN hirearchy.assessment_sessions AS s ON s.organization_id = rc.org_id
+    GROUP BY rc.org_id, rc.cohort_month, rc.first_joined_at
+  )
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'cohortMonth', pg_catalog.to_char(c_month, 'YYYY-MM'),
+        'orgsCreated', orgs_created,
+        'activated7dPct', activated_7d_pct,
+        'retainedM1Pct', CASE WHEN c_month + INTERVAL '1 month' <= date_trunc('month', pg_catalog.clock_timestamp()) THEN m1_pct ELSE NULL END,
+        'retainedM2Pct', CASE WHEN c_month + INTERVAL '2 months' <= date_trunc('month', pg_catalog.clock_timestamp()) THEN m2_pct ELSE NULL END,
+        'retainedM3Pct', CASE WHEN c_month + INTERVAL '3 months' <= date_trunc('month', pg_catalog.clock_timestamp()) THEN m3_pct ELSE NULL END,
+        'repeatWaveOrgsCount', repeat_wave_cnt,
+        'repeatWavePct', repeat_wave_pct,
+        'medianHoursToFirstInvite', median_hours
+      ) ORDER BY c_month DESC
+    ),
+    '[]'::pg_catalog.jsonb
+  ) INTO v_cohorts
+  FROM (
+    SELECT
+      cohort_month AS c_month,
+      COUNT(*)::pg_catalog.int4 AS orgs_created,
+      COALESCE(ROUND((COUNT(*) FILTER (WHERE activated_7d) * 100.0) / NULLIF(COUNT(*), 0), 1), 0) AS activated_7d_pct,
+      COALESCE(ROUND((COUNT(*) FILTER (WHERE retained_m1) * 100.0) / NULLIF(COUNT(*), 0), 1), 0) AS m1_pct,
+      COALESCE(ROUND((COUNT(*) FILTER (WHERE retained_m2) * 100.0) / NULLIF(COUNT(*), 0), 1), 0) AS m2_pct,
+      COALESCE(ROUND((COUNT(*) FILTER (WHERE retained_m3) * 100.0) / NULLIF(COUNT(*), 0), 1), 0) AS m3_pct,
+      COUNT(*) FILTER (WHERE is_repeat_wave)::pg_catalog.int4 AS repeat_wave_cnt,
+      COALESCE(ROUND((COUNT(*) FILTER (WHERE is_repeat_wave) * 100.0) / NULLIF(COUNT(*), 0), 1), 0) AS repeat_wave_pct,
+      ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN first_session_at IS NOT NULL AND first_session_at >= first_joined_at THEN EXTRACT(EPOCH FROM (first_session_at - first_joined_at)) / 3600.0 ELSE NULL END))::numeric, 1) AS median_hours
+    FROM org_rollup
+    GROUP BY cohort_month
+  ) AS cohort_summary;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'actionQueue', v_action_queue,
+    'cohortRetention', v_cohorts
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.telemetry_update_nudge(
+  p_organization_id pg_catalog.uuid,
+  p_nudge_key pg_catalog.text,
+  p_target_ref pg_catalog.text,
+  p_status pg_catalog.text,
+  p_founder_note pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+DECLARE
+  v_snoozed_until pg_catalog.timestamptz;
+BEGIN
+  IF p_nudge_key NOT IN ('no_assessment_48h', 'unreviewed_submission_48h', 'plan_gate_no_upgrade', 'problem_health_alert', 'connect_slack_webhook')
+     OR p_status NOT IN ('contacted', 'snoozed', 'resolved') THEN
+    RAISE EXCEPTION 'Invalid lifecycle nudge update' USING ERRCODE = '22023';
+  END IF;
+
+  v_snoozed_until := CASE
+    WHEN p_status = 'snoozed' THEN pg_catalog.clock_timestamp() + INTERVAL '7 days'
+    ELSE NULL
+  END;
+
+  INSERT INTO hirearchy.organization_nudges (
+    organization_id, nudge_key, target_ref, status, snoozed_until, founder_note, contacted_at, updated_at
+  ) VALUES (
+    p_organization_id,
+    p_nudge_key,
+    left(COALESCE(p_target_ref, ''), 200),
+    p_status,
+    v_snoozed_until,
+    left(trim(COALESCE(p_founder_note, '')), 1000),
+    CASE WHEN p_status = 'contacted' THEN pg_catalog.clock_timestamp() ELSE NULL END,
+    pg_catalog.clock_timestamp()
+  )
+  ON CONFLICT (organization_id, nudge_key, target_ref) DO UPDATE SET
+    status = EXCLUDED.status,
+    snoozed_until = EXCLUDED.snoozed_until,
+    founder_note = CASE
+      WHEN EXCLUDED.founder_note <> '' THEN EXCLUDED.founder_note
+      ELSE hirearchy.organization_nudges.founder_note
+    END,
+    contacted_at = COALESCE(EXCLUDED.contacted_at, hirearchy.organization_nudges.contacted_at),
+    updated_at = pg_catalog.clock_timestamp();
+
+  INSERT INTO hirearchy.product_events (
+    event_name, category, actor_type, organization_id, route, status, properties
+  ) VALUES (
+    'operator.outreach.logged',
+    'team_funnel',
+    'system',
+    p_organization_id,
+    '/r23/intelligence',
+    'ok',
+    pg_catalog.jsonb_build_object(
+      'nudgeKey', p_nudge_key,
+      'status', p_status
+    )
+  );
+
+  RETURN pg_catalog.jsonb_build_object('ok', true);
+END
+$function$;
+
+ALTER FUNCTION staging.hiring_dossier_share_create(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.jsonb) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_dossier_share_list(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_dossier_share_revoke(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_webhook_list(pg_catalog.uuid, pg_catalog.uuid) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_webhook_upsert(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.jsonb) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_webhook_delete(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_org_problem_health(pg_catalog.uuid, pg_catalog.uuid) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_org_nudges_get(pg_catalog.uuid, pg_catalog.uuid) OWNER TO postgres;
+ALTER FUNCTION staging.hiring_org_nudge_dismiss(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text) OWNER TO postgres;
+
+ALTER FUNCTION staging.hiring_dossier_share_resolve(pg_catalog.text) OWNER TO postgres;
+ALTER FUNCTION staging.webhook_enqueue_session_event(pg_catalog.text, pg_catalog.text, pg_catalog.jsonb) OWNER TO postgres;
+ALTER FUNCTION staging.webhook_enqueue_ping(pg_catalog.uuid, pg_catalog.uuid) OWNER TO postgres;
+ALTER FUNCTION staging.webhook_mark_delivery(pg_catalog.uuid, pg_catalog.text, pg_catalog.int4, pg_catalog.int4, pg_catalog.text, pg_catalog.timestamptz) OWNER TO postgres;
+ALTER FUNCTION staging.telemetry_lifecycle_report() OWNER TO postgres;
+ALTER FUNCTION staging.telemetry_update_nudge(pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) OWNER TO postgres;
+
+REVOKE ALL ON FUNCTION staging.hiring_dossier_share_create(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.jsonb) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_dossier_share_list(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_dossier_share_revoke(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_webhook_list(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_webhook_upsert(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.jsonb) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_webhook_delete(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_org_problem_health(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_org_nudges_get(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.hiring_org_nudge_dismiss(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, staging_readiness_owner, hirearchy_migrator;
+
+GRANT EXECUTE ON FUNCTION staging.hiring_dossier_share_create(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.jsonb) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_dossier_share_list(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_dossier_share_revoke(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_webhook_list(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_webhook_upsert(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.jsonb) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_webhook_delete(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_org_problem_health(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_org_nudges_get(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.hiring_org_nudge_dismiss(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
+
+REVOKE ALL ON FUNCTION staging.hiring_dossier_share_resolve(pg_catalog.text) FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.webhook_enqueue_session_event(pg_catalog.text, pg_catalog.text, pg_catalog.jsonb) FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.webhook_enqueue_ping(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.webhook_mark_delivery(pg_catalog.uuid, pg_catalog.text, pg_catalog.int4, pg_catalog.int4, pg_catalog.text, pg_catalog.timestamptz) FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.telemetry_lifecycle_report() FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.telemetry_update_nudge(pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+
+GRANT EXECUTE ON FUNCTION staging.hiring_dossier_share_resolve(pg_catalog.text) TO r23_gateway;
+GRANT EXECUTE ON FUNCTION staging.webhook_enqueue_session_event(pg_catalog.text, pg_catalog.text, pg_catalog.jsonb) TO r23_gateway;
+GRANT EXECUTE ON FUNCTION staging.webhook_enqueue_ping(pg_catalog.uuid, pg_catalog.uuid) TO r23_gateway;
+GRANT EXECUTE ON FUNCTION staging.webhook_mark_delivery(pg_catalog.uuid, pg_catalog.text, pg_catalog.int4, pg_catalog.int4, pg_catalog.text, pg_catalog.timestamptz) TO r23_gateway;
+GRANT EXECUTE ON FUNCTION staging.telemetry_lifecycle_report() TO r23_gateway;
+GRANT EXECUTE ON FUNCTION staging.telemetry_update_nudge(pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO r23_gateway;
 
 COMMIT;

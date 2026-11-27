@@ -6,6 +6,7 @@ import {
   buildPeerReviewResponseEmail,
   deliverHiringNotificationEmail,
 } from '../../../../../../../../../src/hiring/mail';
+import { triggerSessionWebhookEvent } from '../../../../../../../../../src/hiring/webhooks';
 import type {
   HandoffDossierItem,
   PeerReviewRequestContext,
@@ -555,6 +556,16 @@ export async function POST(
               hasFitReport: Boolean(reviewContext.decision?.performanceReport),
             },
           });
+
+          triggerSessionWebhookEvent(
+            sessionId,
+            'verdict.published',
+            {
+              decision,
+              hasFitReport: Boolean(reviewContext.decision?.performanceReport),
+            },
+            resolveStagingPublicOrigin(request),
+          );
 
           return NextResponse.json(
             { reviewContext, reportError },

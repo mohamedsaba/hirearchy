@@ -12,10 +12,12 @@ import {
 import {
   hiringFailureJsonResponse,
   hiringParseJsonBody,
+  resolveStagingPublicOrigin,
   StagingBadRequest,
   stagingLoadR27Evidence,
   withHiringOrganizationSession,
 } from '../../../../../../../src/staging/browser';
+import { triggerSessionWebhookEvent } from '../../../../../../../src/hiring/webhooks';
 import { recordServerTelemetryEvent } from '../../../../../../../src/telemetry/server';
 
 export const dynamic = 'force-dynamic';
@@ -176,6 +178,13 @@ export async function POST(
           route: '/r23/organizations/:id/handoffs',
           properties: { handoffStatus },
         });
+
+        triggerSessionWebhookEvent(
+          sessionId,
+          'handoff.updated',
+          { handoffStatus },
+          resolveStagingPublicOrigin(request),
+        );
 
         return NextResponse.json(
           { handoffs: updated?.handoffs ?? [] },

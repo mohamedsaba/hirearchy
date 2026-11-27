@@ -6,8 +6,8 @@ import { probeStagingReadiness } from '../../scripts/check-staging-readiness.mjs
 const readyPayload = {
   status: 'ready',
   database: {
-    migrationVersion: '0022',
-    targetMigrationVersion: '0022',
+    migrationVersion: '0023',
+    targetMigrationVersion: '0023',
     markers: {
       candidateLifecycle: true,
       onboarding: true,
@@ -21,7 +21,7 @@ const readyPayload = {
 describe('staging readiness operator probe', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('reports migration 0022 as ready when the database markers are present', async () => {
+  it('reports migration 0023 as ready when the database markers are present', async () => {
     vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined);
     vi.spyOn(Client.prototype, 'query')
       .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
@@ -29,7 +29,7 @@ describe('staging readiness operator probe', () => {
         rows: [
           {
             readiness: {
-              migrationVersion: '0022',
+              migrationVersion: '0023',
               markers: readyPayload.database.markers,
             },
           },
@@ -48,8 +48,8 @@ describe('staging readiness operator probe', () => {
     expect(readiness).toMatchObject({
       status: 'ready',
       database: {
-        migrationVersion: '0022',
-        targetMigrationVersion: '0022',
+        migrationVersion: '0023',
+        targetMigrationVersion: '0023',
         isMigrationCurrent: true,
       },
     });
@@ -58,7 +58,7 @@ describe('staging readiness operator probe', () => {
     ).resolves.toMatchObject({
       state: 'ready',
       httpStatus: 200,
-      migrationVersion: '0022',
+      migrationVersion: '0023',
       markers: { executionR214: true },
     });
     expect(fetchImpl.mock.calls[0][0].href).toBe(

@@ -10,6 +10,7 @@ import {
 } from '../../../../database/postgres/r26/adapter.mjs';
 import { readCandidateAiCapability } from '../r212-ai/server';
 import { readCandidateExecutionCapability } from '../r213-execution/server';
+import { triggerSessionWebhookEvent } from '../hiring/webhooks';
 import {
   isAuthenticatedStaging,
   isHiringPlatformEnabled,
@@ -573,6 +574,23 @@ export async function r26CandidateAction(
       sessionId,
       ...body,
     });
+    if (config.profile === 'durable-staging' && isHiringPlatformEnabled()) {
+      if (body.action === 'activate' && view.status === 'ACTIVE') {
+        triggerSessionWebhookEvent(
+          sessionId,
+          'candidate.started',
+          {},
+          config.publicOrigin,
+        );
+      } else if (body.action === 'submit' && view.status === 'SUBMITTED') {
+        triggerSessionWebhookEvent(
+          sessionId,
+          'candidate.submitted',
+          {},
+          config.publicOrigin,
+        );
+      }
+    }
     const capabilities = await candidateCapabilities(
       config.databaseUrl,
       tokenHash,

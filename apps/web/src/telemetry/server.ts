@@ -2,11 +2,15 @@ import { Pool } from 'pg';
 
 import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
 import {
+  buildPublicMarketingProof,
   sanitizeAttribution,
   sanitizeFeedbackInput,
   sanitizeTelemetryEvent,
+  type NudgeKey,
   type ProductFeedbackInput,
   type ProductIntelligenceReport,
+  type ProductLifecycleReport,
+  type PublicMarketingProof,
   type TelemetryAttribution,
   type TelemetryEventInput,
 } from './catalog';
@@ -180,5 +184,92 @@ export async function loadProductIntelligenceReport(
       error: sanitizeError(error),
     });
     return null;
+  }
+}
+
+const PUBLIC_PROOF_CACHE_TTL_MS = 15 * 60 * 1000;
+let cachedPublicProof: {
+  expiresAt: number;
+  liveFlag: boolean;
+  value: PublicMarketingProof;
+} | null = null;
+
+/**
+ * Loads privacy-thresholded aggregate network proof for public marketing pages.
+ * Never exposes organization names, emails, or feedback comments, and caches for 15 minutes.
+ */
+export async function loadPublicMarketingProof(): Promise<PublicMarketingProof> {
+  const liveFlag = process.env.HIREARCHY_PUBLIC_PROOF_LIVE === 'true';
+  const now = Date.now();
+  if (
+    cachedPublicProof &&
+    cachedPublicProof.liveFlag === liveFlag &&
+    cachedPublicProof.expiresAt > now
+  ) {
+    return cachedPublicProof.value;
+  }
+
+  const report = await loadProductIntelligenceReport(90);
+  const projected = buildPublicMarketingProof(report, liveFlag);
+  cachedPublicProof = {
+    expiresAt: now + PUBLIC_PROOF_CACHE_TTL_MS,
+    liveFlag,
+    value: projected,
+  };
+  return projected;
+}
+
+/**
+ * Loads operator action queue and repeat-cycle cohort retention matrix.
+ */
+export async function loadLifecycleReport(): Promise<ProductLifecycleReport | null> {
+  const pool = getTelemetryPool();
+  if (!pool) return null;
+
+  try {
+    const res = await pool.query<{ result: ProductLifecycleReport }>(
+      'SELECT staging.telemetry_lifecycle_report() AS result',
+    );
+    return res.rows[0]?.result ?? null;
+  } catch (error) {
+    operationalLogger.warn('Failed to load lifecycle report', {
+      service: 'product_telemetry',
+      error: sanitizeError(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Updates an operator lifecycle nudge status (contacted, snoozed, resolved).
+ */
+export async function updateOperatorNudge(input: {
+  organizationId: string;
+  nudgeKey: NudgeKey;
+  targetRef?: string;
+  status: 'contacted' | 'snoozed' | 'resolved';
+  founderNote?: string;
+}): Promise<boolean> {
+  const pool = getTelemetryPool();
+  if (!pool) return false;
+
+  try {
+    const res = await pool.query<{ result: { ok?: boolean } }>(
+      'SELECT staging.telemetry_update_nudge($1::pg_catalog.uuid, $2, $3, $4, $5) AS result',
+      [
+        input.organizationId,
+        input.nudgeKey,
+        input.targetRef ?? '',
+        input.status,
+        input.founderNote ?? '',
+      ],
+    );
+    return Boolean(res.rows[0]?.result?.ok);
+  } catch (error) {
+    operationalLogger.warn('Failed to update operator nudge', {
+      service: 'product_telemetry',
+      error: sanitizeError(error),
+    });
+    return false;
   }
 }

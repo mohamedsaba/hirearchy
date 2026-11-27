@@ -15,6 +15,146 @@ export type TelemetryStatus = 'ok' | 'error' | 'abandoned' | 'blocked';
 
 export type TelemetryPlanTier = 'none' | 'per_candidate' | 'pro' | 'ultra';
 
+export type NudgeKey =
+  | 'no_assessment_48h'
+  | 'unreviewed_submission_48h'
+  | 'plan_gate_no_upgrade'
+  | 'problem_health_alert'
+  | 'connect_slack_webhook';
+
+export const LAUNCH_MATURITY_EVENT_NAMES = [
+  'demo.opened',
+  'demo.milestone.clicked',
+  'demo.tab.viewed',
+  'demo.decision.simulated',
+  'demo.cta.clicked',
+  'dossier.share.created',
+  'dossier.share.revoked',
+  'dossier.public.viewed',
+  'webhook.created',
+  'webhook.updated',
+  'webhook.deleted',
+  'webhook.ping.sent',
+  'nudge.snoozed',
+  'nudge.dismissed',
+  'operator.outreach.logged',
+  'operator.nudge.updated',
+] as const;
+
+export interface PublicMarketingProof {
+  readonly live: boolean;
+  readonly windowDays: number;
+  readonly metrics: {
+    readonly candidateCompletionRatePct: number | null;
+    readonly candidateFairnessPositivePct: number | null;
+    readonly candidateSatisfactionAvg: number | null;
+    readonly medianReviewTurnaroundHours: number | null;
+    readonly medianCandidateMinutes: number | null;
+    readonly activeOrganizations: number;
+    readonly sessionsStarted: number;
+    readonly sessionsSubmitted: number;
+    readonly totalCandidateFeedback: number;
+    readonly decisionsPublished: number;
+  };
+}
+
+export interface LifecycleActionQueueItem {
+  readonly organizationId: string;
+  readonly organizationName: string;
+  readonly ownerEmail: string;
+  readonly planTier: TelemetryPlanTier;
+  readonly nudgeKey: NudgeKey;
+  readonly targetRef: string;
+  readonly hoursAge: number;
+  readonly affectedCount: number;
+  readonly summary: string;
+  readonly nudgeStatus:
+    'active' | 'dismissed' | 'snoozed' | 'resolved' | 'contacted';
+  readonly snoozedUntil: string | null;
+  readonly founderNote: string;
+  readonly contactedAt: string | null;
+}
+
+export interface CohortRetentionRow {
+  readonly cohortMonth: string;
+  readonly orgsCreated: number;
+  readonly activated7dPct: number;
+  readonly retainedM1Pct: number | null;
+  readonly retainedM2Pct: number | null;
+  readonly retainedM3Pct: number | null;
+  readonly repeatWaveOrgsCount: number;
+  readonly repeatWavePct: number;
+  readonly medianHoursToFirstInvite: number | null;
+}
+
+export interface ProductLifecycleReport {
+  readonly actionQueue: readonly LifecycleActionQueueItem[];
+  readonly cohortRetention: readonly CohortRetentionRow[];
+}
+
+export function buildPublicMarketingProof(
+  report: ProductIntelligenceReport | null,
+  publicProofLiveFlag: boolean,
+): PublicMarketingProof {
+  if (!report) {
+    return {
+      live: false,
+      windowDays: 90,
+      metrics: {
+        candidateCompletionRatePct: null,
+        candidateFairnessPositivePct: null,
+        candidateSatisfactionAvg: null,
+        medianReviewTurnaroundHours: null,
+        medianCandidateMinutes: null,
+        activeOrganizations: 0,
+        sessionsStarted: 0,
+        sessionsSubmitted: 0,
+        totalCandidateFeedback: 0,
+        decisionsPublished: 0,
+      },
+    };
+  }
+
+  const m = report.marketingProof;
+  const globalGateMet =
+    publicProofLiveFlag &&
+    m.activeOrganizations >= 5 &&
+    m.sessionsStarted >= 25 &&
+    m.sessionsSubmitted >= 15;
+
+  return {
+    live: globalGateMet,
+    windowDays: report.windowDays,
+    metrics: {
+      candidateCompletionRatePct:
+        globalGateMet && m.sessionsStarted >= 25
+          ? m.candidateCompletionRatePct
+          : null,
+      candidateFairnessPositivePct:
+        globalGateMet && m.totalCandidateFeedback >= 15
+          ? m.candidateFairnessPositivePct
+          : null,
+      candidateSatisfactionAvg:
+        globalGateMet && m.totalCandidateFeedback >= 15
+          ? m.candidateSatisfactionAvg
+          : null,
+      medianReviewTurnaroundHours:
+        globalGateMet && m.decisionsPublished >= 15
+          ? m.medianReviewTurnaroundHours
+          : null,
+      medianCandidateMinutes:
+        globalGateMet && m.sessionsSubmitted >= 15
+          ? m.medianCandidateMinutes
+          : null,
+      activeOrganizations: m.activeOrganizations,
+      sessionsStarted: m.sessionsStarted,
+      sessionsSubmitted: m.sessionsSubmitted,
+      totalCandidateFeedback: m.totalCandidateFeedback,
+      decisionsPublished: m.decisionsPublished,
+    },
+  };
+}
+
 export type ProductFeedbackSurface =
   | 'candidate_post_submit'
   | 'builder_ai_generated'

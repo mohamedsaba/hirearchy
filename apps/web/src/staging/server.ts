@@ -64,6 +64,15 @@ const operations = new Set([
   'organization.member.remove',
   'account.profile.get',
   'account.profile.update',
+  'hiring.dossier.share.create',
+  'hiring.dossier.share.list',
+  'hiring.dossier.share.revoke',
+  'hiring.webhook.list',
+  'hiring.webhook.upsert',
+  'hiring.webhook.delete',
+  'hiring.library.health',
+  'hiring.nudges.get',
+  'hiring.nudge.dismiss',
 ]);
 
 export type StagingConfiguration = ReturnType<typeof configuration>;
