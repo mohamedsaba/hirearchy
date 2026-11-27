@@ -370,6 +370,21 @@ export const CandidatePrestart = ({
                 modifications stop automatically and the assessment finalizes.
               </p>
             </section>
+
+            <section
+              className="orientation-section"
+              aria-labelledby="heading-respect-promise"
+              data-testid="candidate-respect-promise"
+            >
+              <h2 id="heading-respect-promise" className="section-title">
+                Candidate Respect Promise
+              </h2>
+              <p className="section-body">
+                Zero webcam, microphone, or desktop tracking. Your timer starts
+                only after setup, AI rules are shown upfront, and you retain a
+                permanent read-only receipt of your submitted files.
+              </p>
+            </section>
           </div>
 
           <div className="button-row">
@@ -427,6 +442,18 @@ export const CandidatePrestart = ({
             You will have {durationText} once the assessment begins. Your time
             limit will not start until you review the orientation and complete
             environment setup.
+          </p>
+        </div>
+
+        <div
+          className="prestart-box info-box"
+          data-testid="candidate-respect-promise"
+        >
+          <p className="box-title">Candidate Respect Promise</p>
+          <p className="box-detail">
+            Zero webcam, microphone, or desktop tracking. Only your workspace
+            code, task activity, and final submission are recorded—and you keep
+            a permanent read-only copy of your submitted work.
           </p>
         </div>
 

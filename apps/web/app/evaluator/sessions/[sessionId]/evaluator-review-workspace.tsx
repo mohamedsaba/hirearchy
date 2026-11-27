@@ -38,7 +38,10 @@ import {
 } from '../../../../src/r27-evidence/presentation';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
 import { experienceLevelLabel } from '../../../../src/hiring/catalogs';
-import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
+import type {
+  PerformanceFitReport,
+  SessionHiringReviewContext,
+} from '../../../../src/hiring/types';
 import { hasPlanFeature } from '../../../../src/plans/entitlements';
 import {
   readPersistedJson,
@@ -1731,12 +1734,34 @@ type R27EvaluatorReviewWorkspaceProps = Readonly<{
   hiringReviewContext?: SessionHiringReviewContext | null;
   initialTab?: WorkbenchMode;
   initialPeerReviewId?: string | null;
+  demoMode?: boolean;
+  isSample?: boolean;
+  controlledTab?: WorkbenchMode;
+  onTabChange?: (tab: WorkbenchMode) => void;
+  controlledFilter?: EvidenceFilter;
+  onFilterChange?: (filter: EvidenceFilter) => void;
+  onSimulatedPublish?: (
+    draft: HiringDecisionDraft,
+    report: PerformanceFitReport | null,
+  ) => void;
 }>;
 
 export const EvaluatorReviewWorkspace = (
   props: LegacyEvaluatorReviewWorkspaceProps | R27EvaluatorReviewWorkspaceProps,
 ) => {
   const { sessionId } = props;
+  const demoMode = 'demoMode' in props ? Boolean(props.demoMode) : false;
+  const isSample = 'isSample' in props ? Boolean(props.isSample) : false;
+  const isolated = demoMode || isSample;
+  const controlledTab =
+    'controlledTab' in props ? props.controlledTab : undefined;
+  const onTabChange = 'onTabChange' in props ? props.onTabChange : undefined;
+  const controlledFilter =
+    'controlledFilter' in props ? props.controlledFilter : undefined;
+  const onFilterChange =
+    'onFilterChange' in props ? props.onFilterChange : undefined;
+  const onSimulatedPublish =
+    'onSimulatedPublish' in props ? props.onSimulatedPublish : undefined;
   const initialHiringReviewContext =
     'hiringReviewContext' in props ? (props.hiringReviewContext ?? null) : null;
   const [hiringReviewContext, setHiringReviewContext] =
@@ -1766,9 +1791,13 @@ export const EvaluatorReviewWorkspace = (
   const [loadingMoreR27, setLoadingMoreR27] = useState(false);
   const [r27PageError, setR27PageError] = useState<string | null>(null);
   const [aiReviewReport, setAiReviewReportState] =
-    useState<R27AiReviewReport | null>(null);
+    useState<R27AiReviewReport | null>(
+      () => initialHiringReviewContext?.initialAiReview ?? null,
+    );
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
-  const aiReportStorageKey = `hirearchy:eval:ai-report:v1:${sessionId}`;
+  const aiReportStorageKey = isolated
+    ? `hirearchy:demo:ai-report:v1:${sessionId}`
+    : `hirearchy:eval:ai-report:v1:${sessionId}`;
   const setAiReviewReport = (next: R27AiReviewReport | null) => {
     setAiReviewReportState(next);
     if (next) {
@@ -1794,7 +1823,7 @@ export const EvaluatorReviewWorkspace = (
     };
   }, [aiReportStorageKey]);
 
-  const decisionDraftStorageKey = hiringDecisionDraftKey(sessionId);
+  const decisionDraftStorageKey = hiringDecisionDraftKey(sessionId, isolated);
   const [hiringDecisionDraft, setHiringDecisionDraft] =
     useState<HiringDecisionDraft | null>(() =>
       initialHiringReviewContext
@@ -1811,6 +1840,7 @@ export const EvaluatorReviewWorkspace = (
         const restored = restoreHiringDecisionDraft(
           sessionId,
           initialHiringDecisionDraft(initialHiringReviewContext),
+          isolated,
         );
         setHiringDecisionDraft(restored);
       } catch {
@@ -1820,7 +1850,7 @@ export const EvaluatorReviewWorkspace = (
     return () => {
       active = false;
     };
-  }, [sessionId, initialHiringReviewContext]);
+  }, [sessionId, initialHiringReviewContext, isolated]);
 
   const updateHiringDecisionDraft = (patch: Partial<HiringDecisionDraft>) => {
     setHiringDecisionDraft((current) => {
@@ -1849,30 +1879,40 @@ export const EvaluatorReviewWorkspace = (
         : buildEvidenceSources(review!, projection!, aiConversations),
     [aiConversations, projection, r27Evidence, r27Presentation, review],
   );
-  const [mode, setModeState] = useState<WorkbenchMode>(initialTab);
+  const [internalMode, setModeState] = useState<WorkbenchMode>(initialTab);
+  const mode = controlledTab ?? internalMode;
   const [visitedModes, setVisitedModes] = useState<ReadonlySet<WorkbenchMode>>(
     () => new Set([initialTab]),
   );
+  const effectiveVisitedModes = useMemo(() => {
+    if (visitedModes.has(mode)) return visitedModes;
+    const next = new Set(visitedModes);
+    next.add(mode);
+    return next;
+  }, [mode, visitedModes]);
   const setMode = (nextMode: WorkbenchMode) => {
     setModeState(nextMode);
-    trackClientEvent({
-      eventName: 'evaluator.tab.viewed',
-      category: 'team_funnel',
-      actorType: 'team_member',
-      organizationId: hiringReviewContext?.organizationId,
-      sessionId,
-      properties: {
-        tab: nextMode.toLowerCase(),
-        hasHiringContext: Boolean(hiringReviewContext),
-      },
-    });
+    onTabChange?.(nextMode);
+    if (!demoMode) {
+      trackClientEvent({
+        eventName: 'evaluator.tab.viewed',
+        category: 'team_funnel',
+        actorType: 'team_member',
+        organizationId: hiringReviewContext?.organizationId,
+        sessionId,
+        properties: {
+          tab: nextMode.toLowerCase(),
+          hasHiringContext: Boolean(hiringReviewContext),
+        },
+      });
+    }
     setVisitedModes((current) => {
       if (current.has(nextMode)) return current;
       const next = new Set(current);
       next.add(nextMode);
       return next;
     });
-    if (typeof window !== 'undefined') {
+    if (!demoMode && typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('tab', nextMode.toLowerCase());
       window.history.replaceState(
@@ -1882,13 +1922,18 @@ export const EvaluatorReviewWorkspace = (
       );
     }
   };
-  const [filter, setFilter] = useState<EvidenceFilter>(() =>
+  const [internalFilter, setInternalFilter] = useState<EvidenceFilter>(() =>
     initialR27Evidence &&
     (initialR27Evidence.revisions.length > 0 ||
       Boolean(initialR27Evidence.submission))
       ? 'Code changes'
       : 'Chronology',
   );
+  const filter = controlledFilter ?? internalFilter;
+  const setFilter = (next: EvidenceFilter) => {
+    setInternalFilter(next);
+    onFilterChange?.(next);
+  };
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(
     () =>
       (initialHiringReviewContext
@@ -1898,7 +1943,9 @@ export const EvaluatorReviewWorkspace = (
   const [workflowSignalsOpen, setWorkflowSignalsOpen] = useState(false);
   const [verificationQuestionsOpen, setVerificationQuestionsOpen] =
     useState(false);
-  const viewStateStorageKey = `hirearchy:eval:workbench-view:v1:${sessionId}`;
+  const viewStateStorageKey = isolated
+    ? `hirearchy:demo:workbench-view:v1:${sessionId}`
+    : `hirearchy:eval:workbench-view:v1:${sessionId}`;
   const [viewStateHydrated, setViewStateHydrated] = useState(false);
   const sourcesRef = useRef(sources);
   useEffect(() => {
@@ -1937,7 +1984,7 @@ export const EvaluatorReviewWorkspace = (
           savedView.filter &&
           (evidenceFilters as readonly string[]).includes(savedView.filter)
         ) {
-          setFilter(savedView.filter as EvidenceFilter);
+          setInternalFilter(savedView.filter as EvidenceFilter);
         }
         if (
           typeof savedView.selectedSourceKey === 'string' &&
@@ -2326,7 +2373,7 @@ export const EvaluatorReviewWorkspace = (
 
   const advisoryPanel = r27Evidence ? (
     <R27AiReviewPanel
-      organizationId={r27Evidence.organizationId}
+      organizationId={isolated ? undefined : r27Evidence.organizationId}
       sessionId={r27Evidence.sessionId}
       evidence={r27Evidence}
       report={aiReviewReport}
@@ -2334,7 +2381,11 @@ export const EvaluatorReviewWorkspace = (
       onLoadingChange={setAiReviewLoading}
       planLocked={aiReviewPlanLocked}
       hiring={Boolean(hiringReviewContext)}
-      planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/plan`}
+      planSettingsHref={
+        isolated
+          ? undefined
+          : `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/plan`
+      }
     />
   ) : null;
 
@@ -2375,18 +2426,22 @@ export const EvaluatorReviewWorkspace = (
           testSummary={headerStats.testSummary}
           diffSummary={headerStats.diffSummary}
           backHref={
-            hiringReviewContext
-              ? `/r23/organizations/${encodeURIComponent(hiringReviewContext.organizationId.toLowerCase())}/candidates`
-              : r27Evidence
-                ? `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId.toLowerCase())}/sessions/${encodeURIComponent(r27Evidence.sessionId)}`
-                : undefined
+            demoMode
+              ? '/products/software'
+              : hiringReviewContext
+                ? `/r23/organizations/${encodeURIComponent(hiringReviewContext.organizationId.toLowerCase())}/candidates`
+                : r27Evidence
+                  ? `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId.toLowerCase())}/sessions/${encodeURIComponent(r27Evidence.sessionId)}`
+                  : undefined
           }
           backLabel={
-            hiringReviewContext
-              ? '← Back to Candidates'
-              : r27Evidence
-                ? '← Back to session summary'
-                : undefined
+            demoMode
+              ? '← Back to Software'
+              : hiringReviewContext
+                ? '← Back to Candidates'
+                : r27Evidence
+                  ? '← Back to session summary'
+                  : undefined
           }
         />
         <div className="evaluator-workbench-topline">
@@ -2457,7 +2512,7 @@ export const EvaluatorReviewWorkspace = (
           tabIndex={0}
         >
           <section className="evaluator-workbench-main">
-            {visitedModes.has('Summary') ? (
+            {effectiveVisitedModes.has('Summary') ? (
               <div hidden={mode !== 'Summary'}>
                 {r27Evidence ? (
                   <R27SummaryView
@@ -2489,7 +2544,7 @@ export const EvaluatorReviewWorkspace = (
                 ) : null}
               </div>
             ) : null}
-            {visitedModes.has('Evidence') ? (
+            {effectiveVisitedModes.has('Evidence') ? (
               <div hidden={mode !== 'Evidence'}>
                 <EvidenceView
                   evidence={evidence ?? undefined}
@@ -2548,7 +2603,7 @@ export const EvaluatorReviewWorkspace = (
             ) : null}
             {readOnly ? (
               r27Evidence ? (
-                visitedModes.has('Review') ? (
+                effectiveVisitedModes.has('Review') ? (
                   <div className="r27-review-stack" hidden={mode !== 'Review'}>
                     <div className="r27-human-review">
                       {hiringReviewContext ? (
@@ -2561,6 +2616,9 @@ export const EvaluatorReviewWorkspace = (
                           onOpenEvidence={openEvidence}
                           onContextChange={setHiringReviewContext}
                           advisory={advisoryPanel}
+                          demoMode={demoMode}
+                          isSample={isSample}
+                          onSimulatedPublish={onSimulatedPublish}
                           onBackToEvidence={() => {
                             setMode('Evidence');
                             modeRefs.current[

@@ -1,7 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { IconCheck, IconCopy, IconFileAnalytics } from '@tabler/icons-react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  IconCheck,
+  IconCopy,
+  IconExternalLink,
+  IconFileAnalytics,
+  IconLink,
+  IconShieldLock,
+  IconTrash,
+  IconX,
+} from '@tabler/icons-react';
 
 import { experienceLevelLabel } from '../../../../../../src/hiring/catalogs';
 import type { HandoffDossierItem } from '../../../../../../src/hiring/types';
@@ -11,6 +20,452 @@ import {
 } from '../../../../../../src/plans/entitlements';
 import { CommonThreadLoader } from '../../../../../_components/common-thread-loader';
 import { CommonThreadToast } from '../../../../../_components/common-thread-toast';
+
+export interface DossierShareLinkRecord {
+  readonly id: string;
+  readonly visibilityMode: 'redacted' | 'named';
+  readonly includeAiAdvisory: boolean;
+  readonly includeVerificationQuestions: boolean;
+  readonly expiresAt: string;
+  readonly revokedAt: string | null;
+  readonly viewCount: number;
+  readonly lastViewedAt: string | null;
+  readonly createdAt: string;
+}
+
+export interface DossierSharePanelProps {
+  readonly organizationId: string;
+  readonly sessionId: string;
+  readonly candidateLabel?: string | null;
+  readonly onClose?: () => void;
+  readonly compact?: boolean;
+}
+
+function formatShortDate(iso: string | null): string {
+  if (!iso) return '—';
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  return new Date(ms).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+export function DossierSharePanel({
+  organizationId,
+  sessionId,
+  candidateLabel,
+  onClose,
+  compact = false,
+}: DossierSharePanelProps) {
+  const [links, setLinks] = useState<readonly DossierShareLinkRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadedAtMs, setLoadedAtMs] = useState<number>(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [visibilityMode, setVisibilityMode] = useState<'redacted' | 'named'>(
+    'redacted',
+  );
+  const [includeAiAdvisory, setIncludeAiAdvisory] = useState(true);
+  const [includeVerificationQuestions, setIncludeVerificationQuestions] =
+    useState(true);
+  const [expiresDays, setExpiresDays] = useState<number>(14);
+  const [createdShareUrl, setCreatedShareUrl] = useState<string | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
+  const dossiersApiUrl = `/r23/api/organizations/${encodeURIComponent(organizationId)}/hiring/dossiers`;
+
+  const loadLinks = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(
+        `${dossiersApiUrl}?sessionId=${encodeURIComponent(sessionId)}`,
+        {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        },
+      );
+      const data = (await res.json().catch(() => null)) as {
+        links?: DossierShareLinkRecord[];
+        error?: { message?: string };
+      } | null;
+      if (!res.ok) {
+        throw new Error(
+          data?.error?.message ?? `Unable to load share links (${res.status})`,
+        );
+      }
+      setLinks(Array.isArray(data?.links) ? data.links : []);
+      setLoadedAtMs(Date.now());
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Unable to load share links.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [dossiersApiUrl, sessionId]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    fetch(`${dossiersApiUrl}?sessionId=${encodeURIComponent(sessionId)}`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => null)) as {
+          links?: DossierShareLinkRecord[];
+          error?: { message?: string };
+        } | null;
+        if (!res.ok) {
+          throw new Error(
+            data?.error?.message ??
+              `Unable to load share links (${res.status})`,
+          );
+        }
+        return Array.isArray(data?.links) ? data.links : [];
+      })
+      .then((nextLinks) => {
+        if (!active) return;
+        setLinks(nextLinks);
+        setLoadedAtMs(Date.now());
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (!active) return;
+        setErrorMsg(
+          err instanceof Error ? err.message : 'Unable to load share links.',
+        );
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [dossiersApiUrl, sessionId]);
+
+  const copyShareUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedUrl(true);
+      window.setTimeout(() => setCopiedUrl(false), 2400);
+    } catch {
+      setErrorMsg('Copy failed — copy the link manually below.');
+    }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const csrf = readCsrfCookie();
+      const res = await fetch(dossiersApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(csrf ? { 'x-csrf-token': csrf } : {}),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          action: 'create',
+          sessionId,
+          visibilityMode,
+          includeAiAdvisory,
+          includeVerificationQuestions,
+          expiresDays,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        link?: DossierShareLinkRecord;
+        shareUrl?: string;
+        shareToken?: string;
+        error?: { message?: string };
+      } | null;
+      if (!res.ok) {
+        throw new Error(
+          data?.error?.message ?? `Unable to create share link (${res.status})`,
+        );
+      }
+      const nextUrl =
+        data?.shareUrl ??
+        (data?.shareToken && typeof window !== 'undefined'
+          ? `${window.location.origin}/dossier/${encodeURIComponent(data.shareToken)}`
+          : null);
+      if (nextUrl) {
+        setCreatedShareUrl(nextUrl);
+        void copyShareUrl(nextUrl);
+      }
+      if (data?.link) {
+        setLinks((prev) => [data.link!, ...prev]);
+      } else {
+        await loadLinks();
+      }
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Unable to create share link.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRevoke = async (shareId: string) => {
+    if (revokingId) return;
+    setRevokingId(shareId);
+    setErrorMsg(null);
+    try {
+      const csrf = readCsrfCookie();
+      const res = await fetch(dossiersApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(csrf ? { 'x-csrf-token': csrf } : {}),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          action: 'revoke',
+          shareId,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: { message?: string };
+      } | null;
+      if (!res.ok) {
+        throw new Error(
+          data?.error?.message ?? `Unable to revoke link (${res.status})`,
+        );
+      }
+      setLinks((prev) =>
+        prev.map((item) =>
+          item.id === shareId
+            ? { ...item, revokedAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Unable to revoke share link.',
+      );
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  return (
+    <div
+      className={compact ? 'hiring-stack-sm' : 'hiring-card hiring-stack-sm'}
+      data-testid="share-executive-dossier-panel"
+    >
+      <div className="hiring-preview-header">
+        <div>
+          <span className="hiring-eyebrow">
+            <IconShieldLock size={13} aria-hidden="true" /> Executive Dossier
+            Link
+          </span>
+          <h3 className="hiring-mt-xs">
+            Share executive dossier
+            {candidateLabel ? ` · ${candidateLabel}` : ''}
+          </h3>
+          <p className="hiring-muted-copy">
+            Read-only brief for CTOs and hiring committees. Never exposes
+            candidate email, phone, ID documents, or private internal notes.
+          </p>
+        </div>
+        {onClose ? (
+          <button
+            type="button"
+            className="hiring-btn hiring-btn-sm"
+            onClick={onClose}
+            aria-label="Close share dossier dialog"
+          >
+            <IconX size={15} aria-hidden="true" /> Close
+          </button>
+        ) : null}
+      </div>
+
+      {errorMsg ? (
+        <div className="hiring-banner hiring-banner-danger" role="alert">
+          {errorMsg}
+        </div>
+      ) : null}
+
+      <form onSubmit={handleCreate} className="hiring-stack-sm">
+        <div className="hiring-two-col">
+          <div className="hiring-field">
+            <label htmlFor={`dossier-visibility-${sessionId}`}>
+              Identity visibility
+            </label>
+            <select
+              id={`dossier-visibility-${sessionId}`}
+              value={visibilityMode}
+              onChange={(e) =>
+                setVisibilityMode(
+                  e.target.value === 'named' ? 'named' : 'redacted',
+                )
+              }
+            >
+              <option value="redacted">
+                Redacted (Recommended — first name + initial &amp; code)
+              </option>
+              <option value="named">
+                Named (Full name, headline role &amp; city)
+              </option>
+            </select>
+          </div>
+          <div className="hiring-field">
+            <label htmlFor={`dossier-expiry-${sessionId}`}>Link expiry</label>
+            <select
+              id={`dossier-expiry-${sessionId}`}
+              value={expiresDays}
+              onChange={(e) => setExpiresDays(Number(e.target.value))}
+            >
+              <option value={7}>7 days</option>
+              <option value={14}>14 days</option>
+              <option value={30}>30 days</option>
+              <option value={90}>90 days</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="hiring-chip-group">
+          <label className="hiring-peer-checkbox">
+            <input
+              type="checkbox"
+              checked={includeAiAdvisory}
+              onChange={(e) => setIncludeAiAdvisory(e.target.checked)}
+            />
+            <span>Include advisory fit summary</span>
+          </label>
+          <label className="hiring-peer-checkbox">
+            <input
+              type="checkbox"
+              checked={includeVerificationQuestions}
+              onChange={(e) =>
+                setIncludeVerificationQuestions(e.target.checked)
+              }
+            />
+            <span>Include live verification questions</span>
+          </label>
+        </div>
+
+        <div className="hiring-header-actions">
+          <button
+            type="submit"
+            className="hiring-btn hiring-btn-primary"
+            disabled={submitting}
+          >
+            <IconLink size={15} aria-hidden="true" />
+            {submitting
+              ? 'Creating share link…'
+              : 'Create & copy executive link'}
+          </button>
+        </div>
+      </form>
+
+      {createdShareUrl ? (
+        <div className="hiring-banner hiring-banner-success" role="status">
+          <div className="hiring-stack-xs" style={{ width: '100%' }}>
+            <strong>Share link created (shown once)</strong>
+            <code style={{ overflowWrap: 'anywhere', fontSize: '0.8rem' }}>
+              {createdShareUrl}
+            </code>
+            <div className="hiring-header-actions">
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm"
+                onClick={() => void copyShareUrl(createdShareUrl)}
+              >
+                {copiedUrl ? (
+                  <IconCheck size={14} aria-hidden="true" />
+                ) : (
+                  <IconCopy size={14} aria-hidden="true" />
+                )}
+                {copiedUrl ? 'Copied link' : 'Copy link'}
+              </button>
+              <a
+                className="hiring-btn hiring-btn-sm"
+                href={createdShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <IconExternalLink size={14} aria-hidden="true" /> Open dossier
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="hiring-stack-xs">
+        <strong className="hiring-sublabel">Active &amp; past links</strong>
+        {loading ? (
+          <CommonThreadLoader compact label="Loading share links…" />
+        ) : links.length === 0 ? (
+          <p className="hiring-muted-copy">
+            No executive share links created for this session yet.
+          </p>
+        ) : (
+          <ul
+            className="hiring-opinion-list"
+            style={{ listStyle: 'none', padding: 0, margin: 0 }}
+          >
+            {links.map((link) => {
+              const revoked = Boolean(link.revokedAt);
+              const expired =
+                loadedAtMs > 0 && Date.parse(link.expiresAt) <= loadedAtMs;
+              return (
+                <li key={link.id} className="hiring-opinion-card">
+                  <div className="hiring-preview-header">
+                    <div className="hiring-chip-group">
+                      <span
+                        className={`hiring-pill ${link.visibilityMode === 'redacted' ? 'hiring-pill-plum' : 'hiring-pill-warning'}`}
+                      >
+                        {link.visibilityMode === 'redacted'
+                          ? 'Redacted'
+                          : 'Named'}
+                      </span>
+                      <span
+                        className={`hiring-pill ${revoked || expired ? 'hiring-pill-danger' : 'hiring-pill-success'}`}
+                      >
+                        {revoked ? 'Revoked' : expired ? 'Expired' : 'Active'}
+                      </span>
+                      <span className="hiring-muted-copy">
+                        {link.viewCount}{' '}
+                        {link.viewCount === 1 ? 'view' : 'views'} · Expires{' '}
+                        {formatShortDate(link.expiresAt)}
+                      </span>
+                    </div>
+                    {!revoked && !expired ? (
+                      <button
+                        type="button"
+                        className="hiring-btn hiring-btn-sm hiring-btn-danger"
+                        disabled={revokingId === link.id}
+                        onClick={() => void handleRevoke(link.id)}
+                      >
+                        <IconTrash size={14} aria-hidden="true" />
+                        {revokingId === link.id ? 'Revoking…' : 'Revoke'}
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export interface HandoffDossierClientProps {
   readonly organizationId: string;
@@ -54,6 +509,7 @@ export function HandoffDossierClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [questionsCopied, setQuestionsCopied] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const canGenerateFitReport = hasPlanFeature(
     plan.planTier,
@@ -199,6 +655,29 @@ export function HandoffDossierClient({
                 </button>
               ),
             )}
+          </div>
+          <div
+            className="hiring-mt-md"
+            style={{
+              borderTop: '1px solid var(--software-border)',
+              paddingTop: '0.85rem',
+            }}
+          >
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-primary hiring-btn-sm"
+              style={{ width: '100%' }}
+              onClick={() => setShareModalOpen(true)}
+            >
+              <IconLink size={14} aria-hidden="true" /> Share executive dossier
+            </button>
+            <p
+              className="hiring-muted-copy hiring-mt-xs"
+              style={{ fontSize: '0.78rem' }}
+            >
+              Create an expiring, redacted or named brief for CTOs &amp; hiring
+              panels.
+            </p>
           </div>
         </aside>
         <div className="hiring-page-shell">
@@ -476,6 +955,27 @@ export function HandoffDossierClient({
           </section>
         </div>
       </div>
+      {shareModalOpen ? (
+        <div
+          className="r210-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Share executive dossier"
+        >
+          <div
+            className="r210-modal-dialog"
+            style={{ maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <DossierSharePanel
+              organizationId={organizationId}
+              sessionId={dossier.sessionId}
+              candidateLabel={dossier.candidateName}
+              compact
+              onClose={() => setShareModalOpen(false)}
+            />
+          </div>
+        </div>
+      ) : null}
       <CommonThreadToast
         message={statusMsg}
         tone="success"

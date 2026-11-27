@@ -13,6 +13,7 @@ import { LocalTime } from '../../../_components/local-time';
 import { ProductFeedbackPulse } from '../../../_components/product-feedback-pulse';
 import { ThemeToggle } from '../../../_components/theme-toggle';
 import { RepositoryInspector } from '../../../r23/organizations/[organizationId]/builder/repository-inspector';
+import { CandidateReceiptShare } from './candidate-receipt-share';
 import './submitted-work.css';
 
 export const dynamic = 'force-dynamic';
@@ -100,6 +101,33 @@ export default async function CandidateSubmissionPage({
             Back to My assessments
           </Link>
         </header>
+        <section
+          className="hiring-card hiring-card-compact hiring-mt-sm"
+          aria-labelledby="candidate-what-next-heading"
+          data-testid="candidate-what-happens-next"
+        >
+          <span className="hiring-eyebrow">What happens next</span>
+          <h2 id="candidate-what-next-heading" className="hiring-mt-xs">
+            Human-owned code review &amp; permanent receipt
+          </h2>
+          <ul className="hiring-bullet-list hiring-mt-xs">
+            <li>
+              <strong>Real code inspection:</strong> Engineers on the hiring
+              team review your submitted diffs, chronology, and test runs—never
+              automated AI scores or keystroke heuristics.
+            </li>
+            <li>
+              <strong>Permanent read-only copy:</strong> You keep read-only
+              access to these exact submitted files and any published outcome in
+              your Candidate Portal.
+            </li>
+            <li>
+              <strong>Private feedback pulse:</strong> Any platform rating below
+              stays private to Hirearchy and is never shared with the hiring
+              team.
+            </li>
+          </ul>
+        </section>
         <ProductFeedbackPulse
           surface="candidate_post_submit"
           actorType="candidate"
@@ -124,6 +152,7 @@ export default async function CandidateSubmissionPage({
         ) : (
           <p>No files were saved with this submission.</p>
         )}
+        <CandidateReceiptShare />
       </main>
     </div>
   );

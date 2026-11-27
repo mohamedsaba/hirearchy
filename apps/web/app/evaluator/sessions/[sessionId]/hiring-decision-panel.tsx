@@ -8,6 +8,7 @@ import {
   IconCode,
   IconCopy,
   IconFileAnalytics,
+  IconLink,
   IconListDetails,
   IconLock,
   IconMail,
@@ -17,6 +18,7 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 
+import { DEMO_PERFORMANCE_FIT_REPORT } from '../../../../src/demo/sample-session';
 import { NEXT_STAGE_OPTIONS } from '../../../../src/hiring/catalogs';
 import type {
   PeerReviewEmailDelivery,
@@ -40,6 +42,7 @@ import {
   CommonThreadToast,
   type CommonThreadToastTone,
 } from '../../../_components/common-thread-toast';
+import { DossierSharePanel } from '../../../r23/organizations/[organizationId]/handoffs/[sessionId]/handoff-dossier-client';
 import type { EvidenceFilter } from './evidence-workbench';
 
 export interface HiringDecisionDraft {
@@ -73,16 +76,22 @@ export function initialHiringDecisionDraft(
   };
 }
 
-export function hiringDecisionDraftKey(sessionId: string): string {
-  return `hirearchy:eval:decision-draft:v2:${sessionId}`;
+export function hiringDecisionDraftKey(
+  sessionId: string,
+  isolated = false,
+): string {
+  return isolated
+    ? `hirearchy:demo:decision-draft:v2:${sessionId}`
+    : `hirearchy:eval:decision-draft:v2:${sessionId}`;
 }
 
 export function restoreHiringDecisionDraft(
   sessionId: string,
   defaults: HiringDecisionDraft,
+  isolated = false,
 ): HiringDecisionDraft {
   const saved = readPersistedJson<Partial<HiringDecisionDraft>>(
-    hiringDecisionDraftKey(sessionId),
+    hiringDecisionDraftKey(sessionId, isolated),
     'durable',
   );
   if (saved) {
@@ -91,6 +100,7 @@ export function restoreHiringDecisionDraft(
       ...saved,
     };
   }
+  if (isolated) return defaults;
   const previous = readPersistedJson<Partial<HiringDecisionDraft>>(
     `hirearchy:eval:decision-draft:v1:${sessionId}`,
     'durable',
@@ -116,6 +126,12 @@ export interface HiringDecisionPanelProps {
   readonly onContextChange?: (next: SessionHiringReviewContext) => void;
   readonly advisory?: ReactNode;
   readonly onBackToEvidence?: () => void;
+  readonly demoMode?: boolean;
+  readonly isSample?: boolean;
+  readonly onSimulatedPublish?: (
+    draft: HiringDecisionDraft,
+    report: PerformanceFitReport | null,
+  ) => void;
 }
 
 function readCsrfCookie(): string {
@@ -279,7 +295,11 @@ export function HiringDecisionPanel({
   onContextChange,
   advisory,
   onBackToEvidence,
+  demoMode = false,
+  isSample = false,
+  onSimulatedPublish,
 }: HiringDecisionPanelProps) {
+  const isolated = demoMode || isSample;
   const [ctx, setCtxState] =
     useState<SessionHiringReviewContext>(initialContext);
   const setCtx = (next: SessionHiringReviewContext) => {
@@ -313,8 +333,11 @@ export function HiringDecisionPanel({
   const [lastEmailDelivery, setLastEmailDelivery] =
     useState<PeerReviewEmailDelivery | null>(null);
   const [copiedReviewLink, setCopiedReviewLink] = useState(false);
-  const peerDraftStorageKey = `hirearchy:eval:peer-draft:v1:${ctx.sessionId}`;
+  const peerDraftStorageKey = isolated
+    ? `hirearchy:demo:peer-draft:v1:${ctx.sessionId}`
+    : `hirearchy:eval:peer-draft:v1:${ctx.sessionId}`;
   const [peerDraftHydrated, setPeerDraftHydrated] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -394,7 +417,7 @@ export function HiringDecisionPanel({
     () => initialHiringDecisionDraft(initialContext),
     [initialContext],
   );
-  const draftStorageKey = hiringDecisionDraftKey(ctx.sessionId);
+  const draftStorageKey = hiringDecisionDraftKey(ctx.sessionId, isolated);
   const [internalDraft, setInternalDraft] =
     useState<HiringDecisionDraft>(defaultDraft);
   const activeDraft = controlledDraft ?? internalDraft;
@@ -434,7 +457,7 @@ export function HiringDecisionPanel({
       if (!active) return;
       try {
         setInternalDraft(
-          restoreHiringDecisionDraft(ctx.sessionId, defaultDraft),
+          restoreHiringDecisionDraft(ctx.sessionId, defaultDraft, isolated),
         );
       } catch {
         // Ignore malformed draft cache
@@ -443,7 +466,7 @@ export function HiringDecisionPanel({
     return () => {
       active = false;
     };
-  }, [controlledDraft, ctx.sessionId, defaultDraft]);
+  }, [controlledDraft, ctx.sessionId, defaultDraft, isolated]);
 
   const isDirtyDraft =
     decision !== defaultDraft.decision ||
@@ -604,6 +627,39 @@ export function HiringDecisionPanel({
     setErrorMsg(null);
     setStatusMsg(null);
     setLastEmailDelivery(null);
+    if (isolated) {
+      const reviewer = ctx.teamMembers.find(
+        (m) => m.principalId === opinionReviewerId,
+      );
+      const requester = ctx.teamMembers.find(
+        (m) => m.principalId === ctx.currentPrincipalId,
+      );
+      const requestContext = buildRequestContextPayload();
+      const simulatedOpinion: SecondOpinionRecord = {
+        id: `sim-opinion-${Date.now()}`,
+        sessionId: ctx.sessionId,
+        requestedByPrincipalId: ctx.currentPrincipalId,
+        requestedByName: requester?.displayName ?? 'You',
+        requestedReviewerPrincipalId: opinionReviewerId,
+        requestedReviewerName: reviewer?.displayName ?? 'Teammate',
+        requestNote: opinionRequestNote.trim(),
+        ...(requestContext ? { requestContext } : {}),
+        responseNote: null,
+        verdict: null,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        respondedAt: null,
+      };
+      setCtx({
+        ...ctx,
+        secondOpinions: [simulatedOpinion, ...ctx.secondOpinions],
+      });
+      setOpinionRequestNote('');
+      setStatusMsg(
+        `Sandbox preview: peer review request added for ${simulatedOpinion.requestedReviewerName} (no email sent).`,
+      );
+      return;
+    }
     setBusyAction('opinion');
     try {
       const requestContext = buildRequestContextPayload();
@@ -640,6 +696,24 @@ export function HiringDecisionPanel({
     setErrorMsg(null);
     setStatusMsg(null);
     setLastEmailDelivery(null);
+    if (isolated) {
+      setCtx({
+        ...ctx,
+        secondOpinions: ctx.secondOpinions.map((op) =>
+          op.id === opinionId
+            ? {
+                ...op,
+                status: 'completed',
+                responseNote: note,
+                verdict,
+                respondedAt: new Date().toISOString(),
+              }
+            : op,
+        ),
+      });
+      setStatusMsg('Sandbox preview: peer review response recorded locally.');
+      return;
+    }
     setBusyAction(`respond:${opinionId}`);
     try {
       const data = await callReviewApi({
@@ -691,6 +765,28 @@ export function HiringDecisionPanel({
   const handleGeneratePerformanceReport = async () => {
     setErrorMsg(null);
     setStatusMsg(null);
+    if (isolated) {
+      const customStrengths = splitLines(strengthsText);
+      const customWeaknesses = splitLines(weaknessesText);
+      const localReport: PerformanceFitReport = {
+        ...DEMO_PERFORMANCE_FIT_REPORT,
+        strengths:
+          customStrengths.length > 0
+            ? customStrengths
+            : DEMO_PERFORMANCE_FIT_REPORT.strengths,
+        weaknessesAndRisks:
+          customWeaknesses.length > 0
+            ? customWeaknesses
+            : DEMO_PERFORMANCE_FIT_REPORT.weaknessesAndRisks,
+        provider: {
+          ...DEMO_PERFORMANCE_FIT_REPORT.provider,
+          generatedAt: new Date().toISOString(),
+        },
+      };
+      setPerformanceReport(localReport);
+      setStatusMsg('Sandbox Managerial Fit Report ready.');
+      return;
+    }
     setBusyAction('report');
     try {
       const data = await callReviewApi({
@@ -729,6 +825,58 @@ export function HiringDecisionPanel({
       return;
     setErrorMsg(null);
     setStatusMsg(null);
+    if (isolated) {
+      const nowIso = new Date().toISOString();
+      const recipient = ctx.teamMembers.find(
+        (m) => m.principalId === handoffRecipientId,
+      );
+      const decider = ctx.teamMembers.find(
+        (m) => m.principalId === ctx.currentPrincipalId,
+      );
+      const nextReport =
+        decision === 'accepted'
+          ? (performanceReport ?? DEMO_PERFORMANCE_FIT_REPORT)
+          : performanceReport;
+      if (nextReport && !performanceReport) {
+        setPerformanceReport(nextReport);
+      }
+      setCtx({
+        ...ctx,
+        decision: {
+          sessionId: ctx.sessionId,
+          organizationId: ctx.organizationId,
+          decidedByPrincipalId: ctx.currentPrincipalId,
+          decidedByName: decider?.displayName ?? 'Evaluator',
+          decision,
+          candidateStrengths: splitLines(strengthsText),
+          candidateWeaknesses: splitLines(weaknessesText),
+          candidateFeedbackNote: feedbackNote,
+          internalNotes,
+          nextStageLabel: decision === 'accepted' ? nextStageLabel : null,
+          handoffRecipientPrincipalId:
+            decision === 'accepted' ? handoffRecipientId || null : null,
+          handoffRecipientName:
+            decision === 'accepted' ? (recipient?.displayName ?? null) : null,
+          handoffStatus: decision === 'accepted' ? 'pending' : 'none',
+          performanceReport: nextReport,
+          publishedAt: nowIso,
+          updatedAt: nowIso,
+        },
+      });
+      removePersistedKey(draftStorageKey);
+      setDraftSaveStatus(null);
+      setStatusMsg(
+        decision === 'accepted'
+          ? `Sandbox preview: Advancement to ${nextStageLabel.trim() || 'next stage'} simulated. Zero credits used.`
+          : 'Sandbox preview: Rejection feedback simulated. Zero credits used.',
+      );
+      setToast({
+        message: 'Simulated decision preview ready.',
+        tone: 'success',
+      });
+      onSimulatedPublish?.(activeDraft, nextReport);
+      return;
+    }
     setBusyAction('publish');
     try {
       const data = await callReviewApi({
@@ -1277,12 +1425,27 @@ export function HiringDecisionPanel({
                 )}
               </span>
               <div className="hiring-header-actions">
-                {ctx.decision?.decision === 'accepted' ? (
+                {!isolated && ctx.decision?.decision === 'accepted' ? (
                   <a
                     className="hiring-btn"
                     href={`${orgBase}/handoffs/${encodeURIComponent(ctx.sessionId)}`}
                   >
                     Open handoff
+                  </a>
+                ) : null}
+                {!isolated && ctx.decision ? (
+                  <button
+                    type="button"
+                    className="hiring-btn"
+                    onClick={() => setShareModalOpen(true)}
+                  >
+                    <IconLink size={15} aria-hidden="true" /> Share executive
+                    dossier
+                  </button>
+                ) : null}
+                {isolated && ctx.decision ? (
+                  <a className="hiring-btn" href="/dossier/demo">
+                    Preview executive dossier
                   </a>
                 ) : null}
                 {onBackToEvidence ? (
@@ -1516,6 +1679,28 @@ export function HiringDecisionPanel({
           </div>
         ) : null}
       </section>
+
+      {!isolated && shareModalOpen && ctx.decision ? (
+        <div
+          className="r210-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Share executive dossier"
+        >
+          <div
+            className="r210-modal-dialog"
+            style={{ maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <DossierSharePanel
+              organizationId={ctx.organizationId}
+              sessionId={ctx.sessionId}
+              candidateLabel={ctx.candidateName ?? ctx.candidateCode}
+              compact
+              onClose={() => setShareModalOpen(false)}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <CommonThreadToast
         message={toast?.message ?? null}
