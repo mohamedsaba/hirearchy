@@ -9,6 +9,7 @@ import {
   IconLayoutSidebarLeftExpand,
   IconListDetails,
   IconLogout,
+  IconPlus,
   IconSettings,
   IconUserCircle,
   IconUsers,
@@ -67,6 +68,20 @@ export function OrganizationWorkspaceShell({
           <span className="software-document-product">Software</span>
         </Link>
         <div className="software-header-controls">
+          <div
+            className="software-header-context"
+            aria-label="Workspace context"
+          >
+            <span className="software-header-context-org">
+              {organizationName}
+            </span>
+            <span className="software-header-context-sep" aria-hidden="true">
+              ·
+            </span>
+            <span className="software-header-context-role">
+              {resolveWorkspaceRoleLabel(role, true)}
+            </span>
+          </div>
           <ThemeToggle variant="header" />
         </div>
       </header>
@@ -99,6 +114,24 @@ export function OrganizationWorkspaceShell({
               <span>{resolveWorkspaceRoleLabel(role, true)}</span>
             </div>
           </div>
+          {role === 'cto' || role === 'recruiter' ? (
+            <Link
+              className="software-sidebar-quick-action"
+              href={`${orgBase}/builder?mode=new`}
+              title="New assessment"
+            >
+              <IconPlus size={15} stroke={2.1} aria-hidden="true" />
+              <span className="software-workspace-nav-label">
+                New assessment
+              </span>
+              <span
+                className="software-workspace-rail-label"
+                aria-hidden="true"
+              >
+                New
+              </span>
+            </Link>
+          ) : null}
           <nav aria-label="Workspace navigation">
             <span className="software-nav-group-label" aria-hidden="true">
               Workspace

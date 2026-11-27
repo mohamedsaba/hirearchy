@@ -1,6 +1,11 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
+import {
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconInfoCircle,
+} from '@tabler/icons-react';
 
 import {
   isAuthenticatedStaging,
@@ -15,8 +20,8 @@ import {
 } from '../../../src/staging/browser';
 import { AuthCanvasBackdrop } from '../../_components/auth-canvas-backdrop';
 import { ThemeToggle } from '../../_components/theme-toggle';
-import { PasswordToggleInput } from '../../_components/password-field';
 import { SwitchSignInAccount } from '../../_components/switch-sign-in-account';
+import { R23LoginForm } from './login-form';
 
 export const metadata = { title: 'Sign in' };
 export const dynamic = 'force-dynamic';
@@ -70,6 +75,12 @@ export default async function R23LoginPage({
                 : null;
   const noticeIsError =
     params.error === 'credentials' || params.error === 'unavailable';
+  const noticeIsSuccess = params.verified === '1' || params.reset === '1';
+  const noticeTone = noticeIsError
+    ? 'error'
+    : noticeIsSuccess
+      ? 'success'
+      : 'info';
 
   return (
     <div className="software-product software-document-access software-team-access">
@@ -121,42 +132,36 @@ export default async function R23LoginPage({
             <>
               <p>Access your assessments and assigned reviews.</p>
               {notice ? (
-                <p role={noticeIsError ? 'alert' : 'status'}>{notice}</p>
-              ) : null}
-              <form action="/r23/auth/login" method="post">
-                {safeNext ? (
-                  <input type="hidden" name="next" value={safeNext} />
-                ) : null}
-                <label htmlFor="email">Email</label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="username"
-                  required
-                  maxLength={320}
-                />
-                <div className="software-field-heading">
-                  <label htmlFor="password">Password</label>
-                  <Link
-                    href={
-                      safeNext
-                        ? `/r23/recover?next=${encodeURIComponent(safeNext)}`
-                        : '/r23/recover'
-                    }
-                    prefetch={false}
-                  >
-                    Reset your password
-                  </Link>
+                <div
+                  className={`software-auth-banner software-auth-banner--${noticeTone}`}
+                  role={noticeIsError ? 'alert' : 'status'}
+                >
+                  {noticeIsError ? (
+                    <IconAlertTriangle
+                      size={18}
+                      stroke={2}
+                      className="software-auth-banner-icon"
+                      aria-hidden="true"
+                    />
+                  ) : noticeIsSuccess ? (
+                    <IconCircleCheck
+                      size={18}
+                      stroke={2}
+                      className="software-auth-banner-icon"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <IconInfoCircle
+                      size={18}
+                      stroke={2}
+                      className="software-auth-banner-icon"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span>{notice}</span>
                 </div>
-                <PasswordToggleInput
-                  id="password"
-                  name="password"
-                  autoComplete="current-password"
-                  maxLength={1024}
-                />
-                <button type="submit">Sign in</button>
-              </form>
+              ) : null}
+              <R23LoginForm safeNext={safeNext} />
               <nav aria-label="Account help">
                 <div className="software-access-switch">
                   {founderUat ||

@@ -147,6 +147,7 @@ const workspaceIconPaths = {
     'M9 4v16',
     'M15 10l-2 2l2 2',
   ],
+  Plus: ['M12 5l0 14', 'M5 12l14 0'],
 } as const;
 
 function workspaceIcon(
@@ -307,6 +308,13 @@ export function renderSoftwareDocument(
         )}"><button type="submit">Sign out</button></form></div>`
     : '';
 
+  const quickActionBlock =
+    workspace &&
+    hiringEnabled &&
+    (workspace.role === 'cto' || workspace.role === 'recruiter')
+      ? `<a class="software-sidebar-quick-action" href="${organizationPath}/builder?mode=new" title="New assessment">${workspaceIcon('Plus', 15)}<span class="software-workspace-nav-label">New assessment</span><span class="software-workspace-rail-label" aria-hidden="true">New</span></a>`
+      : '';
+
   const navigation = workspace
     ? `<aside class="software-workspace-sidebar">
         ${
@@ -315,6 +323,7 @@ export function renderSoftwareDocument(
             : ''
         }
         ${identityBlock}
+        ${quickActionBlock}
         <nav aria-label="Workspace navigation">${navLinks}</nav>
         ${planCard}
         ${footerBlock}
@@ -334,6 +343,14 @@ export function renderSoftwareDocument(
   const themeToggleForm = hiringEnabled
     ? `<form class="hiring-doc-theme-form" action="/api/theme" method="post"><input type="hidden" name="theme" value="${nextTheme}">${nextInput}<button type="submit" class="hiring-theme-toggle hiring-theme-toggle--header" aria-label="Switch to ${nextTheme} theme"><span class="hiring-theme-toggle-icon" aria-hidden="true">${toggleIcon}</span><span>${resolvedTheme === 'dark' ? 'Light' : 'Dark'}</span></button></form>`
     : '';
+  const headerContextHtml =
+    workspace && hiringEnabled
+      ? `<div class="software-header-context" aria-label="Workspace context"><span class="software-header-context-org">${escapeHtml(workspace.organizationName)}</span><span class="software-header-context-sep" aria-hidden="true">·</span><span class="software-header-context-role">${escapeHtml(resolveWorkspaceRoleLabel(workspace.role, true))}</span></div>`
+      : '';
+  const headerControlsHtml =
+    headerContextHtml || themeToggleForm
+      ? `<div class="software-header-controls">${headerContextHtml}${themeToggleForm}</div>`
+      : '';
   const htmlThemeAttr = resolvedTheme === 'dark' ? ' data-theme="dark"' : '';
 
   const isCenteredWorkspacePicker =
@@ -347,5 +364,5 @@ export function renderSoftwareDocument(
       ? ''
       : '<div class="software-access-intro"><p class="software-access-kicker">Engineering evaluation</p><p class="software-access-principle">Evidence informs.<br><span>People decide.</span></p><p class="software-access-lead">Review real codebase work, inspect reconstructed timelines, and lead structured hiring discussions.</p></div>';
 
-  return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${bodyAccessClasses}"><a class="software-skip-link" href="#main-content">Skip to main content</a><header class="software-document-header"><a class="software-document-wordmark" href="${homeBrandHref}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a>${themeToggleForm}</header><div class="software-document-layout">${navigation}<main class="software-document-shell${isCenteredWorkspacePicker ? ' software-document-shell--centered' : ''}" id="main-content" tabindex="-1">${accessIntro}<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
+  return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${bodyAccessClasses}"><a class="software-skip-link" href="#main-content">Skip to main content</a><header class="software-document-header"><a class="software-document-wordmark" href="${homeBrandHref}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a>${headerControlsHtml}</header><div class="software-document-layout">${navigation}<main class="software-document-shell${isCenteredWorkspacePicker ? ' software-document-shell--centered' : ''}" id="main-content" tabindex="-1">${accessIntro}<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
 }

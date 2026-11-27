@@ -1571,6 +1571,14 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
   }
 }
 
+function workspaceMonogram(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return `${words[0].charAt(0)}${words[1].charAt(0)}`.toUpperCase();
+  }
+  return (words[0]?.slice(0, 2) || 'WS').toUpperCase();
+}
+
 export async function stagingOrganizationsGet(
   request: Request,
 ): Promise<Response> {
@@ -1619,32 +1627,39 @@ export async function stagingOrganizationsGet(
             }
             const id = safeHtml(membership.organizationId.toLowerCase());
             const roleLabel = safeHtml(membership.role);
-            const displayName = safeHtml(
+            const rawDisplayName =
               membership.displayName?.trim() ||
-                `Organization ${membership.organizationId.slice(0, 8)}`,
-            );
+              `Organization ${membership.organizationId.slice(0, 8)}`;
+            const displayName = safeHtml(rawDisplayName);
+            const monogram = safeHtml(workspaceMonogram(rawDisplayName));
             const roleLabelDisplay =
               membership.role === 'cto'
                 ? 'CTO / Owner'
                 : membership.role === 'reviewer'
                   ? 'Evaluator'
                   : 'Recruiter';
-            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span>${displayName}</span><span class="software-role-badge">${roleLabelDisplay}</span></button></form></li>`;
+            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span class="software-org-picker-main"><span class="software-org-avatar" aria-hidden="true">${monogram}</span><span class="software-org-picker-copy"><span class="software-org-picker-name">${displayName}</span><span class="software-org-picker-meta">Workspace · ${id.slice(0, 8)}</span></span></span><span class="software-org-picker-trail"><span class="software-role-badge">${roleLabelDisplay}</span><span class="software-org-picker-arrow" aria-hidden="true">→</span></span></button></form></li>`;
           })
           .join('');
         let content = '';
         if (memberships.length > 0) {
-          content = `<h1>Choose a workspace</h1><ul class="software-organization-picker">${items}</ul>`;
+          content = `<h1>Choose a workspace</h1><p class="software-picker-subtitle">Select an engineering workspace to review submissions and manage assessments.</p><ul class="software-organization-picker">${items}</ul>`;
         } else {
           if (
             statusResult.status === 'needs_team' &&
             statusResult.capabilities.selfServiceOnboardingEnabled
           ) {
             content = `
-              <section aria-labelledby="create-org-title">
+              <section class="software-bootstrap-card" aria-labelledby="create-org-title">
+                <ol class="software-bootstrap-steps" aria-label="Workspace setup progress">
+                  <li data-step-state="done"><span class="software-bootstrap-step-badge" aria-hidden="true">✓</span><span>1. Account</span></li>
+                  <li data-step-state="active" aria-current="step"><span class="software-bootstrap-step-badge" aria-hidden="true">2</span><span>2. Workspace</span></li>
+                  <li data-step-state="upcoming"><span class="software-bootstrap-step-badge" aria-hidden="true">3</span><span>3. First Assessment</span></li>
+                </ol>
                 <h1 id="create-org-title">Create your workspace</h1>
                 <p>Create your first organization, then prepare an assessment and invite your team.</p>
-                <div role="note" aria-label="Workspace owner note">
+                <div class="software-owner-note" role="note" aria-label="Workspace owner note">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 9h.01"></path><path d="M11 12h1v4h1"></path></svg>
                   <p>You&apos;ll be set up as the workspace owner. Owner transfer isn&apos;t available in this version.</p>
                 </div>
                 <form action="/r23/organization/bootstrap" method="post">
@@ -5373,9 +5388,17 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
   return htmlResponse(
     'Create your account',
     `
-      <section aria-labelledby="signup-heading">
+      <section class="software-bootstrap-card" aria-labelledby="signup-heading">
+        <ol class="software-bootstrap-steps" aria-label="Workspace setup progress">
+          <li data-step-state="active" aria-current="step"><span class="software-bootstrap-step-badge" aria-hidden="true">1</span><span>1. Account</span></li>
+          <li data-step-state="upcoming"><span class="software-bootstrap-step-badge" aria-hidden="true">2</span><span>2. Workspace</span></li>
+          <li data-step-state="upcoming"><span class="software-bootstrap-step-badge" aria-hidden="true">3</span><span>3. First Assessment</span></li>
+        </ol>
         <h1 id="signup-heading">Create your Hirearchy account</h1>
-        <div role="note" aria-label="Environment notice">${deliveryNotice}</div>
+        <div class="software-owner-note" role="note" aria-label="Environment notice">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 9h.01"></path><path d="M11 12h1v4h1"></path></svg>
+          <div>${deliveryNotice}</div>
+        </div>
         <form action="/r23/signup" method="post">
           <label for="email">Work email</label>
           <input id="email" name="email" type="email" autocomplete="email" required maxlength="320" value="${safeHtml(emailParam)}" placeholder="you@company.com">
@@ -6243,6 +6266,55 @@ export async function stagingAccountGet(request: Request): Promise<Response> {
           ? `<div class="team-account-sign-in-row"><div><h3>Active workspace</h3><p>${safeHtml(workspace.organizationName)}</p></div><a class="hiring-btn" href="/r23/organizations">Switch workspace</a></div>`
           : '';
 
+        const accountPhotoScript = `
+(function () {
+  var dropzone = document.getElementById('account-photo-dropzone');
+  var input = document.getElementById('account-photo');
+  var preview = document.getElementById('account-photo-preview');
+  var fileNameEl = document.getElementById('account-photo-filename');
+  if (!dropzone || !input) return;
+  function updatePreview(file) {
+    if (!file) return;
+    if (fileNameEl) fileNameEl.textContent = file.name;
+    dropzone.setAttribute('data-has-file', 'true');
+    if (preview && typeof FileReader !== 'undefined' && file.type && file.type.indexOf('image/') === 0) {
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        if (!ev.target || typeof ev.target.result !== 'string') return;
+        preview.textContent = '';
+        var img = document.createElement('img');
+        img.width = 52;
+        img.height = 52;
+        img.alt = '';
+        img.src = ev.target.result;
+        preview.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  input.addEventListener('change', function () {
+    updatePreview(input.files && input.files[0]);
+  });
+  dropzone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    dropzone.setAttribute('data-dragover', 'true');
+  });
+  dropzone.addEventListener('dragleave', function () {
+    dropzone.removeAttribute('data-dragover');
+  });
+  dropzone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropzone.removeAttribute('data-dragover');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      try {
+        input.files = e.dataTransfer.files;
+      } catch (err) {}
+      updatePreview(e.dataTransfer.files[0]);
+    }
+  });
+})();
+`;
+
         const content = `<div class="team-account-page">
         <header class="software-page-heading team-account-header">
           <div>
@@ -6268,8 +6340,15 @@ export async function stagingAccountGet(request: Request): Promise<Response> {
             <div class="team-account-photo-block">
               <form class="team-account-photo-form" action="${ACCOUNT_PATH}" method="post" enctype="multipart/form-data">
                 ${csrfField}<input type="hidden" name="action" value="update_avatar">
-                <div class="hiring-field"><label for="account-photo">Profile photo</label><input id="account-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required aria-describedby="photo-help"></div>
-                <button type="submit" class="hiring-btn">Save photo</button>
+                <div class="team-account-dropzone" id="account-photo-dropzone">
+                  <div class="team-account-dropzone-preview" id="account-photo-preview" aria-hidden="true">${avatar}</div>
+                  <div class="team-account-dropzone-body">
+                    <label for="account-photo" class="team-account-dropzone-label">Profile photo</label>
+                    <span id="account-photo-filename" class="team-account-dropzone-hint">Drop an image or choose a file</span>
+                    <input id="account-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required aria-describedby="photo-help">
+                  </div>
+                  <button type="submit" class="hiring-btn hiring-btn-primary">Save photo</button>
+                </div>
               </form>
               <div class="team-account-photo-meta">
                 <p class="software-field-help" id="photo-help">JPG, PNG or WebP, up to 2 MB.</p>
@@ -6305,8 +6384,10 @@ export async function stagingAccountGet(request: Request): Promise<Response> {
             </div>
           </section>
         </div>
-      </div>`;
-        const headers = securityHeaders();
+      </div><script>${accountPhotoScript}</script>`;
+        const headers = securityHeaders(
+          scriptCspDirectives(accountPhotoScript, false),
+        );
         headers.set(
           'Content-Security-Policy',
           `${headers.get('Content-Security-Policy')}; img-src data:`,
@@ -6470,11 +6551,25 @@ export async function stagingOrganizationPlanGet(
           (tier) => tier === plan.planTier,
         );
         const hasSlots = plan.planTier === 'per_candidate';
+        const slotsPurchased = Math.max(0, plan.candidateCreditsPurchased ?? 0);
+        const slotsRemaining = Math.max(0, plan.candidateCreditsRemaining ?? 0);
+        const slotsUsed = Math.max(0, slotsPurchased - slotsRemaining);
+        const slotMax = slotsPurchased > 0 ? slotsPurchased : 100;
+        const slotProgressValue = hasSlots
+          ? Math.min(slotMax, slotsRemaining)
+          : plan.planTier === 'none'
+            ? 0
+            : 100;
         const capacity = hasSlots
-          ? `${plan.candidateCreditsRemaining ?? 0} of ${plan.candidateCreditsPurchased} candidate slots available`
+          ? `${slotsRemaining} of ${slotsPurchased} candidate slots available`
           : plan.planTier === 'none'
             ? 'Activate a plan to issue assessments'
             : 'Unlimited candidate assessments';
+        const capacityDetail = hasSlots
+          ? `${slotsUsed} used · ${slotsRemaining} remaining`
+          : plan.planTier === 'none'
+            ? '0 active assessment slots'
+            : 'Unlimited capacity included';
         const actionFor = (tier: (typeof PAID_PLAN_ORDER)[number]) =>
           currentRank < 0
             ? 'Choose'
@@ -6484,13 +6579,13 @@ export async function stagingOrganizationPlanGet(
         const cards = PAID_PLAN_ORDER.map((tier) => {
           const definition = getPlanDefinition(tier);
           const isCurrent = tier === plan.planTier;
-          const isRecommended = tier === 'ultra' && !isCurrent;
+          const isDefaultRecommended = tier === 'pro' && !isCurrent;
           const statusChip = isCurrent
             ? '<span class="hiring-pill hiring-pill-plum">Current plan</span>'
-            : isRecommended
-              ? '<span class="hiring-pill hiring-pill-mint">Recommended</span>'
-              : '';
-          return `<article class="hiring-plan-card team-plan-card" data-tier="${tier}" data-current="${isCurrent}"${isRecommended ? ' data-recommended="true"' : ''}>
+            : isDefaultRecommended
+              ? '<span class="hiring-pill hiring-pill-mint" data-roi-badge>Recommended</span>'
+              : '<span class="hiring-pill hiring-pill-mint" data-roi-badge hidden>Recommended</span>';
+          return `<article class="hiring-plan-card team-plan-card" data-tier="${tier}" data-current="${isCurrent}"${isDefaultRecommended ? ' data-recommended="true"' : ' data-recommended="false"'}>
           <div class="team-plan-card-title"><h2>${safeHtml(definition.name)}</h2>${statusChip}</div>
           <p class="team-plan-model">${safeHtml(definition.priceLabel)}</p>
           <ul>${definition.highlights.map((item) => `<li>${safeHtml(item)}</li>`).join('')}</ul>
@@ -6569,25 +6664,28 @@ export async function stagingOrganizationPlanGet(
 (function () {
   var root = document.getElementById('team-roi-calculator');
   if (!root) return;
-  var hiresEl = document.getElementById('roi-hires');
-  var candEl = document.getElementById('roi-candidates');
-  var hrsEl = document.getElementById('roi-hours');
-  var rateEl = document.getElementById('roi-rate');
+  var pairs = [
+    { num: document.getElementById('roi-hires'), range: document.getElementById('roi-hires-range'), min: 1, max: 200, def: 8 },
+    { num: document.getElementById('roi-candidates'), range: document.getElementById('roi-candidates-range'), min: 1, max: 50, def: 6 },
+    { num: document.getElementById('roi-hours'), range: document.getElementById('roi-hours-range'), min: 0.5, max: 8, def: 2.5 },
+    { num: document.getElementById('roi-rate'), range: document.getElementById('roi-rate-range'), min: 40, max: 400, def: 110 }
+  ];
   var totalOut = document.getElementById('roi-total-assessments');
   var hoursOut = document.getElementById('roi-hours-saved');
   var valueOut = document.getElementById('roi-value-saved');
   var onsiteOut = document.getElementById('roi-onsite-saved');
   var tierOut = document.getElementById('roi-recommended-tier');
   var tierNoteOut = document.getElementById('roi-recommended-note');
+  var planCards = document.querySelectorAll('.hiring-plan-card[data-tier]');
   function clamp(num, min, max, fallback) {
     if (!Number.isFinite(num)) return fallback;
     return Math.min(max, Math.max(min, num));
   }
   function update() {
-    var hires = clamp(Number(hiresEl && hiresEl.value), 1, 200, 8);
-    var cands = clamp(Number(candEl && candEl.value), 1, 50, 6);
-    var hrs = clamp(Number(hrsEl && hrsEl.value), 0.5, 8, 2.5);
-    var rate = clamp(Number(rateEl && rateEl.value), 40, 400, 110);
+    var hires = clamp(Number(pairs[0].num && pairs[0].num.value), 1, 200, 8);
+    var cands = clamp(Number(pairs[1].num && pairs[1].num.value), 1, 50, 6);
+    var hrs = clamp(Number(pairs[2].num && pairs[2].num.value), 0.5, 8, 2.5);
+    var rate = clamp(Number(pairs[3].num && pairs[3].num.value), 40, 400, 110);
     var total = Math.round(hires * cands);
     var savedHrs = Math.round(total * hrs);
     var savedValue = Math.round(savedHrs * rate);
@@ -6596,11 +6694,12 @@ export async function stagingOrganizationPlanGet(
     if (hoursOut) hoursOut.textContent = savedHrs.toLocaleString('en-US') + ' hrs/yr';
     if (valueOut) valueOut.textContent = '$' + savedValue.toLocaleString('en-US') + '/yr';
     if (onsiteOut) onsiteOut.textContent = onsiteHrs.toLocaleString('en-US') + ' hrs/yr';
+    var recTier = total <= 15 ? 'per_candidate' : total <= 60 ? 'pro' : 'ultra';
     if (tierOut && tierNoteOut) {
-      if (total <= 15) {
+      if (recTier === 'per_candidate') {
         tierOut.textContent = 'Per Candidate';
         tierNoteOut.textContent = 'Best fit for focused hiring (<= 15 distinct candidates/yr) — re-assessments reuse the same candidate slot.';
-      } else if (total <= 60) {
+      } else if (recTier === 'pro') {
         tierOut.textContent = 'Pro';
         tierNoteOut.textContent = 'Best fit for continuous hiring (16–60 candidates/yr) — unlimited assessments with zero per-invite surprises.';
       } else {
@@ -6608,9 +6707,26 @@ export async function stagingOrganizationPlanGet(
         tierNoteOut.textContent = 'Best fit for high-velocity engineering teams (> 60 candidates/yr) — adds advisory AI reviews with timeline deltas and fit reports.';
       }
     }
+    planCards.forEach(function (card) {
+      var isRec = card.getAttribute('data-tier') === recTier && card.getAttribute('data-current') !== 'true';
+      card.setAttribute('data-recommended', isRec ? 'true' : 'false');
+      var badge = card.querySelector('[data-roi-badge]');
+      if (badge) badge.hidden = !isRec;
+    });
   }
-  [hiresEl, candEl, hrsEl, rateEl].forEach(function (el) {
-    if (el) el.addEventListener('input', update);
+  pairs.forEach(function (p) {
+    if (p.num) {
+      p.num.addEventListener('input', function () {
+        if (p.range) p.range.value = String(clamp(Number(p.num.value), p.min, p.max, p.def));
+        update();
+      });
+    }
+    if (p.range) {
+      p.range.addEventListener('input', function () {
+        if (p.num) p.num.value = p.range.value;
+        update();
+      });
+    }
   });
   update();
 })();
@@ -6623,10 +6739,26 @@ export async function stagingOrganizationPlanGet(
           </div>
         </header>
         ${noticeText ? `<p class="hiring-banner hiring-banner-success" role="status">${noticeText}</p>` : ''}
-        <section class="team-plan-current" aria-labelledby="current-plan-title">
-          <div><p class="team-plan-kicker">Current plan</p><h2 id="current-plan-title">${safeHtml(current.name)}</h2></div>
-          <div class="team-plan-capacity">${safeHtml(capacity)}</div>
-        </section>
+        <div class="team-plan-above-fold">
+          <section class="team-plan-current" aria-labelledby="current-plan-title">
+            <div>
+              <p class="team-plan-kicker">Current plan</p>
+              <h2 id="current-plan-title">${safeHtml(current.name)}</h2>
+            </div>
+            <div class="team-plan-meter">
+              <div class="team-plan-capacity">${safeHtml(capacity)}</div>
+              <progress class="team-plan-progress" value="${slotProgressValue}" max="${slotMax}" aria-label="Candidate slot capacity"></progress>
+              <p class="team-plan-capacity-detail">${safeHtml(capacityDetail)}</p>
+            </div>
+            <p class="team-plan-trust-line">Human evaluators remain in full control of every hiring decision.</p>
+          </section>
+          <section class="team-compare-plans" aria-labelledby="compare-plans-title">
+            <h2 id="compare-plans-title">Compare plans</h2>
+            <div class="hiring-plan-grid">${cards}</div>
+            <p class="team-plan-trust-line">No automated candidate scoring. Every tier keeps human evaluators in full control of hiring verdicts.</p>
+            <p class="team-plan-help">${canChange ? 'Demo changes update this workspace without charging a payment method.' : canManage ? 'Plan changes and slot purchases are managed with Hirearchy.' : 'A workspace owner or CTO can change this plan.'}</p>
+          </section>
+        </div>
         ${changeReview}
         <section id="team-roi-calculator" class="software-settings-section team-roi-calculator" aria-labelledby="roi-calculator-title">
           <div class="team-roi-head">
@@ -6640,10 +6772,22 @@ export async function stagingOrganizationPlanGet(
             </div>
           </div>
           <div class="team-roi-inputs">
-            <div class="hiring-field"><label for="roi-hires">Target hires / year</label><input id="roi-hires" type="number" min="1" max="200" value="8"></div>
-            <div class="hiring-field"><label for="roi-candidates">Candidates / hire</label><input id="roi-candidates" type="number" min="1" max="50" value="6"></div>
-            <div class="hiring-field"><label for="roi-hours">Hours saved / candidate</label><input id="roi-hours" type="number" min="0.5" max="8" step="0.5" value="2.5"></div>
-            <div class="hiring-field"><label for="roi-rate">Senior eng hourly cost ($)</label><input id="roi-rate" type="number" min="40" max="400" step="5" value="110"></div>
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-hires">Target hires / year</label><input id="roi-hires" class="team-roi-number" type="number" min="1" max="200" value="8"></div>
+              <input id="roi-hires-range" class="team-roi-slider" type="range" min="1" max="200" value="8" aria-label="Target hires per year">
+            </div>
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-candidates">Candidates / hire</label><input id="roi-candidates" class="team-roi-number" type="number" min="1" max="50" value="6"></div>
+              <input id="roi-candidates-range" class="team-roi-slider" type="range" min="1" max="50" value="6" aria-label="Candidates per hire">
+            </div>
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-hours">Hours saved / candidate</label><input id="roi-hours" class="team-roi-number" type="number" min="0.5" max="8" step="0.5" value="2.5"></div>
+              <input id="roi-hours-range" class="team-roi-slider" type="range" min="0.5" max="8" step="0.5" value="2.5" aria-label="Hours saved per candidate">
+            </div>
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-rate">Senior eng hourly cost ($)</label><input id="roi-rate" class="team-roi-number" type="number" min="40" max="400" step="5" value="110"></div>
+              <input id="roi-rate-range" class="team-roi-slider" type="range" min="40" max="400" step="5" value="110" aria-label="Senior engineering hourly cost">
+            </div>
           </div>
           <div class="team-roi-outputs">
             <div class="team-roi-stat"><span>Assessments / yr</span><strong id="roi-total-assessments">48</strong></div>
@@ -6653,12 +6797,6 @@ export async function stagingOrganizationPlanGet(
           </div>
           <p id="roi-recommended-note" class="hiring-muted-copy">Best fit for continuous hiring (16–60 candidates/yr) — unlimited assessments with zero per-invite surprises.</p>
           <p class="team-roi-formula">Formula: (Hires × Candidates) × Hours saved × Hourly cost; onsite avoidance assumes 40% early filter efficiency × 3 panel hrs.</p>
-        </section>
-        <section class="team-compare-plans" aria-labelledby="compare-plans-title">
-          <h2 id="compare-plans-title">Compare plans</h2>
-          <div class="hiring-plan-grid">${cards}</div>
-          <p class="team-plan-trust-line">No automated candidate scoring. Every tier keeps human evaluators in full control of hiring verdicts.</p>
-          <p class="team-plan-help">${canChange ? 'Demo changes update this workspace without charging a payment method.' : canManage ? 'Plan changes and slot purchases are managed with Hirearchy.' : 'A workspace owner or CTO can change this plan.'}</p>
         </section>
         <section id="add-ons" class="software-settings-section team-plan-add-ons" aria-labelledby="add-ons-title">
           <h2 id="add-ons-title">Add-ons</h2>
@@ -6855,7 +6993,23 @@ export async function stagingOrganizationSettingsGet(
                 `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`,
                 resolvePublicOrigin(request),
               ).toString();
-              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this full link and share it with your teammate.</span></label>`;
+              const safeUrl = safeHtml(acceptUrl);
+              const inviteInputId = `invite-link-${safeHtml(inv.id)}`;
+              linkHtml = `<div class="software-invitation-share">
+                <label class="software-invitation-share-label" for="${inviteInputId}">Invitation link</label>
+                <div class="software-invitation-share-row">
+                  <input id="${inviteInputId}" type="text" readonly value="${safeUrl}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}">
+                  <button type="button" class="ct-copy-btn ct-copy-btn--sm ct-copy-btn--secondary software-invite-copy-btn" data-copy-invite="${safeUrl}" data-copied="false" aria-label="Copy invite link for ${safeHtml(inv.targetEmail)}">
+                    <span class="ct-copy-icon-stack" aria-hidden="true">
+                      <svg class="ct-copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z"></path><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"></path></svg>
+                      <svg class="ct-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"></path></svg>
+                    </span>
+                    <span class="software-invite-copy-label">Copy invite link</span>
+                    <span class="ct-sr-only" aria-live="polite"></span>
+                  </button>
+                </div>
+                <span>Copy this full link and share it with your teammate.</span>
+              </div>`;
             } catch {
               // decryption fallback
             }
@@ -7250,8 +7404,51 @@ export async function stagingOrganizationSettingsGet(
             </form>
             <div id="org-webhook-list" class="org-webhook-list"><p class="hiring-muted-copy">Loading webhooks…</p></div>
             <div id="org-webhook-deliveries" class="org-deliveries-section"></div>
-          </section><script>${webhooksScript}</script>`
+          </section>`
           : '';
+
+      const inviteCopyScript = `
+(function () {
+  var buttons = document.querySelectorAll('[data-copy-invite]');
+  if (!buttons.length) return;
+  buttons.forEach(function (btn) {
+    var timer = null;
+    btn.addEventListener('click', function () {
+      var val = btn.getAttribute('data-copy-invite') || '';
+      var labelEl = btn.querySelector('.software-invite-copy-label');
+      var liveEl = btn.querySelector('[aria-live="polite"]');
+      function markCopied() {
+        btn.setAttribute('data-copied', 'true');
+        if (labelEl) labelEl.textContent = 'Copied';
+        if (liveEl) liveEl.textContent = 'Invite link copied';
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () {
+          btn.setAttribute('data-copied', 'false');
+          if (labelEl) labelEl.textContent = 'Copy invite link';
+          if (liveEl) liveEl.textContent = '';
+          timer = null;
+        }, 2000);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(markCopied).catch(function () {
+          if (liveEl) liveEl.textContent = 'Copy the link from the input field.';
+        });
+      } else {
+        var row = btn.closest('.software-invitation-share-row');
+        var input = row ? row.querySelector('input') : null;
+        if (input) {
+          input.focus();
+          input.select();
+          try {
+            if (document.execCommand('copy')) markCopied();
+          } catch (e) {}
+        }
+      }
+    });
+  });
+})();
+`;
+      const combinedSettingsScript = `${webhooksScript}${inviteCopyScript}`;
 
       const content = hiring
         ? `<div class="team-org-page">
@@ -7262,7 +7459,13 @@ export async function stagingOrganizationSettingsGet(
             </div>
           </header>
           ${noticeBannerHtml}
-          <div class="team-org-overview">${organizationDetailsHtml}${hiringPlanCardHtml}</div>
+          <nav class="software-settings-anchor-nav" aria-label="Organization settings sections">
+            <a href="#organization-overview" class="software-anchor-pill">Overview</a>
+            <a href="#team" class="software-anchor-pill">Team <span class="software-anchor-count">${members.length}</span></a>
+            <a href="#team-invitations" class="software-anchor-pill">Invitations${pendingInviteCount > 0 ? ` <span class="software-anchor-count">${pendingInviteCount}</span>` : ''}</a>
+            ${isOrgAdmin ? '<a href="#webhooks" class="software-anchor-pill">Webhooks &amp; Slack</a>' : ''}
+          </nav>
+          <div id="organization-overview" class="team-org-overview">${organizationDetailsHtml}${hiringPlanCardHtml}</div>
           <section id="team" class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
             <header class="software-section-intro team-section-header-row">
               <div>
@@ -7301,7 +7504,7 @@ export async function stagingOrganizationSettingsGet(
             <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
           </section>
           ${webhooksSectionHtml}
-        </div>`
+        </div><script>${combinedSettingsScript}</script>`
         : `
         <header class="software-page-heading">
           <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1></div>
@@ -7337,16 +7540,14 @@ export async function stagingOrganizationSettingsGet(
           }
           <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
         </section>
-      `;
+      <script>${combinedSettingsScript}</script>`;
 
       const response = htmlResponse(
         hiring ? 'Organization' : 'Team & Settings',
         content,
         200,
         securityHeaders(
-          webhooksScript
-            ? scriptCspDirectives(webhooksScript, true)
-            : undefined,
+          scriptCspDirectives(combinedSettingsScript, Boolean(webhooksScript)),
         ),
         {
           organizationId: orgIdLower,
