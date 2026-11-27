@@ -17,27 +17,44 @@ Scoped under `.ct-site` and `.ct-site-controls`:
 - **Purple (Marketing Accent):** `--ct-purple: #bb98f4`
 - **Ink / Muted:** `--ct-ink: #251a35`, `--ct-muted: #625871`
 
-### 1.2 Software Application Surfaces (`apps/web/public/software-ui.css`)
+### 1.2 Software Application Surfaces (`apps/web/public/software-ui.css` — Common Thread 2.0)
 
-Loaded globally via `apps/web/app/layout.tsx` under `.software-product`:
+Loaded globally via `apps/web/app/layout.tsx` under `.software-product` (and `html[data-theme='dark']` for dark mode):
 
-- **Canvas (Warm Paper):** `--software-canvas: #f5efe6`
-- **Elevated Surface:** `--software-surface: #ffffff`, `--software-surface-subtle: #f3ede6`, `--software-surface-note: #eee7f4`
-- **Ink & Plum:** `--software-plum: #211426`, `--software-ink: #291d2c`, `--software-muted: #635661`
-- **Brand Accent:** `--software-mint: #8ee3b8`, `--software-lilac: #ebe5f2`
-- **Hairline Borders:** `--software-border: #ded4cc`, `--software-border-subtle: #eae1d9`, `--software-border-strong: #8b7c99`
-- **Semantic Status Tokens:**
-  - Success: `#166534` on `#ecfdf3` (border `#bbf7d0`)
-  - Warning: `#74520a` on `#fff7df` (border `#e2c66f`)
-  - Danger: `#b42318` on `#fef2f2` (border `#fecaca`)
+- **Brand & Ink:** `--software-plum: #211426`, `--software-brand-plum: #291e36`, `--software-ink: #1c1521` (dark `#f4efe8`), `--software-muted: #65596e` (dark `#aca0b8`), `--software-mint: #8ee3b8`, `--software-mint-bright: #b0f0ce`, `--software-lilac: #ebe5f2` (dark `#271d33`).
+- **5-Step Elevation Ladder (Light Warm Paper → Dark Plum Void):**
+  1. Recessed / Sidebar: `--software-canvas-recessed` (`#ede6dc` / `#0f0a15`), `--software-sidebar-bg` (`#eee7de` / `#100b16`)
+  2. Base Canvas: `--software-canvas` (`#f5efe6` / `#140f1a`)
+  3. Subtle Strip: `--software-surface-subtle` (`#efe9e0` / `#17111f`)
+  4. Primary Surface / Card: `--software-surface-1` / `--software-surface` (`#fcfaf7` / `#1c1524`), paired with `--software-surface-2` (`#f3edf6` / `#231a2e`)
+  5. Elevated Popover / Modal: `--software-surface-elevated` (`#ffffff` / `#291f36`)
+- **Optical Borders, Specular Edge & Glass Headers:** 1px luminance borders (`--software-border-subtle`, `--software-border`, `--software-border-strong`), inner top-edge rim highlights (`--software-highlight-edge`, `--software-highlight-edge-strong`), layered contact/ambient shadows (`--software-shadow-xs`, `--software-shadow-card`, `--software-shadow-elevated`), and translucent sticky headers (`--software-header-bg` + `--software-header-blur`).
+- **Motion Physics & Duration Ladder:** `--motion-spring` (`linear(...)` with cubic-bezier fallback), `--motion-snappy`, `--motion-gentle`, `--motion-brand-sweep`; durations `--duration-instant` (`90ms`), `--duration-fast` (`140ms`), `--duration-standard` (`180ms`), `--duration-reveal` (`240ms`), `--duration-slow` (`360ms`). All transitions/animations collapse cleanly under `@media (prefers-reduced-motion: reduce)`.
+- **Semantic Status Tokens:** `--software-status-{info,success,warning,danger}` paired with `-surface` and `-border` tokens in both light and dark modes.
 
 ### 1.3 Typography & Local Assets (`apps/web/public/`)
 
 - **Primary UI Font:** Local variable **DM Sans** (`apps/web/public/fonts/dm-sans-latin.woff2`), loaded in `apps/web/app/layout.tsx` via `next/font/local` (`--font-dm-sans`). Zero external font CDN dependency at runtime.
-- **Monospace Code Font:** `'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace`.
+- **Editorial Display Font:** Local variable **Newsreader** (`apps/web/public/fonts/newsreader-latin.woff2`, `--font-newsreader`) for `h1` editorial headings.
+- **Monospace Code Font:** Local **JetBrains Mono** (`apps/web/public/fonts/jetbrains-mono-latin.woff2`, `--font-jetbrains-mono`) with `tabular-nums` enforced on metrics, timers, tables, and `<kbd>` keycaps.
 - **Icons:**
   - Inline crisp React UI icons via `@tabler/icons-react`.
   - Curated 30-icon SVG sprite set in `apps/web/public/software/icons/*.svg` (with license & SHA256SUMS manifest).
+
+### 1.4 AI Thinking & Streaming Primitives (`apps/web/app/_components/ai/`)
+
+- `CommonThreadSpark`: Geometric three-node weave starburst (`compact` 16px or 28px) with calm completion settle (`active` → `completing` mint check → `idle`).
+- `HirearchyAiThinking`: Stepped thinking indicator supporting `studio` (assessment generation), `inline` (assistant chat), and `advisory` (evaluator synthesis with explicit `Advisory only` badge per `ADR 0006`) variants, optional elapsed timer, and `active` / `completing` / `error` states.
+- `AiStreamingBubble`: Assistant chat bubble combining `thinking`, capped `<= 900ms` word-snapped progressive reveal (`animateReveal`, instant when `prefers-reduced-motion` matches), optional context disclosure, and neutral error reporting.
+- `AiReasoningDisclosure`: CSS grid `0fr -> 1fr` collapsible trace disclosure for recorded candidate AI context (`Recorded`) or advisory synthesis traces (`Advisory synthesis`), with optional settled duration pill.
+
+### 1.5 Loading Choreography & Micro-Interaction Kit (`apps/web/app/_components/`)
+
+- `RouteProgressBar`: Mounted globally in `apps/web/app/layout.tsx`; 2.5px top-edge mint transition bar with a 140ms visibility delay so fast prefetched routes never flash.
+- `BrandToastViewport` & `emitToast`: Global toast region (`max 3`, hover-pause auto-dismiss, polite `aria-live`) replacing scattered inline alert banners for transient confirmations.
+- `CopyActionButton`: Tactile copy trigger with spring `IconCopy` → `IconCheck` morph, `aria-live="polite"` announcement, and optional `emitToast` confirmation.
+- `SkeletonBlock`, `SkeletonText`, `WorkspaceSkeletonShell`, & `EvaluatorWorkbenchSkeleton`: GPU-composited staggered shimmer primitives powering layout-matched `loading.tsx` skeletons across workspace, candidate, evaluator, demo, and dossier routes.
+- `SmoothDisclosure`, `KbdHint`, & `useSlidingIndicator` (`apps/web/src/ui/use-sliding-indicator.ts`): Shared `0fr -> 1fr` accordion primitive, JetBrains Mono shortcut badges, and sliding tab indicator hook.
 
 ---
 
