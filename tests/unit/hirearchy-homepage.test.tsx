@@ -28,6 +28,7 @@ const routes = [
   '/about',
   '/contact',
   '/early-access',
+  '/r23/login',
   '/privacy',
   '/terms',
 ];
@@ -59,6 +60,12 @@ describe('Hirearchy public website', () => {
     expect(html).toContain('Evidence informs.');
     expect(html).toContain('People decide.');
     expect(html).toContain('Hirearchy Software');
+    expect(html).toContain('Try live demo');
+    expect(html).toContain('href="/demo"');
+    expect(html).toContain('href="/early-access"');
+    expect(html).toContain('href="/trust"');
+    expect(html).toContain('href="/r23/login"');
+    expect(html).toContain('Sign in');
     expect(html.match(/Future direction/g)).toHaveLength(4);
     expect(html).not.toContain('<img');
   });
@@ -70,6 +77,10 @@ describe('Hirearchy public website', () => {
     expect(html).toContain('Illustrative task');
     expect(html).toContain('Illustrative record');
     expect(html).toContain('no automatic positive or negative judgement');
+    expect(html).toContain('data-testid="demo-limits-boundaries"');
+    expect(html).toContain('Live execution gate');
+    expect(html).toContain('Interactive AI gate');
+    expect(html).toContain('Outbound SMTP gate');
   });
   it('keeps buyer and demo requests closed without collecting personal data', () => {
     const html = renderToStaticMarkup(createElement(ContactPage));

@@ -233,6 +233,9 @@ describe('Public /trust, /products/software, and / GTM surfaces', () => {
     expect(html).toContain('href="/demo"');
     expect(html).toContain('href="/early-access"');
     expect(html).toContain('href="/trust"');
+    expect(html).toContain('href="#candidate-respect"');
+    expect(html).toContain('href="#neutral-ai"');
+    expect(html).toContain('href="#sandboxing-and-isolation"');
     expect(html).not.toMatch(/candidate score|candidate ranking/i);
   });
 
@@ -244,6 +247,12 @@ describe('Public /trust, /products/software, and / GTM surfaces', () => {
     expect(html).toContain('data-testid="marketing-proof-strip"');
     expect(html).toContain('data-testid="roi-calculator"');
     expect(html).toContain('data-testid="software-staging-limits"');
+    expect(html).toContain('data-testid="demo-limits-boundaries"');
+    expect(html).toContain('Live execution gate');
+    expect(html).toContain('Interactive AI gate');
+    expect(html).toContain('Outbound SMTP gate');
+    expect(html).toContain('Gated');
+    expect(html).toContain('Active');
 
     const proofIdx = html.indexOf('data-testid="marketing-proof-strip"');
     const compareIdx = html.indexOf('The Old Funnel vs. Hirearchy Software');
@@ -255,10 +264,14 @@ describe('Public /trust, /products/software, and / GTM surfaces', () => {
     expect(limitsIdx).toBeGreaterThan(roiIdx);
   });
 
-  it('includes Live Demo and Trust navigation links and compact proof strip on /', () => {
+  it('includes Live Demo, Trust, Sign in, and hero primary CTAs on /', () => {
     const html = renderToStaticMarkup(createElement(HomePage));
     expect(html).toContain('href="/demo"');
+    expect(html).toContain('href="/early-access"');
     expect(html).toContain('href="/trust"');
+    expect(html).toContain('href="/r23/login"');
+    expect(html).toContain('Try live demo');
+    expect(html).toContain('Sign in');
     expect(html).toContain('Interactive workbench');
     expect(html).toContain('data-testid="marketing-proof-strip"');
   });

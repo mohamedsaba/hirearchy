@@ -225,17 +225,16 @@ export default function HomePage() {
               </li>
             ))}
           </ol>
-          <div
-            className="ct-software-button"
-            style={{
-              display: 'flex',
-              gap: '16px',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-            }}
-          >
+          <div className="ct-software-button">
             <Button href="/early-access">Request early access</Button>
-            <Button href="/products/software">Explore Software</Button>
+            <Link
+              className="ct-button-secondary"
+              href="/products/software"
+              prefetch={false}
+            >
+              Explore Software
+              <Arrow />
+            </Link>
             <Link className="ct-inline-link" href="/trust" prefetch={false}>
               Candidate Respect &amp; Security <Arrow />
             </Link>

@@ -152,9 +152,14 @@ export function Header() {
           Contact
         </Link>
       </nav>
-      <Link className="ct-start" href="/products/software" prefetch={false}>
-        Explore Software
-      </Link>
+      <div className="ct-header-actions">
+        <Link className="ct-signin" href="/r23/login" prefetch={false}>
+          Sign in
+        </Link>
+        <Link className="ct-start" href="/products/software" prefetch={false}>
+          Explore Software
+        </Link>
+      </div>
     </header>
   );
 }

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Site, Kicker, Button, Arrow } from '../home/site';
 import { R26_CANDIDATE_DATA_NOTICE_VERSION } from '../../src/r26-candidate/contract';
@@ -23,35 +24,58 @@ const aiAndHumanFinality = [
   ],
 ];
 
-const architectureSpecs = [
+const architectureSpecs: ReadonlyArray<
+  readonly [surface: string, mechanism: ReactNode, scope: string]
+> = [
   [
     'Candidate consent',
-    `Explicit ${R26_CANDIDATE_DATA_NOTICE_VERSION} SHA-256 notice before session activation`,
+    <>
+      Explicit <code>{R26_CANDIDATE_DATA_NOTICE_VERSION}</code> SHA-256 notice
+      before session activation
+    </>,
     'Active candidate workspaces',
   ],
   [
     'Execution containment',
-    'Docker --network none, --read-only, --cap-drop ALL, no-new-privileges, UID 1000 subreaper',
+    <>
+      Docker <code>--network none</code>, <code>--read-only</code>,{' '}
+      <code>--cap-drop ALL</code>, <code>no-new-privileges</code>, UID 1000
+      subreaper
+    </>,
     'Restricted-executor runtime (gated off in synthetic demo)',
   ],
   [
     'Submission finality',
-    'Whole-container cgroup pause (docker pause) + ephemeral read-only helper diff capture',
+    <>
+      Whole-container cgroup pause (<code>docker pause</code>) + ephemeral
+      read-only helper diff capture
+    </>,
     'Dedicated hirearchy-ws-* named volume',
   ],
   [
     'Tenant data isolation',
-    'PostgreSQL FORCE ROW LEVEL SECURITY across tenant tables (0001–0023)',
+    <>
+      PostgreSQL <code>FORCE ROW LEVEL SECURITY</code> across tenant tables (
+      <code>0001–0023</code>)
+    </>,
     'Org-scoped sessions, library, credits & decisions',
   ],
   [
     'Privilege separation',
-    'app_candidate_gateway restricted to r26_candidate_command & lifecycle readiness; runtime RPCs in staging schema',
+    <>
+      <code>app_candidate_gateway</code> restricted to{' '}
+      <code>r26_candidate_command</code> &amp; lifecycle readiness; runtime RPCs
+      in <code>staging</code> schema
+    </>,
     'Database role & schema boundary',
   ],
   [
     'Session & mutation safety',
-    'HTTP-only __Host-r23-session, double-submit __Host-r23-csrf, same-origin checks, expectedVersion + requestId',
+    <>
+      HTTP-only <code>__Host-r23-session</code>, double-submit{' '}
+      <code>__Host-r23-csrf</code>, same-origin checks,{' '}
+      <code>expectedVersion</code> + <code>requestId</code>
+    </>,
     'Authenticated team & candidate APIs',
   ],
 ];
@@ -71,13 +95,31 @@ export default function TrustPage() {
           human judgment into black-box numbers. Here is exactly what Hirearchy
           captures, isolates, and refuses to build.
         </p>
-        <div className="ct-contact-links" style={{ marginTop: '28px' }}>
+        <nav className="ct-chapter-jumps" aria-label="Trust standard chapters">
+          <a className="ct-chapter-jump" href="#candidate-respect">
+            <span className="ct-chapter-jump-num">01</span>
+            <span>Anti-Proctoring</span>
+          </a>
+          <a className="ct-chapter-jump" href="#neutral-ai">
+            <span className="ct-chapter-jump-num">02</span>
+            <span>Neutral AI</span>
+          </a>
+          <a className="ct-chapter-jump" href="#sandboxing-and-isolation">
+            <span className="ct-chapter-jump-num">03</span>
+            <span>Sandboxing &amp; RLS</span>
+          </a>
+        </nav>
+        <div className="ct-contact-links ct-contact-links--hero">
           <Button href="/demo" light>
             Try live reviewer demo
           </Button>
-          <Button href="/early-access" light>
+          <Link
+            className="ct-button-secondary ct-button-secondary--dark"
+            href="/early-access"
+            prefetch={false}
+          >
             Request early access
-          </Button>
+          </Link>
         </div>
       </section>
 
@@ -97,7 +139,7 @@ export default function TrustPage() {
           artifacts.
         </p>
 
-        <div className="ct-columns">
+        <div className="ct-columns ct-columns--cards">
           <article className="ct-enter">
             <h3>Zero surveillance.</h3>
             <p>
@@ -169,7 +211,10 @@ export default function TrustPage() {
           trust boundaries.
         </p>
 
-        <div className="ct-columns" style={{ marginBottom: '48px' }}>
+        <div
+          className="ct-columns ct-columns--cards"
+          style={{ marginBottom: '48px' }}
+        >
           <article className="ct-enter">
             <h3>Docker freeze finality.</h3>
             <p>
@@ -224,9 +269,13 @@ export default function TrustPage() {
             <tbody>
               {architectureSpecs.map(([surface, mechanism, scope]) => (
                 <tr key={surface}>
-                  <th scope="row">{surface}</th>
-                  <td>{mechanism}</td>
-                  <td>{scope}</td>
+                  <th scope="row">
+                    <span className="ct-spec-surface-badge">{surface}</span>
+                  </th>
+                  <td className="ct-spec-mechanism">{mechanism}</td>
+                  <td>
+                    <span className="ct-spec-scope-pill">{scope}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>

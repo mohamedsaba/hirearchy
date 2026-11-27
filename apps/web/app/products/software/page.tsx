@@ -33,6 +33,45 @@ const funnelComparisonRows = [
   ],
 ];
 
+const stagingBoundaries = [
+  {
+    index: '01',
+    gate: 'Live execution gate',
+    status: 'Gated',
+    active: false,
+    title: 'Live Untrusted Code Execution',
+    detail:
+      'Live backend execution of untrusted candidate code is disabled pending our hardened container isolation release gate. Candidates work against deterministic starter code and save verifiable file revisions.',
+  },
+  {
+    index: '02',
+    gate: 'Interactive AI gate',
+    status: 'Gated',
+    active: false,
+    title: 'Integrated Live AI Assistance',
+    detail:
+      'Interactive LLM assistance is disabled in this staging demo. Candidate actions are recorded neutrally without speculating on AI origins.',
+  },
+  {
+    index: '03',
+    gate: 'Outbound SMTP gate',
+    status: 'Gated',
+    active: false,
+    title: 'Automated Email Delivery (SMTP)',
+    detail:
+      'Outbound SMTP delivery is disabled. An authorized recruiter can copy a candidate invitation from the internal demo; evaluators sign in to review assigned sessions.',
+  },
+  {
+    index: '04',
+    gate: 'Evidence & review workflow',
+    status: 'Active',
+    active: true,
+    title: 'Deterministic Revisions & Human Review',
+    detail:
+      'Upfront candidate-data-v1 consent, verifiable file revisions, chronological r27 timelines, anchored evaluator observations, and human-authored review packets are active.',
+  },
+] as const;
+
 export default function SoftwarePage() {
   return (
     <Site dark>
@@ -51,16 +90,17 @@ export default function SoftwarePage() {
           logs—with zero webcam tracking, zero algorithmic rankings, and
           human-owned verdicts.
         </p>
-        <div
-          className="ct-contact-links"
-          style={{ marginTop: '24px', alignItems: 'center' }}
-        >
-          <Button href="/early-access" light>
-            Request early access
-          </Button>
+        <div className="ct-contact-links ct-contact-links--hero">
           <Button href="/demo" light>
             Try live reviewer demo
           </Button>
+          <Link
+            className="ct-button-secondary ct-button-secondary--dark"
+            href="/early-access"
+            prefetch={false}
+          >
+            Request early access
+          </Link>
           <Link
             className="ct-hero-secondary-link"
             href="/trust"
@@ -250,61 +290,55 @@ export default function SoftwarePage() {
           judgement, and the demo does not infer whether code came from AI or
           any other source.
         </p>
-        <div style={{ maxWidth: '720px', marginTop: '20px' }}>
-          <ul
-            style={{
-              paddingLeft: '24px',
-              lineHeight: '1.6',
-              color: 'var(--ct-ink)',
-            }}
-          >
-            <li style={{ marginBottom: '12px' }}>
-              <strong>Live Untrusted Code Execution:</strong> Live backend
-              execution of untrusted candidate code is disabled pending our
-              hardened container isolation release gate. Candidates work against
-              deterministic starter code and save verifiable file revisions.
+        <ol
+          className="ct-principles ct-boundary-list"
+          data-testid="demo-limits-boundaries"
+        >
+          {stagingBoundaries.map((boundary) => (
+            <li
+              className={`ct-enter ct-boundary-card${boundary.active ? ' ct-boundary-card--active' : ''}`}
+              key={boundary.gate}
+            >
+              <div className="ct-boundary-meta">
+                <span className="ct-boundary-index">{boundary.index}</span>
+                <span
+                  className={`ct-status-pill ${boundary.active ? 'ct-status-pill--active' : 'ct-status-pill--gated'}`}
+                >
+                  <span className="ct-status-dot" aria-hidden="true" />
+                  {boundary.status}
+                </span>
+              </div>
+              <div className="ct-boundary-heading">
+                <span className="ct-boundary-gate">{boundary.gate}</span>
+                <h3>{boundary.title}</h3>
+              </div>
+              <p>{boundary.detail}</p>
             </li>
-            <li style={{ marginBottom: '12px' }}>
-              <strong>Integrated Live AI Assistance:</strong> Interactive LLM
-              assistance is disabled in this staging demo. Candidate actions are
-              recorded neutrally without speculating on AI origins.
-            </li>
-            <li style={{ marginBottom: '12px' }}>
-              <strong>Automated Email Delivery (SMTP):</strong> Outbound SMTP
-              delivery is disabled. An authorized recruiter can copy a candidate
-              invitation from the internal demo; evaluators sign in to review
-              assigned sessions.
-            </li>
-          </ul>
-        </div>
+          ))}
+        </ol>
       </section>
 
       <section
-        className="ct-contact-cta ct-reveal"
-        style={{ background: 'var(--ct-plum)', color: '#ffffff' }}
+        className="ct-contact-cta ct-contact-cta--dark ct-reveal"
         data-testid="software-pilot-cta"
       >
         <Kicker>Early access interest</Kicker>
-        <h2 style={{ color: '#ffffff' }}>
-          Ready to evaluate real engineering work?
-        </h2>
-        <p
-          style={{
-            color: '#cfc6dc',
-            maxWidth: '600px',
-            margin: '16px auto 28px',
-          }}
-        >
+        <h2>Ready to evaluate real engineering work?</h2>
+        <p>
           Try the zero-signup reviewer sandbox or request an early-access
           conversation for your team.
         </p>
-        <div className="ct-contact-links" style={{ justifyContent: 'center' }}>
+        <div className="ct-contact-links ct-contact-links--centered">
           <Button href="/early-access" light>
             Request early access
           </Button>
-          <Button href="/demo" light>
+          <Link
+            className="ct-button-secondary ct-button-secondary--dark"
+            href="/demo"
+            prefetch={false}
+          >
             Try live reviewer demo
-          </Button>
+          </Link>
           <Link
             className="ct-hero-secondary-link"
             href="/trust"
