@@ -36,7 +36,7 @@
 }
 
 .r26-header .hiring-theme-toggle:hover {
-  background: #3d2c4b;
+  background: color-mix(in srgb, var(--software-brand-plum) 76%, #ffffff 24%);
   border-color: var(--software-on-plum);
 }
 
@@ -252,12 +252,12 @@
 .software-product .hiring-btn-mint {
   border-color: var(--software-mint);
   background: var(--software-mint);
-  color: #211426;
+  color: var(--software-brand-plum);
 }
 
 .software-product .hiring-btn-mint:not(:disabled):hover {
-  border-color: #abe8c7;
-  background: #abe8c7;
+  border-color: var(--software-mint-bright);
+  background: var(--software-mint-bright);
 }
 
 .software-product .hiring-btn-danger {
@@ -486,11 +486,11 @@
 
 .hiring-switch-input:checked + .hiring-switch-track {
   background: var(--software-mint);
-  border-color: #40785c;
+  border-color: var(--software-mint-border);
 }
 
 .hiring-switch-input:checked + .hiring-switch-track::after {
-  background: #211426;
+  background: var(--software-brand-plum);
   transform: translateX(0.9rem);
 }
 
@@ -2089,7 +2089,7 @@ html[data-theme='dark'] .software-repository {
 }
 
 .hiring-decision-region-candidate {
-  border-left: 3px solid var(--software-mint, #10b981);
+  border-left: 3px solid var(--software-mint);
 }
 
 .hiring-decision-region-team {
@@ -2279,14 +2279,22 @@ html[data-theme='dark'] .software-repository {
   padding: 0.8rem 0.85rem;
   border-radius: 0.75rem;
   border: 1px solid var(--software-plum-line);
-  background: linear-gradient(155deg, #35183c 0%, #211426 100%);
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--software-brand-plum) 84%, #ffffff 16%) 0%,
+    var(--software-brand-plum) 100%
+  );
   color: var(--software-on-plum);
   box-shadow: var(--software-shadow-card);
 }
 
 html[data-theme='dark'] .software-sidebar-plan-card {
-  border-color: rgba(142, 227, 184, 0.24);
-  background: linear-gradient(155deg, #271a33 0%, #17101f 100%);
+  border-color: var(--software-mint-border);
+  background: linear-gradient(
+    155deg,
+    var(--software-surface-2) 0%,
+    var(--software-surface-1) 100%
+  );
   color: var(--software-ink);
 }
 
@@ -2338,9 +2346,9 @@ html[data-theme='dark'] .software-sidebar-plan-card {
   margin-top: 0.15rem;
   padding: 0.46rem 0.7rem;
   border-radius: 0.5rem;
-  border: 1px solid rgba(142, 227, 184, 0.45);
+  border: 1px solid var(--software-mint-border);
   background: var(--software-mint);
-  color: #191020;
+  color: var(--software-brand-plum);
   font-size: 0.8rem;
   font-weight: 700;
   text-decoration: none;
@@ -2355,8 +2363,8 @@ html[data-theme='dark'] .software-sidebar-plan-card {
 .software-document-compact-nav
   .software-workspace-sidebar
   a.software-workspace-upgrade[aria-current='page'] {
-  background: #a7edc9;
-  color: #140b1a;
+  background: var(--software-mint-bright);
+  color: var(--software-brand-plum);
 }
 
 .software-document-compact-nav
@@ -3221,14 +3229,22 @@ html[data-theme='dark'] .software-sidebar-plan-card {
 }
 .software-document-panel .team-org-plan-card:not([data-tier='ultra']) {
   border-color: var(--software-plum-line);
-  background: linear-gradient(155deg, #35183c 0%, #211426 100%);
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--software-brand-plum) 84%, #ffffff 16%) 0%,
+    var(--software-brand-plum) 100%
+  );
   color: var(--software-on-plum);
 }
 html[data-theme='dark']
   .software-document-panel
   .team-org-plan-card:not([data-tier='ultra']) {
-  border-color: rgba(142, 227, 184, 0.28);
-  background: linear-gradient(155deg, #271a33 0%, #17101f 100%);
+  border-color: var(--software-mint-border);
+  background: linear-gradient(
+    155deg,
+    var(--software-surface-2) 0%,
+    var(--software-surface-1) 100%
+  );
   color: var(--software-ink);
 }
 .team-org-plan-head {
@@ -3294,14 +3310,14 @@ html[data-theme='dark']
   .hiring-btn-primary {
   border-color: var(--software-mint);
   background: var(--software-mint);
-  color: #191020;
+  color: var(--software-brand-plum);
 }
 .software-document-panel
   .team-org-plan-card:not([data-tier='ultra'])
   .hiring-btn-primary:hover {
-  border-color: #a7edc9;
-  background: #a7edc9;
-  color: #140b1a;
+  border-color: var(--software-mint-bright);
+  background: var(--software-mint-bright);
+  color: var(--software-brand-plum);
 }
 
 .team-section-header-row {
@@ -3970,9 +3986,9 @@ html[data-theme='dark']
 }
 
 .org-checklist-step.is-done .org-checklist-icon {
-  border-color: rgba(45, 138, 91, 0.45);
-  background: rgba(142, 227, 184, 0.25);
-  color: #166534;
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
 }
 
 .org-checklist-body {
@@ -4489,4 +4505,389 @@ html[data-theme='dark'] .candidate-preview-banner {
 html[data-theme='dark'] .intel-heatmap-cell {
   background: rgba(142, 227, 184, calc(var(--intel-heat, 0.12) * 0.45));
   color: var(--software-ink);
+}
+
+/* ==========================================================================
+   Area 2 Common Thread 2.0 Upgrades (Skeletons, Pipeline Pulse, Builder,
+   Dossier Shared vs Private Separation, and Intelligence Executive Hub)
+   ========================================================================== */
+
+/* Shimmer Workspace Loading Layouts */
+.team-skel-stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.team-skel-stack-sm {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.team-skel-stack-xs {
+  display: grid;
+  gap: 0.35rem;
+  min-inline-size: 0;
+}
+
+.team-skel-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.95rem 1.1rem;
+}
+
+.team-skel-pulse-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.75rem;
+  background: var(--software-surface);
+}
+
+.team-skel-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.team-skel-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.team-skel-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.team-skel-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.team-skel-subrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  padding-block-start: 0.7rem;
+  border-block-start: 1px solid var(--software-border-subtle);
+}
+
+.team-skel-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+/* Candidates & Handoffs Above-the-Fold Pulse Bar + Setup Drawer */
+.team-candidates-page {
+  gap: 0.85rem;
+}
+
+.team-candidates-header {
+  padding-block-end: 0.85rem;
+}
+
+.team-top-utility-strip {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.team-top-utility-strip:empty {
+  display: none;
+}
+
+.team-setup-drawer {
+  padding: 0.15rem 0 0.25rem;
+}
+
+.team-pipeline-pulse-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.75rem;
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-xs);
+}
+
+.team-pulse-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.software-product .hiring-btn.team-pulse-pill {
+  min-height: 2rem;
+  padding: 0.28rem 0.68rem;
+  border-radius: 999px;
+  border-color: var(--software-border);
+  background: var(--software-surface-subtle);
+  color: var(--software-ink-soft);
+  font-weight: 600;
+}
+
+.software-product .hiring-btn.team-pulse-pill:hover:not(:disabled) {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-2);
+  color: var(--software-ink);
+}
+
+.software-product .hiring-btn.team-pulse-pill[aria-pressed='true'] {
+  border-color: var(--software-btn-primary-bg);
+  background: var(--software-btn-primary-bg);
+  color: var(--software-btn-primary-fg);
+}
+
+html[data-theme='dark']
+  .software-product
+  .hiring-btn.team-pulse-pill[aria-pressed='true'] {
+  border-color: var(--software-mint-border);
+  background: var(--software-mint-tint);
+  color: var(--software-mint);
+}
+
+.software-product .hiring-btn.team-setup-summary-pill {
+  min-height: 2rem;
+  border-radius: 999px;
+  border-color: var(--software-border);
+  background: var(--software-surface-2);
+  color: var(--software-ink-soft);
+}
+
+.software-product
+  .hiring-btn.team-setup-summary-pill[aria-expanded='true']
+  svg:last-child {
+  transform: rotate(180deg);
+}
+
+.team-candidate-pipeline .hiring-candidate-list {
+  gap: 0.75rem;
+}
+
+.team-candidate-pipeline .hiring-candidate-card {
+  padding: 0.85rem 1rem;
+}
+
+.team-candidate-pipeline .hiring-session-subrow {
+  padding-block: 0.55rem;
+}
+
+/* Builder Quick Settings Bar & Docked Preview Actions */
+.hiring-ai-quick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.75rem;
+  background: var(--software-surface-subtle);
+}
+
+.hiring-ai-quick-duration {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.hiring-ai-quick-duration label {
+  white-space: nowrap;
+}
+
+.hiring-ai-quick-duration select {
+  min-inline-size: 6.75rem;
+}
+
+.hiring-ai-quick-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.hiring-ai-quick-toggle .hiring-pill {
+  margin-block-start: 0;
+}
+
+.hiring-preview-header-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.hiring-preview-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-block-start: 0.9rem;
+  border-block-start: 1px solid var(--software-border-subtle);
+}
+
+/* Handoff Dossier Segmented Control + Shared vs Private Panels */
+.hiring-segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.65rem;
+  background: var(--software-surface-2);
+}
+
+.software-product .hiring-segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.15rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--software-muted);
+  font: 600 0.74rem / 1.25 var(--software-sans);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast, 140ms) var(--motion-snappy, ease),
+    border-color var(--duration-fast, 140ms) var(--motion-snappy, ease),
+    color var(--duration-fast, 140ms) var(--motion-snappy, ease);
+}
+
+.software-product .hiring-segmented-btn:hover:not(:disabled) {
+  color: var(--software-ink);
+  background: var(--software-surface-subtle);
+}
+
+.software-product .hiring-segmented-btn.is-active {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-elevated, var(--software-surface));
+  color: var(--software-ink);
+  box-shadow: var(--software-shadow-xs);
+}
+
+html[data-theme='dark'] .software-product .hiring-segmented-btn.is-active {
+  border-color: var(--software-mint-border);
+  background: var(--software-mint-tint);
+  color: var(--software-mint);
+}
+
+.hiring-dossier-panel--shared {
+  border-color: var(--software-status-success-border);
+  border-inline-start: 3px solid var(--software-status-success);
+  background: var(--software-surface);
+}
+
+.hiring-dossier-panel--private {
+  border-color: var(--software-plum-line);
+  border-inline-start: 3px solid var(--software-link);
+  background: var(--software-surface-2);
+}
+
+html[data-theme='dark'] .hiring-dossier-panel--shared {
+  border-color: var(--software-mint-border);
+  border-inline-start-color: var(--software-mint);
+  background: var(--software-surface-1);
+}
+
+html[data-theme='dark'] .hiring-dossier-panel--private {
+  border-color: rgba(187, 152, 244, 0.28);
+  border-inline-start-color: rgba(187, 152, 244, 0.85);
+  background: var(--software-surface-2);
+}
+
+.hiring-dossier-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: 0.65rem;
+}
+
+.hiring-dossier-panel-head .hiring-pill {
+  margin-block-start: 0;
+}
+
+/* Product Intelligence Executive Hub */
+.intel-jump-nav {
+  position: sticky;
+  top: calc(var(--software-header-height, 3.75rem) + 0.5rem);
+  z-index: 15;
+  display: inline-flex;
+  max-inline-size: 100%;
+  justify-self: start;
+  padding: 0.2rem;
+  border-radius: 0.75rem;
+  background: var(--software-header-bg, var(--software-canvas));
+  backdrop-filter: var(--software-header-blur, none);
+  box-shadow: var(--software-shadow-xs);
+}
+
+.intel-kpi-grid--executive {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1020px) {
+  .intel-kpi-grid--executive {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .intel-kpi-grid--executive {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.intel-kpi-card {
+  border-top: 2px solid var(--software-border-strong);
+}
+
+.intel-kpi-grid--executive .intel-kpi-card:first-child {
+  border-top-color: var(--software-mint);
+}
+
+.intel-section {
+  scroll-margin-top: calc(var(--software-header-height, 4rem) + 4.5rem);
+}
+
+.intel-table-actions {
+  flex-wrap: nowrap;
+}
+
+.intel-note-input {
+  min-inline-size: 10.5rem;
+  max-inline-size: 15rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--software-border-strong);
+  border-radius: var(--software-radius-control, 0.5rem);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .team-skel-filter-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

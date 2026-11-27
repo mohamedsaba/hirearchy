@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
@@ -8,11 +8,8 @@ import {
   IconBookmark,
   IconCheck,
   IconCodePlus,
-  IconCopy,
   IconEye,
-  IconLoader2,
   IconPlus,
-  IconMail,
   IconSend,
   IconTemplate,
 } from '@tabler/icons-react';
@@ -46,10 +43,12 @@ import {
   writePersistedJson,
 } from '../../../../../src/ui/browser-state';
 import { ScenarioBrief } from '../../../../../src/ui/scenario-brief';
+import { HirearchyAiThinking } from '../../../../_components/ai';
+import { emitToast } from '../../../../_components/brand-toast';
+import { CopyActionButton } from '../../../../_components/copy-action-button';
 import { HorizontalTabs } from '../../../../_components/horizontal-tabs';
 import { LocalTime } from '../../../../_components/local-time';
 import { CommonThreadLoader } from '../../../../_components/common-thread-loader';
-import { CommonThreadToast } from '../../../../_components/common-thread-toast';
 import { ProductFeedbackPulse } from '../../../../_components/product-feedback-pulse';
 import {
   healthFlagMeta,
@@ -338,10 +337,20 @@ export function HiringAssessmentBuilderClient({
   const [activeGenJob, setActiveGenJob] =
     useState<BuilderGenerationJobView | null>(initialRunningJob);
   const [generating, setGenerating] = useState(hasInitialRunningJob);
+  const [aiGenCompleting, setAiGenCompleting] = useState(false);
+  const genSettleTimerRef = useRef<number | null>(null);
   const trackedRunningJobIdRef = useRef<string | null>(
     initialRunningJob?.jobId ?? null,
   );
   const acknowledgedJobIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      if (genSettleTimerRef.current !== null) {
+        window.clearTimeout(genSettleTimerRef.current);
+      }
+    };
+  }, []);
 
   const [libOwnerFilter, setLibOwnerFilter] = useState<'all' | 'mine'>('all');
   const [libSourceFilter, setLibSourceFilter] = useState<
@@ -368,7 +377,6 @@ export function HiringAssessmentBuilderClient({
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
-  const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [issuedResult, setIssuedResult] = useState<{
     candidateLink: string;
     recipient: string;
@@ -378,13 +386,10 @@ export function HiringAssessmentBuilderClient({
   useEffect(() => {
     if (issuedResult) issuedHeading.current?.focus();
   }, [issuedResult]);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedEmailMsg, setCopiedEmailMsg] = useState(false);
   const [copyFallback, setCopyFallback] = useState<'link' | 'email' | null>(
     null,
   );
   const issuedLinkInput = useRef<HTMLInputElement>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const legacyDraftKey = `hirearchy:builder:state:v2:${organizationId}`;
   const draftPrefix = `hirearchy:builder:draft:${organizationId}:${currentPrincipalId}:`;
@@ -801,18 +806,24 @@ export function HiringAssessmentBuilderClient({
     };
   }, [healthFetched, mode, organizationId]);
 
-  const acknowledgeGenJob = (jobId: string) => {
-    acknowledgedJobIdsRef.current.add(jobId);
-    const csrf = readCsrfCookie();
-    void fetch(`${builderGenerateApiUrl}?jobId=${encodeURIComponent(jobId)}`, {
-      method: 'DELETE',
-      credentials: 'same-origin',
-      headers: {
-        Accept: 'application/json',
-        ...(csrf ? { 'x-csrf-token': csrf } : {}),
-      },
-    }).catch(() => null);
-  };
+  const acknowledgeGenJob = useCallback(
+    (jobId: string) => {
+      acknowledgedJobIdsRef.current.add(jobId);
+      const csrf = readCsrfCookie();
+      void fetch(
+        `${builderGenerateApiUrl}?jobId=${encodeURIComponent(jobId)}`,
+        {
+          method: 'DELETE',
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json',
+            ...(csrf ? { 'x-csrf-token': csrf } : {}),
+          },
+        },
+      ).catch(() => null);
+    },
+    [builderGenerateApiUrl],
+  );
 
   useEffect(() => {
     let active = true;
@@ -844,9 +855,9 @@ export function HiringAssessmentBuilderClient({
       }
       trackedRunningJobIdRef.current = null;
       setActiveGenJob(null);
-      setGenerating(false);
       if (job.status === 'completed' && job.draft) {
-        setActiveDraft(job.draft);
+        const completedDraft = job.draft;
+        setActiveDraft(completedDraft);
         setActiveSourceMeta({
           sourceKind: 'ai_generated',
           targetRole: job.targetRole,
@@ -876,14 +887,25 @@ export function HiringAssessmentBuilderClient({
         setProblemSelected(true);
         setPreviewVisited(true);
         setSavedIds(null);
-        setPreviewFilePath(job.draft.primaryFilePath);
-        setStage('preview');
-        setToastMsg(
-          `Generated "${job.draft.title}". Review it below, save to your role library, or invite a candidate.`,
-        );
+        setPreviewFilePath(completedDraft.primaryFilePath);
         acknowledgeGenJob(job.jobId);
+        setGenerating(false);
+        setAiGenCompleting(true);
+        if (genSettleTimerRef.current !== null) {
+          window.clearTimeout(genSettleTimerRef.current);
+        }
+        genSettleTimerRef.current = window.setTimeout(() => {
+          genSettleTimerRef.current = null;
+          setAiGenCompleting(false);
+          setStage('preview');
+          emitToast({
+            message: `Generated "${completedDraft.title}". Review it below, save to your role library, or invite a candidate.`,
+            tone: 'success',
+          });
+        }, 280);
         return;
       }
+      setGenerating(false);
       if (job.status === 'failed') {
         setErrorBanner(job.error ?? 'Unable to generate assessment with AI.');
         acknowledgeGenJob(job.jobId);
@@ -940,6 +962,7 @@ export function HiringAssessmentBuilderClient({
       if (timer !== undefined) window.clearInterval(timer);
     };
   }, [
+    acknowledgeGenJob,
     activeGenJob?.jobId,
     activeGenJob?.status,
     builderGenerateApiUrl,
@@ -1030,7 +1053,6 @@ export function HiringAssessmentBuilderClient({
     setPreviewFilePath(nextDraft.primaryFilePath);
     setIssuedResult(null);
     setErrorBanner(null);
-    setStatusBanner(null);
     showStage('preview');
   };
 
@@ -1056,9 +1078,10 @@ export function HiringAssessmentBuilderClient({
     setPreviewFilePath(nextDraft.primaryFilePath);
     setIssuedResult(null);
     setErrorBanner(null);
-    setStatusBanner(
-      `Loaded "${problem.title}" from your Saved Problem Library.`,
-    );
+    emitToast({
+      message: `Loaded "${problem.title}" from your Saved Problem Library.`,
+      tone: 'info',
+    });
     showStage('preview');
   };
 
@@ -1072,10 +1095,23 @@ export function HiringAssessmentBuilderClient({
     );
   };
 
+  const completeAiGenerationWithSettle = (onSettled: () => void) => {
+    setGenerating(false);
+    setAiGenCompleting(true);
+    if (genSettleTimerRef.current !== null) {
+      window.clearTimeout(genSettleTimerRef.current);
+    }
+    genSettleTimerRef.current = window.setTimeout(() => {
+      genSettleTimerRef.current = null;
+      setAiGenCompleting(false);
+      onSettled();
+    }, 280);
+  };
+
   const handleGenerateAi = async () => {
     setErrorBanner(null);
-    setStatusBanner(null);
     setIssuedResult(null);
+    setAiGenCompleting(false);
     setGenerating(true);
     try {
       const csrf = readCsrfCookie();
@@ -1133,7 +1169,8 @@ export function HiringAssessmentBuilderClient({
           );
         }
         if (data.job.draft) {
-          setActiveDraft(data.job.draft);
+          const generatedDraft = data.job.draft;
+          setActiveDraft(generatedDraft);
           setActiveSourceMeta({
             sourceKind: 'ai_generated',
             targetRole: data.job.targetRole,
@@ -1153,20 +1190,23 @@ export function HiringAssessmentBuilderClient({
           setProblemSelected(true);
           setPreviewVisited(true);
           setSavedIds(null);
-          setPreviewFilePath(data.job.draft.primaryFilePath);
+          setPreviewFilePath(generatedDraft.primaryFilePath);
           setActiveGenJob(null);
-          setGenerating(false);
-          showStage('preview');
-          setToastMsg(
-            `Generated "${data.job.draft.title}". Review it below, save to your role library, or invite a candidate.`,
-          );
           acknowledgeGenJob(data.job.jobId);
+          completeAiGenerationWithSettle(() => {
+            showStage('preview');
+            emitToast({
+              message: `Generated "${generatedDraft.title}". Review it below, save to your role library, or invite a candidate.`,
+              tone: 'success',
+            });
+          });
           return;
         }
       }
 
       if (data.draft) {
-        setActiveDraft(data.draft);
+        const generatedDraft = data.draft;
+        setActiveDraft(generatedDraft);
         setActiveSourceMeta({
           sourceKind: 'ai_generated',
           targetRole: aiRole,
@@ -1186,12 +1226,14 @@ export function HiringAssessmentBuilderClient({
         setProblemSelected(true);
         setPreviewVisited(true);
         setSavedIds(null);
-        setPreviewFilePath(data.draft.primaryFilePath);
-        setGenerating(false);
-        showStage('preview');
-        setToastMsg(
-          `Generated "${data.draft.title}". Review it below, save to your role library, or invite a candidate.`,
-        );
+        setPreviewFilePath(generatedDraft.primaryFilePath);
+        completeAiGenerationWithSettle(() => {
+          showStage('preview');
+          emitToast({
+            message: `Generated "${generatedDraft.title}". Review it below, save to your role library, or invite a candidate.`,
+            tone: 'success',
+          });
+        });
       }
     } catch (err) {
       setGenerating(false);
@@ -1259,14 +1301,14 @@ export function HiringAssessmentBuilderClient({
 
   const handleSaveLibraryOnly = async () => {
     setErrorBanner(null);
-    setStatusBanner(null);
     setSavingLibrary(true);
     try {
       await ensureSavedToLibrary();
 
-      setStatusBanner(
-        `Saved "${activeDraft.title}" to your organization's Problem Library.`,
-      );
+      emitToast({
+        message: `Saved "${activeDraft.title}" to your organization's Problem Library.`,
+        tone: 'success',
+      });
     } catch (err) {
       setErrorBanner(
         err instanceof Error ? err.message : 'Unable to save to library.',
@@ -1280,8 +1322,7 @@ export function HiringAssessmentBuilderClient({
     e.preventDefault();
     if (issuing || issuedResult) return;
     setErrorBanner(null);
-    setStatusBanner(null);
-    setCopiedLink(false);
+    setCopyFallback(null);
 
     if (!problemSelected) {
       setErrorBanner(
@@ -1381,41 +1422,12 @@ export function HiringAssessmentBuilderClient({
     : 'Workspace AI assistant: disabled for this task (AI rules are shown upfront before you begin).';
   const invitationEmail = `Hi,\n\nYou’ve been invited to complete the "${activeDraft.title}" engineering assessment.\n\n• Time budget: ${activeDraft.durationMinutes} min (your timer starts only after clicking Start)\n• Real codebase editor: zero webcam, microphone, or desktop spyware\n• ${aiRuleCopy}\n• Permanent read-only receipt: you keep a copy of your submitted code after submission\n\nOpen your workspace link below whenever you’re ready:\n${invitationUrl}\n\nBest regards,\nThe Hiring Team`;
 
-  const copyInvitation = async (kind: 'link' | 'email') => {
-    if (!issuedResult) return;
-    setCopyFallback(null);
-    setToastMsg(null);
-    const setCopied = kind === 'link' ? setCopiedLink : setCopiedEmailMsg;
-    setCopied(false);
-    try {
-      await navigator.clipboard.writeText(
-        kind === 'link' ? invitationUrl : invitationEmail,
-      );
-      setCopied(true);
-      setToastMsg(
-        kind === 'link'
-          ? 'Candidate invite link copied.'
-          : 'Ready-to-send email message copied.',
-      );
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopyFallback(kind);
-      if (kind === 'link') {
-        issuedLinkInput.current?.focus();
-        issuedLinkInput.current?.select();
-      }
-    }
-  };
-
   const resetForAnotherCandidate = () => {
     setCandidateEmail('');
     setInvitationNote('');
     setIssuedResult(null);
     setDraftCompleted(false);
-    setStatusBanner(null);
     setErrorBanner(null);
-    setCopiedLink(false);
-    setCopiedEmailMsg(false);
     setCopyFallback(null);
   };
 
@@ -1802,16 +1814,61 @@ export function HiringAssessmentBuilderClient({
                   </div>
                 </div>
 
+                <div className="hiring-ai-quick-bar">
+                  <div className="hiring-field hiring-ai-quick-duration">
+                    <label htmlFor="ai-duration">Time limit</label>
+                    <select
+                      id="ai-duration"
+                      value={aiDuration}
+                      onChange={(e) =>
+                        setAiDuration(
+                          Number(e.target.value) as 30 | 45 | 60 | 90,
+                        )
+                      }
+                    >
+                      <option value={30}>30 min</option>
+                      <option value={45}>45 min</option>
+                      <option value={60}>60 min</option>
+                      <option value={90}>90 min</option>
+                    </select>
+                  </div>
+
+                  <div className="hiring-field hiring-ai-quick-toggle">
+                    <label className="hiring-switch-row">
+                      <input
+                        type="checkbox"
+                        className="hiring-switch-input"
+                        aria-label="Candidate AI assistant"
+                        checked={aiIntegratedAi}
+                        onChange={(e) => setAiIntegratedAi(e.target.checked)}
+                      />
+                      <span
+                        className="hiring-switch-track"
+                        aria-hidden="true"
+                      />
+                      <span className="hiring-switch-copy">
+                        Candidate AI assistant
+                      </span>
+                    </label>
+                    <span
+                      className={`hiring-pill ${aiIntegratedAi ? 'hiring-pill-mint' : ''}`}
+                    >
+                      {aiIntegratedAi ? 'AI assistant on' : 'AI assistant off'}{' '}
+                      · {aiDuration} min
+                    </span>
+                  </div>
+                </div>
+
                 <details
                   className="hiring-customize-details"
                   open={aiSettingsOpen}
                   onToggle={(e) => setAiSettingsOpen(e.currentTarget.open)}
                 >
                   <summary>
-                    <span>Assessment settings</span>
+                    <span>Additional constraints &amp; skills</span>
                     <small>
-                      {selectedDomainOption.label} · {aiDuration} min · AI
-                      assistant {aiIntegratedAi ? 'on' : 'off'}
+                      {selectedDomainOption.label} · {aiYears} yrs ·{' '}
+                      {selectedStructureOption.label} · {aiSkills.length} skills
                     </small>
                   </summary>
                   <div className="hiring-customize-body">
@@ -1867,47 +1924,6 @@ export function HiringAssessmentBuilderClient({
                           {selectedStructureOption.description}
                         </p>
                       </div>
-
-                      <div className="hiring-field">
-                        <label htmlFor="ai-duration">Time limit</label>
-                        <select
-                          id="ai-duration"
-                          value={aiDuration}
-                          onChange={(e) =>
-                            setAiDuration(
-                              Number(e.target.value) as 30 | 45 | 60 | 90,
-                            )
-                          }
-                        >
-                          <option value={30}>30 min</option>
-                          <option value={45}>45 min</option>
-                          <option value={60}>60 min</option>
-                          <option value={90}>90 min</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="hiring-field">
-                      <label className="hiring-switch-row">
-                        <input
-                          type="checkbox"
-                          className="hiring-switch-input"
-                          aria-label="Candidate AI assistant"
-                          checked={aiIntegratedAi}
-                          onChange={(e) => setAiIntegratedAi(e.target.checked)}
-                        />
-                        <span
-                          className="hiring-switch-track"
-                          aria-hidden="true"
-                        />
-                        <span className="hiring-switch-copy">
-                          Candidate AI assistant
-                        </span>
-                      </label>
-                      <p className="hiring-field-hint">
-                        Allow AI assistant in candidate workspace (Off by
-                        default).
-                      </p>
                     </div>
 
                     <div className="hiring-field">
@@ -1957,32 +1973,38 @@ export function HiringAssessmentBuilderClient({
                   <button
                     type="button"
                     className="hiring-btn hiring-btn-primary"
-                    disabled={generating || !canUseAiBuilder}
+                    disabled={generating || aiGenCompleting || !canUseAiBuilder}
                     onClick={handleGenerateAi}
                   >
-                    {generating ? (
-                      <IconLoader2
-                        size={16}
-                        className="team-builder-spinner"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <IconCodePlus size={16} aria-hidden="true" />
-                    )}{' '}
+                    <IconCodePlus size={16} aria-hidden="true" />{' '}
                     {generating
                       ? 'Generating assessment…'
-                      : 'Generate assessment with AI'}
+                      : aiGenCompleting
+                        ? 'Opening preview…'
+                        : 'Generate assessment with AI'}
                   </button>
                 </div>
-                {generating ? (
-                  <CommonThreadLoader
-                    startedAt={activeGenJob?.startedAt}
-                    label="Generating tailored assessment"
+                {generating || aiGenCompleting ? (
+                  <HirearchyAiThinking
+                    variant="studio"
+                    status={generating ? 'active' : 'completing'}
+                    headline={
+                      generating
+                        ? 'Generating tailored assessment'
+                        : 'Assessment ready — opening preview'
+                    }
                     sublabel="Building starter repository, brief, and rubric — you can navigate elsewhere and return without losing progress."
-                    stages={[
-                      'Analyzing role & constraints',
-                      'Drafting starter codebase & tests',
-                      'Calibrating rubric & acceptance criteria',
+                    startedAt={activeGenJob?.startedAt}
+                    steps={[
+                      { id: 'rubric', label: 'Analyzing role & constraints…' },
+                      {
+                        id: 'repo',
+                        label: 'Designing repository files & tests…',
+                      },
+                      {
+                        id: 'validate',
+                        label: 'Validating rubric & test harness…',
+                      },
                     ]}
                   />
                 ) : null}
@@ -2128,6 +2150,47 @@ export function HiringAssessmentBuilderClient({
                   : ` · ${activeDraft.durationMinutes} min · Candidate AI assistant ${activeDraft.integratedAi ? 'on' : 'off'}`}
               </p>
             </div>
+            <div className="hiring-header-actions hiring-preview-header-actions">
+              <Link
+                className="hiring-btn hiring-btn-sm"
+                href={`${orgBase}/builder/candidate-preview${activeDraftId ? `?draft=${encodeURIComponent(activeDraftId)}` : ''}`}
+                onClick={() => {
+                  try {
+                    window.sessionStorage.setItem(
+                      `${CANDIDATE_PREVIEW_DRAFT_KEY_PREFIX}${organizationId}`,
+                      JSON.stringify({ draft: activeDraft }),
+                    );
+                  } catch {
+                    // Ignore storage failures in restricted contexts.
+                  }
+                }}
+              >
+                <IconEye size={16} aria-hidden="true" /> Preview as Candidate
+              </Link>
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm"
+                disabled={savingLibrary || Boolean(savedIds)}
+                onClick={handleSaveLibraryOnly}
+              >
+                <IconBookmark size={16} />{' '}
+                {savedIds
+                  ? 'Saved to library'
+                  : savingLibrary
+                    ? 'Saving…'
+                    : activeSourceMeta.sourceKind === 'ai_generated'
+                      ? 'Save to role library'
+                      : 'Save to library'}
+              </button>
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-primary hiring-btn-sm"
+                onClick={() => goToStage('invite')}
+              >
+                Continue to invitation{' '}
+                <IconArrowRight size={15} aria-hidden="true" />
+              </button>
+            </div>
           </header>
           {editableTemplate ? (
             <div className="hiring-template-settings">
@@ -2179,47 +2242,6 @@ export function HiringAssessmentBuilderClient({
               </div>
             </div>
           ) : null}
-          <div className="software-builder-next">
-            <Link
-              className="hiring-btn hiring-btn-sm"
-              href={`${orgBase}/builder/candidate-preview${activeDraftId ? `?draft=${encodeURIComponent(activeDraftId)}` : ''}`}
-              onClick={() => {
-                try {
-                  window.sessionStorage.setItem(
-                    `${CANDIDATE_PREVIEW_DRAFT_KEY_PREFIX}${organizationId}`,
-                    JSON.stringify({ draft: activeDraft }),
-                  );
-                } catch {
-                  // Ignore storage failures in restricted contexts.
-                }
-              }}
-            >
-              <IconEye size={16} aria-hidden="true" /> Preview as Candidate
-            </Link>
-            <button
-              type="button"
-              className="hiring-btn hiring-btn-sm"
-              disabled={savingLibrary || Boolean(savedIds)}
-              onClick={handleSaveLibraryOnly}
-            >
-              <IconBookmark size={16} />{' '}
-              {savedIds
-                ? 'Saved to library'
-                : savingLibrary
-                  ? 'Saving…'
-                  : activeSourceMeta.sourceKind === 'ai_generated'
-                    ? 'Save to role library'
-                    : 'Save to library'}
-            </button>
-            <button
-              type="button"
-              className="hiring-btn hiring-btn-primary"
-              onClick={() => goToStage('invite')}
-            >
-              Continue to invitation{' '}
-              <IconArrowRight size={15} aria-hidden="true" />
-            </button>
-          </div>
           {activeSourceMeta.sourceKind === 'ai_generated' ? (
             <p className="hiring-muted-copy">
               Review the starter files, acceptance criteria, and rubric, then
@@ -2324,6 +2346,23 @@ export function HiringAssessmentBuilderClient({
               }}
             />
           ) : null}
+          <footer className="hiring-preview-footer">
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-sm"
+              onClick={() => goToStage('source')}
+            >
+              ← Change problem
+            </button>
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-primary hiring-btn-sm"
+              onClick={() => goToStage('invite')}
+            >
+              Continue to invitation{' '}
+              <IconArrowRight size={15} aria-hidden="true" />
+            </button>
+          </footer>
         </section>
 
         <section
@@ -2502,14 +2541,21 @@ export function HiringAssessmentBuilderClient({
                   aria-label="Issued candidate link"
                   className="hiring-issued-link-input"
                 />
-                <button
-                  type="button"
+                <CopyActionButton
+                  value={invitationUrl}
+                  label="Copy invite link"
+                  copiedLabel="Copied"
+                  toastMessage="Candidate invite link copied."
+                  size="md"
+                  variant="secondary"
                   className="hiring-btn hiring-btn-primary"
-                  onClick={() => void copyInvitation('link')}
-                >
-                  <IconCopy size={15} />{' '}
-                  {copiedLink ? 'Copied' : 'Copy invite link'}
-                </button>
+                  onCopied={() => setCopyFallback(null)}
+                  onCopyError={() => {
+                    setCopyFallback('link');
+                    issuedLinkInput.current?.focus();
+                    issuedLinkInput.current?.select();
+                  }}
+                />
               </div>
               {copyFallback === 'link' ? (
                 <p className="hiring-muted-copy" role="alert">
@@ -2517,14 +2563,16 @@ export function HiringAssessmentBuilderClient({
                 </p>
               ) : null}
               <div className="hiring-header-actions hiring-mt-sm">
-                <button
-                  type="button"
-                  className="hiring-btn hiring-btn-sm"
-                  onClick={() => void copyInvitation('email')}
-                >
-                  <IconMail size={14} aria-hidden="true" />{' '}
-                  {copiedEmailMsg ? 'Message copied' : 'Copy email message'}
-                </button>
+                <CopyActionButton
+                  value={invitationEmail}
+                  label="Copy email message"
+                  copiedLabel="Message copied"
+                  toastMessage="Ready-to-send email message copied."
+                  size="sm"
+                  variant="secondary"
+                  onCopied={() => setCopyFallback(null)}
+                  onCopyError={() => setCopyFallback('email')}
+                />
                 <button
                   type="button"
                   className="hiring-btn hiring-btn-sm"
@@ -2557,14 +2605,6 @@ export function HiringAssessmentBuilderClient({
           ) : null}
         </section>
       </div>
-      <CommonThreadToast
-        message={toastMsg ?? statusBanner}
-        tone="success"
-        onDismiss={() => {
-          setToastMsg(null);
-          setStatusBanner(null);
-        }}
-      />
     </div>
   );
 }

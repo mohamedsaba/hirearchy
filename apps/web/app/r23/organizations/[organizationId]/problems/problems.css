@@ -1,10 +1,10 @@
 .problems-page {
-  width: min(58rem, 100%);
-  margin: 0 auto;
-  padding: clamp(1rem, 4vw, 3rem);
+  width: 100%;
+  min-inline-size: 0;
   color: var(--software-ink);
   overflow-wrap: anywhere;
 }
+
 .problems-page header,
 .problems-page nav,
 .problems-page .problem-actions,
@@ -14,10 +14,11 @@
   align-items: center;
   flex-wrap: wrap;
 }
+
 .problems-page header {
   justify-content: space-between;
-  margin: 1.5rem 0;
 }
+
 .problems-page h1 {
   margin: 0;
   font-family: var(--software-serif);
@@ -25,38 +26,99 @@
   font-optical-sizing: auto;
   letter-spacing: -0.025em;
   line-height: 1.12;
+  color: var(--software-ink);
 }
-.problems-page table {
+
+.problems-table-card {
+  padding: 0.4rem clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.problems-table-wrap {
+  width: 100%;
+}
+
+.problems-page table.problems-table {
   width: 100%;
   border-collapse: collapse;
 }
-.problems-page th,
-.problems-page td {
+
+.problems-page .problems-table th,
+.problems-page .problems-table td {
   text-align: left;
-  padding: 0.75rem 0.5rem;
-  border-bottom: 1px solid var(--software-border, #d6dedb);
+  vertical-align: middle;
+  padding: 0.9rem 0.65rem;
+  border-bottom: 1px solid var(--software-border-subtle);
+  color: var(--software-ink);
 }
-.problems-page tbody tr {
-  position: relative;
+
+.problems-page .problems-table thead th {
+  color: var(--software-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--software-border);
 }
-.problems-page tbody th a::after {
-  content: '';
-  position: absolute;
-  inset: 0;
+
+.problems-page .problems-table tbody tr {
+  transition: background-color var(--duration-fast, 140ms)
+    var(--motion-snappy, ease);
 }
-.problems-page tbody tr:hover,
-.problems-page tbody tr:focus-within {
-  background: var(--software-surface-note);
+
+.problems-page .problems-table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
 }
+
+.problems-page .problems-table tbody tr:hover,
+.problems-page .problems-table tbody tr:focus-within {
+  background: var(--software-surface-2);
+}
+
+.problems-row-primary {
+  display: grid;
+  gap: 0.4rem;
+  min-inline-size: 0;
+}
+
+.problems-row-title-link {
+  color: var(--software-ink);
+  font-size: 0.98rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.problems-row-title-link:hover {
+  color: var(--software-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.problems-row-badges .hiring-pill {
+  margin-block-start: 0;
+}
+
+.problems-row-actions {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 780px) {
+  .problems-row-actions {
+    flex-wrap: wrap;
+  }
+}
+
 .problems-page form,
 .problems-page fieldset,
 .problems-page label {
   display: grid;
   gap: 0.6rem;
 }
+
 .problems-page form {
   gap: 1.2rem;
 }
+
 .problems-page fieldset {
   min-width: 0;
   border: 1px solid var(--software-border);
@@ -65,29 +127,38 @@
   background: var(--software-surface);
   box-shadow: var(--software-shadow-card);
 }
+
 .problems-page legend {
   font-weight: 600;
+  color: var(--software-ink);
 }
+
 .problems-page input:not([type='checkbox']),
 .problems-page textarea,
 .problems-page select {
   width: 100%;
   min-width: 0;
-  padding: 0.6rem;
-  border: 1px solid var(--software-border, #d6dedb);
-  border-radius: 0.35rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--software-border-strong);
+  border-radius: var(--software-radius-control, 0.5rem);
+  background: var(--software-surface);
+  color: var(--software-ink);
   font: inherit;
 }
+
 .problems-page textarea {
   resize: vertical;
 }
+
 .problems-page .toggle {
   display: flex;
   align-items: center;
 }
+
 .problems-page .problem-delete {
   margin-top: 2rem;
 }
+
 .problem-library-actions {
   margin-block: 0.75rem;
 }
@@ -97,6 +168,6 @@
   .problems-page *::before,
   .problems-page *::after {
     animation: none !important;
-    transition: none !important;
+    transition-duration: 100ms !important;
   }
 }

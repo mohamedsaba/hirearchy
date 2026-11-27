@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { IconEyeCheck } from '@tabler/icons-react';
 
 import {
   HIRING_ROLES,
@@ -229,90 +230,171 @@ export function HandoffsHubClient({
   };
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
+  const needsReviewCount = useMemo(
+    () =>
+      initialHandoffs.filter((h) => h.decision.handoffStatus === 'pending')
+        .length,
+    [initialHandoffs],
+  );
+  const reviewedCount = useMemo(
+    () =>
+      initialHandoffs.filter((h) => h.decision.handoffStatus === 'reviewed')
+        .length,
+    [initialHandoffs],
+  );
+  const completedCount = useMemo(
+    () =>
+      initialHandoffs.filter((h) => h.decision.handoffStatus === 'completed')
+        .length,
+    [initialHandoffs],
+  );
 
   return (
     <div className="hiring-page-shell">
       {initialHandoffs.length > 0 ? (
-        <section className="hiring-filter-bar" aria-label="Filter handoffs">
-          <div className="hiring-filter-primary">
-            <div className="hiring-field">
-              <label htmlFor="handoff-search">Search</label>
-              <input
-                id="handoff-search"
-                type="search"
-                aria-label="Search handoffs"
-                placeholder="Find a handoff…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="hiring-field">
-              <label htmlFor="handoff-status">Handoff status</label>
-              <select
-                id="handoff-status"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="all">All statuses</option>
-                <option value="pending">Needs review</option>
-                <option value="reviewed">Reviewed</option>
-                <option value="completed">Interview done</option>
-              </select>
-            </div>
-          </div>
-          <details
-            className="hiring-disclosure hiring-more-filters"
-            open={moreFiltersOpen}
-            onToggle={(event) => {
-              setMoreFiltersOpen(event.currentTarget.open);
-            }}
+        <>
+          <div
+            className="team-pipeline-pulse-bar"
+            role="region"
+            aria-label="Handoff status summary"
           >
-            <summary>More filters</summary>
-            <div className="hiring-filter-grid hiring-mt-xs">
-              <div className="hiring-field">
-                <label htmlFor="handoff-stage">Next hiring stage</label>
-                <select
-                  id="handoff-stage"
-                  value={stageFilter}
-                  onChange={(e) => setStageFilter(e.target.value)}
-                >
-                  <option value="all">All stages</option>
-                  {NEXT_STAGE_OPTIONS.map((stage) => (
-                    <option key={stage} value={stage}>
-                      {stage}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="hiring-field">
-                <label htmlFor="handoff-role">Target role</label>
-                <select
-                  id="handoff-role"
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                >
-                  <option value="all">All roles</option>
-                  {HIRING_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </details>
-          {isFiltered ? (
-            <div className="hiring-header-actions">
+            <div
+              className="team-pulse-pills"
+              role="group"
+              aria-label="Quick handoff filters"
+            >
               <button
                 type="button"
-                className="hiring-btn hiring-btn-sm"
-                onClick={clearFilters}
+                className="hiring-btn hiring-btn-sm team-pulse-pill"
+                aria-pressed={statusFilter === 'all'}
+                onClick={() => setStatusFilter('all')}
               >
-                Clear filters
+                All{' '}
+                <span className="tabular-nums">({initialHandoffs.length})</span>
+              </button>
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm team-pulse-pill team-review-filter"
+                aria-pressed={statusFilter === 'pending'}
+                onClick={() =>
+                  setStatusFilter(
+                    statusFilter === 'pending' ? 'all' : 'pending',
+                  )
+                }
+              >
+                <IconEyeCheck size={15} aria-hidden="true" />
+                Needs review{' '}
+                <span className="tabular-nums">({needsReviewCount})</span>
+              </button>
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm team-pulse-pill"
+                aria-pressed={statusFilter === 'reviewed'}
+                onClick={() =>
+                  setStatusFilter(
+                    statusFilter === 'reviewed' ? 'all' : 'reviewed',
+                  )
+                }
+              >
+                Reviewed <span className="tabular-nums">({reviewedCount})</span>
+              </button>
+              <button
+                type="button"
+                className="hiring-btn hiring-btn-sm team-pulse-pill"
+                aria-pressed={statusFilter === 'completed'}
+                onClick={() =>
+                  setStatusFilter(
+                    statusFilter === 'completed' ? 'all' : 'completed',
+                  )
+                }
+              >
+                Interview done{' '}
+                <span className="tabular-nums">({completedCount})</span>
               </button>
             </div>
-          ) : null}
-        </section>
+          </div>
+
+          <section className="hiring-filter-bar" aria-label="Filter handoffs">
+            <div className="hiring-filter-primary">
+              <div className="hiring-field">
+                <label htmlFor="handoff-search">Search</label>
+                <input
+                  id="handoff-search"
+                  type="search"
+                  aria-label="Search handoffs"
+                  placeholder="Find a handoff…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="hiring-field">
+                <label htmlFor="handoff-status">Handoff status</label>
+                <select
+                  id="handoff-status"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">All statuses</option>
+                  <option value="pending">Needs review</option>
+                  <option value="reviewed">Reviewed</option>
+                  <option value="completed">Interview done</option>
+                </select>
+              </div>
+            </div>
+            <details
+              className="hiring-disclosure hiring-more-filters"
+              open={moreFiltersOpen}
+              onToggle={(event) => {
+                setMoreFiltersOpen(event.currentTarget.open);
+              }}
+            >
+              <summary>More filters</summary>
+              <div className="hiring-filter-grid hiring-mt-xs">
+                <div className="hiring-field">
+                  <label htmlFor="handoff-stage">Next hiring stage</label>
+                  <select
+                    id="handoff-stage"
+                    value={stageFilter}
+                    onChange={(e) => setStageFilter(e.target.value)}
+                  >
+                    <option value="all">All stages</option>
+                    {NEXT_STAGE_OPTIONS.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="hiring-field">
+                  <label htmlFor="handoff-role">Target role</label>
+                  <select
+                    id="handoff-role"
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                  >
+                    <option value="all">All roles</option>
+                    {HIRING_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </details>
+            {isFiltered ? (
+              <div className="hiring-header-actions">
+                <button
+                  type="button"
+                  className="hiring-btn hiring-btn-sm"
+                  onClick={clearFilters}
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : null}
+          </section>
+        </>
       ) : null}
 
       {filtered.length === 0 ? (

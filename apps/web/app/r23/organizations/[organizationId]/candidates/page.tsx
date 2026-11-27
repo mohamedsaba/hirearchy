@@ -51,8 +51,8 @@ export default async function OrganizationCandidatesPage({
       active="candidates"
       plan={workspace.plan}
     >
-      <div className="hiring-page-shell team-candidates-page">
-        <header className="hiring-page-header">
+      <div className="hiring-page-shell team-candidates-page ct-enter-crossfade">
+        <header className="hiring-page-header team-candidates-header">
           <h1>Candidates</h1>
           <Link
             className="hiring-btn hiring-btn-primary"

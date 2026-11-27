@@ -51,7 +51,11 @@ export default async function ProductIntelligencePage() {
           <ThemeToggle variant="header" />
         </div>
       </header>
-      <main className="intel-main" id="intelligence-main" tabIndex={-1}>
+      <main
+        className="intel-main ct-enter-crossfade"
+        id="intelligence-main"
+        tabIndex={-1}
+      >
         <IntelligenceDashboardClient
           initialReport={initialReport}
           initialLifecycle={initialLifecycle}

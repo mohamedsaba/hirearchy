@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  IconCheck,
-  IconCopy,
   IconExternalLink,
+  IconEye,
   IconFileAnalytics,
   IconLink,
+  IconLock,
   IconShieldLock,
   IconTrash,
   IconX,
@@ -18,8 +18,10 @@ import {
   hasPlanFeature,
   type OrganizationPlanSummary,
 } from '../../../../../../src/plans/entitlements';
+import { HirearchyAiThinking } from '../../../../../_components/ai';
+import { emitToast } from '../../../../../_components/brand-toast';
 import { CommonThreadLoader } from '../../../../../_components/common-thread-loader';
-import { CommonThreadToast } from '../../../../../_components/common-thread-toast';
+import { CopyActionButton } from '../../../../../_components/copy-action-button';
 
 export interface DossierShareLinkRecord {
   readonly id: string;
@@ -73,7 +75,6 @@ export function DossierSharePanel({
     useState(true);
   const [expiresDays, setExpiresDays] = useState<number>(14);
   const [createdShareUrl, setCreatedShareUrl] = useState<string | null>(null);
-  const [copiedUrl, setCopiedUrl] = useState(false);
 
   const dossiersApiUrl = `/r23/api/organizations/${encodeURIComponent(organizationId)}/hiring/dossiers`;
 
@@ -150,13 +151,18 @@ export function DossierSharePanel({
     };
   }, [dossiersApiUrl, sessionId]);
 
-  const copyShareUrl = async (url: string) => {
+  const copyShareUrlQuietly = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      setCopiedUrl(true);
-      window.setTimeout(() => setCopiedUrl(false), 2400);
+      emitToast({
+        message: 'Executive dossier link created and copied.',
+        tone: 'success',
+      });
     } catch {
-      setErrorMsg('Copy failed — copy the link manually below.');
+      emitToast({
+        message: 'Executive dossier link created — copy it below.',
+        tone: 'info',
+      });
     }
   };
 
@@ -202,7 +208,7 @@ export function DossierSharePanel({
           : null);
       if (nextUrl) {
         setCreatedShareUrl(nextUrl);
-        void copyShareUrl(nextUrl);
+        void copyShareUrlQuietly(nextUrl);
       }
       if (data?.link) {
         setLinks((prev) => [data.link!, ...prev]);
@@ -381,18 +387,14 @@ export function DossierSharePanel({
               {createdShareUrl}
             </code>
             <div className="hiring-header-actions">
-              <button
-                type="button"
-                className="hiring-btn hiring-btn-sm"
-                onClick={() => void copyShareUrl(createdShareUrl)}
-              >
-                {copiedUrl ? (
-                  <IconCheck size={14} aria-hidden="true" />
-                ) : (
-                  <IconCopy size={14} aria-hidden="true" />
-                )}
-                {copiedUrl ? 'Copied link' : 'Copy link'}
-              </button>
+              <CopyActionButton
+                value={createdShareUrl}
+                label="Copy link"
+                copiedLabel="Copied link"
+                toastMessage="Executive dossier link copied."
+                size="sm"
+                variant="secondary"
+              />
               <a
                 className="hiring-btn hiring-btn-sm"
                 href={createdShareUrl}
@@ -507,8 +509,6 @@ export function HandoffDossierClient({
   const [dossier, setDossier] = useState<HandoffDossierItem>(initialDossier);
   const [busy, setBusy] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [questionsCopied, setQuestionsCopied] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const canGenerateFitReport = hasPlanFeature(
@@ -522,7 +522,6 @@ export function HandoffDossierClient({
     nextStatus: 'pending' | 'reviewed' | 'completed',
   ) => {
     setErrorMsg(null);
-    setStatusMsg(null);
     setBusy(nextStatus);
     try {
       const csrf = readCsrfCookie();
@@ -553,7 +552,10 @@ export function HandoffDossierClient({
       );
       if (updated) setDossier(updated);
 
-      setStatusMsg(`Handoff updated: ${handoffStatusLabel(nextStatus)}.`);
+      emitToast({
+        message: `Handoff updated: ${handoffStatusLabel(nextStatus)}.`,
+        tone: 'success',
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Update failed.');
     } finally {
@@ -563,7 +565,6 @@ export function HandoffDossierClient({
 
   const regenerateFitReport = async () => {
     setErrorMsg(null);
-    setStatusMsg(null);
     setBusy('regen');
     try {
       const csrf = readCsrfCookie();
@@ -595,7 +596,10 @@ export function HandoffDossierClient({
       );
       if (updated) setDossier(updated);
 
-      setStatusMsg('Updated Managerial Fit Report.');
+      emitToast({
+        message: 'Updated Managerial Fit Report.',
+        tone: 'success',
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Generation failed.');
     } finally {
@@ -641,19 +645,27 @@ export function HandoffDossierClient({
               </dd>
             </div>
           </dl>
-          <div className="hiring-header-actions hiring-mt-md">
+          <div
+            className="hiring-segmented-control hiring-mt-md"
+            role="group"
+            aria-label="Interview handoff status"
+          >
             {(['pending', 'reviewed', 'completed'] as const).map(
-              (statusOpt) => (
-                <button
-                  key={statusOpt}
-                  type="button"
-                  className={`hiring-btn hiring-btn-sm${dossier.decision.handoffStatus === statusOpt ? ' hiring-btn-primary' : ''}`}
-                  disabled={busy !== null}
-                  onClick={() => void updateStatus(statusOpt)}
-                >
-                  {handoffStatusLabel(statusOpt)}
-                </button>
-              ),
+              (statusOpt) => {
+                const active = dossier.decision.handoffStatus === statusOpt;
+                return (
+                  <button
+                    key={statusOpt}
+                    type="button"
+                    className={`hiring-segmented-btn${active ? ' is-active' : ''}`}
+                    aria-pressed={active}
+                    disabled={busy !== null}
+                    onClick={() => void updateStatus(statusOpt)}
+                  >
+                    {handoffStatusLabel(statusOpt)}
+                  </button>
+                );
+              },
             )}
           </div>
           <div
@@ -736,33 +748,43 @@ export function HandoffDossierClient({
           <section className="hiring-card hiring-card-animated">
             <h2>Feedback and private notes</h2>
             <div className="hiring-two-col hiring-mt-sm">
-              <div className="hiring-card-subtle">
-                <strong>Strengths (Shared with candidate)</strong>
+              <div className="hiring-card-subtle hiring-dossier-panel--shared">
+                <div className="hiring-dossier-panel-head">
+                  <span className="hiring-pill hiring-pill-mint">
+                    <IconEye size={13} aria-hidden="true" /> Shared with
+                    candidate
+                  </span>
+                </div>
+                <strong>Strengths</strong>
                 <ul className="hiring-bullet-list">
                   {dossier.decision.candidateStrengths.map((s, i) => (
                     <li key={i}>{s}</li>
                   ))}
                 </ul>
-                <strong className="hiring-sublabel">
-                  Areas to explore (shared with candidate)
-                </strong>
+                <strong className="hiring-sublabel">Areas to explore</strong>
                 <ul className="hiring-bullet-list">
                   {dossier.decision.candidateWeaknesses.map((w, i) => (
                     <li key={i}>{w}</li>
                   ))}
                 </ul>
-              </div>
-              <div className="hiring-card-subtle">
-                <strong>Internal Interview Notes (Hiring Team Only)</strong>
-                <p className="hiring-prewrap hiring-mt-xs">
-                  {dossier.decision.internalNotes ||
-                    'No internal notes recorded.'}
-                </p>
                 <strong className="hiring-sublabel">
-                  Published Candidate Note
+                  Published candidate note
                 </strong>
                 <p className="hiring-prewrap hiring-mt-xs">
                   {dossier.decision.candidateFeedbackNote || '—'}
+                </p>
+              </div>
+              <div className="hiring-card-subtle hiring-dossier-panel--private">
+                <div className="hiring-dossier-panel-head">
+                  <span className="hiring-pill hiring-pill-plum">
+                    <IconLock size={13} aria-hidden="true" /> Private — Hiring
+                    Team Only
+                  </span>
+                </div>
+                <strong>Internal interview notes</strong>
+                <p className="hiring-prewrap hiring-mt-xs">
+                  {dossier.decision.internalNotes ||
+                    'No internal notes recorded.'}
                 </p>
               </div>
             </div>
@@ -842,9 +864,21 @@ export function HandoffDossierClient({
 
             {busy === 'regen' ? (
               <div className="hiring-mt-sm">
-                <CommonThreadLoader
-                  compact
-                  label="Drafting Managerial Fit Report…"
+                <HirearchyAiThinking
+                  variant="advisory"
+                  status="active"
+                  badge="Advisory only"
+                  headline="Synthesizing Managerial Fit Report…"
+                  steps={[
+                    {
+                      id: 'evidence',
+                      label: 'Correlating submission & rubric evidence…',
+                    },
+                    {
+                      id: 'questions',
+                      label: 'Drafting live verification probes…',
+                    },
+                  ]}
                 />
               </div>
             ) : !report ? (
@@ -911,37 +945,16 @@ export function HandoffDossierClient({
                       <strong>
                         Live verification questions (10-min defense)
                       </strong>
-                      <button
-                        type="button"
-                        className="hiring-btn hiring-btn-sm"
-                        onClick={() => {
-                          const text = report.suggestedNextInterviewQuestions
-                            .map((q, idx) => `${idx + 1}. ${q}`)
-                            .join('\n');
-                          void navigator.clipboard
-                            .writeText(text)
-                            .then(() => {
-                              setQuestionsCopied(true);
-                              setStatusMsg('Verification questions copied.');
-                              window.setTimeout(
-                                () => setQuestionsCopied(false),
-                                2000,
-                              );
-                            })
-                            .catch(() => {
-                              setErrorMsg(
-                                'Copy failed — copy manually from this browser.',
-                              );
-                            });
-                        }}
-                      >
-                        {questionsCopied ? (
-                          <IconCheck size={14} aria-hidden="true" />
-                        ) : (
-                          <IconCopy size={14} aria-hidden="true" />
-                        )}
-                        {questionsCopied ? 'Copied' : 'Copy questions'}
-                      </button>
+                      <CopyActionButton
+                        value={report.suggestedNextInterviewQuestions
+                          .map((q, idx) => `${idx + 1}. ${q}`)
+                          .join('\n')}
+                        label="Copy questions"
+                        copiedLabel="Copied"
+                        toastMessage="Verification questions copied."
+                        size="sm"
+                        variant="secondary"
+                      />
                     </div>
                     <ol className="hiring-ol-list">
                       {report.suggestedNextInterviewQuestions.map((q, i) => (
@@ -976,11 +989,6 @@ export function HandoffDossierClient({
           </div>
         </div>
       ) : null}
-      <CommonThreadToast
-        message={statusMsg}
-        tone="success"
-        onDismiss={() => setStatusMsg(null)}
-      />
     </div>
   );
 }

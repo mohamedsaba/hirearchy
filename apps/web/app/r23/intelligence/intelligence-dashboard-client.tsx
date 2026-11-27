@@ -5,9 +5,7 @@ import {
   IconActivityHeartbeat,
   IconBolt,
   IconChartBar,
-  IconCheck,
   IconClock,
-  IconCopy,
   IconDownload,
   IconMessageStar,
   IconRefresh,
@@ -22,6 +20,9 @@ import type {
   ProductIntelligenceReport,
   ProductLifecycleReport,
 } from '../../../src/telemetry/catalog';
+import { emitToast } from '../../_components/brand-toast';
+import { CopyActionButton } from '../../_components/copy-action-button';
+import { HorizontalTabs } from '../../_components/horizontal-tabs';
 
 const HEALTH_BADGE_MAP: Readonly<
   Record<
@@ -105,6 +106,19 @@ function retentionCellStyle(
   };
 }
 
+type IntelSectionTab = 'overview' | 'queue' | 'health' | 'cohorts';
+
+const SECTION_JUMP_TABS: readonly {
+  id: IntelSectionTab;
+  targetId: string;
+  label: string;
+}[] = [
+  { id: 'overview', targetId: 'intel-overview', label: 'Overview & Funnel' },
+  { id: 'queue', targetId: 'intel-action-queue', label: 'Action Queue' },
+  { id: 'health', targetId: 'intel-health', label: 'Assessment Health' },
+  { id: 'cohorts', targetId: 'intel-cohorts', label: 'Cohorts & Feedback' },
+];
+
 export function IntelligenceDashboardClient({
   initialReport,
   initialLifecycle = null,
@@ -118,8 +132,9 @@ export function IntelligenceDashboardClient({
   const [lifecycle, setLifecycle] = useState<ProductLifecycleReport | null>(
     initialLifecycle,
   );
+  const [activeSection, setActiveSection] =
+    useState<IntelSectionTab>('overview');
   const [queueFilter, setQueueFilter] = useState<'all' | NudgeKey>('all');
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [actionBusyKey, setActionBusyKey] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState<number>(
@@ -134,18 +149,13 @@ export function IntelligenceDashboardClient({
   const itemRowKey = (item: LifecycleActionQueueItem) =>
     `${item.organizationId}:${item.nudgeKey}:${item.targetRef}`;
 
-  const copyOutreach = async (item: LifecycleActionQueueItem) => {
-    const key = itemRowKey(item);
-    const text = buildOutreachTemplate(item);
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      window.setTimeout(() => {
-        setCopiedKey((curr) => (curr === key ? null : curr));
-      }, 2000);
-    } catch {
-      setError('Clipboard unavailable in this browser context.');
-    }
+  const jumpToSection = (sectionId: IntelSectionTab) => {
+    setActiveSection(sectionId);
+    const tab = SECTION_JUMP_TABS.find((t) => t.id === sectionId);
+    if (!tab || typeof document === 'undefined') return;
+    document
+      .getElementById(tab.targetId)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const applyQueueAction = async (
@@ -194,8 +204,14 @@ export function IntelligenceDashboardClient({
           ),
         };
       });
+      emitToast({
+        message: `${item.organizationName} marked as ${status}.`,
+        tone: 'success',
+      });
     } catch {
-      setError('Unable to update outreach status right now.');
+      const msg = 'Unable to update outreach status right now.';
+      setError(msg);
+      emitToast({ message: msg, tone: 'error' });
     } finally {
       setActionBusyKey(null);
     }
@@ -219,7 +235,9 @@ export function IntelligenceDashboardClient({
       };
       if (data.report) setReport(data.report);
     } catch {
-      setError('Unable to refresh intelligence metrics right now.');
+      const msg = 'Unable to refresh intelligence metrics right now.';
+      setError(msg);
+      emitToast({ message: msg, tone: 'error' });
     } finally {
       setLoading(false);
     }
@@ -340,7 +358,190 @@ export function IntelligenceDashboardClient({
         </p>
       ) : null}
 
+      <nav className="intel-jump-nav" aria-label="Intelligence sections">
+        <HorizontalTabs<IntelSectionTab>
+          id="intel-sections"
+          label="Dashboard sections"
+          active={activeSection}
+          onSelect={jumpToSection}
+          className="hiring-builder-tabs"
+          tabClassName="hiring-builder-tab"
+          tabs={SECTION_JUMP_TABS.map((t) => ({ id: t.id, label: t.label }))}
+        />
+      </nav>
+
       <section
+        id="intel-overview"
+        aria-labelledby="intel-proof-title"
+        className="intel-section"
+      >
+        <div className="intel-section-head">
+          <IconTrendingUp size={18} aria-hidden="true" />
+          <h2 id="intel-proof-title">Executive Overview</h2>
+        </div>
+        <div className="intel-kpi-grid intel-kpi-grid--executive">
+          <article className="hiring-card intel-kpi-card">
+            <span className="intel-kpi-label">Active / Total Orgs</span>
+            <strong className="intel-kpi-value tabular-nums">
+              {report.marketingProof.activeOrganizations} /{' '}
+              {report.marketingProof.totalOrganizations}
+            </strong>
+            <span className="intel-kpi-sub tabular-nums">
+              Issued {report.marketingProof.totalSessionsIssued} assessments
+            </span>
+          </article>
+          <article className="hiring-card intel-kpi-card">
+            <span className="intel-kpi-label">Candidate Completion</span>
+            <strong className="intel-kpi-value tabular-nums">
+              {report.marketingProof.candidateCompletionRatePct}%
+            </strong>
+            <span className="intel-kpi-sub tabular-nums">
+              {report.marketingProof.sessionsSubmitted} submitted of{' '}
+              {report.marketingProof.sessionsStarted} started (
+              {report.marketingProof.candidateStartRatePct}% start)
+            </span>
+          </article>
+          <article className="hiring-card intel-kpi-card">
+            <span className="intel-kpi-label">Median Review Turnaround</span>
+            <strong className="intel-kpi-value tabular-nums">
+              {report.marketingProof.medianReviewTurnaroundHours !== null
+                ? `${report.marketingProof.medianReviewTurnaroundHours} hrs`
+                : '—'}
+            </strong>
+            <span className="intel-kpi-sub tabular-nums">
+              {report.marketingProof.decisionsPublished} decisions (
+              {report.marketingProof.acceptanceRatePct}% accepted)
+            </span>
+          </article>
+          <article className="hiring-card intel-kpi-card">
+            <span className="intel-kpi-label">Candidate Fairness Score</span>
+            <strong className="intel-kpi-value tabular-nums">
+              {report.marketingProof.candidateSatisfactionAvg !== null
+                ? `${report.marketingProof.candidateSatisfactionAvg} / 5`
+                : '—'}
+            </strong>
+            <span className="intel-kpi-sub tabular-nums">
+              {report.marketingProof.candidateFairnessPositivePct}% rated 4–5 ★
+              ({report.marketingProof.totalCandidateFeedback} responses)
+            </span>
+          </article>
+        </div>
+      </section>
+
+      <div className="intel-two-col">
+        <section
+          aria-labelledby="intel-funnel-title"
+          className="hiring-card intel-section"
+        >
+          <div className="intel-section-head">
+            <IconChartBar size={18} aria-hidden="true" />
+            <h2 id="intel-funnel-title">End-to-End Hiring Funnel</h2>
+          </div>
+          <div className="intel-funnel-list">
+            {funnelSteps.map((step) => {
+              const pct = Math.round((step.count / funnelPeak) * 100);
+              return (
+                <div key={step.label} className="intel-funnel-row">
+                  <span className="intel-funnel-label">{step.label}</span>
+                  <progress
+                    className="hiring-rubric-progress"
+                    value={pct}
+                    max={100}
+                    aria-label={`${step.label}: ${step.count}`}
+                  />
+                  <strong className="intel-funnel-count tabular-nums">
+                    {step.count}
+                  </strong>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="intel-ai-monetization-title"
+          className="hiring-card intel-section"
+        >
+          <div className="intel-section-head">
+            <IconSparkles size={18} aria-hidden="true" />
+            <h2 id="intel-ai-monetization-title">
+              AI Builder &amp; Commercial Health
+            </h2>
+          </div>
+          <div className="intel-stat-pairs">
+            <div>
+              <span>Median Candidate Time &amp; AI Adoption</span>
+              <strong className="tabular-nums">
+                {report.marketingProof.medianCandidateMinutes !== null
+                  ? `${report.marketingProof.medianCandidateMinutes} min`
+                  : '—'}{' '}
+                · AI on {report.marketingProof.aiAssistantEnabledPct}% of
+                sessions
+              </strong>
+            </div>
+            <div>
+              <span>AI Generations (Done / Failed)</span>
+              <strong className="tabular-nums">
+                {report.aiPerformance.generateCompleted} /{' '}
+                {report.aiPerformance.generateFailed} (
+                {report.aiPerformance.successRatePct}% ok)
+              </strong>
+            </div>
+            <div>
+              <span>AI Generation Latency (p50 / p95)</span>
+              <strong className="tabular-nums">
+                {report.aiPerformance.medianLatencyMs ?? '—'} ms /{' '}
+                {report.aiPerformance.p95LatencyMs ?? '—'} ms
+              </strong>
+            </div>
+            <div>
+              <span>AI Problems Saved → Issued</span>
+              <strong className="tabular-nums">
+                {report.aiPerformance.problemsSaved} saved →{' '}
+                {report.aiPerformance.aiProblemsIssued} issued
+              </strong>
+            </div>
+            <div>
+              <span>AI Builder Rating / Fit Review Opens</span>
+              <strong className="tabular-nums">
+                {report.aiPerformance.avgAiQualityRating !== null
+                  ? `${report.aiPerformance.avgAiQualityRating} / 5 (${report.aiPerformance.aiFeedbackCount})`
+                  : '—'}{' '}
+                · {report.aiPerformance.advisoryReviewOpened} opens
+              </strong>
+            </div>
+            <div>
+              <span>Plan Funnel (Gates → Visits → Upgrades)</span>
+              <strong className="tabular-nums">
+                {report.monetization.planGateHits} gates →{' '}
+                {report.monetization.upgradePageVisits} views →{' '}
+                {report.monetization.planUpgrades} upgrades (+
+                {report.monetization.slotAddons} slot packs)
+              </strong>
+            </div>
+            <div>
+              <span>Active Plan Distribution</span>
+              <strong className="tabular-nums">
+                None: {report.monetization.planDistribution.none} · Slots:{' '}
+                {report.monetization.planDistribution.per_candidate} · Pro:{' '}
+                {report.monetization.planDistribution.pro} · Ultra:{' '}
+                {report.monetization.planDistribution.ultra}
+              </strong>
+            </div>
+            <div>
+              <span>Theme Split &amp; Client Errors</span>
+              <strong className="tabular-nums">
+                Light {report.uxFriction.themeSplit.light} / Dark{' '}
+                {report.uxFriction.themeSplit.dark} ·{' '}
+                {report.uxFriction.clientErrorCount} client errors
+              </strong>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section
+        id="intel-action-queue"
         aria-labelledby="intel-action-queue-title"
         className="hiring-card intel-section"
       >
@@ -404,15 +605,16 @@ export function IntelligenceDashboardClient({
                         <span className="hiring-pill">{item.planTier}</span>
                       </td>
                       <td>{item.summary}</td>
-                      <td>{item.hoursAge}h</td>
-                      <td>{item.affectedCount}</td>
+                      <td className="tabular-nums">{item.hoursAge}h</td>
+                      <td className="tabular-nums">{item.affectedCount}</td>
                       <td>
                         <span className={badge.className}>{badge.label}</span>
                       </td>
                       <td>
-                        <div className="hiring-header-actions">
+                        <div className="hiring-header-actions intel-table-actions">
                           <input
                             type="text"
+                            className="intel-note-input"
                             aria-label={`Outreach note for ${item.organizationName}`}
                             placeholder="Outreach note…"
                             value={noteDrafts[key] ?? item.founderNote}
@@ -422,25 +624,15 @@ export function IntelligenceDashboardClient({
                                 [key]: e.target.value,
                               }))
                             }
-                            style={{ minWidth: '10rem' }}
                           />
-                          <button
-                            type="button"
-                            className="hiring-btn hiring-btn-sm"
-                            onClick={() => void copyOutreach(item)}
-                          >
-                            {copiedKey === key ? (
-                              <>
-                                <IconCheck size={14} aria-hidden="true" />{' '}
-                                Copied
-                              </>
-                            ) : (
-                              <>
-                                <IconCopy size={14} aria-hidden="true" /> Copy
-                                outreach
-                              </>
-                            )}
-                          </button>
+                          <CopyActionButton
+                            value={buildOutreachTemplate(item)}
+                            label="Copy outreach"
+                            copiedLabel="Copied"
+                            toastMessage={`Outreach template copied for ${item.organizationName}.`}
+                            size="sm"
+                            variant="secondary"
+                          />
                           <button
                             type="button"
                             className="hiring-btn hiring-btn-primary hiring-btn-sm"
@@ -472,173 +664,8 @@ export function IntelligenceDashboardClient({
         )}
       </section>
 
-      <section aria-labelledby="intel-proof-title" className="intel-section">
-        <div className="intel-section-head">
-          <IconTrendingUp size={18} aria-hidden="true" />
-          <h2 id="intel-proof-title">Marketing &amp; Product Proof</h2>
-        </div>
-        <div className="intel-kpi-grid">
-          <article className="hiring-card intel-kpi-card">
-            <span className="intel-kpi-label">Active / Total Orgs</span>
-            <strong className="intel-kpi-value">
-              {report.marketingProof.activeOrganizations} /{' '}
-              {report.marketingProof.totalOrganizations}
-            </strong>
-            <span className="intel-kpi-sub">
-              Issued {report.marketingProof.totalSessionsIssued} assessments
-            </span>
-          </article>
-          <article className="hiring-card intel-kpi-card">
-            <span className="intel-kpi-label">Candidate Completion</span>
-            <strong className="intel-kpi-value">
-              {report.marketingProof.candidateCompletionRatePct}%
-            </strong>
-            <span className="intel-kpi-sub">
-              {report.marketingProof.sessionsSubmitted} submitted of{' '}
-              {report.marketingProof.sessionsStarted} started (
-              {report.marketingProof.candidateStartRatePct}% start rate)
-            </span>
-          </article>
-          <article className="hiring-card intel-kpi-card">
-            <span className="intel-kpi-label">Median Candidate Time</span>
-            <strong className="intel-kpi-value">
-              {report.marketingProof.medianCandidateMinutes !== null
-                ? `${report.marketingProof.medianCandidateMinutes} min`
-                : '—'}
-            </strong>
-            <span className="intel-kpi-sub">
-              AI enabled on {report.marketingProof.aiAssistantEnabledPct}% of
-              sessions
-            </span>
-          </article>
-          <article className="hiring-card intel-kpi-card">
-            <span className="intel-kpi-label">Median Review Turnaround</span>
-            <strong className="intel-kpi-value">
-              {report.marketingProof.medianReviewTurnaroundHours !== null
-                ? `${report.marketingProof.medianReviewTurnaroundHours} hrs`
-                : '—'}
-            </strong>
-            <span className="intel-kpi-sub">
-              {report.marketingProof.decisionsPublished} decisions (
-              {report.marketingProof.acceptanceRatePct}% accepted)
-            </span>
-          </article>
-          <article className="hiring-card intel-kpi-card">
-            <span className="intel-kpi-label">Candidate Fairness Score</span>
-            <strong className="intel-kpi-value">
-              {report.marketingProof.candidateSatisfactionAvg !== null
-                ? `${report.marketingProof.candidateSatisfactionAvg} / 5`
-                : '—'}
-            </strong>
-            <span className="intel-kpi-sub">
-              {report.marketingProof.candidateFairnessPositivePct}% rated 4–5 ★
-              ({report.marketingProof.totalCandidateFeedback} responses)
-            </span>
-          </article>
-        </div>
-      </section>
-
-      <div className="intel-two-col">
-        <section
-          aria-labelledby="intel-funnel-title"
-          className="hiring-card intel-section"
-        >
-          <div className="intel-section-head">
-            <IconChartBar size={18} aria-hidden="true" />
-            <h2 id="intel-funnel-title">End-to-End Hiring Funnel</h2>
-          </div>
-          <div className="intel-funnel-list">
-            {funnelSteps.map((step) => {
-              const pct = Math.round((step.count / funnelPeak) * 100);
-              return (
-                <div key={step.label} className="intel-funnel-row">
-                  <span className="intel-funnel-label">{step.label}</span>
-                  <progress
-                    className="hiring-rubric-progress"
-                    value={pct}
-                    max={100}
-                    aria-label={`${step.label}: ${step.count}`}
-                  />
-                  <strong className="intel-funnel-count">{step.count}</strong>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section
-          aria-labelledby="intel-ai-monetization-title"
-          className="hiring-card intel-section"
-        >
-          <div className="intel-section-head">
-            <IconSparkles size={18} aria-hidden="true" />
-            <h2 id="intel-ai-monetization-title">
-              AI Builder &amp; Commercial Health
-            </h2>
-          </div>
-          <div className="intel-stat-pairs">
-            <div>
-              <span>AI Generations (Done / Failed)</span>
-              <strong>
-                {report.aiPerformance.generateCompleted} /{' '}
-                {report.aiPerformance.generateFailed} (
-                {report.aiPerformance.successRatePct}% ok)
-              </strong>
-            </div>
-            <div>
-              <span>AI Generation Latency (p50 / p95)</span>
-              <strong>
-                {report.aiPerformance.medianLatencyMs ?? '—'} ms /{' '}
-                {report.aiPerformance.p95LatencyMs ?? '—'} ms
-              </strong>
-            </div>
-            <div>
-              <span>AI Problems Saved → Issued</span>
-              <strong>
-                {report.aiPerformance.problemsSaved} saved →{' '}
-                {report.aiPerformance.aiProblemsIssued} issued
-              </strong>
-            </div>
-            <div>
-              <span>AI Builder Rating / Fit Review Opens</span>
-              <strong>
-                {report.aiPerformance.avgAiQualityRating !== null
-                  ? `${report.aiPerformance.avgAiQualityRating} / 5 (${report.aiPerformance.aiFeedbackCount})`
-                  : '—'}{' '}
-                · {report.aiPerformance.advisoryReviewOpened} opens
-              </strong>
-            </div>
-            <div>
-              <span>Plan Funnel (Gates → Visits → Upgrades)</span>
-              <strong>
-                {report.monetization.planGateHits} gates →{' '}
-                {report.monetization.upgradePageVisits} views →{' '}
-                {report.monetization.planUpgrades} upgrades (+
-                {report.monetization.slotAddons} slot packs)
-              </strong>
-            </div>
-            <div>
-              <span>Active Plan Distribution</span>
-              <strong>
-                None: {report.monetization.planDistribution.none} · Slots:{' '}
-                {report.monetization.planDistribution.per_candidate} · Pro:{' '}
-                {report.monetization.planDistribution.pro} · Ultra:{' '}
-                {report.monetization.planDistribution.ultra}
-              </strong>
-            </div>
-            <div>
-              <span>Theme Split &amp; Client Errors</span>
-              <strong>
-                Light {report.uxFriction.themeSplit.light} / Dark{' '}
-                {report.uxFriction.themeSplit.dark} ·{' '}
-                {report.uxFriction.clientErrorCount} client errors
-              </strong>
-            </div>
-          </div>
-        </section>
-      </div>
-
       <section
+        id="intel-health"
         aria-labelledby="intel-health-title"
         className="hiring-card intel-section"
       >
@@ -784,6 +811,7 @@ export function IntelligenceDashboardClient({
       </div>
 
       <section
+        id="intel-cohorts"
         aria-labelledby="intel-cohorts-title"
         className="hiring-card intel-section"
       >
