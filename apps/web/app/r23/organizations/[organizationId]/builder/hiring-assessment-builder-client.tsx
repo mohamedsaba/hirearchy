@@ -9,6 +9,7 @@ import {
   IconCheck,
   IconCodePlus,
   IconCopy,
+  IconEye,
   IconLoader2,
   IconPlus,
   IconMail,
@@ -50,6 +51,11 @@ import { LocalTime } from '../../../../_components/local-time';
 import { CommonThreadLoader } from '../../../../_components/common-thread-loader';
 import { CommonThreadToast } from '../../../../_components/common-thread-toast';
 import { ProductFeedbackPulse } from '../../../../_components/product-feedback-pulse';
+import {
+  healthFlagMeta,
+  type OrgProblemHealthItem,
+} from '../../../_components/org-benchmarks-strip';
+import { CANDIDATE_PREVIEW_DRAFT_KEY_PREFIX } from './candidate-preview/candidate-preview-client';
 import { trackClientEvent } from '../../../../../src/telemetry/client';
 
 const RepositoryInspector = dynamic(
@@ -342,6 +348,10 @@ export function HiringAssessmentBuilderClient({
     'all' | 'template' | 'ai_generated'
   >('all');
   const [libRoleFilter, setLibRoleFilter] = useState<string>('all');
+  const [problemHealthMap, setProblemHealthMap] = useState<
+    Record<string, OrgProblemHealthItem>
+  >({});
+  const [healthFetched, setHealthFetched] = useState(false);
   const builderUiStorageKey = `hirearchy:builder:ui:v1:${organizationId}`;
   const [uiHydrated, setUiHydrated] = useState(false);
 
@@ -761,6 +771,35 @@ export function HiringAssessmentBuilderClient({
   ]);
 
   const builderGenerateApiUrl = `/r23/api/organizations/${encodeURIComponent(organizationId)}/hiring/builder/generate`;
+
+  useEffect(() => {
+    if (mode !== 'library' || healthFetched || typeof fetch !== 'function') {
+      return;
+    }
+    let active = true;
+    fetch(
+      `/r23/api/organizations/${encodeURIComponent(organizationId)}/hiring/health`,
+      { headers: { Accept: 'application/json' }, cache: 'no-store' },
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { problems?: OrgProblemHealthItem[] } | null) => {
+        if (!active) return;
+        setHealthFetched(true);
+        if (Array.isArray(data?.problems)) {
+          const map: Record<string, OrgProblemHealthItem> = {};
+          for (const item of data.problems) {
+            map[item.definitionId] = item;
+          }
+          setProblemHealthMap(map);
+        }
+      })
+      .catch(() => {
+        if (active) setHealthFetched(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [healthFetched, mode, organizationId]);
 
   const acknowledgeGenJob = (jobId: string) => {
     acknowledgedJobIdsRef.current.add(jobId);
@@ -1337,7 +1376,10 @@ export function HiringAssessmentBuilderClient({
   const invitationUrl = issuedResult
     ? new URL(issuedResult.candidateLink, window.location.origin).href
     : '';
-  const invitationEmail = `Hi,\n\nYou’ve been invited to complete the "${activeDraft.title}" engineering assessment (${activeDraft.durationMinutes} min).\n\nOpen your workspace link below whenever you’re ready (your timer starts only after clicking Start):\n${invitationUrl}\n\nBest regards,\nThe Hiring Team`;
+  const aiRuleCopy = activeDraft.integratedAi
+    ? 'Workspace AI assistant: enabled (prompts are logged neutrally; AI rules are shown upfront before you begin).'
+    : 'Workspace AI assistant: disabled for this task (AI rules are shown upfront before you begin).';
+  const invitationEmail = `Hi,\n\nYou’ve been invited to complete the "${activeDraft.title}" engineering assessment.\n\n• Time budget: ${activeDraft.durationMinutes} min (your timer starts only after clicking Start)\n• Real codebase editor: zero webcam, microphone, or desktop spyware\n• ${aiRuleCopy}\n• Permanent read-only receipt: you keep a copy of your submitted code after submission\n\nOpen your workspace link below whenever you’re ready:\n${invitationUrl}\n\nBest regards,\nThe Hiring Team`;
 
   const copyInvitation = async (kind: 'link' | 'email') => {
     if (!issuedResult) return;
@@ -1380,6 +1422,8 @@ export function HiringAssessmentBuilderClient({
   const renderLibraryVersion = (problem: SavedLibraryProblem) => {
     const isSelected =
       problemSelected && savedIds?.definitionId === problem.definitionId;
+    const health = problemHealthMap[problem.definitionId];
+    const healthMeta = health ? healthFlagMeta(health.healthFlag) : null;
     return (
       <div
         key={problem.definitionId}
@@ -1394,6 +1438,9 @@ export function HiringAssessmentBuilderClient({
               {problem.targetRole || 'General'}
             </span>
             <span className="hiring-pill">Issued {problem.issuedCount}×</span>
+            {healthMeta ? (
+              <span className={healthMeta.pillClass}>{healthMeta.label}</span>
+            ) : null}
           </div>
           <p className="hiring-muted-copy">
             By {problem.authorName} · {problem.durationMinutes} min ·{' '}
@@ -1405,14 +1452,45 @@ export function HiringAssessmentBuilderClient({
             {' · Saved '}
             <LocalTime timestamp={problem.createdAt} absolute />
           </p>
+          {health && health.started > 0 ? (
+            <p className="hiring-muted-copy">
+              {health.completionRatePct}% completion
+              {health.medianMinutes !== null
+                ? ` · ${health.medianMinutes}m median`
+                : ''}
+              {health.executionErrorRatePct > 0
+                ? ` · ${health.executionErrorRatePct}% runner errors`
+                : ''}
+              {health.avgCandidateRating !== null
+                ? ` · ${health.avgCandidateRating.toFixed(1)}★`
+                : ''}
+            </p>
+          ) : null}
+          {health?.diagnosticHint ? (
+            <p className="hiring-muted-copy org-problem-diagnostic-hint">
+              {health.diagnosticHint}
+            </p>
+          ) : null}
         </div>
-        <button
-          type="button"
-          className={`hiring-btn${isSelected ? ' hiring-btn-primary' : ''}`}
-          onClick={() => selectSavedProblem(problem)}
-        >
-          Preview saved problem <IconArrowRight size={15} aria-hidden="true" />
-        </button>
+        <div className="hiring-header-actions">
+          {healthMeta?.isAlert ? (
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-sm"
+              onClick={() => selectSavedProblem(problem)}
+            >
+              Customize / adjust
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`hiring-btn${isSelected ? ' hiring-btn-primary' : ''}`}
+            onClick={() => selectSavedProblem(problem)}
+          >
+            Preview saved problem{' '}
+            <IconArrowRight size={15} aria-hidden="true" />
+          </button>
+        </div>
       </div>
     );
   };
@@ -2102,6 +2180,22 @@ export function HiringAssessmentBuilderClient({
             </div>
           ) : null}
           <div className="software-builder-next">
+            <Link
+              className="hiring-btn hiring-btn-sm"
+              href={`${orgBase}/builder/candidate-preview${activeDraftId ? `?draft=${encodeURIComponent(activeDraftId)}` : ''}`}
+              onClick={() => {
+                try {
+                  window.sessionStorage.setItem(
+                    `${CANDIDATE_PREVIEW_DRAFT_KEY_PREFIX}${organizationId}`,
+                    JSON.stringify({ draft: activeDraft }),
+                  );
+                } catch {
+                  // Ignore storage failures in restricted contexts.
+                }
+              }}
+            >
+              <IconEye size={16} aria-hidden="true" /> Preview as Candidate
+            </Link>
             <button
               type="button"
               className="hiring-btn hiring-btn-sm"

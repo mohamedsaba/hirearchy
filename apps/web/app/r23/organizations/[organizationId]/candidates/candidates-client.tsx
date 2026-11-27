@@ -39,6 +39,9 @@ import {
   formatRelativeTime,
 } from '../../../../../src/ui/relative-time';
 import { CommonThreadToast } from '../../../../_components/common-thread-toast';
+import { OrgActivationChecklist } from '../../../_components/org-activation-checklist';
+import { OrgBenchmarksStrip } from '../../../_components/org-benchmarks-strip';
+import { OrgNudgeBanner } from '../../../_components/org-nudge-banner';
 
 export interface CandidatesPipelineClientProps {
   readonly organizationId: string;
@@ -384,6 +387,13 @@ export function CandidatesPipelineClient({
   };
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
+  const decisionsCount = useMemo(
+    () =>
+      candidates.filter((candidate) =>
+        candidate.sessions.some((sess) => sess.decision !== null),
+      ).length,
+    [candidates],
+  );
 
   const myPendingPeerReviews = useMemo(() => {
     if (!currentPrincipalId) return [];
@@ -540,6 +550,18 @@ export function CandidatesPipelineClient({
 
   return (
     <div className="hiring-page-shell team-candidate-pipeline">
+      <OrgNudgeBanner organizationId={organizationId} />
+
+      <OrgActivationChecklist
+        organizationId={organizationId}
+        planTier={plan.planTier}
+        currentRole={currentRole}
+        candidatesCount={candidates.length}
+        decisionsCount={decisionsCount}
+      />
+
+      <OrgBenchmarksStrip organizationId={organizationId} compact />
+
       {myPendingPeerReviews.length > 0 ? (
         <section
           className="hiring-card hiring-peer-queue-card"
@@ -824,7 +846,38 @@ export function CandidatesPipelineClient({
                   ? 'Candidates appear here when you send them an assessment.'
                   : 'Try a different search or clear your filters.'}
               </p>
-              {candidates.length > 0 ? (
+              {candidates.length === 0 ? (
+                <article
+                  className="hiring-card-subtle org-sample-candidate-card"
+                  data-testid="empty-state-sample-candidate"
+                >
+                  <div className="org-sample-candidate-copy">
+                    <span className="hiring-pill hiring-pill-plum">
+                      Sample evaluated candidate · Zero credits used
+                    </span>
+                    <h3>Maya Lin · Senior Backend Engineer</h3>
+                    <p className="hiring-muted-copy">
+                      Explore a pre-seeded Reservation Moves v3 evaluation with
+                      chronological file diffs, test runs, neutral AI logs, and
+                      an executive verdict.
+                    </p>
+                  </div>
+                  <div className="hiring-header-actions">
+                    <Link
+                      className="hiring-btn hiring-btn-sm hiring-btn-primary"
+                      href={`${orgBase}/sample-review`}
+                    >
+                      Explore sample candidate
+                    </Link>
+                    <Link
+                      className="hiring-btn hiring-btn-sm"
+                      href={`${orgBase}/builder/candidate-preview`}
+                    >
+                      Preview as Candidate
+                    </Link>
+                  </div>
+                </article>
+              ) : (
                 <button
                   type="button"
                   className="hiring-btn"
@@ -832,7 +885,7 @@ export function CandidatesPipelineClient({
                 >
                   Clear filters
                 </button>
-              ) : null}
+              )}
             </div>
           ) : (
             <div className="hiring-candidate-list">

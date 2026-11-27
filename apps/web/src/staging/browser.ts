@@ -623,15 +623,25 @@ function safeHtml(value: string): string {
   });
 }
 
-function securityHeaders(): Headers {
+function securityHeaders(extraDirectives?: string): Headers {
+  const base =
+    "default-src 'none'; style-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
   return new Headers({
     'Cache-Control': 'private, no-store',
-    'Content-Security-Policy':
-      "default-src 'none'; style-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    'Content-Security-Policy': extraDirectives
+      ? `${base}; ${extraDirectives}`
+      : base,
     'Content-Type': 'text/html; charset=utf-8',
     'Referrer-Policy': 'same-origin',
     'X-Content-Type-Options': 'nosniff',
   });
+}
+
+function scriptCspDirectives(scriptBody: string, allowFetch = false): string {
+  const hash = createHash('sha256').update(scriptBody, 'utf8').digest('base64');
+  return allowFetch
+    ? `script-src 'sha256-${hash}'; connect-src 'self'`
+    : `script-src 'sha256-${hash}'`;
 }
 
 function readRequestTheme(request?: Request): SoftwareDocumentTheme {
@@ -2077,7 +2087,11 @@ export async function stagingOrganizationGet(
         <div>${hiring ? '' : `<p class="software-eyebrow">${safeOrgName}</p>`}<h1>${isOrgManager ? 'Assessments' : 'Assigned reviews'}</h1>${hiring && isOrgManager ? '' : `<p>${safeHtml(roleScopeText)}</p>`}</div>
         ${
           hiring
-            ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder?mode=new" data-testid="open-assessment-builder-link">Create assessment</a>`
+            ? `<div class="hiring-header-actions">
+                <a class="hiring-btn hiring-btn-sm" href="/r23/organizations/${safeOrgId}/sample-review" data-testid="explore-sample-candidate-link">Explore sample candidate</a>
+                <a class="hiring-btn hiring-btn-sm" href="/r23/organizations/${safeOrgId}/builder/candidate-preview" data-testid="preview-as-candidate-link">Preview as Candidate</a>
+                <a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder?mode=new" data-testid="open-assessment-builder-link">Create assessment</a>
+              </div>`
             : membership.role === 'recruiter'
               ? `<div>
                 <a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>
@@ -6550,7 +6564,57 @@ export async function stagingOrganizationPlanGet(
         });
         const planSubtitle = isUltra
           ? 'Review your active Ultra subscription, compare tiers, or adjust workspace plan settings.'
-          : 'Scale your engineering hiring pipeline and unlock AI-assisted review workflows.';
+          : 'Protect senior engineering hours. Pay per distinct candidate or unlock unlimited evaluations and advisory AI synthesis.';
+        const roiCalculatorScript = `
+(function () {
+  var root = document.getElementById('team-roi-calculator');
+  if (!root) return;
+  var hiresEl = document.getElementById('roi-hires');
+  var candEl = document.getElementById('roi-candidates');
+  var hrsEl = document.getElementById('roi-hours');
+  var rateEl = document.getElementById('roi-rate');
+  var totalOut = document.getElementById('roi-total-assessments');
+  var hoursOut = document.getElementById('roi-hours-saved');
+  var valueOut = document.getElementById('roi-value-saved');
+  var onsiteOut = document.getElementById('roi-onsite-saved');
+  var tierOut = document.getElementById('roi-recommended-tier');
+  var tierNoteOut = document.getElementById('roi-recommended-note');
+  function clamp(num, min, max, fallback) {
+    if (!Number.isFinite(num)) return fallback;
+    return Math.min(max, Math.max(min, num));
+  }
+  function update() {
+    var hires = clamp(Number(hiresEl && hiresEl.value), 1, 200, 8);
+    var cands = clamp(Number(candEl && candEl.value), 1, 50, 6);
+    var hrs = clamp(Number(hrsEl && hrsEl.value), 0.5, 8, 2.5);
+    var rate = clamp(Number(rateEl && rateEl.value), 40, 400, 110);
+    var total = Math.round(hires * cands);
+    var savedHrs = Math.round(total * hrs);
+    var savedValue = Math.round(savedHrs * rate);
+    var onsiteHrs = Math.round(total * 0.4 * 3);
+    if (totalOut) totalOut.textContent = String(total);
+    if (hoursOut) hoursOut.textContent = savedHrs.toLocaleString('en-US') + ' hrs/yr';
+    if (valueOut) valueOut.textContent = '$' + savedValue.toLocaleString('en-US') + '/yr';
+    if (onsiteOut) onsiteOut.textContent = onsiteHrs.toLocaleString('en-US') + ' hrs/yr';
+    if (tierOut && tierNoteOut) {
+      if (total <= 15) {
+        tierOut.textContent = 'Per Candidate';
+        tierNoteOut.textContent = 'Best fit for focused hiring (<= 15 distinct candidates/yr) — re-assessments reuse the same candidate slot.';
+      } else if (total <= 60) {
+        tierOut.textContent = 'Pro';
+        tierNoteOut.textContent = 'Best fit for continuous hiring (16–60 candidates/yr) — unlimited assessments with zero per-invite surprises.';
+      } else {
+        tierOut.textContent = 'Ultra';
+        tierNoteOut.textContent = 'Best fit for high-velocity engineering teams (> 60 candidates/yr) — adds advisory AI reviews with timeline deltas and fit reports.';
+      }
+    }
+  }
+  [hiresEl, candEl, hrsEl, rateEl].forEach(function (el) {
+    if (el) el.addEventListener('input', update);
+  });
+  update();
+})();
+`;
         const content = `<div class="team-plan-page">
         <header class="software-page-heading">
           <div>
@@ -6564,9 +6628,36 @@ export async function stagingOrganizationPlanGet(
           <div class="team-plan-capacity">${safeHtml(capacity)}</div>
         </section>
         ${changeReview}
+        <section id="team-roi-calculator" class="software-settings-section team-roi-calculator" aria-labelledby="roi-calculator-title">
+          <div class="team-roi-head">
+            <div>
+              <p class="team-plan-kicker">Value &amp; engineering time</p>
+              <h2 id="roi-calculator-title">ROI &amp; Engineering Hours Saved Calculator</h2>
+              <p class="hiring-muted-copy">Estimate senior engineering hours reclaimed from live screening and unstructured code debriefs.</p>
+            </div>
+            <div class="team-roi-recommendation">
+              <span class="hiring-pill hiring-pill-mint">Recommended: <strong id="roi-recommended-tier">Pro</strong></span>
+            </div>
+          </div>
+          <div class="team-roi-inputs">
+            <div class="hiring-field"><label for="roi-hires">Target hires / year</label><input id="roi-hires" type="number" min="1" max="200" value="8"></div>
+            <div class="hiring-field"><label for="roi-candidates">Candidates / hire</label><input id="roi-candidates" type="number" min="1" max="50" value="6"></div>
+            <div class="hiring-field"><label for="roi-hours">Hours saved / candidate</label><input id="roi-hours" type="number" min="0.5" max="8" step="0.5" value="2.5"></div>
+            <div class="hiring-field"><label for="roi-rate">Senior eng hourly cost ($)</label><input id="roi-rate" type="number" min="40" max="400" step="5" value="110"></div>
+          </div>
+          <div class="team-roi-outputs">
+            <div class="team-roi-stat"><span>Assessments / yr</span><strong id="roi-total-assessments">48</strong></div>
+            <div class="team-roi-stat"><span>Engineering hours reclaimed</span><strong id="roi-hours-saved">120 hrs/yr</strong></div>
+            <div class="team-roi-stat"><span>Reclaimed capacity value</span><strong id="roi-value-saved">$13,200/yr</strong></div>
+            <div class="team-roi-stat"><span>Onsite loop hours avoided (est.)</span><strong id="roi-onsite-saved">58 hrs/yr</strong></div>
+          </div>
+          <p id="roi-recommended-note" class="hiring-muted-copy">Best fit for continuous hiring (16–60 candidates/yr) — unlimited assessments with zero per-invite surprises.</p>
+          <p class="team-roi-formula">Formula: (Hires × Candidates) × Hours saved × Hourly cost; onsite avoidance assumes 40% early filter efficiency × 3 panel hrs.</p>
+        </section>
         <section class="team-compare-plans" aria-labelledby="compare-plans-title">
           <h2 id="compare-plans-title">Compare plans</h2>
           <div class="hiring-plan-grid">${cards}</div>
+          <p class="team-plan-trust-line">No automated candidate scoring. Every tier keeps human evaluators in full control of hiring verdicts.</p>
           <p class="team-plan-help">${canChange ? 'Demo changes update this workspace without charging a payment method.' : canManage ? 'Plan changes and slot purchases are managed with Hirearchy.' : 'A workspace owner or CTO can change this plan.'}</p>
         </section>
         <section id="add-ons" class="software-settings-section team-plan-add-ons" aria-labelledby="add-ons-title">
@@ -6576,25 +6667,31 @@ export async function stagingOrganizationPlanGet(
           ${slotQuery && !validSlots && canChange && hasSlots ? '<p role="alert">Enter between 1 and 10,000 candidate slots.</p>' : ''}
           ${slotForm}${slotReview}
         </section>
-      </div>`;
+      </div><script>${roiCalculatorScript}</script>`;
         const role = org.isOwner ? 'cto' : org.role;
         const organizationName = resolveOrgDisplay(organizationId, {
           role,
           displayName: org.displayName,
         }).name;
         return attachRefreshedCookie(
-          htmlResponse(title, content, 200, securityHeaders(), {
-            organizationId,
-            organizationName,
-            role,
-            email: identity.email ?? '',
-            csrf: csrfToken,
-            active: 'plan',
-            planTier: plan.planTier,
-            planBadge: formatPlanBadge(plan),
-            theme: readRequestTheme(request),
-            currentPath: path,
-          }),
+          htmlResponse(
+            title,
+            content,
+            200,
+            securityHeaders(scriptCspDirectives(roiCalculatorScript, false)),
+            {
+              organizationId,
+              organizationName,
+              role,
+              email: identity.email ?? '',
+              csrf: csrfToken,
+              active: 'plan',
+              planTier: plan.planTier,
+              planBadge: formatPlanBadge(plan),
+              theme: readRequestTheme(request),
+              currentPath: path,
+            },
+          ),
           refreshedSessionCookie,
         );
       },
@@ -6890,6 +6987,272 @@ export async function stagingOrganizationSettingsGet(
             })()
           : '';
 
+      const webhooksScript =
+        hiring && isOrgAdmin
+          ? `
+(function () {
+  var root = document.getElementById('webhooks');
+  if (!root) return;
+  var orgId = root.getAttribute('data-org-id') || '';
+  var apiUrl = '/r23/api/organizations/' + encodeURIComponent(orgId) + '/hiring/webhooks';
+  var form = document.getElementById('org-webhook-create-form');
+  var listEl = document.getElementById('org-webhook-list');
+  var delivEl = document.getElementById('org-webhook-deliveries');
+  var statusEl = document.getElementById('org-webhook-status');
+  var secretBanner = document.getElementById('org-webhook-secret-banner');
+  var secretValue = document.getElementById('org-webhook-secret-value');
+  var secretDismiss = document.getElementById('org-webhook-secret-dismiss');
+
+  function readCsrf() {
+    var m = document.cookie.match(/(?:^|;\\s*)__Host-r23-csrf=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function showStatus(msg, isError) {
+    if (!statusEl) return;
+    statusEl.hidden = false;
+    statusEl.className = 'hiring-banner ' + (isError ? 'hiring-banner-danger' : 'hiring-banner-success');
+    statusEl.setAttribute('role', isError ? 'alert' : 'status');
+    statusEl.textContent = msg;
+  }
+
+  function renderWebhooks(webhooks) {
+    if (!listEl) return;
+    listEl.textContent = '';
+    if (!webhooks || webhooks.length === 0) {
+      var p = document.createElement('p');
+      p.className = 'hiring-muted-copy';
+      p.textContent = 'No webhooks configured yet. Add a Slack incoming webhook or JSON endpoint above.';
+      listEl.appendChild(p);
+      return;
+    }
+    webhooks.forEach(function (hook) {
+      var card = document.createElement('article');
+      card.className = 'hiring-card-subtle org-webhook-card';
+      var head = document.createElement('div');
+      head.className = 'org-webhook-card-head';
+
+      var info = document.createElement('div');
+      var titleRow = document.createElement('div');
+      titleRow.className = 'hiring-candidate-name';
+      var strong = document.createElement('strong');
+      strong.textContent = hook.label;
+      titleRow.appendChild(strong);
+      var statePill = document.createElement('span');
+      statePill.className = 'hiring-pill ' + (hook.isActive ? 'hiring-pill-success' : 'hiring-pill-warning');
+      statePill.textContent = hook.isActive ? 'Active' : 'Paused';
+      titleRow.appendChild(statePill);
+      var modePill = document.createElement('span');
+      modePill.className = 'hiring-pill hiring-pill-plum';
+      modePill.textContent = hook.payloadMode === 'slack_block_kit' ? 'Slack Block Kit' : 'JSON HMAC';
+      titleRow.appendChild(modePill);
+      info.appendChild(titleRow);
+
+      var urlP = document.createElement('p');
+      urlP.className = 'hiring-muted-copy org-webhook-url';
+      urlP.textContent = hook.targetUrl + ' · Secret ' + (hook.signingSecretPrefix || '');
+      info.appendChild(urlP);
+
+      var evP = document.createElement('p');
+      evP.className = 'hiring-muted-copy';
+      evP.textContent = 'Events: ' + (hook.eventTypes || []).join(', ') + (hook.disabledReason ? ' · Disabled: ' + hook.disabledReason : '');
+      info.appendChild(evP);
+
+      var actions = document.createElement('div');
+      actions.className = 'hiring-header-actions';
+      function mkBtn(label, extraClass, onClick) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'hiring-btn hiring-btn-sm' + (extraClass ? ' ' + extraClass : '');
+        b.textContent = label;
+        b.addEventListener('click', onClick);
+        return b;
+      }
+      actions.appendChild(mkBtn('Test ping', '', function () {
+        postAction({ action: 'ping', webhookId: hook.id });
+      }));
+      actions.appendChild(mkBtn(hook.isActive ? 'Pause' : 'Resume', '', function () {
+        postAction({ action: 'update', webhookId: hook.id, isActive: !hook.isActive });
+      }));
+      actions.appendChild(mkBtn('Rotate secret', '', function () {
+        postAction({ action: 'rotate', webhookId: hook.id });
+      }));
+      actions.appendChild(mkBtn('Delete', 'team-danger-btn', function () {
+        postAction({ action: 'delete', webhookId: hook.id });
+      }));
+
+      head.appendChild(info);
+      head.appendChild(actions);
+      card.appendChild(head);
+      listEl.appendChild(card);
+    });
+  }
+
+  function renderDeliveries(deliveries) {
+    if (!delivEl) return;
+    delivEl.textContent = '';
+    if (!deliveries || deliveries.length === 0) return;
+    var heading = document.createElement('h3');
+    heading.textContent = 'Recent deliveries';
+    delivEl.appendChild(heading);
+    var wrap = document.createElement('div');
+    wrap.className = 'software-overflow-region';
+    wrap.setAttribute('tabindex', '0');
+    var table = document.createElement('table');
+    table.className = 'software-members-table org-deliveries-table';
+    var thead = document.createElement('thead');
+    var htr = document.createElement('tr');
+    ['Event', 'Status', 'HTTP', 'Latency', 'Error'].forEach(function (col) {
+      var th = document.createElement('th');
+      th.textContent = col;
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    deliveries.slice(0, 15).forEach(function (d) {
+      var tr = document.createElement('tr');
+      var vals = [
+        d.eventType,
+        d.status,
+        d.httpStatus != null ? String(d.httpStatus) : '—',
+        d.latencyMs != null ? d.latencyMs + 'ms' : '—',
+        d.errorSummary || '—'
+      ];
+      vals.forEach(function (v, idx) {
+        var td = document.createElement('td');
+        if (idx === 1) {
+          var pill = document.createElement('span');
+          pill.className = 'hiring-pill ' + (v === 'delivered' ? 'hiring-pill-success' : (v === 'failed' || v === 'blocked_ssrf') ? 'hiring-pill-danger' : 'hiring-pill-warning');
+          pill.textContent = v;
+          td.appendChild(pill);
+        } else {
+          td.textContent = v;
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    delivEl.appendChild(wrap);
+  }
+
+  function loadAll() {
+    fetch(apiUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.d && res.d.error && res.d.error.message) || 'Unable to load webhooks.');
+        renderWebhooks(res.d.webhooks || []);
+        renderDeliveries(res.d.deliveries || []);
+      })
+      .catch(function (err) {
+        showStatus(err && err.message ? err.message : 'Unable to load webhooks.', true);
+      });
+  }
+
+  function postAction(payload) {
+    var csrf = readCsrf();
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-csrf-token': csrf
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.d && res.d.error && res.d.error.message) || 'Webhook operation failed.');
+        if (res.d && res.d.signingSecret && secretBanner && secretValue) {
+          secretValue.textContent = res.d.signingSecret;
+          secretBanner.hidden = false;
+        }
+        if (payload.action === 'ping' && res.d && res.d.delivery) {
+          var dlv = res.d.delivery;
+          showStatus('Test ping ' + dlv.status + (dlv.httpStatus ? ' (HTTP ' + dlv.httpStatus + ')' : '') + '.', dlv.status !== 'delivered');
+        } else if (payload.action === 'create') {
+          if (form) form.reset();
+          showStatus('Webhook endpoint created.', false);
+        } else if (payload.action === 'rotate') {
+          showStatus('Signing secret rotated.', false);
+        } else if (payload.action === 'delete') {
+          showStatus('Webhook removed.', false);
+        } else {
+          showStatus('Webhook updated.', false);
+        }
+        loadAll();
+      })
+      .catch(function (err) {
+        showStatus(err && err.message ? err.message : 'Webhook operation failed.', true);
+      });
+  }
+
+  if (secretDismiss && secretBanner) {
+    secretDismiss.addEventListener('click', function () {
+      secretBanner.hidden = true;
+    });
+  }
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var labelInput = document.getElementById('org-webhook-label');
+      var urlInput = document.getElementById('org-webhook-url');
+      var modeInput = document.getElementById('org-webhook-mode');
+      var checks = form.querySelectorAll('input[name="webhookEvent"]:checked');
+      var events = [];
+      checks.forEach(function (c) { events.push(c.value); });
+      postAction({
+        action: 'create',
+        label: labelInput ? labelInput.value.trim() : '',
+        targetUrl: urlInput ? urlInput.value.trim() : '',
+        payloadMode: modeInput ? modeInput.value : 'json',
+        eventTypes: events
+      });
+    });
+  }
+  loadAll();
+})();
+`
+          : '';
+
+      const webhooksSectionHtml =
+        hiring && isOrgAdmin
+          ? `<section id="webhooks" data-org-id="${safeOrgId}" class="software-settings-section org-webhooks-panel" aria-labelledby="org-webhooks-heading">
+            <header class="software-section-intro">
+              <h2 id="org-webhooks-heading">Integrations: Webhooks &amp; Slack</h2>
+              <p>Send HMAC-SHA256 JSON events or Slack Block Kit alerts when candidates start, submit, or receive a verdict.</p>
+            </header>
+            <div id="org-webhook-secret-banner" class="hiring-banner hiring-banner-success org-webhook-secret-banner" role="status" hidden>
+              <div>
+                <strong>Save your signing secret now (shown once)</strong>
+                <div><code id="org-webhook-secret-value" class="org-webhook-secret-value"></code></div>
+              </div>
+              <button type="button" id="org-webhook-secret-dismiss" class="hiring-btn hiring-btn-sm">Dismiss</button>
+            </div>
+            <div id="org-webhook-status" hidden></div>
+            <form id="org-webhook-create-form" class="org-webhook-create-form">
+              <div class="hiring-two-col">
+                <div class="hiring-field"><label for="org-webhook-label">Endpoint label</label><input id="org-webhook-label" type="text" required maxlength="80" placeholder="#hiring-alerts Slack"></div>
+                <div class="hiring-field"><label for="org-webhook-url">HTTPS endpoint URL</label><input id="org-webhook-url" type="url" required maxlength="500" placeholder="https://hooks.slack.com/services/..."></div>
+              </div>
+              <div class="hiring-two-col">
+                <div class="hiring-field"><label for="org-webhook-mode">Payload format</label><select id="org-webhook-mode"><option value="json">Standard JSON (HMAC-SHA256)</option><option value="slack_block_kit">Slack Incoming Webhook (Block Kit)</option></select></div>
+                <fieldset class="hiring-field org-webhook-events-fieldset"><legend>Subscribed events</legend><div class="org-webhook-event-checks">
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="candidate.started" checked><span>candidate.started</span></label>
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="candidate.submitted" checked><span>candidate.submitted</span></label>
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="verdict.published" checked><span>verdict.published</span></label>
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="handoff.updated" checked><span>handoff.updated</span></label>
+                </div></fieldset>
+              </div>
+              <div><button type="submit" class="hiring-btn hiring-btn-primary">Add webhook endpoint</button></div>
+            </form>
+            <div id="org-webhook-list" class="org-webhook-list"><p class="hiring-muted-copy">Loading webhooks…</p></div>
+            <div id="org-webhook-deliveries" class="org-deliveries-section"></div>
+          </section><script>${webhooksScript}</script>`
+          : '';
+
       const content = hiring
         ? `<div class="team-org-page">
           <header class="software-page-heading team-org-header">
@@ -6937,6 +7300,7 @@ export async function stagingOrganizationSettingsGet(
             }
             <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
           </section>
+          ${webhooksSectionHtml}
         </div>`
         : `
         <header class="software-page-heading">
@@ -6979,7 +7343,11 @@ export async function stagingOrganizationSettingsGet(
         hiring ? 'Organization' : 'Team & Settings',
         content,
         200,
-        securityHeaders(),
+        securityHeaders(
+          webhooksScript
+            ? scriptCspDirectives(webhooksScript, true)
+            : undefined,
+        ),
         {
           organizationId: orgIdLower,
           organizationName: orgDisplay.name,

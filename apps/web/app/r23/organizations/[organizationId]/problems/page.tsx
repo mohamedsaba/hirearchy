@@ -3,6 +3,7 @@ import type { R211ReusableProblem } from '../../../../../src/r211-builder/contra
 import { DeferredProblemRead } from './deferred-problem-read';
 import { ProblemsTable } from './problems-table';
 import { loadProblems } from './load-problems';
+import { OrgBenchmarksStrip } from '../../../_components/org-benchmarks-strip';
 import './problems.css';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,7 @@ export default async function ProblemsPage({
           Create a problem
         </Link>
       </header>
+      <OrgBenchmarksStrip organizationId={organizationId} showProblemHealth />
       {data ? (
         <ProblemsTable workspace={workspace} problems={data.problems} />
       ) : (

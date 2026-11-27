@@ -3887,3 +3887,606 @@ html[data-theme='dark']
 .intel-feedback-meta .hiring-pill {
   margin-block-start: 0;
 }
+
+/* ==========================================================================
+   Phase 2: Org Activation, Nudges, Benchmarks, Webhooks, ROI, Sandbox & Intel
+   ========================================================================== */
+
+.org-activation-checklist {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.org-checklist-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.org-checklist-heading {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.org-checklist-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.org-checklist-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.org-checklist-progress {
+  inline-size: 100%;
+  block-size: 0.42rem;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  accent-color: var(--software-btn-primary-bg);
+  background: var(--software-surface-subtle);
+}
+
+.org-checklist-steps {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.org-checklist-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem 0.9rem;
+  padding: 0.78rem 0.95rem;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: 0.7rem;
+  background: var(--software-surface-subtle);
+}
+
+.org-checklist-step.is-done {
+  border-color: rgba(45, 138, 91, 0.35);
+  background: rgba(142, 227, 184, 0.1);
+}
+
+.org-checklist-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-muted);
+}
+
+.org-checklist-step.is-done .org-checklist-icon {
+  border-color: rgba(45, 138, 91, 0.45);
+  background: rgba(142, 227, 184, 0.25);
+  color: #166534;
+}
+
+.org-checklist-body {
+  display: grid;
+  gap: 0.2rem;
+  min-inline-size: 0;
+}
+
+.org-checklist-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+@media (max-width: 720px) {
+  .org-checklist-step {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .org-checklist-cta {
+    grid-column: 1 / -1;
+  }
+}
+
+.org-nudge-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  border-color: var(--software-plum-line);
+  background: var(--software-surface-note);
+}
+
+.org-nudge-copy {
+  display: grid;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.org-nudge-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.org-nudge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.org-benchmarks-strip {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.org-benchmarks-strip.is-compact {
+  padding: 0.95rem 1.1rem;
+}
+
+.org-benchmarks-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+}
+
+.org-benchmarks-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.org-benchmarks-title h2 {
+  font-size: 1.05rem;
+}
+
+.org-benchmarks-summary-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.org-benchmark-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.75rem;
+}
+
+.org-benchmark-card {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.85rem 1rem;
+}
+
+.org-benchmark-role {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.org-benchmark-metrics {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--software-ink-soft);
+}
+
+.org-benchmark-pending {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.org-health-alerts {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.org-health-alert-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: 0.65rem;
+  background: var(--software-surface-subtle);
+  font-size: 0.88rem;
+}
+
+.org-problem-health-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.org-problem-health-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.org-problem-diagnostic-hint {
+  font-size: 0.83rem;
+  color: var(--software-ink-soft);
+}
+
+.org-sample-candidate-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  margin-block-start: 0.75rem;
+  text-align: left;
+}
+
+.org-sample-candidate-copy {
+  display: grid;
+  gap: 0.3rem;
+  max-width: 56ch;
+}
+
+/* Webhooks & Slack Integrations */
+
+.org-webhooks-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.org-webhook-secret-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.org-webhook-secret-value {
+  display: inline-block;
+  margin-block-start: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  font-size: 0.84rem;
+  word-break: break-all;
+}
+
+.org-webhook-create-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.org-webhook-events-fieldset {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: 0.6rem;
+}
+
+.org-webhook-events-fieldset legend {
+  padding-inline: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--software-muted);
+}
+
+.org-webhook-event-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+}
+
+.org-webhook-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.org-webhook-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.org-webhook-card {
+  padding: 0.9rem 1rem;
+}
+
+.org-webhook-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.org-webhook-url {
+  margin: 0.25rem 0;
+  word-break: break-all;
+}
+
+.org-deliveries-section {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.org-deliveries-table th,
+.org-deliveries-table td {
+  white-space: nowrap;
+}
+
+/* ROI Calculator & Trust Line on /upgrade */
+
+.team-roi-calculator {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.team-roi-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.team-roi-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.team-roi-outputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.team-roi-stat {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: 0.7rem;
+  background: var(--software-surface-subtle);
+}
+
+.team-roi-stat span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--software-muted);
+}
+
+.team-roi-stat strong {
+  font-family: var(--software-serif);
+  font-size: 1.45rem;
+  font-weight: 500;
+  color: var(--software-ink);
+}
+
+.team-roi-formula,
+.team-plan-trust-line {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--software-muted);
+}
+
+/* Sandboxed Preview as Candidate IDE */
+
+.candidate-preview-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.candidate-preview-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  border-color: var(--software-plum-line);
+  background: var(--software-surface-note);
+}
+
+.candidate-preview-banner-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.candidate-preview-prestart {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.candidate-preview-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.75rem;
+}
+
+.candidate-preview-promise {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.candidate-preview-promise-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.candidate-preview-ide-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem 1.1rem;
+}
+
+.candidate-preview-grid {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .candidate-preview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.candidate-preview-sidebar {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.candidate-preview-files {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidate-preview-editor-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.candidate-preview-editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.candidate-preview-editor {
+  border: 1px solid var(--software-border);
+  border-radius: 0.65rem;
+  overflow: hidden;
+}
+
+.candidate-preview-ai-box {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.candidate-preview-ai-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.candidate-preview-ai-form input {
+  flex: 1 1 14rem;
+}
+
+.candidate-preview-ai-log {
+  display: grid;
+  gap: 0.35rem;
+}
+
+/* /r23/intelligence Action Queue & Cohort Retention Heatmap */
+
+.intel-action-queue {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.intel-action-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.intel-action-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.intel-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: 0.7rem;
+  background: var(--software-surface-subtle);
+}
+
+.intel-action-meta {
+  display: grid;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.intel-action-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.intel-cohort-table th,
+.intel-cohort-table td {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.intel-heatmap-cell {
+  border-radius: 0.35rem;
+  font-weight: 600;
+  text-align: center;
+  background: rgba(142, 227, 184, var(--intel-heat, 0.12));
+  color: var(--software-ink);
+}
+
+/* Dark theme adjustments */
+
+html[data-theme='dark'] .org-checklist-step.is-done {
+  border-color: rgba(142, 227, 184, 0.32);
+  background: rgba(142, 227, 184, 0.1);
+}
+
+html[data-theme='dark'] .org-checklist-step.is-done .org-checklist-icon {
+  border-color: rgba(142, 227, 184, 0.45);
+  background: rgba(142, 227, 184, 0.18);
+  color: var(--software-mint);
+}
+
+html[data-theme='dark'] .org-nudge-banner,
+html[data-theme='dark'] .candidate-preview-banner {
+  border-color: rgba(196, 168, 220, 0.32);
+  background: rgba(58, 35, 76, 0.42);
+}
+
+html[data-theme='dark'] .intel-heatmap-cell {
+  background: rgba(142, 227, 184, calc(var(--intel-heat, 0.12) * 0.45));
+  color: var(--software-ink);
+}
