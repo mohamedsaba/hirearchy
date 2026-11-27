@@ -155,30 +155,24 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
     );
   };
 
+  const activeStepNumber = isMilestoneActive('verdict')
+    ? 4
+    : isMilestoneActive('runs')
+      ? 3
+      : isMilestoneActive('diff')
+        ? 2
+        : 1;
+
   return (
     <div
       className="software-product evaluator-review-shell"
       style={{ width: '100%', maxWidth: 'none', margin: 0, padding: 0 }}
     >
       <header
-        className="software-product-header"
+        className="software-product-header demo-sticky-topbar"
         data-testid="demo-sticky-topbar"
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 40,
-          justifyContent: 'space-between',
-          paddingBlock: '0.55rem',
-        }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="demo-topbar-brand">
           <Link
             className="software-wordmark"
             href="/products/software"
@@ -187,65 +181,12 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
             <span>Hirearchy</span>
             <span className="software-product-capsule">Software</span>
           </Link>
-          <span
-            className="hiring-pill hiring-pill-plum"
-            style={{ marginBlockStart: 0 }}
-          >
+          <span className="hiring-pill hiring-pill-plum demo-sandbox-pill">
             Interactive Sandbox · No Sign-up Required
           </span>
         </div>
 
-        <nav
-          aria-label="Guided demo milestones"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            flexWrap: 'wrap',
-          }}
-        >
-          <button
-            type="button"
-            className={`hiring-btn hiring-btn-sm${isMilestoneActive('timeline') ? ' hiring-btn-primary' : ''}`}
-            onClick={() => jumpTo('Summary', 'timeline')}
-          >
-            <IconHistory size={14} aria-hidden="true" /> 1. Timeline
-          </button>
-          <button
-            type="button"
-            className={`hiring-btn hiring-btn-sm${isMilestoneActive('diff') ? ' hiring-btn-primary' : ''}`}
-            onClick={() => jumpTo('Evidence', 'code_diff', 'Code changes')}
-          >
-            <IconCode size={14} aria-hidden="true" /> 2. Code Diff
-          </button>
-          <button
-            type="button"
-            className={`hiring-btn hiring-btn-sm${isMilestoneActive('runs') ? ' hiring-btn-primary' : ''}`}
-            onClick={() => {
-              const nextFilter =
-                activeTab === 'Evidence' && evidenceFilter === 'Execution runs'
-                  ? 'AI conversations'
-                  : 'Execution runs';
-              jumpTo(
-                'Evidence',
-                nextFilter === 'AI conversations' ? 'ai_log' : 'test_runs',
-                nextFilter,
-              );
-            }}
-          >
-            <IconTerminal2 size={14} aria-hidden="true" /> 3. Test Runs &amp; AI
-            Log
-          </button>
-          <button
-            type="button"
-            className={`hiring-btn hiring-btn-sm${isMilestoneActive('verdict') ? ' hiring-btn-primary' : ''}`}
-            onClick={() => jumpTo('Review', 'human_verdict')}
-          >
-            <IconGavel size={14} aria-hidden="true" /> 4. Human Verdict
-          </button>
-        </nav>
-
-        <div className="software-header-controls" style={{ gap: '0.6rem' }}>
+        <div className="software-header-controls demo-topbar-actions">
           <ThemeToggle variant="header" />
           <Link
             href={ctaHref}
@@ -261,6 +202,77 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
         <h1 className="visually-hidden">
           Hirearchy Software Interactive Evaluator Demo
         </h1>
+        <section
+          className="demo-walkthrough-banner"
+          aria-label="Guided evaluator tour"
+        >
+          <div className="demo-walkthrough-meta">
+            <span className="demo-walkthrough-kicker">
+              Guided Tour · Step {activeStepNumber} of 4
+            </span>
+            <div className="demo-walkthrough-track" aria-hidden="true">
+              <span
+                className="demo-walkthrough-track-fill"
+                style={{ width: `${(activeStepNumber / 4) * 100}%` }}
+              />
+            </div>
+          </div>
+          <nav
+            className="demo-walkthrough-stepper"
+            aria-label="Guided demo milestones"
+          >
+            <button
+              type="button"
+              className="demo-step-pill"
+              aria-current={isMilestoneActive('timeline') ? 'step' : undefined}
+              data-completed={activeStepNumber > 1 ? 'true' : undefined}
+              onClick={() => jumpTo('Summary', 'timeline')}
+            >
+              <IconHistory size={14} aria-hidden="true" />
+              <span>1. Timeline</span>
+            </button>
+            <button
+              type="button"
+              className="demo-step-pill"
+              aria-current={isMilestoneActive('diff') ? 'step' : undefined}
+              data-completed={activeStepNumber > 2 ? 'true' : undefined}
+              onClick={() => jumpTo('Evidence', 'code_diff', 'Code changes')}
+            >
+              <IconCode size={14} aria-hidden="true" />
+              <span>2. Code Diff</span>
+            </button>
+            <button
+              type="button"
+              className="demo-step-pill"
+              aria-current={isMilestoneActive('runs') ? 'step' : undefined}
+              data-completed={activeStepNumber > 3 ? 'true' : undefined}
+              onClick={() => {
+                const nextFilter =
+                  activeTab === 'Evidence' &&
+                  evidenceFilter === 'Execution runs'
+                    ? 'AI conversations'
+                    : 'Execution runs';
+                jumpTo(
+                  'Evidence',
+                  nextFilter === 'AI conversations' ? 'ai_log' : 'test_runs',
+                  nextFilter,
+                );
+              }}
+            >
+              <IconTerminal2 size={14} aria-hidden="true" />
+              <span>3. Test Runs &amp; AI Log</span>
+            </button>
+            <button
+              type="button"
+              className="demo-step-pill"
+              aria-current={isMilestoneActive('verdict') ? 'step' : undefined}
+              onClick={() => jumpTo('Review', 'human_verdict')}
+            >
+              <IconGavel size={14} aria-hidden="true" />
+              <span>4. Human Verdict</span>
+            </button>
+          </nav>
+        </section>
         <EvaluatorExperience
           sessionId={DEMO_SESSION_ID}
           readOnly

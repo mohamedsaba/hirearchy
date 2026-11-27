@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { IconCheck, IconCopy, IconRefresh } from '@tabler/icons-react';
+import { IconRefresh } from '@tabler/icons-react';
 
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
 import {
@@ -10,8 +10,13 @@ import {
   type AiReviewPresetId,
   type R27AiReviewReport,
 } from '../../../../src/r27-evidence/ai-review-contract';
-import { CommonThreadLoader } from '../../../_components/common-thread-loader';
-import { CommonThreadToast } from '../../../_components/common-thread-toast';
+import {
+  AiReasoningDisclosure,
+  CommonThreadSpark,
+  HirearchyAiThinking,
+} from '../../../_components/ai';
+import { emitToast } from '../../../_components/brand-toast';
+import { CopyActionButton } from '../../../_components/copy-action-button';
 
 export type R27AiReviewPanelProps = Readonly<{
   organizationId?: string;
@@ -69,29 +74,15 @@ export const R27AiReviewPanel = ({
     useState<AiReviewPresetId>(defaultPreset);
   const [customModelId, setCustomModelId] = useState<string>('');
   const [loading, setLoadingState] = useState<boolean>(false);
+  const [loadingStartedAt, setLoadingStartedAt] = useState<number | undefined>(
+    undefined,
+  );
   const setLoading = (next: boolean) => {
     setLoadingState(next);
+    setLoadingStartedAt(next ? Date.now() : undefined);
     onLoadingChange?.(next);
   };
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [questionsCopied, setQuestionsCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleCopyQuestions = async () => {
-    const items = report?.verificationQuestions ?? [];
-    if (!items.length) return;
-    const text = items
-      .map((item, idx) => `${idx + 1}. ${item.question} (${item.focus})`)
-      .join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      setQuestionsCopied(true);
-      setToastMsg('Verification questions copied.');
-      window.setTimeout(() => setQuestionsCopied(false), 2000);
-    } catch {
-      setError('Copy failed — copy manually from this browser.');
-    }
-  };
 
   const selectedOption =
     AI_REVIEW_MODEL_CATALOG.find((item) => item.id === selectedPreset) ??
@@ -108,7 +99,7 @@ export const R27AiReviewPanel = ({
           label: 'Evidence-Grounded Preview (Offline Ready)',
         }),
       );
-      setToastMsg('Evidence summary ready.');
+      emitToast({ message: 'Evidence summary ready.', tone: 'success' });
       return;
     }
 
@@ -156,7 +147,7 @@ export const R27AiReviewPanel = ({
         throw new Error('AI review endpoint returned no report payload.');
       }
       setReport(data.report);
-      setToastMsg('Advisory AI review ready.');
+      emitToast({ message: 'Advisory AI review ready.', tone: 'success' });
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : 'Unable to generate AI review.',
@@ -187,18 +178,26 @@ export const R27AiReviewPanel = ({
     >
       <summary>
         <span>{hiring ? 'AI advisory' : 'AI Candidate Review'}</span>
+        <span className="ct-ai-badge ct-ai-badge--advisory">Advisory only</span>
         {loading ? (
-          <span className="evaluator-tab-weaving-dot" aria-label="Analyzing" />
+          <CommonThreadSpark compact status="active" label="Analyzing" />
         ) : null}
       </summary>
       {loading && !report ? (
-        <div style={{ padding: '1rem 0' }}>
-          <CommonThreadLoader
-            stages={[
-              'Reading workspace diffs…',
-              'Cross-referencing test runs…',
-              'Drafting advisory summary…',
+        <div className="r27-ai-thinking-wrap">
+          <HirearchyAiThinking
+            variant="advisory"
+            status="active"
+            badge="Advisory only"
+            headline="Analyzing candidate evidence…"
+            sublabel="Synthesizing diffs, recorded runs, and workflow signals — human evaluators own final verdicts."
+            startedAt={loadingStartedAt}
+            steps={[
+              { id: 'diffs', label: 'Reading workspace diffs…' },
+              { id: 'runs', label: 'Cross-referencing test runs…' },
+              { id: 'summary', label: 'Drafting advisory summary…' },
             ]}
+            testId="r27-ai-thinking"
           />
         </div>
       ) : null}
@@ -366,39 +365,50 @@ export const R27AiReviewPanel = ({
             </div>
           )}
 
-          {report.timingInsights && report.timingInsights.length > 0 ? (
-            <div className="hiring-card-subtle">
-              <h4>Chronological Timing &amp; Workflow Analysis</h4>
-              <ul className="hiring-timing-list">
-                {report.timingInsights.map((insight, index) => (
-                  <li
-                    key={`${index}:${insight}`}
-                    className="hiring-timing-item"
-                  >
-                    {insight}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+          {(report.timingInsights && report.timingInsights.length > 0) ||
+          (report.requirementBreakdown &&
+            report.requirementBreakdown.length > 0) ? (
+            <AiReasoningDisclosure
+              title="Evidence & requirement trace"
+              status="settled"
+              badge="Advisory synthesis"
+              testId="r27-ai-reasoning-disclosure"
+            >
+              {report.timingInsights && report.timingInsights.length > 0 ? (
+                <div className="hiring-card-subtle">
+                  <h4>Chronological Timing &amp; Workflow Analysis</h4>
+                  <ul className="hiring-timing-list">
+                    {report.timingInsights.map((insight, index) => (
+                      <li
+                        key={`${index}:${insight}`}
+                        className="hiring-timing-item"
+                      >
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
-          {report.requirementBreakdown &&
-          report.requirementBreakdown.length > 0 ? (
-            <div className="hiring-card-subtle">
-              <h4>Requirement Evidence Breakdown</h4>
-              <ul className="hiring-timing-list">
-                {report.requirementBreakdown.map((item, index) => (
-                  <li
-                    key={`${index}:${item.requirement}`}
-                    className="hiring-timing-item"
-                  >
-                    <strong>{item.requirement}</strong> ·{' '}
-                    <span className="hiring-pill">{item.status}</span> —{' '}
-                    {item.evidence}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              {report.requirementBreakdown &&
+              report.requirementBreakdown.length > 0 ? (
+                <div className="hiring-card-subtle">
+                  <h4>Requirement Evidence Breakdown</h4>
+                  <ul className="hiring-timing-list">
+                    {report.requirementBreakdown.map((item, index) => (
+                      <li
+                        key={`${index}:${item.requirement}`}
+                        className="hiring-timing-item"
+                      >
+                        <strong>{item.requirement}</strong> ·{' '}
+                        <span className="hiring-pill">{item.status}</span> —{' '}
+                        {item.evidence}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </AiReasoningDisclosure>
           ) : null}
 
           {report.verificationQuestions &&
@@ -409,18 +419,22 @@ export const R27AiReviewPanel = ({
             >
               <div className="hiring-preview-header">
                 <h4>Live verification questions (10-min defense)</h4>
-                <button
-                  type="button"
-                  className="r27-ai-review-secondary-btn"
-                  onClick={() => void handleCopyQuestions()}
-                >
-                  {questionsCopied ? (
-                    <IconCheck size={14} aria-hidden="true" />
-                  ) : (
-                    <IconCopy size={14} aria-hidden="true" />
-                  )}
-                  {questionsCopied ? 'Copied' : 'Copy questions'}
-                </button>
+                <CopyActionButton
+                  value={report.verificationQuestions
+                    .map(
+                      (item, idx) =>
+                        `${idx + 1}. ${item.question} (${item.focus})`,
+                    )
+                    .join('\n')}
+                  label="Copy questions"
+                  copiedLabel="Copied"
+                  toastMessage="Verification questions copied."
+                  size="sm"
+                  variant="secondary"
+                  onCopyError={() =>
+                    setError('Copy failed — copy manually from this browser.')
+                  }
+                />
               </div>
               <ol className="hiring-ol-list">
                 {report.verificationQuestions.map((item, index) => (
@@ -473,11 +487,6 @@ export const R27AiReviewPanel = ({
           {error}
         </p>
       ) : null}
-      <CommonThreadToast
-        message={toastMsg}
-        tone="success"
-        onDismiss={() => setToastMsg(null)}
-      />
     </details>
   );
 };

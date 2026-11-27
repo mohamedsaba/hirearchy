@@ -6,7 +6,6 @@ import {
   IconCheck,
   IconCircleCheck,
   IconCode,
-  IconCopy,
   IconFileAnalytics,
   IconLink,
   IconListDetails,
@@ -36,12 +35,10 @@ import {
   writePersistedJson,
 } from '../../../../src/ui/browser-state';
 import { formatLocalDateTime } from '../../../../src/ui/relative-time';
+import { HirearchyAiThinking } from '../../../_components/ai';
+import { emitToast } from '../../../_components/brand-toast';
 import { CandidateOutcome } from '../../../_components/candidate-outcome';
-import { CommonThreadLoader } from '../../../_components/common-thread-loader';
-import {
-  CommonThreadToast,
-  type CommonThreadToastTone,
-} from '../../../_components/common-thread-toast';
+import { CopyActionButton } from '../../../_components/copy-action-button';
 import { DossierSharePanel } from '../../../r23/organizations/[organizationId]/handoffs/[sessionId]/handoff-dossier-client';
 import type { EvidenceFilter } from './evidence-workbench';
 
@@ -332,7 +329,6 @@ export function HiringDecisionPanel({
   >({});
   const [lastEmailDelivery, setLastEmailDelivery] =
     useState<PeerReviewEmailDelivery | null>(null);
-  const [copiedReviewLink, setCopiedReviewLink] = useState(false);
   const peerDraftStorageKey = isolated
     ? `hirearchy:demo:peer-draft:v1:${ctx.sessionId}`
     : `hirearchy:eval:peer-draft:v1:${ctx.sessionId}`;
@@ -493,12 +489,11 @@ export function HiringDecisionPanel({
     );
 
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [reportStartedAt, setReportStartedAt] = useState<number | undefined>(
+    undefined,
+  );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [toast, setToast] = useState<{
-    message: string;
-    tone: CommonThreadToastTone;
-  } | null>(null);
 
   const peerReviewRefs = useRef(new Map<string, HTMLElement>());
 
@@ -750,17 +745,10 @@ export function HiringDecisionPanel({
     }
   };
 
-  const handleCopyReviewLink = async () => {
-    if (typeof window === 'undefined' || !navigator.clipboard) return;
-    const url = `${window.location.origin}/r27/organizations/${encodeURIComponent(ctx.organizationId)}/sessions/${encodeURIComponent(ctx.sessionId)}?tab=review`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedReviewLink(true);
-      window.setTimeout(() => setCopiedReviewLink(false), 2400);
-    } catch {
-      // Ignore clipboard failures in restricted frames.
-    }
-  };
+  const reviewLinkValue =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/r27/organizations/${encodeURIComponent(ctx.organizationId)}/sessions/${encodeURIComponent(ctx.sessionId)}?tab=review`
+      : `/r27/organizations/${encodeURIComponent(ctx.organizationId)}/sessions/${encodeURIComponent(ctx.sessionId)}?tab=review`;
 
   const handleGeneratePerformanceReport = async () => {
     setErrorMsg(null);
@@ -785,9 +773,14 @@ export function HiringDecisionPanel({
       };
       setPerformanceReport(localReport);
       setStatusMsg('Sandbox Managerial Fit Report ready.');
+      emitToast({
+        message: 'Sandbox Managerial Fit Report ready.',
+        tone: 'success',
+      });
       return;
     }
     setBusyAction('report');
+    setReportStartedAt(Date.now());
     try {
       const data = await callReviewApi({
         action: 'generate_performance_report',
@@ -800,12 +793,19 @@ export function HiringDecisionPanel({
       if (data?.performanceReport) {
         setPerformanceReport(data.performanceReport);
 
-        setStatusMsg(
+        const readyMessage =
           data.performanceReport.provider.mode === 'live_ai'
             ? 'Fit report ready for the next interviewer.'
             : 'Evidence summary ready. ' +
-                (data.performanceReport.provider.fallbackReason ?? ''),
-        );
+              (data.performanceReport.provider.fallbackReason ?? '');
+        setStatusMsg(readyMessage);
+        emitToast({
+          message:
+            data.performanceReport.provider.mode === 'live_ai'
+              ? 'Managerial Fit Report ready.'
+              : 'Evidence summary ready.',
+          tone: 'success',
+        });
       }
     } catch (err) {
       setErrorMsg(
@@ -813,6 +813,7 @@ export function HiringDecisionPanel({
       );
     } finally {
       setBusyAction(null);
+      setReportStartedAt(undefined);
     }
   };
 
@@ -870,7 +871,7 @@ export function HiringDecisionPanel({
           ? `Sandbox preview: Advancement to ${nextStageLabel.trim() || 'next stage'} simulated. Zero credits used.`
           : 'Sandbox preview: Rejection feedback simulated. Zero credits used.',
       );
-      setToast({
+      emitToast({
         message: 'Simulated decision preview ready.',
         tone: 'success',
       });
@@ -906,7 +907,7 @@ export function HiringDecisionPanel({
           ? `Advancement to ${nextStageLabel.trim() || 'next stage'} published. Candidate feedback and team handoff are ready.`
           : 'Rejection decision and candidate feedback published to their Candidate Portal.';
       setStatusMsg(publishedMsg);
-      setToast({
+      emitToast({
         message:
           decision === 'accepted'
             ? 'Advancement published & handoff ready.'
@@ -968,14 +969,14 @@ export function HiringDecisionPanel({
                 <span className="hiring-muted-copy">
                   {lastEmailDelivery.reason}
                 </span>
-                <button
-                  type="button"
-                  className="hiring-btn hiring-btn-sm"
-                  onClick={() => void handleCopyReviewLink()}
-                >
-                  <IconCopy size={14} aria-hidden="true" />{' '}
-                  {copiedReviewLink ? 'Review link copied' : 'Copy review link'}
-                </button>
+                <CopyActionButton
+                  value={reviewLinkValue}
+                  label="Copy review link"
+                  copiedLabel="Review link copied"
+                  toastMessage="Review link copied."
+                  size="sm"
+                  variant="secondary"
+                />
               </div>
             ) : null}
           </div>
@@ -1274,9 +1275,29 @@ export function HiringDecisionPanel({
                           </div>
                         ) : null}
                         {busyAction === 'report' ? (
-                          <CommonThreadLoader
-                            compact
-                            label="Generating Managerial Fit Report…"
+                          <HirearchyAiThinking
+                            variant="advisory"
+                            status="active"
+                            badge="Advisory only"
+                            headline="Synthesizing Managerial Fit Report…"
+                            sublabel="Summarizing observable evidence and requirement coverage — non-binding advisory."
+                            startedAt={reportStartedAt}
+                            steps={[
+                              {
+                                id: 'evidence',
+                                label: 'Reviewing submitted files & test runs…',
+                              },
+                              {
+                                id: 'notes',
+                                label:
+                                  'Incorporating evaluator feedback notes…',
+                              },
+                              {
+                                id: 'fit',
+                                label: 'Formatting managerial fit brief…',
+                              },
+                            ]}
+                            testId="fit-report-thinking"
                           />
                         ) : null}
                         {performanceReport ? (
@@ -1374,24 +1395,46 @@ export function HiringDecisionPanel({
                 <div className="review-desk-preview-header">
                   <h4>Candidate preview</h4>
                   <p className="hiring-muted-copy">
-                    Visible after you publish.
+                    Exact view visible to candidate after publishing.
                   </p>
                 </div>
-                {decision ? (
-                  <CandidateOutcome
-                    outcome={{
-                      decision,
-                      nextStageLabel: nextStageLabel.trim(),
-                      feedbackNote: feedbackNote.trim(),
-                      strengths: strengthsPreviewList,
-                      weaknesses: weaknessesPreviewList,
-                    }}
-                  />
-                ) : (
-                  <p className="review-desk-preview-empty">
-                    Choose an outcome to see the preview.
-                  </p>
-                )}
+                <div className="review-desk-preview-bezel">
+                  <div className="review-desk-preview-chrome">
+                    <span
+                      className="review-desk-preview-dots"
+                      aria-hidden="true"
+                    >
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                    <span className="review-desk-preview-portal-label">
+                      Candidate Portal · Outcome Card
+                    </span>
+                    <span
+                      className={`review-desk-preview-scope ${decision ? 'is-active' : ''}`}
+                    >
+                      {decision ? 'Visible on publish' : 'Draft preview'}
+                    </span>
+                  </div>
+                  <div className="review-desk-preview-body">
+                    {decision ? (
+                      <CandidateOutcome
+                        outcome={{
+                          decision,
+                          nextStageLabel: nextStageLabel.trim(),
+                          feedbackNote: feedbackNote.trim(),
+                          strengths: strengthsPreviewList,
+                          weaknesses: weaknessesPreviewList,
+                        }}
+                      />
+                    ) : (
+                      <p className="review-desk-preview-empty">
+                        Choose an outcome to see the preview.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </section>
               {advisory}
               {decision === 'accepted' &&
@@ -1406,7 +1449,25 @@ export function HiringDecisionPanel({
             </div>
 
             <div className="review-desk-publish">
-              <span id="review-desk-publish-state" role="status">
+              <span
+                id="review-desk-publish-state"
+                className="review-desk-publish-status"
+                data-state={
+                  busyAction === 'publish'
+                    ? 'publishing'
+                    : !decision
+                      ? 'pending'
+                      : draftSaveStatus === 'unavailable'
+                        ? 'warning'
+                        : draftSaveStatus === 'saved'
+                          ? 'saved'
+                          : ctx.decision?.decision === decision && !isDirtyDraft
+                            ? 'published'
+                            : 'ready'
+                }
+                role="status"
+              >
+                <span className="review-desk-publish-dot" aria-hidden="true" />
                 {busyAction === 'publish' ? (
                   'Publishing…'
                 ) : !decision ? (
@@ -1415,11 +1476,14 @@ export function HiringDecisionPanel({
                   'Draft storage unavailable'
                 ) : draftSaveStatus === 'saved' ? (
                   <>
-                    <IconCheck size={17} aria-hidden="true" /> Draft saved in
+                    <IconCheck size={16} aria-hidden="true" /> Draft saved in
                     this tab
                   </>
                 ) : ctx.decision?.decision === decision && !isDirtyDraft ? (
-                  'Outcome published'
+                  <>
+                    <IconCircleCheck size={16} aria-hidden="true" /> Outcome
+                    published
+                  </>
                 ) : (
                   'Ready to publish'
                 )}
@@ -1579,14 +1643,14 @@ export function HiringDecisionPanel({
                       ? 'Sending peer review email…'
                       : 'Request peer review & send email'}
                   </button>
-                  <button
-                    type="button"
-                    className="hiring-btn"
-                    onClick={() => void handleCopyReviewLink()}
-                  >
-                    <IconCopy size={14} aria-hidden="true" />{' '}
-                    {copiedReviewLink ? 'Link copied' : 'Copy review link'}
-                  </button>
+                  <CopyActionButton
+                    value={reviewLinkValue}
+                    label="Copy review link"
+                    copiedLabel="Link copied"
+                    toastMessage="Review link copied."
+                    size="md"
+                    variant="secondary"
+                  />
                 </div>
               </form>
             </details>
@@ -1701,12 +1765,6 @@ export function HiringDecisionPanel({
           </div>
         </div>
       ) : null}
-
-      <CommonThreadToast
-        message={toast?.message ?? null}
-        tone={toast?.tone ?? 'success'}
-        onDismiss={() => setToast(null)}
-      />
     </div>
   );
 }

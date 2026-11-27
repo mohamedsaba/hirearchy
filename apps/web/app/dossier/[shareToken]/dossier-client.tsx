@@ -2,8 +2,14 @@
 
 import Link from 'next/link';
 import {
+  IconAlertCircle,
   IconArrowRight,
   IconCheck,
+  IconCircleCheck,
+  IconClock,
+  IconCompass,
+  IconFileDiff,
+  IconMessages,
   IconPrinter,
   IconShieldCheck,
 } from '@tabler/icons-react';
@@ -52,23 +58,14 @@ export function DossierClient({ dossier, demoCtaHref }: DossierClientProps) {
   return (
     <div className="software-product dossier-page">
       <header className="dossier-topbar dossier-no-print">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="dossier-topbar-brand">
           <span className="software-document-wordmark">
             <span>Hirearchy</span>
             <span className="software-document-product">Software</span>
           </span>
-          <span
-            className="hiring-pill hiring-pill-plum"
-            style={{ marginBlockStart: 0 }}
-          >
-            {dossier.organizationName} · Executive Dossier
+          <span className="dossier-org-context">
+            · {dossier.organizationName} Dossier
+            {dossier.isDemo ? ' · Sample' : ''}
           </span>
           <span
             className={`hiring-pill ${dossier.visibilityMode === 'redacted' ? 'hiring-pill-success' : 'hiring-pill-warning'}`}
@@ -79,14 +76,9 @@ export function DossierClient({ dossier, demoCtaHref }: DossierClientProps) {
               ? 'Redacted Identity · Zero PII'
               : 'Named Candidate Brief'}
           </span>
-          {dossier.isDemo ? (
-            <span className="hiring-pill" style={{ marginBlockStart: 0 }}>
-              Sample Dossier
-            </span>
-          ) : null}
         </div>
 
-        <div className="hiring-header-actions">
+        <div className="hiring-header-actions dossier-topbar-actions">
           {dossier.expiresAt ? (
             <span className="hiring-muted-copy">
               Expires {formatDisplayDate(dossier.expiresAt)}
@@ -190,7 +182,10 @@ export function DossierClient({ dossier, demoCtaHref }: DossierClientProps) {
           </h2>
           <div className="dossier-stats-grid hiring-mt-sm">
             <div className="dossier-stat-card">
-              <span className="dossier-stat-label">Active Duration</span>
+              <span className="dossier-stat-head">
+                <IconClock size={14} aria-hidden="true" />
+                <span className="dossier-stat-label">Active Duration</span>
+              </span>
               <strong className="dossier-stat-value">
                 {dossier.evidenceSummary.durationMinutes !== null
                   ? `${dossier.evidenceSummary.durationMinutes} min`
@@ -198,7 +193,10 @@ export function DossierClient({ dossier, demoCtaHref }: DossierClientProps) {
               </strong>
             </div>
             <div className="dossier-stat-card">
-              <span className="dossier-stat-label">Files Modified</span>
+              <span className="dossier-stat-head">
+                <IconFileDiff size={14} aria-hidden="true" />
+                <span className="dossier-stat-label">Files Modified</span>
+              </span>
               <strong className="dossier-stat-value">
                 {dossier.evidenceSummary.filesModified}
                 {dossier.evidenceSummary.totalFiles > 0
@@ -206,15 +204,40 @@ export function DossierClient({ dossier, demoCtaHref }: DossierClientProps) {
                   : ''}
               </strong>
             </div>
-            <div className="dossier-stat-card">
-              <span className="dossier-stat-label">Verification Runs</span>
+            <div
+              className="dossier-stat-card"
+              data-passed={
+                dossier.evidenceSummary.executionRunsPassed > 0
+                  ? 'true'
+                  : 'false'
+              }
+            >
+              <span className="dossier-stat-head">
+                {dossier.evidenceSummary.executionRunsPassed > 0 ? (
+                  <IconCircleCheck
+                    size={15}
+                    className="dossier-stat-icon--success"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <IconAlertCircle
+                    size={15}
+                    className="dossier-stat-icon--warning"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="dossier-stat-label">Verification Runs</span>
+              </span>
               <strong className="dossier-stat-value">
                 {dossier.evidenceSummary.executionRunsPassed} /{' '}
                 {dossier.evidenceSummary.executionRunsTotal} passed
               </strong>
             </div>
             <div className="dossier-stat-card">
-              <span className="dossier-stat-label">Workspace AI Log</span>
+              <span className="dossier-stat-head">
+                <IconMessages size={14} aria-hidden="true" />
+                <span className="dossier-stat-label">Workspace AI Log</span>
+              </span>
               <strong className="dossier-stat-value">
                 {dossier.evidenceSummary.aiInteractionsCount}{' '}
                 {dossier.evidenceSummary.aiInteractionsCount === 1
@@ -239,8 +262,15 @@ export function DossierClient({ dossier, demoCtaHref }: DossierClientProps) {
             Strengths &amp; Follow-up Areas
           </h2>
           <div className="dossier-two-col hiring-mt-sm">
-            <div className="hiring-card-subtle">
-              <strong>Demonstrated Strengths</strong>
+            <div className="hiring-card-subtle dossier-synthesis-card dossier-synthesis-card--strengths">
+              <strong className="dossier-synthesis-heading">
+                <IconCircleCheck
+                  size={16}
+                  className="dossier-synthesis-icon"
+                  aria-hidden="true"
+                />
+                Demonstrated Strengths
+              </strong>
               {dossier.candidateStrengths.length > 0 ? (
                 <ul className="hiring-bullet-list">
                   {dossier.candidateStrengths.map((s, i) => (
@@ -254,8 +284,15 @@ export function DossierClient({ dossier, demoCtaHref }: DossierClientProps) {
               )}
             </div>
 
-            <div className="hiring-card-subtle">
-              <strong>Areas to Explore in Next Interview</strong>
+            <div className="hiring-card-subtle dossier-synthesis-card dossier-synthesis-card--explore">
+              <strong className="dossier-synthesis-heading">
+                <IconCompass
+                  size={16}
+                  className="dossier-synthesis-icon"
+                  aria-hidden="true"
+                />
+                Areas to Explore in Next Interview
+              </strong>
               {dossier.candidateWeaknesses.length > 0 ? (
                 <ul className="hiring-bullet-list">
                   {dossier.candidateWeaknesses.map((w, i) => (

@@ -6,56 +6,36 @@
   padding: clamp(1.5rem, 6vw, 5rem);
 }
 
-/* Keep the product workbench on the approved Software palette without
-   changing the public homepage or shared app shell. */
+/* Map legacy workspace aliases onto Common Thread 2.0 --software-* tokens so
+   light (Warm Paper) and html[data-theme='dark'] (Plum Void) stay in sync. */
 .workspace-shell,
 .evaluator-access-shell {
-  --software-plum: #291e36;
-  --software-lilac: #ebe5f2;
-  --software-mint: #b0f0ce;
-  --software-ink: #251a35;
-  --software-muted: #625871;
-  --software-canvas: #faf8fc;
-  --software-surface-subtle: var(--software-lilac);
-  --software-surface-note: #eee7f4;
-  --software-border: #ddd6e5;
-  --software-border-subtle: #eeeaf2;
-  --software-border-strong: #8b7c99;
-  --software-status-success: #166534;
-  --software-status-success-surface: #ecfdf3;
-  --software-status-success-border: #bbf7d0;
-  --software-status-warning: #74520a;
-  --software-status-warning-surface: #fff7df;
-  --software-status-warning-border: #e2c66f;
-  --software-status-danger: #b42318;
-  --software-status-danger-surface: #fef2f2;
-  --software-status-danger-border: #fecaca;
-  --software-control-height: 2.5rem;
-  --software-touch-target: 2.75rem;
-  --software-radius-control: 0.5rem;
-  --software-radius-surface: 0.75rem;
+  --software-control-height: var(--control-height, 2.5rem);
+  --software-touch-target: var(--touch-target, 2.75rem);
+  --software-radius-control: var(--radius-control, 0.5rem);
+  --software-radius-surface: var(--radius-surface, 0.75rem);
   --software-space-page: var(--layout-gutter, 2rem);
 
-  --font-sans: var(--font-dm-sans), sans-serif;
-  --font-body: var(--font-dm-sans), sans-serif;
-  --font-display: var(--font-dm-sans), sans-serif;
-  --font-header: var(--font-dm-sans), sans-serif;
+  --font-sans: var(--software-sans, var(--font-dm-sans), sans-serif);
+  --font-body: var(--software-sans, var(--font-dm-sans), sans-serif);
+  --font-display: var(--software-sans, var(--font-dm-sans), sans-serif);
+  --font-header: var(--software-sans, var(--font-dm-sans), sans-serif);
   --ink: var(--software-ink);
-  --ink-secondary: var(--software-ink);
+  --ink-secondary: var(--software-ink-soft, var(--software-ink));
   --muted: var(--software-muted);
-  --paper: #fff;
+  --paper: var(--software-surface);
   --paper-subtle: var(--software-surface-subtle);
-  --surface: #fff;
+  --surface: var(--software-surface);
   --surface-subtle: var(--software-surface-subtle);
   --surface-note: var(--software-surface-note);
-  --surface-muted: #f0ebf5;
+  --surface-muted: var(--software-surface-2, var(--software-surface-note));
   --line: var(--software-border);
   --line-subtle: var(--software-border-subtle);
-  --line-strong: var(--software-plum);
+  --line-strong: var(--software-border-strong);
   --accent: var(--software-plum);
   --accent-light: var(--software-lilac);
   --accent-dark: var(--software-plum);
-  --focus-ring: var(--software-plum);
+  --focus-ring: var(--software-focus);
   --status-success-bg: var(--software-status-success-surface);
   --status-success-text: var(--software-status-success);
   --status-success-border: var(--software-status-success-border);
@@ -65,21 +45,29 @@
   --status-danger-bg: var(--software-status-danger-surface);
   --status-danger-text: var(--software-status-danger);
   --status-danger-border: var(--software-status-danger-border);
-  --notice-bg: #f8fafc;
-  --notice-text: #334155;
-  --notice-border: #cbd5e1;
+  --notice-bg: var(--software-status-info-surface);
+  --notice-text: var(--software-status-info);
+  --notice-border: var(--software-status-info-border);
   --radius-sm: var(--software-radius-control);
   --radius-md: var(--software-radius-surface);
 
-  background: #fff;
+  background: var(--software-canvas);
   color: var(--software-ink);
-  font-family: var(--font-dm-sans), sans-serif;
+  font-family: var(--software-sans, var(--font-dm-sans), sans-serif);
 }
 
 .workspace-shell .workspace-navigation-button[aria-current='page'] {
-  border-color: var(--software-plum);
-  background: var(--software-mint);
+  border-color: var(--software-mint-border);
+  background: var(--software-mint-tint);
   color: var(--software-ink);
+}
+
+html[data-theme='dark']
+  .workspace-shell
+  .workspace-navigation-button[aria-current='page'] {
+  border-color: var(--software-mint-border);
+  background: var(--software-mint-tint);
+  color: var(--software-mint);
 }
 
 .evaluator-access-shell .evaluator-entry-card h1 {
@@ -107,9 +95,10 @@
 .task-assessment-report {
   min-width: 0;
   padding: clamp(1.1rem, 2.6vw, 2rem);
-  border: 1px solid #8b7c99;
+  border: 1px solid var(--software-border-strong);
   border-radius: 12px;
-  background: #fff;
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-card);
 }
 
 .task-assessment-heading,
@@ -128,7 +117,7 @@
 
 .task-assessment-heading h2 {
   margin: 0.2rem 0 0.45rem;
-  color: #251a35;
+  color: var(--software-ink);
   font-size: clamp(1.35rem, 2vw, 1.8rem);
   letter-spacing: -0.03em;
   text-transform: none;
@@ -137,7 +126,7 @@
 .task-assessment-heading p:last-child {
   max-width: 54rem;
   margin: 0;
-  color: #625871;
+  color: var(--software-muted);
   line-height: 1.55;
 }
 
@@ -145,8 +134,8 @@
   flex: 0 0 auto;
   min-width: 10.5rem;
   padding: 0.8rem 1rem;
-  border-left: 3px solid #8b7c99;
-  background: #faf8fc;
+  border-left: 3px solid var(--software-border-strong);
+  background: var(--software-surface-subtle);
 }
 
 .task-total span,
@@ -155,13 +144,13 @@
 }
 
 .task-total span {
-  color: #625871;
+  color: var(--software-muted);
   font-size: 0.78rem;
 }
 
 .task-total strong {
   margin-top: 0.25rem;
-  color: #291e36;
+  color: var(--software-plum);
   font-size: 1.85rem;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -175,9 +164,9 @@
 .task-report-state,
 .task-report-status {
   padding: 0.8rem 0.95rem;
-  border-left: 3px solid #8b7c99;
-  background: #faf8fc;
-  color: #251a35;
+  border-left: 3px solid var(--software-border-strong);
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
   line-height: 1.5;
 }
 
@@ -196,7 +185,7 @@
 .task-report-state-unavailable,
 .task-report-state-failed,
 .task-report-state-rubric_unavailable {
-  border-left-color: #8b7c99;
+  border-left-color: var(--software-border-strong);
 }
 
 .task-report-actions {
@@ -217,13 +206,13 @@
 .task-criterion {
   min-width: 0;
   padding: 1rem 0;
-  border-top: 1px solid #ddd6e5;
+  border-top: 1px solid var(--software-border);
 }
 
 .task-criterion-topline h3,
 .task-evidence-inspector-heading h3 {
   margin: 0;
-  color: #251a35;
+  color: var(--software-ink);
   font-size: 1rem;
   letter-spacing: -0.01em;
   text-transform: none;
@@ -232,13 +221,13 @@
 .task-criterion-topline p {
   max-width: 62rem;
   margin: 0.3rem 0 0;
-  color: #625871;
+  color: var(--software-muted);
   line-height: 1.5;
 }
 
 .task-criterion-weight {
   flex: 0 0 auto;
-  color: #625871;
+  color: var(--software-muted);
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
@@ -251,7 +240,7 @@
 }
 
 .task-criterion-result strong {
-  color: #291e36;
+  color: var(--software-plum);
   font-variant-numeric: tabular-nums;
 }
 
@@ -260,22 +249,22 @@
   align-items: center;
   min-height: 1.65rem;
   padding: 0.15rem 0.5rem;
-  border: 1px solid #8b7c99;
+  border: 1px solid var(--software-border-strong);
   border-radius: 999px;
-  color: #4b4058;
+  color: var(--software-ink-soft);
   font-size: 0.74rem;
   font-weight: 650;
 }
 
 .criterion-status-scored {
-  background: #fff;
+  background: var(--software-surface);
 }
 
 .task-criterion-reason,
 .task-criterion-pending,
 .task-evidence-empty {
   margin: 0.5rem 0 0;
-  color: #383047;
+  color: var(--software-ink-soft);
   line-height: 1.55;
 }
 
@@ -289,10 +278,10 @@
 .task-evidence-link {
   min-height: 2.75rem;
   padding: 0.5rem 0.7rem;
-  border: 1px solid #8b7c99;
+  border: 1px solid var(--software-border-strong);
   border-radius: 8px;
-  background: #fff;
-  color: #291e36;
+  background: var(--software-surface);
+  color: var(--software-ink);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 650;
@@ -301,16 +290,16 @@
 
 .task-evidence-link:hover,
 .task-evidence-link[aria-pressed='true'] {
-  border-color: #291e36;
-  background: #ebe5f2;
+  border-color: var(--software-focus);
+  background: var(--software-lilac);
 }
 
 .task-evidence-inspector {
   margin-top: 1rem;
   padding: 1rem;
-  border: 1px solid #8b7c99;
+  border: 1px solid var(--software-border-strong);
   border-radius: 10px;
-  background: #faf8fc;
+  background: var(--software-surface-subtle);
 }
 
 .task-evidence-inspector-heading {
@@ -320,7 +309,7 @@
 
 .task-rubric-version {
   margin: 1rem 0 0;
-  color: #625871;
+  color: var(--software-muted);
   font-size: 0.78rem;
   line-height: 1.5;
 }
@@ -329,16 +318,16 @@
 .evaluator-source-record,
 .evaluator-technical-record {
   min-width: 0;
-  border: 1px solid #8b7c99;
+  border: 1px solid var(--software-border-strong);
   border-radius: 10px;
-  background: #fff;
+  background: var(--software-surface);
 }
 
 .task-submitted-context {
   margin-top: 0.8rem;
-  border-color: #ddd6e5;
+  border-color: var(--software-border);
   border-radius: 8px;
-  background: #faf8fc;
+  background: var(--software-surface-subtle);
 }
 
 .task-submitted-context summary,
@@ -348,7 +337,7 @@
   display: flex;
   align-items: center;
   padding: 0.65rem 0.9rem;
-  color: #291e36;
+  color: var(--software-plum);
   font-weight: 650;
   cursor: pointer;
 }
@@ -357,7 +346,7 @@
 .task-submitted-context > ul {
   margin: 0;
   padding: 0.1rem 1rem 0.85rem;
-  color: #383047;
+  color: var(--software-ink-soft);
 }
 
 .evaluator-source-record-content {
@@ -380,21 +369,21 @@
 
 .candidate-rubric-disclosure {
   margin-top: 1.15rem;
-  border-top: 1px solid #ddd6e5;
+  border-top: 1px solid var(--software-border);
 }
 
 .candidate-rubric-disclosure > summary {
   min-height: 2.75rem;
   display: flex;
   align-items: center;
-  color: #291e36;
+  color: var(--software-plum);
   font-weight: 650;
   cursor: pointer;
 }
 
 .candidate-rubric-disclosure > p {
   margin: 0.1rem 0 0.65rem;
-  color: #625871;
+  color: var(--software-muted);
   font-size: 0.84rem;
   line-height: 1.5;
 }
@@ -413,8 +402,8 @@
   justify-content: space-between;
   gap: 0.8rem;
   padding: 0.65rem 0;
-  border-top: 1px solid #ddd6e5;
-  color: #625871;
+  border-top: 1px solid var(--software-border);
+  color: var(--software-muted);
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -425,13 +414,13 @@
 }
 
 .candidate-rubric-list strong {
-  color: #251a35;
+  color: var(--software-ink);
   font-size: 0.88rem;
 }
 
 .candidate-rubric-list > li > span {
   flex: 0 0 auto;
-  color: #291e36;
+  color: var(--software-plum);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
@@ -439,9 +428,9 @@
 .candidate-rubric-unavailable {
   margin: 1rem 0 0;
   padding: 0.75rem 0.85rem;
-  border-left: 3px solid #8b7c99;
-  background: #faf8fc;
-  color: #4b4058;
+  border-left: 3px solid var(--software-border-strong);
+  background: var(--software-surface-subtle);
+  color: var(--software-ink-soft);
   font-size: 0.84rem;
   line-height: 1.5;
 }
@@ -2590,10 +2579,10 @@ details[open] > summary > .disclosure-chevron {
 .ai-summary-notice {
   margin: 0.5rem 0 0 0;
   font-size: 0.85rem;
-  color: #92400e;
+  color: var(--software-status-warning);
   padding: 0.35rem 0.6rem;
-  border-left: 3px solid #f59e0b;
-  background: #fffbeb;
+  border-left: 3px solid var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
 }
 
 .ai-summary-interleaving {
@@ -2735,9 +2724,9 @@ details[open] > summary > .disclosure-chevron {
 }
 
 .activity-excerpt.error-excerpt {
-  border-color: #fca5a5;
-  background: #fff5f5;
-  color: #991b1b;
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
 }
 
 .evaluator-v2-container .activity-excerpt.error-excerpt {

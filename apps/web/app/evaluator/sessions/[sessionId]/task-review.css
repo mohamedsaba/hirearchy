@@ -2029,6 +2029,15 @@
   color: var(--software-plum);
 }
 
+.evaluator-workbench-modes[data-indicator-ready='true']
+  button[aria-selected='true'] {
+  border-bottom-color: transparent;
+}
+
+.evaluator-tab-kbd {
+  font-size: 0.65rem;
+}
+
 .evaluator-workbench-modes button:focus-visible,
 .evaluator-quick-note-trigger:focus-visible,
 .evaluator-source-row:focus-visible,
@@ -3880,6 +3889,17 @@ html[data-theme='dark'] .evaluator-review-tabs button[aria-selected='true'] {
   color: var(--software-ink);
 }
 
+html[data-theme='dark']
+  .evaluator-workbench-modes[data-indicator-ready='true']
+  button[aria-selected='true'] {
+  border-bottom-color: transparent;
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .evaluator-workbench-modes .ct-tab-indicator {
+  background: var(--software-mint);
+}
+
 html[data-theme='dark'] .evaluator-workbench-modes button:hover,
 html[data-theme='dark'] .evaluator-evidence-filter-bar button:hover,
 html[data-theme='dark'] .evaluator-review-tabs button:hover {
@@ -4100,6 +4120,7 @@ html[data-theme='dark'] .task-assessment-report .task-total {
 .evaluator-meta-pill {
   display: inline-flex;
   align-items: center;
+  gap: 0.3rem;
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
   border: 1px solid var(--software-border);
@@ -4107,6 +4128,23 @@ html[data-theme='dark'] .task-assessment-report .task-total {
   color: var(--software-ink);
   font-size: 0.76rem;
   font-weight: 600;
+}
+
+.evaluator-meta-pill--mono {
+  font-family: var(--software-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.evaluator-meta-pill--success {
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+
+.evaluator-meta-pill--warning {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
 }
 
 .evaluator-tab-weaving-dot {
@@ -4382,6 +4420,10 @@ html[data-theme='dark'] .task-assessment-report .task-total {
   [data-hiring-review='true'] .evaluator-workbench-modes button {
     padding-inline: 0.55rem;
     font-size: 0.8rem;
+  }
+
+  .evaluator-tab-kbd {
+    display: none;
   }
 
   [data-hiring-review='true'] .evaluator-review-next {

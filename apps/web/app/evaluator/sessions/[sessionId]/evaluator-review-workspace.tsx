@@ -10,11 +10,9 @@ import {
 } from 'react';
 import {
   IconArrowRight,
-  IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconCode,
-  IconCopy,
   IconFile,
   IconListDetails,
   IconMessages,
@@ -50,6 +48,10 @@ import {
 } from '../../../../src/ui/browser-state';
 import { trackClientEvent } from '../../../../src/telemetry/client';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { useSlidingIndicator } from '../../../../src/ui/use-sliding-indicator';
+import { CommonThreadSpark } from '../../../_components/ai';
+import { CopyActionButton } from '../../../_components/copy-action-button';
+import { KbdHint } from '../../../_components/kbd-hint';
 import { R27AiReviewPanel } from './ai-review-panel';
 import {
   HiringDecisionPanel,
@@ -316,21 +318,9 @@ const R27SummaryView = ({
     workflowSignals,
     liveVerificationQuestions,
   } = presentation;
-  const [questionsCopied, setQuestionsCopied] = useState(false);
-
-  const handleCopyVerificationQuestions = async () => {
-    if (!liveVerificationQuestions.length) return;
-    const text = liveVerificationQuestions
-      .map((item, idx) => `${idx + 1}. ${item.question} (${item.focus})`)
-      .join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      setQuestionsCopied(true);
-      window.setTimeout(() => setQuestionsCopied(false), 2000);
-    } catch {
-      setQuestionsCopied(false);
-    }
-  };
+  const verificationQuestionsText = liveVerificationQuestions
+    .map((item, idx) => `${idx + 1}. ${item.question} (${item.focus})`)
+    .join('\n');
   const fileSources = [...sources]
     .filter((source) => source.r27?.kind === 'file')
     .sort((left, right) => {
@@ -661,18 +651,14 @@ const R27SummaryView = ({
                 ))}
               </ol>
               <div className="hiring-header-actions hiring-mt-xs">
-                <button
-                  type="button"
-                  className="hiring-btn hiring-btn-sm"
-                  onClick={() => void handleCopyVerificationQuestions()}
-                >
-                  {questionsCopied ? (
-                    <IconCheck size={14} aria-hidden="true" />
-                  ) : (
-                    <IconCopy size={14} aria-hidden="true" />
-                  )}
-                  {questionsCopied ? 'Copied' : 'Copy questions'}
-                </button>
+                <CopyActionButton
+                  value={verificationQuestionsText}
+                  label="Copy questions"
+                  copiedLabel="Copied"
+                  toastMessage="Verification questions copied."
+                  size="sm"
+                  variant="secondary"
+                />
               </div>
             </details>
           ) : null}
@@ -2031,7 +2017,9 @@ export const EvaluatorReviewWorkspace = (
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [quickNoteOpen, setQuickNoteOpen] = useState(false);
   const pendingQuickNoteFocus = useRef(false);
+  const modesNavRef = useRef<HTMLElement>(null);
   const modeRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const indicatorReady = useSlidingIndicator(modesNavRef, mode);
   const sourceRows = useRef(new Map<string, HTMLButtonElement>());
   const inspectorHeading = useRef<HTMLHeadingElement | null>(null);
   const inspectorDialog = useRef<HTMLDivElement | null>(null);
@@ -2299,6 +2287,44 @@ export const EvaluatorReviewWorkspace = (
     setQuickNoteOpen(false);
   };
 
+  const setModeRef = useRef(setMode);
+  useEffect(() => {
+    setModeRef.current = setMode;
+  });
+
+  useEffect(() => {
+    if (mobileInspectorOpen) return;
+    const handleShortcut = (event: globalThis.KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const nextMode: WorkbenchMode | null =
+        event.key === '1'
+          ? 'Summary'
+          : event.key === '2'
+            ? 'Evidence'
+            : event.key === '3'
+              ? 'Review'
+              : null;
+      if (!nextMode) return;
+      event.preventDefault();
+      setModeRef.current(nextMode);
+      setQuickNoteOpen(false);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [mobileInspectorOpen]);
+
   const showQuickNote = () => {
     if (readOnly) return;
     if (window.matchMedia('(max-width: 1199px)').matches) {
@@ -2404,6 +2430,7 @@ export const EvaluatorReviewWorkspace = (
         <EvaluatorHeader
           sessionId={sessionId}
           desktopReview={Boolean(hiringReviewContext)}
+          showTheme={!demoMode}
           action={reviewNextAction}
           scenarioTitle={
             r27Evidence?.scenario.title ?? evidence!.scenario.title
@@ -2446,10 +2473,13 @@ export const EvaluatorReviewWorkspace = (
         />
         <div className="evaluator-workbench-topline">
           <nav
-            className="evaluator-workbench-modes"
+            ref={modesNavRef}
+            className="ct-tabs-root evaluator-workbench-modes"
             role="tablist"
             aria-label="Review workspace"
+            data-indicator-ready={indicatorReady ? 'true' : undefined}
           >
+            <span className="ct-tab-indicator" aria-hidden="true" />
             {modes.map((item, index) => (
               <button
                 key={item}
@@ -2469,12 +2499,16 @@ export const EvaluatorReviewWorkspace = (
                 }}
                 onKeyDown={(event) => onModeKeyDown(event, index)}
               >
+                <KbdHint
+                  keys={String(index + 1)}
+                  className="evaluator-tab-kbd"
+                />
                 <span>{tabDisplayLabel(item)}</span>
                 {item === 'Review' && aiReviewLoading ? (
-                  <span
-                    className="evaluator-tab-weaving-dot"
-                    aria-label="AI review running"
-                    title="AI review running"
+                  <CommonThreadSpark
+                    compact
+                    status="active"
+                    label="AI review running"
                   />
                 ) : null}
                 {item === 'Review' && pendingPeerReviewsForMeCount > 0 ? (

@@ -2,7 +2,11 @@ import type { ReactNode } from 'react';
 import type { BriefingSessionDuration } from '../../../../src/evaluator/evaluator-briefing';
 import type { SessionClosureReason } from '../../../../src/sessions/session';
 import { formatEvaluatorClosureReason } from '../../../../src/evaluator/evaluator-review-presentation';
-import { IconChevronRight } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconChevronRight,
+} from '@tabler/icons-react';
 import Link from 'next/link';
 import { LocalTime } from '../../../_components/local-time';
 import { ThemeToggle } from '../../../_components/theme-toggle';
@@ -59,6 +63,8 @@ export const EvaluatorHeader = ({
 
   if (desktopReview) {
     const name = displayName ?? scenarioTitle;
+    const shouldShowTheme = showTheme ?? true;
+    const testsPassed = testSummary ? /\bpassed\b/i.test(testSummary) : false;
     return (
       <header className="evaluator-report-heading review-desk-heading">
         <nav className="review-desk-breadcrumb" aria-label="Candidate review">
@@ -88,10 +94,39 @@ export const EvaluatorHeader = ({
                 <span className="evaluator-report-status">Submitted</span>
                 <LocalTime timestamp={submittedAt} absolute />
                 {closureReason === 'timeout' ? <span>Time expired</span> : null}
+                {candidateCode ? (
+                  <span className="evaluator-meta-pill evaluator-meta-pill--mono">
+                    {candidateCode}
+                  </span>
+                ) : null}
+                {testSummary ? (
+                  <span
+                    className={`evaluator-meta-pill ${testsPassed ? 'evaluator-meta-pill--success' : 'evaluator-meta-pill--warning'}`}
+                    data-testid="evaluator-header-test-summary"
+                  >
+                    {testsPassed ? (
+                      <IconCheck size={13} aria-hidden="true" />
+                    ) : (
+                      <IconAlertTriangle size={13} aria-hidden="true" />
+                    )}
+                    {testSummary}
+                  </span>
+                ) : null}
+                {diffSummary ? (
+                  <span
+                    className="evaluator-meta-pill evaluator-meta-pill--mono"
+                    data-testid="evaluator-header-diff-summary"
+                  >
+                    {diffSummary}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
-          {action}
+          <div className="review-desk-head-actions">
+            {shouldShowTheme ? <ThemeToggle variant="header" /> : null}
+            {action}
+          </div>
         </div>
       </header>
     );
