@@ -20,6 +20,7 @@ import {
   IconCircleCheck,
   IconClock,
   IconCode,
+  IconEyeOff,
   IconFile,
   IconFileCode,
   IconFolder,
@@ -29,6 +30,7 @@ import {
   IconMessageCode,
   IconPlayerPlay,
   IconSettings2,
+  IconShieldCheck,
   IconTerminal2,
   IconX,
 } from '@tabler/icons-react';
@@ -53,10 +55,10 @@ import { HorizontalTabs } from '../../../_components/horizontal-tabs';
 import { LocalTime } from '../../../_components/local-time';
 import { formatLocalDateTime } from '../../../../src/ui/relative-time';
 import { CommonThreadLoader } from '../../../_components/common-thread-loader';
-import {
-  CommonThreadToast,
-  type CommonThreadToastTone,
-} from '../../../_components/common-thread-toast';
+import { emitToast } from '../../../_components/brand-toast';
+import { CopyActionButton } from '../../../_components/copy-action-button';
+import { KbdHint } from '../../../_components/kbd-hint';
+import { AiStreamingBubble } from '../../../_components/ai';
 import {
   ThemeToggle,
   useHirearchyTheme,
@@ -357,25 +359,19 @@ function writeStoredJson(
 }
 
 function AiCodeBlock({ language, code }: { language: string; code: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    try {
-      void navigator.clipboard?.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard may be unavailable in restricted frames
-    }
-  };
-
   return (
     <div className="r26-ai-codeblock">
       <div className="r26-ai-codeblock-head">
         <span>{language || 'code'}</span>
-        <button type="button" className="r26-pref-btn" onClick={handleCopy}>
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <CopyActionButton
+          value={code}
+          label="Copy"
+          copiedLabel="Copied"
+          toastMessage="Code snippet copied."
+          size="sm"
+          variant="ghost"
+          className="r26-pref-btn r26-ai-copy-btn"
+        />
       </div>
       <pre>
         <code>{code}</code>
@@ -590,10 +586,6 @@ export function R26CandidateClient({
   const [lineWrap, setLineWrap] = useState(true);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [pendingAiPrompt, setPendingAiPrompt] = useState<string | null>(null);
-  const [toastState, setToastState] = useState<{
-    message: string;
-    tone: CommonThreadToastTone;
-  } | null>(null);
   const [message, setMessage] = useState('');
   const [loadFailure, setLoadFailure] = useState('');
   const [accessUnavailable, setAccessUnavailable] = useState(false);
@@ -743,6 +735,10 @@ export function R26CandidateClient({
   const [aiSubmitting, setAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [lastAiPrompt, setLastAiPrompt] = useState<string | null>(null);
+  const [newlyArrivedAiIds, setNewlyArrivedAiIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const knownAiInteractionIdsRef = useRef<Set<string> | null>(null);
   const aiMessagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAiView = useCallback(
@@ -763,6 +759,32 @@ export function R26CandidateClient({
         );
         if (response.ok) {
           const data = (await response.json()) as R212CandidateAiView;
+          const known = knownAiInteractionIdsRef.current;
+          if (known === null) {
+            knownAiInteractionIdsRef.current = new Set(
+              data.interactions.map(
+                (item) => item.interactionId || item.requestId,
+              ),
+            );
+          } else {
+            const arrived: string[] = [];
+            for (const item of data.interactions) {
+              const id = item.interactionId || item.requestId;
+              if (!known.has(id)) {
+                known.add(id);
+                if (item.status === 'COMPLETED') {
+                  arrived.push(id);
+                }
+              }
+            }
+            if (arrived.length > 0) {
+              setNewlyArrivedAiIds((prev) => {
+                const next = new Set(prev);
+                for (const id of arrived) next.add(id);
+                return next;
+              });
+            }
+          }
           setAiView(data);
         }
       } catch {
@@ -869,8 +891,8 @@ export function R26CandidateClient({
     async (
       capabilityEnabled = viewRef.current?.capabilities.execution,
       silent = false,
-    ) => {
-      if (!token || capabilityEnabled !== true) return;
+    ): Promise<R213CandidateExecutionView | null> => {
+      if (!token || capabilityEnabled !== true) return null;
       if (!silent) setExecutionViewLoading(true);
       try {
         const response = await fetch(
@@ -888,11 +910,13 @@ export function R26CandidateClient({
         if (response.ok) {
           const data = (await response.json()) as R213CandidateExecutionView;
           setExecutionView(data);
-        } else {
-          setExecutionView(null);
+          return data;
         }
+        setExecutionView(null);
+        return null;
       } catch {
         setExecutionView(null);
+        return null;
       } finally {
         if (!silent) setExecutionViewLoading(false);
       }
@@ -1470,8 +1494,14 @@ export function R26CandidateClient({
         setPendingSave(null);
         if (saved?.content === intent.content) {
           setConflictLatest(null);
-          if (!automatic && !isHiringExperience) {
-            setMessage('Work saved.');
+          if (!automatic) {
+            if (!isHiringExperience) {
+              setMessage('Work saved.');
+            }
+            emitToast({
+              message: `${fileBasename(intent.path)} saved.`,
+              tone: 'success',
+            });
           }
           return true;
         } else if (saved) {
@@ -1635,12 +1665,22 @@ export function R26CandidateClient({
         return;
       }
 
-      await fetchExecutionView();
+      const nextExecutionView = await fetchExecutionView();
       if (result?.operationId) {
         setSelectedExecutionId(result.operationId);
       }
 
-      setToastState({ message: 'Test run finished.', tone: 'success' });
+      const completedOp =
+        nextExecutionView?.operations?.find(
+          (op) => op.operationId === result?.operationId,
+        ) ?? nextExecutionView?.operations?.at(-1);
+      if (completedOp?.status === 'COMPLETED' && completedOp.exitCode === 0) {
+        emitToast({ message: 'Tests passed (Exit 0).', tone: 'success' });
+      } else if (completedOp) {
+        emitToast({ message: 'Test run finished.', tone: 'warning' });
+      } else {
+        emitToast({ message: 'Test run finished.', tone: 'success' });
+      }
       executionRequestIdRef.current = requestId();
     } catch {
       setExecutionError('Network error executing checks. Please retry.');
@@ -1999,7 +2039,7 @@ export function R26CandidateClient({
     if (remainingMs <= 2 * 60_000 && !reminded2MinRef.current) {
       reminded2MinRef.current = true;
       reminded10MinRef.current = true;
-      setToastState({
+      emitToast({
         message: '2 minutes remaining — wrap up and submit when ready.',
         tone: 'warning',
       });
@@ -2007,7 +2047,7 @@ export function R26CandidateClient({
     }
     if (remainingMs <= 10 * 60_000 && !reminded10MinRef.current) {
       reminded10MinRef.current = true;
-      setToastState({
+      emitToast({
         message: '10 minutes remaining — changes save automatically.',
         tone: 'info',
       });
@@ -2050,28 +2090,35 @@ export function R26CandidateClient({
       }
 
       const isSelected = node.path === selectedPath;
+      const fileDraft = draftsByPath[node.path];
+      const isModified =
+        (isSelected && isDirty) ||
+        Boolean(fileDraft && fileDraft.content !== fileDraft.baseContent);
       return (
         <li className="r26-tree-file" key={`file:${node.path}`}>
           <button
             type="button"
-            className={`r26-tree-file-btn ${isSelected ? 'is-active' : ''}`}
+            className={`r26-tree-file-btn ${isSelected ? 'is-active' : ''} ${isModified ? 'is-modified' : ''}`}
             style={{ paddingLeft: `${26 + depth * 12}px` }}
             aria-current={isSelected ? 'page' : undefined}
+            data-modified={isModified ? 'true' : undefined}
             disabled={!canSwitchFile && !isSelected}
             title={
               !canSwitchFile && !isSelected
                 ? 'Resolve pending workspace action before switching files'
-                : node.path
+                : isModified
+                  ? `${node.path} (modified)`
+                  : node.path
             }
             onClick={() => void selectWorkspaceFile(node.path)}
           >
             <IconFileCode size={15} stroke={1.8} aria-hidden="true" />
             <span className="r26-tree-file-name">{node.name}</span>
-            {isSelected && isDirty ? (
+            {isModified ? (
               <span
                 className="r26-tree-dirty-dot"
-                title="Unsaved edits"
-                aria-hidden="true"
+                title="modified"
+                aria-label="modified"
               />
             ) : null}
           </button>
@@ -2374,6 +2421,10 @@ export function R26CandidateClient({
             >
               <IconMessageCode size={15} stroke={1.9} aria-hidden="true" />
               <span>Assistant</span>
+              <KbdHint
+                keys="⌘J"
+                className="r26-kbd-chip r26-kbd-chip--header"
+              />
             </button>
           ) : null}
           {view &&
@@ -2690,6 +2741,28 @@ export function R26CandidateClient({
                     <span aria-current="page">{scenarioTitle}</span>
                   </nav>
                   <h1 id="candidate-readiness-title">{scenarioTitle}</h1>
+                  <ul
+                    className="r26-prestart-trust-strip"
+                    aria-label="Candidate privacy and timing guarantees"
+                    data-testid="r26-prestart-trust-strip"
+                  >
+                    <li>
+                      <IconEyeOff size={15} stroke={2} aria-hidden="true" />
+                      <span>Zero Webcam</span>
+                    </li>
+                    <li>
+                      <IconShieldCheck
+                        size={15}
+                        stroke={2}
+                        aria-hidden="true"
+                      />
+                      <span>Zero Spyware</span>
+                    </li>
+                    <li>
+                      <IconClock size={15} stroke={2} aria-hidden="true" />
+                      <span>Timer starts after setup</span>
+                    </li>
+                  </ul>
                   <div className="r26-readiness-overview">
                     <div className="r26-readiness-instructions">
                       <section aria-labelledby="candidate-before-start">
@@ -2763,7 +2836,11 @@ export function R26CandidateClient({
                   <div className="r26-readiness-actions">
                     <div className="r26-readiness-start">
                       {view.dataNotice ? (
-                        <label htmlFor="candidate-start-consent">
+                        <label
+                          htmlFor="candidate-start-consent"
+                          className="r26-consent-card"
+                          data-accepted={consentAccepted ? 'true' : 'false'}
+                        >
                           <input
                             id="candidate-start-consent"
                             aria-describedby="candidate-data-use-summary"
@@ -2779,7 +2856,14 @@ export function R26CandidateClient({
                             }}
                             type="checkbox"
                           />
-                          I understand what’s recorded.
+                          <span className="r26-consent-card-copy">
+                            <span>I understand what’s recorded.</span>
+                            {!consentAccepted ? (
+                              <span className="r26-consent-lock-hint">
+                                Confirm to unlock Start assessment
+                              </span>
+                            ) : null}
+                          </span>
                         </label>
                       ) : null}
                       <button
@@ -3202,6 +3286,18 @@ export function R26CandidateClient({
                   </button>
                 </div>
               </details>
+              {activeFile && currentDraft && view?.status !== 'CREATED' ? (
+                <CopyActionButton
+                  value={currentDraft.content}
+                  label="Copy"
+                  copiedLabel="Copied"
+                  toastMessage={`Copied ${fileBasename(activeFile.path)}.`}
+                  size="sm"
+                  variant="ghost"
+                  className="r26-pref-btn r26-editor-copy-btn"
+                  ariaLabel={`Copy ${fileBasename(activeFile.path)}`}
+                />
+              ) : null}
               {canEdit && !pendingSubmit && activeFile ? (
                 isHiringExperience ? (
                   !activeWorkspace && (pendingSave || saveConflict) ? (
@@ -3255,6 +3351,7 @@ export function R26CandidateClient({
                 >
                   <IconPlayerPlay size={13} stroke={2.2} aria-hidden="true" />
                   <span>{executionRunning ? 'Running…' : 'Run Tests'}</span>
+                  <KbdHint keys="⌘↵" className="r26-kbd-chip" />
                 </button>
               ) : null}
             </div>
@@ -3456,6 +3553,27 @@ export function R26CandidateClient({
               id="candidate-execution-panel"
               aria-label="Automated Checks"
               data-testid="candidate-execution-panel"
+              data-execution-outcome={
+                executionRunning
+                  ? 'running'
+                  : executionError
+                    ? 'failed'
+                    : !latestExecution
+                      ? 'idle'
+                      : latestExecution.isUnknown ||
+                          latestExecution.status === 'UNKNOWN'
+                        ? 'unknown'
+                        : latestExecution.status === 'TIMED_OUT'
+                          ? 'timed_out'
+                          : latestExecution.status === 'FAILED' ||
+                              (latestExecution.status === 'COMPLETED' &&
+                                latestExecution.exitCode !== 0)
+                            ? 'failed'
+                            : latestExecution.status === 'COMPLETED' &&
+                                latestExecution.exitCode === 0
+                              ? 'passed'
+                              : 'idle'
+              }
               onKeyDown={(event) => {
                 if (
                   activeWorkspace &&
@@ -3549,6 +3667,9 @@ export function R26CandidateClient({
                       : isHiringExperience
                         ? 'Run tests'
                         : 'Run checks'}
+                    {!executionRunning ? (
+                      <KbdHint keys="⌘↵" className="r26-kbd-chip" />
+                    ) : null}
                   </button>
                   {activeWorkspace ? (
                     <button
@@ -4161,32 +4282,35 @@ export function R26CandidateClient({
 
                         {interaction.status === 'COMPLETED' &&
                         interaction.assistantResponse ? (
-                          <div
-                            className="r26-ai-message r26-ai-message-assistant"
-                            data-testid="ai-assistant-message"
-                          >
-                            <div className="r26-ai-meta">
-                              <strong>
-                                {isSyntheticAiLane
-                                  ? 'Synthetic Assistant (Test Lane)'
-                                  : 'AI Assistant'}
-                              </strong>
-                              {interaction.completedAt ? (
-                                <time dateTime={interaction.completedAt}>
-                                  {new Date(
+                          <AiStreamingBubble
+                            className="r26-ai-message r26-ai-message-assistant r26-ai-streaming-bubble"
+                            roleLabel={
+                              isSyntheticAiLane
+                                ? 'Synthetic Assistant (Test Lane)'
+                                : 'Recorded AI Assistant'
+                            }
+                            timestamp={
+                              interaction.completedAt
+                                ? new Date(
                                     interaction.completedAt,
                                   ).toLocaleTimeString([], {
                                     hour: '2-digit',
                                     minute: '2-digit',
                                     second: '2-digit',
-                                  })}
-                                </time>
-                              ) : null}
-                            </div>
-                            <AiMarkdownContent
-                              content={interaction.assistantResponse}
-                            />
-                          </div>
+                                  })
+                                : undefined
+                            }
+                            status="complete"
+                            content={interaction.assistantResponse}
+                            animateReveal={newlyArrivedAiIds.has(
+                              interaction.interactionId ||
+                                interaction.requestId,
+                            )}
+                            renderContent={(visibleText) => (
+                              <AiMarkdownContent content={visibleText} />
+                            )}
+                            testId="ai-assistant-message"
+                          />
                         ) : interaction.status === 'FAILED' ? (
                           <div
                             className="r26-ai-message r26-ai-message-failed"
@@ -4196,7 +4320,7 @@ export function R26CandidateClient({
                               <strong>
                                 {isSyntheticAiLane
                                   ? 'Synthetic Assistant (Test Lane) — Error'
-                                  : 'AI Assistant — Error'}
+                                  : 'Recorded AI Assistant — Error'}
                               </strong>
                             </div>
                             <p>
@@ -4223,25 +4347,29 @@ export function R26CandidateClient({
                       </div>
                     </div>
                   ) : null}
+                  {aiSubmitting ? (
+                    <div className="r26-ai-loading">
+                      <AiStreamingBubble
+                        className="r26-ai-message r26-ai-message-assistant r26-ai-streaming-bubble"
+                        roleLabel={
+                          isSyntheticAiLane
+                            ? 'Synthetic Assistant (Test Lane)'
+                            : 'Recorded AI Assistant'
+                        }
+                        status="thinking"
+                        testId="ai-loading-indicator"
+                        thinkingProps={{
+                          headline: isSyntheticAiLane
+                            ? 'Generating response from Synthetic Assistant…'
+                            : 'Thinking…',
+                          badge: isSyntheticAiLane ? 'Test lane' : 'Recorded',
+                        }}
+                        renderContent={() => null}
+                      />
+                    </div>
+                  ) : null}
                   <div ref={aiMessagesEndRef} />
                 </div>
-
-                {aiSubmitting ? (
-                  <div
-                    className="r26-ai-loading"
-                    role="status"
-                    data-testid="ai-loading-indicator"
-                  >
-                    <CommonThreadLoader
-                      compact
-                      label={
-                        isSyntheticAiLane
-                          ? 'Generating response from Synthetic Assistant…'
-                          : 'Thinking…'
-                      }
-                    />
-                  </div>
-                ) : null}
 
                 {aiError ? (
                   <div
@@ -4443,11 +4571,6 @@ export function R26CandidateClient({
           </div>
         </dialog>
       ) : null}
-      <CommonThreadToast
-        message={toastState?.message ?? null}
-        tone={toastState?.tone ?? 'info'}
-        onDismiss={() => setToastState(null)}
-      />
     </main>
   );
 }

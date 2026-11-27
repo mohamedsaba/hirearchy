@@ -1277,14 +1277,11 @@
 
 .r26-ai-loading {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.65rem 1rem;
-  margin: 0 1rem 0.5rem;
-  background: #f4f0f8;
-  border-radius: 0.5rem;
-  font-size: 0.82rem;
-  color: var(--r26-ink);
+  flex-direction: column;
+  align-items: stretch;
+  margin: 0;
+  padding: 0;
+  background: transparent;
 }
 
 .r26-ai-spinner {
@@ -2234,7 +2231,7 @@ html[data-theme='dark']
 }
 
 html[data-theme='dark'] .r26-candidate .r26-ai-loading {
-  background: #281d35;
+  background: transparent;
   color: var(--software-ink);
 }
 
@@ -3368,4 +3365,231 @@ html[data-theme='dark'] .r26-candidate .r26-conflict p {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem;
+}
+
+/* Prestart Trust Strip & Tactile Consent Check-Card */
+.r26-prestart-trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  margin: 0 0 clamp(1.25rem, 3.2vh, 2rem);
+  padding: 0;
+  list-style: none;
+}
+
+.r26-prestart-trust-strip li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.34rem 0.75rem;
+  border: 1px solid var(--software-mint-border, rgba(20, 83, 45, 0.24));
+  border-radius: 999px;
+  background: var(--software-mint-tint, rgba(142, 227, 184, 0.2));
+  color: var(--r26-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.r26-prestart-trust-strip svg {
+  flex: none;
+  color: var(--software-status-success);
+}
+
+html[data-theme='dark'] .r26-prestart-trust-strip svg {
+  color: var(--software-mint);
+}
+
+.r26-readiness-start .r26-consent-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-block-size: var(--software-touch-target, 44px);
+  margin-inline-end: auto;
+  padding: 0.6rem 0.95rem;
+  border: 1px solid var(--software-border-strong);
+  border-radius: var(--software-radius-control, 8px);
+  background: var(--r26-surface);
+  box-shadow: var(--software-shadow-xs);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast, 140ms) ease,
+    background-color var(--duration-fast, 140ms) ease,
+    box-shadow var(--duration-fast, 140ms) ease;
+}
+
+.r26-readiness-start .r26-consent-card[data-accepted='false'] {
+  border-color: var(--software-status-warning-border);
+  background: color-mix(
+    in srgb,
+    var(--software-status-warning-surface) 55%,
+    var(--r26-surface) 45%
+  );
+}
+
+.r26-readiness-start .r26-consent-card[data-accepted='true'] {
+  border-color: var(--software-mint-border);
+  background: var(--software-mint-tint);
+}
+
+.r26-consent-card-copy {
+  display: grid;
+  gap: 0.1rem;
+  font-size: clamp(0.95rem, 1.35vw, 1.15rem);
+  font-weight: 600;
+  color: var(--r26-ink);
+}
+
+.r26-consent-lock-hint {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--software-status-warning);
+}
+
+/* AI Streaming Bubble Inside Message Log */
+.r26-ai-streaming-bubble {
+  max-width: 94%;
+  border-radius: 0.65rem;
+  border-bottom-left-radius: 0.15rem;
+}
+
+.r26-ai-streaming-bubble .ct-ai-bubble-header {
+  margin-bottom: 0.2rem;
+}
+
+.r26-ai-streaming-bubble .ct-ai-bubble-role {
+  font-size: 0.72rem;
+  color: var(--r26-muted);
+}
+
+.r26-ai-streaming-bubble .ct-ai-bubble-time {
+  font-size: 0.7rem;
+  color: var(--r26-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tree Modified-File Dot & Copy Button Polish */
+.r26-tree-file-btn.is-modified {
+  color: var(--r26-ink);
+}
+
+.r26-tree-file-btn.is-modified .r26-tree-dirty-dot {
+  margin-left: auto;
+}
+
+.r26-editor-copy-btn {
+  flex: none;
+}
+
+.r26-ai-copy-btn {
+  min-height: 1.55rem;
+  padding: 0.15rem 0.45rem;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2d8ee;
+}
+
+.r26-ai-copy-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+/* Keyboard Shortcut Hints */
+.r26-kbd-chip {
+  margin-left: 0.15rem;
+}
+
+.r26-kbd-chip--header {
+  border-color: rgba(244, 239, 232, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--software-on-plum-muted, #d5cae0);
+  box-shadow: none;
+}
+
+.r26-button-primary .r26-kbd-chip {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  color: inherit;
+  box-shadow: none;
+}
+
+html[data-theme='dark'] .r26-button-primary .r26-kbd-chip {
+  border-color: rgba(20, 15, 26, 0.24);
+  background: rgba(20, 15, 26, 0.12);
+}
+
+@media (max-width: 54rem) {
+  .r26-kbd-chip {
+    display: none;
+  }
+}
+
+/* Execution Panel Header Pass/Fail Semantic Stripe */
+.r26-execution-panel[data-execution-outcome='passed'] .r26-execution-header {
+  padding-inline-start: 0.7rem;
+  border-inline-start: 3px solid var(--software-status-success);
+}
+
+.r26-execution-panel[data-execution-outcome='failed'] .r26-execution-header {
+  padding-inline-start: 0.7rem;
+  border-inline-start: 3px solid var(--software-status-danger);
+}
+
+.r26-execution-panel[data-execution-outcome='unknown'] .r26-execution-header,
+.r26-execution-panel[data-execution-outcome='timed_out'] .r26-execution-header {
+  padding-inline-start: 0.7rem;
+  border-inline-start: 3px solid var(--software-status-warning);
+}
+
+.r26-execution-panel[data-execution-outcome='running'] .r26-execution-header {
+  padding-inline-start: 0.7rem;
+  border-inline-start: 3px solid var(--software-mint);
+}
+
+/* 3-Pane IDE Shimmer Skeleton (r26/candidate/[sessionId]/loading.tsx) */
+.r26-loading-workspace {
+  min-height: calc(100dvh - 58px);
+}
+
+.r26-loading-tree,
+.r26-loading-task-body {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.25rem;
+}
+
+.r26-loading-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.r26-loading-editor-lines {
+  display: grid;
+  align-content: start;
+  gap: 0.85rem;
+  padding: 1.25rem;
+}
+
+.r26-loading-code-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.r26-loading-task-card {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0.9rem;
+  border: 1px solid var(--r26-line);
+  border-radius: 10px;
+  background: var(--r26-surface);
+}
+
+@media (max-width: 54rem) {
+  .r26-loading-workspace .r26-desktop-files,
+  .r26-loading-workspace .r26-task-panel {
+    display: none;
+  }
 }

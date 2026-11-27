@@ -107,6 +107,19 @@
   color: var(--candidate-muted);
   overflow-wrap: anywhere;
 }
+.weft-ai .weft-ai-streaming-bubble {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.weft-ai .weft-ai-streaming-bubble .ct-ai-bubble-role {
+  color: var(--candidate-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+.weft-ai .weft-ai-context-body .ct-ai-reasoning {
+  margin-top: 6px;
+}
 .weft-ai .weft-ai-pending {
   display: flex;
   align-items: center;
@@ -209,7 +222,7 @@
   text-underline-offset: 3px;
 }
 .weft-ai .weft-ai-context-body {
-  max-height: 120px;
+  max-height: 240px;
   overflow: auto;
   font-size: 11px;
   line-height: 1.5;

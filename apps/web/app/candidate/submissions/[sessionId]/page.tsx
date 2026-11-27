@@ -67,7 +67,10 @@ export default async function CandidateSubmissionPage({
         </div>
         <div className="candidate-submitted-header-actions">
           <ThemeToggle variant="header" />
-          <span>Submitted</span>
+          <span className="hiring-pill hiring-pill-success candidate-submitted-pill">
+            <IconCheck size={14} stroke={2.4} aria-hidden="true" />
+            Submitted
+          </span>
         </div>
       </header>
       <main

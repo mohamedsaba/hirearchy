@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import './candidate-ai-panel.css';
 
+import { AiReasoningDisclosure, AiStreamingBubble } from '../../_components/ai';
 import type { SessionStatus } from '../../../src/sessions/session';
 import type { CandidateAiCapability } from '../../../src/sessions/candidate-session-view';
 import { MAXIMUM_AI_CONTEXT_ATTACHMENTS } from '../../../src/ai/ai-interaction';
@@ -268,16 +269,16 @@ export const CandidateAiPanel = ({
               </section>
 
               {entry.status === 'submitting' ? (
-                <section className="weft-ai-message weft-ai-message--weft">
-                  <h3 className="ai-section-subtitle weft-ai-role">Weft</h3>
-                  <p
-                    className="ai-submitting-status weft-ai-pending"
-                    role="status"
-                  >
-                    <span className="weft-ai-pending-mark" aria-hidden="true" />
-                    Weft is preparing a response for this request.
-                  </p>
-                </section>
+                <AiStreamingBubble
+                  className="weft-ai-message weft-ai-message--weft weft-ai-streaming-bubble"
+                  roleLabel="Weft"
+                  status="thinking"
+                  thinkingProps={{
+                    headline: 'Weft is preparing a response for this request.',
+                    showTimer: false,
+                  }}
+                  renderContent={() => null}
+                />
               ) : null}
 
               {entry.status === 'completed' ? (
@@ -403,23 +404,31 @@ export const CandidateAiPanel = ({
             </summary>
 
             <div className="weft-ai-context-body">
-              <ul className="weft-ai-context-facts">
-                <li>
-                  {sendsSavedWorkspaceContext
-                    ? 'Saved file contents and the published task brief are sent with the paths above. Unsaved editor edits are not included.'
-                    : 'Only the file paths above are sent. Unsaved editor edits are not included.'}
-                </li>
-                <li>
-                  {sendsSavedWorkspaceContext
-                    ? 'Recent recorded test checks are already included: the recorded command, its exit code, and output previews captured earlier in this assessment.'
-                    : 'Recorded test checks are not included in this configuration.'}
-                </li>
-                <li>
-                  Weft provides text suggestions. You edit files and run
-                  commands. Requests and responses are recorded. Assessment
-                  metadata is included.
-                </li>
-              </ul>
+              <AiReasoningDisclosure
+                title="Context included in this request"
+                badge="Recorded"
+                status="settled"
+                defaultOpen
+                items={[
+                  {
+                    label: sendsSavedWorkspaceContext
+                      ? 'Saved file contents and the published task brief are sent with the paths above. Unsaved editor edits are not included.'
+                      : 'Only the file paths above are sent. Unsaved editor edits are not included.',
+                    status: 'observed',
+                  },
+                  {
+                    label: sendsSavedWorkspaceContext
+                      ? 'Recent recorded test checks are already included: the recorded command, its exit code, and output previews captured earlier in this assessment.'
+                      : 'Recorded test checks are not included in this configuration.',
+                    status: sendsSavedWorkspaceContext ? 'verified' : 'partial',
+                  },
+                  {
+                    label:
+                      'Weft provides text suggestions. You edit files and run commands. Requests and responses are recorded. Assessment metadata is included.',
+                    status: 'observed',
+                  },
+                ]}
+              />
             </div>
           </details>
 

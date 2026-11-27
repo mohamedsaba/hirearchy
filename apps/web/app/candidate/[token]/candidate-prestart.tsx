@@ -1,8 +1,154 @@
 'use client';
 
+import {
+  IconActivity,
+  IconChecklist,
+  IconClock,
+  IconDeviceFloppy,
+  IconFlagCheck,
+  IconMessageCode,
+  IconShieldCheck,
+  IconTool,
+} from '@tabler/icons-react';
+
 import type { CandidateEphemeralUiMode } from '../../../src/candidate/candidate-experience-state';
 import type { CandidateSessionView } from '../../../src/sessions/candidate-session-view';
 import type { TaskRubricSnapshot } from '../../../src/assessments/task-rubric';
+
+function PrestartStepTrail({
+  step,
+}: Readonly<{ step: 'overview' | 'orientation' | 'start' }>) {
+  const steps = [
+    { id: 'overview', num: '01', label: 'Overview' },
+    { id: 'orientation', num: '02', label: 'Orientation' },
+    { id: 'start', num: '03', label: 'Start' },
+  ] as const;
+  const activeIdx = steps.findIndex((item) => item.id === step);
+
+  return (
+    <ol
+      aria-label="Pre-start progress"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '0.45rem',
+        listStyle: 'none',
+        margin: '0 0 0.85rem',
+        padding: 0,
+      }}
+    >
+      {steps.map((item, idx) => {
+        const isCurrent = item.id === step;
+        const isDone = idx < activeIdx;
+        return (
+          <li
+            key={item.id}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.2rem 0.6rem',
+              borderRadius: '999px',
+              border: `1px solid ${
+                isCurrent
+                  ? 'var(--software-mint-border, rgba(20, 83, 45, 0.28))'
+                  : 'var(--candidate-line, var(--software-border))'
+              }`,
+              background: isCurrent
+                ? 'var(--software-mint-tint, rgba(142, 227, 184, 0.2))'
+                : 'var(--software-surface-subtle, #efe9e0)',
+              color: isCurrent
+                ? 'var(--candidate-ink, var(--software-ink))'
+                : 'var(--candidate-muted, var(--software-muted))',
+              fontSize: '0.74rem',
+              fontWeight: isCurrent ? 650 : 500,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'var(--software-mono)',
+                fontSize: '0.68rem',
+                opacity: isDone ? 0.85 : 1,
+              }}
+            >
+              {isDone ? '✓' : item.num}
+            </span>
+            <span>{item.label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function OrientationSectionHead({
+  step,
+  icon,
+  id,
+  title,
+}: Readonly<{
+  step: string;
+  icon: React.ReactNode;
+  id: string;
+  title: string;
+}>) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '0.5rem',
+        marginBottom: '0.45rem',
+      }}
+    >
+      <div
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.45rem',
+          minWidth: 0,
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '1.5rem',
+            height: '1.5rem',
+            borderRadius: '6px',
+            background: 'var(--software-surface-2, #ebe5f2)',
+            color: 'var(--candidate-ink, var(--software-ink))',
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </span>
+        <h2 id={id} className="section-title" style={{ margin: 0 }}>
+          {title}
+        </h2>
+      </div>
+      <span
+        aria-hidden="true"
+        style={{
+          fontFamily: 'var(--software-mono)',
+          fontSize: '0.68rem',
+          fontWeight: 650,
+          fontVariantNumeric: 'tabular-nums',
+          color: 'var(--candidate-muted, var(--software-muted))',
+          padding: '0.1rem 0.4rem',
+          borderRadius: '999px',
+          border: '1px solid var(--candidate-line, var(--software-border))',
+        }}
+      >
+        {step}
+      </span>
+    </div>
+  );
+}
 
 type CandidatePrestartProps = Readonly<{
   session: CandidateSessionView;
@@ -160,6 +306,7 @@ export const CandidatePrestart = ({
         </header>
 
         <div className="prestart-card">
+          <PrestartStepTrail step="start" />
           <p className="eyebrow">Step 2 of 2 · Confirmation</p>
           <h1 id="prestart-title">Ready to Begin Assessment</h1>
           <p className="summary">
@@ -218,6 +365,7 @@ export const CandidatePrestart = ({
         </header>
 
         <div className="prestart-card">
+          <PrestartStepTrail step="orientation" />
           <p className="eyebrow">Step 1 of 2 · Environment Orientation</p>
           <h1 id="prestart-title">Assessment Guidelines & Environment</h1>
           <p className="summary">
@@ -229,9 +377,12 @@ export const CandidatePrestart = ({
               className="orientation-section"
               aria-labelledby="heading-duration"
             >
-              <h2 id="heading-duration" className="section-title">
-                Assessment Duration
-              </h2>
+              <OrientationSectionHead
+                step="01"
+                icon={<IconClock size={14} stroke={2} />}
+                id="heading-duration"
+                title="Assessment Duration"
+              />
               <p className="section-body">
                 You will have <strong>{durationText}</strong> once the
                 assessment begins. Your timer will start only when your
@@ -243,9 +394,12 @@ export const CandidatePrestart = ({
               className="orientation-section"
               aria-labelledby="heading-tools"
             >
-              <h2 id="heading-tools" className="section-title">
-                Available Tools
-              </h2>
+              <OrientationSectionHead
+                step="02"
+                icon={<IconTool size={14} stroke={2} />}
+                id="heading-tools"
+                title="Available Tools"
+              />
               <ul className="orientation-list">
                 <li>
                   <strong>File Editor:</strong> Inspect and edit source code in
@@ -274,9 +428,12 @@ export const CandidatePrestart = ({
               className="orientation-section"
               aria-labelledby="heading-ai"
             >
-              <h2 id="heading-ai" className="section-title">
-                AI Policy
-              </h2>
+              <OrientationSectionHead
+                step="03"
+                icon={<IconMessageCode size={14} stroke={2} />}
+                id="heading-ai"
+                title="AI Policy"
+              />
               <p className="section-body">
                 The integrated AI assistant is{' '}
                 {aiEnabled ? 'available' : 'not available'} for this assessment.
@@ -290,9 +447,12 @@ export const CandidatePrestart = ({
               className="orientation-section"
               aria-labelledby="heading-recording"
             >
-              <h2 id="heading-recording" className="section-title">
-                Observable Activity
-              </h2>
+              <OrientationSectionHead
+                step="04"
+                icon={<IconActivity size={14} stroke={2} />}
+                id="heading-recording"
+                title="Observable Activity"
+              />
               <p className="section-body">
                 Work performed inside the assessment environment is recorded as
                 part of the technical assessment.
@@ -304,9 +464,12 @@ export const CandidatePrestart = ({
                 className="orientation-section candidate-task-rubric"
                 aria-labelledby="candidate-rubric-title"
               >
-                <h2 id="candidate-rubric-title" className="section-title">
-                  Task criteria
-                </h2>
+                <OrientationSectionHead
+                  step="05"
+                  icon={<IconChecklist size={14} stroke={2} />}
+                  id="candidate-rubric-title"
+                  title="Task criteria"
+                />
                 <p className="section-body">
                   After submission, recorded evidence about your work is
                   analyzed against these task-specific criteria. They describe
@@ -333,9 +496,12 @@ export const CandidatePrestart = ({
                 className="orientation-section"
                 aria-labelledby="candidate-rubric-title"
               >
-                <h2 id="candidate-rubric-title" className="section-title">
-                  Task criteria
-                </h2>
+                <OrientationSectionHead
+                  step="05"
+                  icon={<IconChecklist size={14} stroke={2} />}
+                  id="candidate-rubric-title"
+                  title="Task criteria"
+                />
                 <p className="section-body">
                   {hasTaskRubricProjection
                     ? 'This session has no saved task rubric, so a scored task report will not be available.'
@@ -348,9 +514,12 @@ export const CandidatePrestart = ({
               className="orientation-section"
               aria-labelledby="heading-persistence"
             >
-              <h2 id="heading-persistence" className="section-title">
-                Workspace Persistence
-              </h2>
+              <OrientationSectionHead
+                step="06"
+                icon={<IconDeviceFloppy size={14} stroke={2} />}
+                id="heading-persistence"
+                title="Workspace Persistence"
+              />
               <p className="section-body">
                 File modifications persist in the workspace when saved. Save
                 failures are reported immediately.
@@ -361,9 +530,12 @@ export const CandidatePrestart = ({
               className="orientation-section"
               aria-labelledby="heading-submission"
             >
-              <h2 id="heading-submission" className="section-title">
-                Submission & Expiry
-              </h2>
+              <OrientationSectionHead
+                step="07"
+                icon={<IconFlagCheck size={14} stroke={2} />}
+                id="heading-submission"
+                title="Submission & Expiry"
+              />
               <p className="section-body">
                 You can submit your assessment before time ends. You’ll review
                 your submission before final confirmation. If time expires,
@@ -376,9 +548,12 @@ export const CandidatePrestart = ({
               aria-labelledby="heading-respect-promise"
               data-testid="candidate-respect-promise"
             >
-              <h2 id="heading-respect-promise" className="section-title">
-                Candidate Respect Promise
-              </h2>
+              <OrientationSectionHead
+                step="08"
+                icon={<IconShieldCheck size={14} stroke={2} />}
+                id="heading-respect-promise"
+                title="Candidate Respect Promise"
+              />
               <p className="section-body">
                 Zero webcam, microphone, or desktop tracking. Your timer starts
                 only after setup, AI rules are shown upfront, and you retain a
@@ -426,6 +601,7 @@ export const CandidatePrestart = ({
       </header>
 
       <div className="prestart-card">
+        <PrestartStepTrail step="overview" />
         <p className="eyebrow">Technical Evaluation</p>
         <h1 id="prestart-title">
           {session.scenario?.title || 'Engineering Assessment'}
