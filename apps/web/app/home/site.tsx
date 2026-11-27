@@ -136,6 +136,12 @@ export function Header() {
         <Link href="/products" prefetch={false}>
           Products
         </Link>
+        <Link href="/demo" prefetch={false}>
+          Live Demo
+        </Link>
+        <Link href="/trust" prefetch={false}>
+          Trust
+        </Link>
         <Link href="/thinking" prefetch={false}>
           Our thinking
         </Link>
@@ -164,6 +170,12 @@ export function Footer() {
       <nav aria-label="Footer navigation">
         <Link href="/products" prefetch={false}>
           Products
+        </Link>
+        <Link href="/demo" prefetch={false}>
+          Live Demo
+        </Link>
+        <Link href="/trust" prefetch={false}>
+          Trust
         </Link>
         <Link href="/thinking" prefetch={false}>
           Our thinking

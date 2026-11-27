@@ -14,7 +14,14 @@ export function Hero() {
           <br />
           One clear principle.
         </h1>
-        <p>A family of tools for seeing work clearly.</p>
+        <p>
+          See real engineering work in context—with zero algorithmic puzzles,
+          zero webcam surveillance, and human-owned hiring decisions.
+        </p>
+        <Link className="ct-hero-trust-link" href="/trust" prefetch={false}>
+          Read our Candidate Respect Standard
+          <Arrow />
+        </Link>
       </div>
       <svg
         className="ct-paths"
@@ -52,7 +59,7 @@ export function Hero() {
         <span>
           <strong>Hirearchy Software</strong>
           <ProductCaption action="Explore Software">
-            Internal demo
+            Interactive workbench
           </ProductCaption>
         </span>
         <Arrow />

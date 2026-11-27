@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { isFounderUatEnabled } from '../src/runtime/founder-uat';
+import { MarketingProofStrip } from './_components/marketing-proof-strip';
 import { Hero } from './home/hero';
 import {
   Site,
@@ -15,14 +16,18 @@ import {
 export const metadata = {
   title: 'Hirearchy — Different work. One clear principle.',
   description:
-    'A family of tools for seeing work clearly. Real tasks, visible work and human review. Start with Hirearchy Software.',
+    'See real engineering work in context—with zero algorithmic puzzles, zero webcam surveillance, and human-owned hiring decisions. Start with Hirearchy Software.',
 };
 export const dynamic = 'force-dynamic';
 const processSteps = [
   ['task', 'A real task', 'A practical assignment relevant to the role.'],
-  ['work', 'Work in context', 'Candidates show their process and output.'],
+  [
+    'work',
+    'Work in context',
+    'Candidates work in a real repo—no trick puzzles or spyware.',
+  ],
   ['record', 'A visible record', 'Work comes together in a clear timeline.'],
-  ['person', 'Human review', 'People read, assess and decide.'],
+  ['person', 'Human review', 'Engineers inspect diffs and decide.'],
 ];
 const softwareSteps = [
   ['task', 'The task', 'A real, role-relevant assignment.'],
@@ -197,49 +202,62 @@ export default function HomePage() {
         className="ct-software ct-reveal"
         aria-labelledby="software-heading"
       >
-        <svg className="ct-paths" viewBox="0 0 751 341" aria-hidden="true">
-          <Path
-            d="M650 0H582Q539 0 539 43V91Q539 129 502 129H400"
-            color="deep-mint"
-          />
-        </svg>
-        <div className="ct-software-heading ct-enter">
-          <Kicker>The first step</Kicker>
-          <h2 id="software-heading">Hirearchy Software</h2>
-          <p>Real tasks. Visible work. A clearer conversation.</p>
+        <div className="ct-software-stage">
+          <svg className="ct-paths" viewBox="0 0 751 341" aria-hidden="true">
+            <Path
+              d="M650 0H582Q539 0 539 43V91Q539 129 502 129H400"
+              color="deep-mint"
+            />
+          </svg>
+          <div className="ct-software-heading ct-enter">
+            <Kicker>The first step</Kicker>
+            <h2 id="software-heading">Hirearchy Software</h2>
+            <p>Real tasks. Visible work. A clearer conversation.</p>
+          </div>
+          <ol className="ct-steps ct-software-steps">
+            {softwareSteps.map(([icon, title, copy]) => (
+              <li className="ct-enter" key={title}>
+                <span className="ct-icon">
+                  <Icon type={icon} />
+                </span>
+                <h3>{title}</h3>
+                <p>{copy}</p>
+              </li>
+            ))}
+          </ol>
+          <div
+            className="ct-software-button"
+            style={{
+              display: 'flex',
+              gap: '16px',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}
+          >
+            <Button href="/early-access">Request early access</Button>
+            <Button href="/products/software">Explore Software</Button>
+            <Link className="ct-inline-link" href="/trust" prefetch={false}>
+              Candidate Respect &amp; Security <Arrow />
+            </Link>
+          </div>
+          <aside className="ct-software-aside">
+            <Kicker>
+              Same principle.
+              <br />
+              More opportunity.
+            </Kicker>
+            <p>
+              A conversation
+              <br />
+              grounded in the work
+              <br />
+              people actually do.
+            </p>
+          </aside>
         </div>
-        <ol className="ct-steps ct-software-steps">
-          {softwareSteps.map(([icon, title, copy]) => (
-            <li className="ct-enter" key={title}>
-              <span className="ct-icon">
-                <Icon type={icon} />
-              </span>
-              <h3>{title}</h3>
-              <p>{copy}</p>
-            </li>
-          ))}
-        </ol>
-        <div
-          className="ct-software-button"
-          style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}
-        >
-          <Button href="/early-access">Request early access</Button>
-          <Button href="/products/software">Explore Software</Button>
+        <div className="ct-software-proof-band">
+          <MarketingProofStrip variant="compact" surface="mint" />
         </div>
-        <aside className="ct-software-aside">
-          <Kicker>
-            Same principle.
-            <br />
-            More opportunity.
-          </Kicker>
-          <p>
-            A conversation
-            <br />
-            grounded in the work
-            <br />
-            people actually do.
-          </p>
-        </aside>
       </section>
     </Site>
   );

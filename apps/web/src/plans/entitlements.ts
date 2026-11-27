@@ -7,7 +7,8 @@ export type PlanFeatureKey =
   | 'candidateWorkspaceAi'
   | 'savedProblemLibrary'
   | 'multiStageHandoff'
-  | 'secondOpinionReview';
+  | 'secondOpinionReview'
+  | 'webhooksAndSlack';
 
 export interface PlanDefinition {
   readonly id: PlanTier;
@@ -47,6 +48,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: false,
       multiStageHandoff: false,
       secondOpinionReview: false,
+      webhooksAndSlack: false,
     },
   },
   per_candidate: {
@@ -59,9 +61,10 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     priceLabel: 'Pay per candidate slot',
     canIssueAssessments: true,
     highlights: [
-      'One slot per distinct candidate',
-      'Templates, AI authoring, and saved problems',
-      'Candidate AI assistant, peer reviews, and handoffs',
+      'Ideal for focused hiring (<15 candidates/yr)',
+      '1 slot per distinct candidate email (re-assessments reuse slot)',
+      'Includes AI Assessment Builder, Saved Library & Peer Second Opinions',
+      'Outbound Webhooks & Slack notifications included',
     ],
     features: {
       aiCandidateReview: false,
@@ -71,6 +74,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: true,
       multiStageHandoff: true,
       secondOpinionReview: true,
+      webhooksAndSlack: true,
     },
   },
   pro: {
@@ -83,8 +87,9 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     priceLabel: 'Pro Subscription',
     canIssueAssessments: true,
     highlights: [
-      'Unlimited candidate assessments',
-      'Authoring, candidate AI, and team tools from Per Candidate',
+      'Ideal for growing teams running continuous loops',
+      'Unlimited candidate assessments — zero per-invite surprises',
+      'Full repo evidence timeline, diff viewer, peer verdicts & handoffs',
     ],
     features: {
       aiCandidateReview: false,
@@ -94,6 +99,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: true,
       multiStageHandoff: true,
       secondOpinionReview: true,
+      webhooksAndSlack: true,
     },
   },
   ultra: {
@@ -101,14 +107,15 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     name: 'Ultra',
     badgeLabel: 'Ultra',
     tagline:
-      'Everything in Pro, plus AI-assisted review summaries and hiring manager fit reports.',
+      'Everything in Pro, plus advisory AI Candidate Reviews and Managerial Fit Reports.',
     billingModel: 'subscription',
     priceLabel: 'Ultra Subscription',
     canIssueAssessments: true,
     highlights: [
+      'Ideal for engineering leaders & multi-reviewer debriefs',
       'Everything in Pro',
-      'AI-assisted review summaries',
-      'Hiring Manager Fit Report on candidate acceptance',
+      'Advisory AI Candidate Review (timeline Δ deltas + evidence citations)',
+      'Automated Managerial Performance & Fit Report upon acceptance',
     ],
     features: {
       aiCandidateReview: true,
@@ -118,6 +125,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: true,
       multiStageHandoff: true,
       secondOpinionReview: true,
+      webhooksAndSlack: true,
     },
   },
 };
