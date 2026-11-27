@@ -20,6 +20,11 @@
 }
 .problems-page h1 {
   margin: 0;
+  font-family: var(--software-serif);
+  font-weight: 500;
+  font-optical-sizing: auto;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
 }
 .problems-page table {
   width: 100%;
@@ -41,7 +46,7 @@
 }
 .problems-page tbody tr:hover,
 .problems-page tbody tr:focus-within {
-  background: var(--accent-light);
+  background: var(--software-surface-note);
 }
 .problems-page form,
 .problems-page fieldset,
@@ -54,9 +59,11 @@
 }
 .problems-page fieldset {
   min-width: 0;
-  border: 1px solid var(--software-border, #d6dedb);
-  padding: 1rem;
-  border-radius: 0.5rem;
+  border: 1px solid var(--software-border);
+  padding: 1.15rem;
+  border-radius: 0.875rem;
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-card);
 }
 .problems-page legend {
   font-weight: 600;
@@ -83,4 +90,13 @@
 }
 .problem-library-actions {
   margin-block: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .problems-page *,
+  .problems-page *::before,
+  .problems-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

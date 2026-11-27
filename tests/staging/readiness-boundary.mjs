@@ -127,7 +127,7 @@ export async function checkReadinessBoundary({
     'SELECT staging.readiness_probe() AS readiness',
   );
   assert.deepEqual(rows[0].readiness, {
-    migrationVersion: '0020',
+    migrationVersion: '0021',
     markers: {
       candidateLifecycle: true,
       onboarding: true,

@@ -12,15 +12,23 @@ import {
   useState,
 } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import {
+  IconArrowRight,
+  IconCheck,
   IconChevronRight,
+  IconCircleCheck,
   IconClock,
+  IconCode,
+  IconFile,
   IconFileCode,
   IconFolder,
   IconFolderOpen,
+  IconLayoutSidebarRight,
+  IconLoader2,
+  IconMessageCode,
   IconPlayerPlay,
   IconSettings2,
-  IconSparkles,
   IconTerminal2,
   IconX,
 } from '@tabler/icons-react';
@@ -36,8 +44,9 @@ import type {
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { HorizontalTabs } from '../../../_components/horizontal-tabs';
+import { LocalTime } from '../../../_components/local-time';
 import { formatLocalDateTime } from '../../../../src/ui/relative-time';
-import { BrandMark } from '../../../_components/brand-mark';
 import { CommonThreadLoader } from '../../../_components/common-thread-loader';
 import {
   CommonThreadToast,
@@ -501,6 +510,7 @@ export function R26CandidateClient({
   sessionId,
   accountGate,
 }: CandidateClientProps) {
+  const router = useRouter();
   const activeTheme = useHirearchyTheme();
   const isHiringExperience = Boolean(accountGate);
   const isAccountGateBlocked = Boolean(
@@ -536,8 +546,17 @@ export function R26CandidateClient({
     useState(!isHiringExperience);
   const [showAiDrawer, setShowAiDrawer] = useState(!isHiringExperience);
   const [mobileTab, setMobileTab] = useState<'code' | 'task' | 'tests' | 'ai'>(
-    'code',
+    'task',
   );
+  const [isStorageHydrated, setIsStorageHydrated] = useState(false);
+  const [aiView, setAiView] = useState<R212CandidateAiView | null>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [showEditorCriteria, setShowEditorCriteria] = useState(false);
+  const [showTaskPanel, setShowTaskPanel] = useState(true);
+  const taskTriggerRef = useRef<HTMLButtonElement>(null);
+  const taskHeadingRef = useRef<HTMLHeadingElement>(null);
+  const executionTriggerRef = useRef<HTMLButtonElement>(null);
+  const submitTriggerRef = useRef<HTMLButtonElement>(null);
   const assistantTriggerRef = useRef<HTMLButtonElement>(null);
   const mobileAssistantRef = useRef<HTMLButtonElement>(null);
   const editorTabsRef = useRef<HTMLElement>(null);
@@ -553,6 +572,14 @@ export function R26CandidateClient({
     const mobileTrigger = mobileAssistantRef.current;
     if (mobileTrigger?.getClientRects().length) mobileTrigger.focus();
     else assistantTriggerRef.current?.focus();
+  };
+  const closeTask = () => {
+    setShowTaskPanel(false);
+    taskTriggerRef.current?.focus();
+  };
+  const closeTests = () => {
+    setShowExecutionDrawer(false);
+    executionTriggerRef.current?.focus();
   };
   const [editorFontSize, setEditorFontSize] = useState<EditorFontSize>(14);
   const [lineWrap, setLineWrap] = useState(true);
@@ -595,20 +622,57 @@ export function R26CandidateClient({
       if (typeof savedWrap === 'boolean') {
         setLineWrap(savedWrap);
       }
-      const savedDrafts = readStoredJson<Record<string, Draft>>(
-        `${draftsStoragePrefix}${sessionId}`,
-        'session',
-      );
+      const savedDrafts =
+        readStoredJson<Record<string, Draft>>(
+          `${draftsStoragePrefix}${sessionId}`,
+          'local',
+        ) ??
+        readStoredJson<Record<string, Draft>>(
+          `${draftsStoragePrefix}${sessionId}`,
+          'session',
+        );
       if (savedDrafts && typeof savedDrafts === 'object') {
         setDraftsByPath(savedDrafts);
       }
-      const savedCriteria = readStoredJson<Record<number, boolean>>(
-        `${criteriaStoragePrefix}${sessionId}`,
-        'session',
-      );
+      const savedCriteria =
+        readStoredJson<Record<number, boolean>>(
+          `${criteriaStoragePrefix}${sessionId}`,
+          'local',
+        ) ??
+        readStoredJson<Record<number, boolean>>(
+          `${criteriaStoragePrefix}${sessionId}`,
+          'session',
+        );
       if (savedCriteria && typeof savedCriteria === 'object') {
         setCheckedCriteria(savedCriteria);
       }
+      const savedWorkspaceUi =
+        readStoredJson<{
+          selectedPath?: string;
+          openTabPaths?: string[];
+          aiPrompt?: string;
+        }>(`hirearchy:r26:workspace-ui:v1:${sessionId}`, 'local') ??
+        readStoredJson<{
+          selectedPath?: string;
+          openTabPaths?: string[];
+          aiPrompt?: string;
+        }>(`hirearchy:r26:workspace-ui:v1:${sessionId}`, 'session');
+      if (savedWorkspaceUi && typeof savedWorkspaceUi === 'object') {
+        if (typeof savedWorkspaceUi.selectedPath === 'string') {
+          setSelectedPath(savedWorkspaceUi.selectedPath);
+        }
+        if (Array.isArray(savedWorkspaceUi.openTabPaths)) {
+          setOpenTabPaths(
+            savedWorkspaceUi.openTabPaths.filter(
+              (item): item is string => typeof item === 'string',
+            ),
+          );
+        }
+        if (typeof savedWorkspaceUi.aiPrompt === 'string') {
+          setAiPrompt(savedWorkspaceUi.aiPrompt);
+        }
+      }
+      setIsStorageHydrated(true);
     });
     return () => {
       active = false;
@@ -616,43 +680,61 @@ export function R26CandidateClient({
   }, [sessionId]);
 
   useEffect(() => {
+    if (!isStorageHydrated) return;
     writeStoredJson(fontSizePrefKey, editorFontSize, 'local');
-  }, [editorFontSize]);
+  }, [editorFontSize, isStorageHydrated]);
 
   useEffect(() => {
+    if (!isStorageHydrated) return;
     writeStoredJson(lineWrapPrefKey, lineWrap, 'local');
-  }, [lineWrap]);
+  }, [lineWrap, isStorageHydrated]);
 
   useEffect(() => {
+    if (!isStorageHydrated) return;
+    writeStoredJson(
+      `${draftsStoragePrefix}${sessionId}`,
+      draftsByPath,
+      'local',
+    );
     writeStoredJson(
       `${draftsStoragePrefix}${sessionId}`,
       draftsByPath,
       'session',
     );
-  }, [draftsByPath, sessionId]);
+  }, [draftsByPath, sessionId, isStorageHydrated]);
 
   useEffect(() => {
+    if (!isStorageHydrated) return;
+    writeStoredJson(
+      `${criteriaStoragePrefix}${sessionId}`,
+      checkedCriteria,
+      'local',
+    );
     writeStoredJson(
       `${criteriaStoragePrefix}${sessionId}`,
       checkedCriteria,
       'session',
     );
-  }, [checkedCriteria, sessionId]);
+  }, [checkedCriteria, sessionId, isStorageHydrated]);
 
   useEffect(() => {
-    if (!submitConfirmOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setSubmitConfirmOpen(false);
-      }
+    if (!isStorageHydrated) return;
+    const payload = {
+      selectedPath: selectedPathState,
+      openTabPaths,
+      aiPrompt,
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [submitConfirmOpen]);
-
-  const [aiView, setAiView] = useState<R212CandidateAiView | null>(null);
-  const [aiPrompt, setAiPrompt] = useState('');
+    writeStoredJson(
+      `hirearchy:r26:workspace-ui:v1:${sessionId}`,
+      payload,
+      'local',
+    );
+    writeStoredJson(
+      `hirearchy:r26:workspace-ui:v1:${sessionId}`,
+      payload,
+      'session',
+    );
+  }, [aiPrompt, isStorageHydrated, openTabPaths, selectedPathState, sessionId]);
   const [aiSubmitting, setAiSubmitting] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [lastAiPrompt, setLastAiPrompt] = useState<string | null>(null);
@@ -1141,6 +1223,53 @@ export function R26CandidateClient({
   const scenarioTitle = scenarioText(scenario, 'title') || 'Assessment task';
   const brief = scenarioText(scenario, 'brief');
   const criteria = scenarioList(scenario, 'acceptanceCriteria');
+  const checkedCriteriaCount = criteria.filter(
+    (_, index) => checkedCriteria[index],
+  ).length;
+  const taskChecklist =
+    criteria.length > 0 ? (
+      <details className="r26-criteria r26-task-goal-card" open>
+        <summary>
+          <IconChevronRight size={16} aria-hidden="true" />
+          <span>Acceptance criteria</span>
+          <span className="r26-criteria-progress">
+            {checkedCriteriaCount} of {criteria.length} checked
+          </span>
+        </summary>
+        <ul className="r26-criteria-checklist">
+          {criteria.map((criterion, index) => {
+            const isChecked = Boolean(checkedCriteria[index]);
+            return (
+              <li key={`${index}-${criterion}`}>
+                <label
+                  className={`r26-criteria-check-label ${isChecked ? 'is-checked' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(event) =>
+                      setCheckedCriteria((current) => ({
+                        ...current,
+                        [index]: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>{criterion}</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
+    ) : null;
+  const briefWorkspaceContext = useMemo(
+    () => ({
+      filePaths: view?.files.map((file) => file.path),
+      testsRunnable: view?.capabilities.execution,
+      integratedAiEnabled: view?.capabilities.ai,
+    }),
+    [view?.files, view?.capabilities.execution, view?.capabilities.ai],
+  );
   const serverAdjustedNow = clockNow + serverOffsetMs;
   const invitationExpiryMs = timestampMilliseconds(view?.invitationExpiresAt);
   const sessionDeadlineMs = timestampMilliseconds(view?.deadline);
@@ -1162,6 +1291,14 @@ export function R26CandidateClient({
     invitationExpiryMs !== null &&
     (sessionDeadlineMs === null || invitationExpiryMs <= sessionDeadlineMs);
   const submitted = view?.status === 'SUBMITTED';
+  const activeWorkspace = isHiringExperience && view?.status === 'ACTIVE';
+  const prestart = isHiringExperience && view?.status === 'CREATED';
+  const focusTaskOnStart = useRef(false);
+  useEffect(() => {
+    if (!activeWorkspace || !focusTaskOnStart.current) return;
+    focusTaskOnStart.current = false;
+    taskHeadingRef.current?.focus();
+  }, [activeWorkspace]);
   const canEdit =
     view?.status === 'ACTIVE' &&
     remainingMs !== null &&
@@ -1219,12 +1356,11 @@ export function R26CandidateClient({
           }
         : {};
       const next = await callApi('POST', { action: 'activate', input });
+      focusTaskOnStart.current = isHiringExperience && next.status === 'ACTIVE';
       applyView(next);
-      setMessage(
-        isHiringExperience
-          ? 'Assessment started. Your timer is running.'
-          : 'Assessment activated. Your time has started.',
-      );
+      setMobileTab('task');
+      if (!isHiringExperience)
+        setMessage('Assessment activated. Your time has started.');
       void fetchAiView(next.capabilities.ai);
       void fetchExecutionView(next.capabilities.execution);
     } catch (error) {
@@ -1260,12 +1396,17 @@ export function R26CandidateClient({
               baseVersion: saved.version,
               baseDigest: saved.digest,
             };
+            const rebaseDraft = (localDraft: Draft | null | undefined) =>
+              localDraft?.path === intent.path &&
+              localDraft.content !== intent.content
+                ? { ...nextSavedDraft, content: localDraft.content }
+                : nextSavedDraft;
             setDraft((current) =>
-              current?.path === intent.path ? nextSavedDraft : current,
+              current?.path === intent.path ? rebaseDraft(current) : current,
             );
             setDraftsByPath((current) => ({
               ...current,
-              [intent.path]: nextSavedDraft,
+              [intent.path]: rebaseDraft(current[intent.path]),
             }));
           } else {
             setConflictLatest(saved);
@@ -1282,7 +1423,7 @@ export function R26CandidateClient({
         setPendingSave(null);
         if (saved?.content === intent.content) {
           setConflictLatest(null);
-          if (!automatic) {
+          if (!automatic && !isHiringExperience) {
             setMessage('Work saved.');
           }
           return true;
@@ -1329,7 +1470,7 @@ export function R26CandidateClient({
         setBusy(false);
       }
     },
-    [applyView, callApi],
+    [applyView, callApi, isHiringExperience],
   );
 
   const save = useCallback(
@@ -1597,10 +1738,28 @@ export function R26CandidateClient({
       setPendingSubmit(null);
       setSubmitConfirmOpen(false);
 
+      if (
+        activeWorkspace &&
+        next.status === 'SUBMITTED' &&
+        next.closureReason !== 'timeout' &&
+        !Object.values(draftsByPath).some(
+          (localDraft) => localDraft.content !== localDraft.baseContent,
+        )
+      ) {
+        router.replace(
+          `/candidate/submissions/${encodeURIComponent(sessionId)}`,
+        );
+        return;
+      }
+
       setMessage('Assessment submitted. Your saved work is now read-only.');
       void fetchAiView(next.capabilities.ai);
       void fetchExecutionView(next.capabilities.execution);
     } catch (error) {
+      if (activeWorkspace) {
+        setSubmitConfirmOpen(false);
+        requestAnimationFrame(() => submitTriggerRef.current?.focus());
+      }
       const failure = error as ApiFailure;
       if (isCandidateAccessUnavailable(failure)) {
         setPendingSubmit(null);
@@ -1625,8 +1784,24 @@ export function R26CandidateClient({
   };
 
   const showEditor = Boolean(
-    view && (view.status !== 'CREATED' || view.files.length > 0),
+    view && !prestart && (view.status !== 'CREATED' || view.files.length > 0),
   );
+  const saveStatus =
+    accessUnavailable || sessionTimeExpired || invitationExpired
+      ? isDirty || pendingSave
+        ? 'Access ended · Draft may be unsaved'
+        : 'Access ended · Saved work is read-only'
+      : pendingSubmit
+        ? busy
+          ? 'Confirming submission…'
+          : 'Submission unconfirmed'
+        : saveConflict
+          ? 'Save conflict · Draft preserved'
+          : pendingSave && !busy
+            ? 'Save unconfirmed'
+            : pendingSave || isDirty
+              ? 'Saving…'
+              : 'All changes saved';
   const fileTree = useMemo(
     () => buildFileTree(view?.files ?? []),
     [view?.files],
@@ -1741,7 +1916,9 @@ export function R26CandidateClient({
     remainingMs !== null && totalWindowMs && totalWindowMs > 0
       ? Math.max(0, Math.min(100, (remainingMs / totalWindowMs) * 100))
       : null;
-  const timerLow = remainingPercent !== null && remainingPercent <= 20;
+  const timerLow = isHiringExperience
+    ? remainingMs !== null && remainingMs <= 5 * 60_000
+    : remainingPercent !== null && remainingPercent <= 20;
 
   useEffect(() => {
     if (view?.status !== 'ACTIVE' || remainingMs === null || remainingMs <= 0) {
@@ -1938,9 +2115,9 @@ export function R26CandidateClient({
       <div className="hiring-gate-shell software-product">
         <div className="hiring-gate-card">
           <div className="hiring-gate-topbar">
-            <span className="software-brand-mark">
-              <BrandMark size={20} />
-              <span className="hiring-eyebrow">Hirearchy Software</span>
+            <span className="software-document-wordmark">
+              <span>Hirearchy</span>
+              <span className="software-document-product">Software</span>
             </span>
             <div className="software-header-controls">
               <ThemeToggle variant="pill" />
@@ -2038,20 +2215,20 @@ export function R26CandidateClient({
   return (
     <main
       className="r26-candidate software-product"
-      data-active-workspace={
-        isHiringExperience && view?.status === 'ACTIVE' ? 'true' : undefined
-      }
+      data-active-workspace={activeWorkspace || undefined}
+      data-candidate-loading={loading || undefined}
     >
       <header className="r26-header">
         <div className="r26-brand">
-          <BrandMark size={22} />
           <strong>Hirearchy</strong>
           <span className="r26-product-tab">Software</span>
-          <span className="r26-workspace-label">
-            {view && view.status !== 'CREATED'
-              ? scenarioTitle
-              : 'Candidate workspace'}
-          </span>
+          {!prestart ? (
+            <span className="r26-workspace-label">
+              {view && view.status !== 'CREATED'
+                ? scenarioTitle
+                : 'Candidate workspace'}
+            </span>
+          ) : null}
         </div>
         <div className="r26-header-status">
           <ThemeToggle variant="header" />
@@ -2079,9 +2256,32 @@ export function R26CandidateClient({
               ) : null}
             </div>
           ) : null}
+          {activeWorkspace ? (
+            <button
+              type="button"
+              ref={taskTriggerRef}
+              className={`r26-header-tool ${showTaskPanel && !showAiDrawer ? 'is-active' : ''}`}
+              aria-expanded={showTaskPanel && !showAiDrawer}
+              aria-controls="candidate-task-brief"
+              onClick={() => {
+                if (showAiDrawer) {
+                  setAssistantOpen(false);
+                  setShowTaskPanel(true);
+                } else setShowTaskPanel((open) => !open);
+              }}
+            >
+              <IconLayoutSidebarRight
+                size={15}
+                stroke={1.9}
+                aria-hidden="true"
+              />
+              <span>Task</span>
+            </button>
+          ) : null}
           {view && view.status !== 'CREATED' && view.capabilities.execution ? (
             <button
               type="button"
+              ref={executionTriggerRef}
               className={`r26-header-tool ${showExecutionDrawer ? 'is-active' : ''}`}
               aria-expanded={showExecutionDrawer}
               aria-controls="candidate-execution-panel"
@@ -2100,11 +2300,12 @@ export function R26CandidateClient({
               aria-controls="candidate-assistant-panel"
               onClick={() => setAssistantOpen(!showAiDrawer)}
             >
-              <IconSparkles size={15} stroke={1.9} aria-hidden="true" />
+              <IconMessageCode size={15} stroke={1.9} aria-hidden="true" />
               <span>Assistant</span>
             </button>
           ) : null}
           {view &&
+          !prestart &&
           (view.status !== 'ACTIVE' ||
             remainingMs === null ||
             accessUnavailable ||
@@ -2128,7 +2329,12 @@ export function R26CandidateClient({
           ) : null}
           {showEditor && (canEdit || pendingSubmit) ? (
             <button
-              className="r26-button r26-button-primary r26-header-submit"
+              ref={submitTriggerRef}
+              className={`r26-button ${
+                isHiringExperience && !pendingSubmit
+                  ? 'r26-button-secondary r26-submit-quiet'
+                  : 'r26-button-primary'
+              } r26-header-submit`}
               disabled={
                 busy ||
                 (!pendingSubmit &&
@@ -2154,13 +2360,22 @@ export function R26CandidateClient({
               }}
               type="button"
             >
-              {busy && pendingSubmit
-                ? 'Submitting…'
-                : pendingSubmit
-                  ? 'Retry submission'
-                  : isHiringExperience
-                    ? 'Submit'
-                    : 'Submit assessment'}
+              {busy && pendingSubmit ? (
+                <>
+                  <IconLoader2
+                    className="r26-action-spinner"
+                    size={16}
+                    aria-hidden="true"
+                  />
+                  Submitting…
+                </>
+              ) : pendingSubmit ? (
+                'Retry submission'
+              ) : isHiringExperience ? (
+                'Submit'
+              ) : (
+                'Submit assessment'
+              )}
             </button>
           ) : null}
         </div>
@@ -2210,12 +2425,65 @@ export function R26CandidateClient({
         </nav>
       ) : null}
 
+      {isHiringExperience && view && submitted ? (
+        <section
+          className="r26-submission-receipt-top"
+          aria-label="Submission confirmation"
+          role="status"
+        >
+          <div className="r26-submission-receipt-copy">
+            <span className="hiring-pill hiring-pill-success">Submitted</span>
+            <h2>
+              {view.closureReason === 'timeout'
+                ? 'Closed when time ended'
+                : 'Assessment submitted'}
+            </h2>
+            <p>
+              {view.submittedAt ? (
+                <>
+                  Submitted{' '}
+                  <time dateTime={view.submittedAt}>
+                    {formatLocalDateTime(view.submittedAt)}
+                  </time>
+                  .{' '}
+                </>
+              ) : null}
+              Captured {view.files.length} saved workspace file
+              {view.files.length === 1 ? '' : 's'}
+              {view.capabilities.execution
+                ? executionView?.operations.length
+                  ? ` and ${executionView.operations.length} recorded test run${executionView.operations.length === 1 ? '' : 's'}`
+                  : ' and execution records'
+                : ' (test runner disabled for this assessment)'}
+              {view.capabilities.ai ? ' and AI conversation records' : ''}. Your
+              code below is now read-only.
+            </p>
+            {isHiringExperience ? (
+              <p>
+                Your hiring team can now review your submission. Any feedback
+                they share will appear in My assessments.
+              </p>
+            ) : null}
+          </div>
+          <div className="r26-submission-receipt-actions">
+            <a
+              className="r26-button r26-button-primary"
+              href={`/candidate/submissions/${encodeURIComponent(sessionId)}`}
+            >
+              View submitted work
+            </a>
+            <a className="r26-button r26-button-secondary" href="/candidate">
+              Return to My assessments
+            </a>
+          </div>
+        </section>
+      ) : null}
+
       <div
         className="r26-workspace"
         data-session-state={view?.status.toLowerCase() ?? 'loading'}
-        data-prestart-stage={
-          isHiringExperience && view?.status === 'CREATED' ? 'true' : 'false'
-        }
+        data-prestart-stage={prestart}
+        data-task-open={showTaskPanel}
         data-ai-enabled={
           view?.capabilities.ai === true &&
           showAiDrawer &&
@@ -2225,11 +2493,34 @@ export function R26CandidateClient({
         }
         data-mobile-tab={mobileTab}
       >
+        {activeWorkspace ? (
+          <aside className="r26-desktop-files" aria-label="Workspace files">
+            <h2>Files</h2>
+            {view.files.length ? (
+              <ul className="r26-tree-list r26-tree-root">
+                {renderTreeNodes(fileTree)}
+              </ul>
+            ) : (
+              <p>No workspace files are available.</p>
+            )}
+          </aside>
+        ) : null}
         <aside
           id="candidate-task-brief"
           className="r26-task-panel"
           aria-label="Assessment task"
           tabIndex={0}
+          onKeyDown={(event) => {
+            if (
+              activeWorkspace &&
+              event.key === 'Escape' &&
+              !event.defaultPrevented &&
+              taskTriggerRef.current?.getClientRects().length
+            ) {
+              event.preventDefault();
+              closeTask();
+            }
+          }}
         >
           {loading ? (
             <div style={{ padding: '1rem 0.25rem' }}>
@@ -2279,30 +2570,15 @@ export function R26CandidateClient({
                   </p>
                 </div>
               ) : null}
-              {submitted ? (
+              {submitted && !isHiringExperience ? (
                 <div className="r26-notice r26-notice-success" role="status">
-                  <strong>
-                    {isHiringExperience
-                      ? 'Submitted — thank you'
-                      : 'Assessment submitted'}
-                  </strong>
+                  <strong>Assessment submitted</strong>
                   <p>
                     {view.closureReason === 'timeout'
                       ? 'The assessment closed when its time limit ended.'
-                      : isHiringExperience
-                        ? 'Your final files are saved and handed to the hiring team. They review your code diff, test results, and notes directly.'
-                        : 'Your saved work has been submitted and is read-only.'}
+                      : 'Your saved work has been submitted and is read-only.'}
                   </p>
-                  {isHiringExperience ? (
-                    <p>
-                      <a
-                        className="r26-button r26-button-secondary"
-                        href="/candidate"
-                      >
-                        Return to My assessments
-                      </a>
-                    </p>
-                  ) : view.submission ? (
+                  {view.submission ? (
                     <details className="r26-disclosure">
                       <summary>Submission receipt</summary>
                       <p>
@@ -2314,81 +2590,113 @@ export function R26CandidateClient({
                 </div>
               ) : null}
 
-              {isHiringExperience && view.status === 'CREATED' ? (
+              {prestart ? (
                 <section
                   className="r26-prestart-stage"
-                  aria-label="Assessment overview before starting"
+                  aria-labelledby="candidate-readiness-title"
                 >
-                  <div className="r26-prestart-header">
-                    <h1>{scenarioTitle}</h1>
-                    <p className="r26-time-budget">
-                      <IconClock size={17} aria-hidden="true" />
-                      {view.durationSeconds
-                        ? `${Math.round(view.durationSeconds / 60)} minutes`
-                        : 'Untimed'}
-                    </p>
-                  </div>
-                  <p className="r26-readiness-tools">
-                    Code editor with autosave
-                    {view.capabilities.execution
-                      ? ' · Tests'
-                      : ' · Tests unavailable'}
-                    {view.capabilities.ai ? ' · AI assistant' : ''}
-                  </p>
-                  <div
-                    className="r26-readiness-actions"
-                    data-testid={
-                      view.dataNotice ? 'candidate-data-use-notice' : undefined
-                    }
-                  >
-                    {view.dataNotice ? (
-                      <p>
-                        Your saved files
-                        {view.capabilities.execution ? ', test runs' : ''}
-                        {view.capabilities.ai ? ', AI conversations,' : ''} and
-                        final submission are recorded for your hiring team.
-                      </p>
-                    ) : null}
-                    <p id="candidate-start-timing">
-                      {view.durationSeconds
-                        ? 'Your timer starts when you click Start assessment.'
-                        : 'Click Start assessment to open the task and files.'}
-                      {view.invitationExpiresAt ? (
-                        <span className="r26-readiness-expiry">
-                          {' '}
-                          Invitation expires{' '}
-                          <time dateTime={view.invitationExpiresAt}>
-                            {formatLocalDateTime(view.invitationExpiresAt)}
-                          </time>
-                          .
-                        </span>
+                  <nav className="r26-breadcrumb" aria-label="Breadcrumb">
+                    <a href="/candidate">My assessments</a>
+                    <span aria-hidden="true">/</span>
+                    <span aria-current="page">{scenarioTitle}</span>
+                  </nav>
+                  <h1 id="candidate-readiness-title">{scenarioTitle}</h1>
+                  <div className="r26-readiness-overview">
+                    <div className="r26-readiness-instructions">
+                      <section aria-labelledby="candidate-before-start">
+                        <h2 id="candidate-before-start">Before you start</h2>
+                        <p id="candidate-start-timing">
+                          <IconClock size={25} aria-hidden="true" />
+                          <span>
+                            {view.durationSeconds
+                              ? `Your ${Math.round(view.durationSeconds / 60)}-minute timer starts once the workspace is ready.`
+                              : 'Select Start assessment to open the task and files.'}
+                          </span>
+                        </p>
+                      </section>
+                      {view.dataNotice ? (
+                        <section
+                          aria-labelledby="candidate-data-use-title"
+                          data-testid="candidate-data-use-notice"
+                        >
+                          <h2 id="candidate-data-use-title">What’s recorded</h2>
+                          <p id="candidate-data-use-summary">
+                            <IconFile size={24} aria-hidden="true" />
+                            <span>
+                              Your saved files and revisions, task activity,
+                              {view.capabilities.execution ? ' test runs,' : ''}
+                              {view.capabilities.ai
+                                ? ' AI conversations,'
+                                : ''}{' '}
+                              and final submission are recorded for the hiring
+                              team.
+                            </span>
+                          </p>
+                        </section>
                       ) : null}
-                    </p>
+                    </div>
+                    <section
+                      className="r26-readiness-tools"
+                      aria-labelledby="candidate-tools-title"
+                    >
+                      <h2 id="candidate-tools-title">Workspace tools</h2>
+                      <dl className="r26-capability-grid">
+                        <div>
+                          <dt>
+                            <IconCode size={25} aria-hidden="true" />
+                            Code editor
+                          </dt>
+                          <dd>Autosave on</dd>
+                        </div>
+                        <div>
+                          <dt>
+                            <IconCircleCheck size={23} aria-hidden="true" />
+                            Tests
+                          </dt>
+                          <dd data-unavailable={!view.capabilities.execution}>
+                            {view.capabilities.execution
+                              ? 'Available'
+                              : 'Unavailable'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>
+                            <IconMessageCode size={23} aria-hidden="true" />
+                            AI assistant
+                          </dt>
+                          <dd data-unavailable={!view.capabilities.ai}>
+                            {view.capabilities.ai ? 'Available' : 'Unavailable'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </section>
+                  </div>
+                  <div className="r26-readiness-actions">
                     <div className="r26-readiness-start">
                       {view.dataNotice ? (
                         <label htmlFor="candidate-start-consent">
                           <input
                             id="candidate-start-consent"
+                            aria-describedby="candidate-data-use-summary"
                             checked={consentAccepted}
+                            disabled={busy}
                             onChange={(event) => {
                               const dataNotice = view.dataNotice;
                               setAcceptedConsent(
                                 event.target.checked && dataNotice
-                                  ? {
-                                      sessionId,
-                                      digest: dataNotice.digest,
-                                    }
+                                  ? { sessionId, digest: dataNotice.digest }
                                   : null,
                               );
                             }}
                             type="checkbox"
-                          />{' '}
+                          />
                           I understand what’s recorded.
                         </label>
                       ) : null}
                       <button
                         className="r26-button r26-button-primary"
                         aria-describedby="candidate-start-timing"
+                        aria-busy={busy}
                         disabled={
                           busy ||
                           accessUnavailable ||
@@ -2399,8 +2707,32 @@ export function R26CandidateClient({
                         type="button"
                       >
                         {busy ? 'Starting…' : 'Start assessment'}
+                        {busy ? (
+                          <IconLoader2
+                            className="r26-action-spinner"
+                            size={20}
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <IconArrowRight size={21} aria-hidden="true" />
+                        )}
                       </button>
                     </div>
+                    {view.invitationExpiresAt ? (
+                      <p className="r26-readiness-expiry">
+                        Invitation expires{' '}
+                        <LocalTime
+                          timestamp={view.invitationExpiresAt}
+                          absolute
+                        />
+                        .
+                      </p>
+                    ) : null}
+                    {message ? (
+                      <p className="r26-start-error" role="alert">
+                        {message}
+                      </p>
+                    ) : null}
                   </div>
                 </section>
               ) : (
@@ -2424,7 +2756,7 @@ export function R26CandidateClient({
 
                   {isHiringExperience && view.status !== 'CREATED' ? (
                     <>
-                      {view.files.length ? (
+                      {!activeWorkspace && view.files.length ? (
                         <details className="r26-workspace-files" open>
                           <summary>Files</summary>
                           <ul
@@ -2439,55 +2771,58 @@ export function R26CandidateClient({
                         className="r26-workspace-task"
                         aria-labelledby="workspace-task-heading"
                       >
-                        <h1 id="workspace-task-heading">Task</h1>
+                        {activeWorkspace ? (
+                          <div className="r26-task-panel-bar">
+                            <span>Task</span>
+                            <button
+                              className="r26-pref-btn r26-task-close"
+                              aria-label="Close task panel"
+                              onClick={closeTask}
+                              type="button"
+                            >
+                              <IconX size={18} aria-hidden="true" />
+                            </button>
+                          </div>
+                        ) : null}
+                        <div className="r26-task-head-row">
+                          <h1
+                            id="workspace-task-heading"
+                            ref={taskHeadingRef}
+                            tabIndex={-1}
+                          >
+                            {scenarioTitle}
+                          </h1>
+                          {showEditor ? (
+                            <button
+                              type="button"
+                              className="r26-button r26-button-primary r26-open-editor-btn"
+                              onClick={() => setMobileTab('code')}
+                            >
+                              Open editor
+                            </button>
+                          ) : null}
+                        </div>
                         <div
                           id="candidate-brief-content"
                           className="r26-task-reading"
                         >
                           {brief ? (
-                            <ScenarioBrief markdown={brief} />
+                            <ScenarioBrief
+                              markdown={brief}
+                              workspaceContext={briefWorkspaceContext}
+                              afterIntro={taskChecklist}
+                              collapseAfterIntro={activeWorkspace}
+                            />
                           ) : (
-                            <p className="r26-brief">
-                              The issued task details are not available in this
-                              snapshot.
-                            </p>
+                            <>
+                              <p className="r26-brief">
+                                The issued task details are not available in
+                                this snapshot.
+                              </p>
+                              {taskChecklist}
+                            </>
                           )}
                         </div>
-                        {criteria.length > 0 ? (
-                          <section
-                            className="r26-criteria"
-                            aria-label="Checklist"
-                            style={{ marginTop: '0.85rem' }}
-                          >
-                            <p className="r26-eyebrow">Checklist</p>
-                            <ul className="r26-criteria-checklist">
-                              {criteria.map((criterion, index) => {
-                                const isChecked = Boolean(
-                                  checkedCriteria[index],
-                                );
-                                return (
-                                  <li key={`${index}-${criterion}`}>
-                                    <label
-                                      className={`r26-criteria-check-label ${isChecked ? 'is-checked' : ''}`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        onChange={(event) =>
-                                          setCheckedCriteria((current) => ({
-                                            ...current,
-                                            [index]: event.target.checked,
-                                          }))
-                                        }
-                                      />
-                                      <span>{criterion}</span>
-                                    </label>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </section>
-                        ) : null}
                       </section>
                     </>
                   ) : (
@@ -2579,9 +2914,10 @@ export function R26CandidateClient({
                                   <>
                                     {' '}
                                     This invitation expires at{' '}
-                                    <time dateTime={view.invitationExpiresAt}>
-                                      {formatDateTime(invitationExpiryMs)}
-                                    </time>
+                                    <LocalTime
+                                      timestamp={view.invitationExpiresAt}
+                                      absolute
+                                    />
                                     .
                                   </>
                                 ) : null}
@@ -2779,7 +3115,7 @@ export function R26CandidateClient({
               </details>
               {canEdit && !pendingSubmit && activeFile ? (
                 isHiringExperience ? (
-                  pendingSave || saveConflict ? (
+                  !activeWorkspace && (pendingSave || saveConflict) ? (
                     <button
                       className="r26-button r26-button-primary r26-save-button"
                       disabled={busy || saveConflict}
@@ -2806,10 +3142,21 @@ export function R26CandidateClient({
                   </button>
                 )
               ) : null}
+              {isHiringExperience && criteria.length > 0 ? (
+                <button
+                  type="button"
+                  id="candidate-editor-criteria-toggle"
+                  className="r26-pref-btn r26-criteria-toggle-btn r26-code-mobile-action"
+                  aria-expanded={showEditorCriteria}
+                  onClick={() => setShowEditorCriteria((current) => !current)}
+                >
+                  Criteria ({checkedCriteriaCount}/{criteria.length})
+                </button>
+              ) : null}
               {view?.status === 'ACTIVE' && view.capabilities.execution ? (
                 <button
                   type="button"
-                  className="r26-run-toolbar-btn"
+                  className="r26-run-toolbar-btn r26-code-mobile-action"
                   disabled={!canRunChecks}
                   title="Run tests against saved code (Cmd/Ctrl + Enter)"
                   onClick={() => {
@@ -2824,6 +3171,61 @@ export function R26CandidateClient({
             </div>
           </div>
 
+          {activeWorkspace && selectedPath ? (
+            <div className="r26-editor-path">
+              {selectedPath.split('/').join(' / ')}
+            </div>
+          ) : null}
+
+          {isHiringExperience && showEditorCriteria && criteria.length > 0 ? (
+            <section
+              className="r26-editor-criteria-drawer r26-code-mobile-action"
+              aria-label="Acceptance criteria reference"
+            >
+              <div className="r26-criteria-header">
+                <p className="r26-eyebrow">
+                  Acceptance criteria ({checkedCriteriaCount}/{criteria.length})
+                </p>
+                <button
+                  type="button"
+                  className="r26-pref-btn r26-criteria-close-btn"
+                  onClick={() => {
+                    setShowEditorCriteria(false);
+                    document
+                      .getElementById('candidate-editor-criteria-toggle')
+                      ?.focus();
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <ul className="r26-criteria-checklist">
+                {criteria.map((criterion, index) => {
+                  const isChecked = Boolean(checkedCriteria[index]);
+                  return (
+                    <li key={`drawer-${index}-${criterion}`}>
+                      <label
+                        className={`r26-criteria-check-label ${isChecked ? 'is-checked' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(event) =>
+                            setCheckedCriteria((current) => ({
+                              ...current,
+                              [index]: event.target.checked,
+                            }))
+                          }
+                        />
+                        <span>{criterion}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+
           {pendingSubmit ? (
             <p
               className="r26-message"
@@ -2834,7 +3236,7 @@ export function R26CandidateClient({
                 ? 'Submission is being confirmed. Editing and other actions are paused.'
                 : 'The submission outcome is unknown. Your workspace is read-only until you retry the same submission.'}
             </p>
-          ) : canEdit && (pendingSave || saveConflict) ? (
+          ) : !activeWorkspace && canEdit && (pendingSave || saveConflict) ? (
             <p
               id="candidate-submit-save-status"
               className="r26-message"
@@ -2965,15 +3367,26 @@ export function R26CandidateClient({
               id="candidate-execution-panel"
               aria-label="Automated Checks"
               data-testid="candidate-execution-panel"
+              onKeyDown={(event) => {
+                if (
+                  activeWorkspace &&
+                  event.key === 'Escape' &&
+                  !event.defaultPrevented &&
+                  executionTriggerRef.current?.getClientRects().length
+                ) {
+                  event.preventDefault();
+                  closeTests();
+                }
+              }}
             >
               <div className="r26-execution-header">
                 <div>
                   <div className="r26-execution-title-row">
-                    <p className="r26-eyebrow" style={{ margin: 0 }}>
-                      {isHiringExperience
-                        ? 'Terminal'
-                        : 'Automated Verification'}
-                    </p>
+                    {!isHiringExperience ? (
+                      <p className="r26-eyebrow" style={{ margin: 0 }}>
+                        Automated Verification
+                      </p>
+                    ) : null}
                     {!isHiringExperience ? (
                       <span
                         className={
@@ -2994,9 +3407,7 @@ export function R26CandidateClient({
                     ) : null}
                   </div>
                   <h2>
-                    {isHiringExperience
-                      ? 'Test runner'
-                      : 'Approved Checks Runner'}
+                    {isHiringExperience ? 'Tests' : 'Approved Checks Runner'}
                   </h2>
                 </div>
                 <div className="r26-execution-actions">
@@ -3031,6 +3442,17 @@ export function R26CandidateClient({
                     onClick={() => void runChecks()}
                     type="button"
                   >
+                    {isHiringExperience ? (
+                      executionRunning ? (
+                        <IconLoader2
+                          className="r26-action-spinner"
+                          size={16}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <IconPlayerPlay size={16} aria-hidden="true" />
+                      )
+                    ) : null}
                     {executionRunning
                       ? isHiringExperience
                         ? 'Running tests…'
@@ -3039,10 +3461,20 @@ export function R26CandidateClient({
                         ? 'Run tests'
                         : 'Run checks'}
                   </button>
+                  {activeWorkspace ? (
+                    <button
+                      className="r26-pref-btn r26-tests-close"
+                      aria-label="Close tests"
+                      onClick={closeTests}
+                      type="button"
+                    >
+                      <IconX size={17} aria-hidden="true" />
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
-              {executionRunning ? (
+              {executionRunning && !isHiringExperience ? (
                 <div style={{ padding: '0.5rem 0' }}>
                   <CommonThreadLoader compact label="Running tests…" />
                 </div>
@@ -3066,7 +3498,9 @@ export function R26CandidateClient({
               ) : null}
 
               <div className="r26-execution-status-bar">
-                <span className="r26-status-label">Status:</span>
+                {!isHiringExperience ? (
+                  <span className="r26-status-label">Status:</span>
+                ) : null}
                 <span
                   className={`r26-execution-state-badge state-${
                     executionRunning
@@ -3090,7 +3524,9 @@ export function R26CandidateClient({
                     : executionError
                       ? 'Request error'
                       : !latestExecution
-                        ? 'Never executed'
+                        ? isHiringExperience
+                          ? 'No test runs yet'
+                          : 'Never executed'
                         : latestExecution.isUnknown ||
                             latestExecution.status === 'UNKNOWN'
                           ? 'Unknown execution status'
@@ -3150,28 +3586,18 @@ export function R26CandidateClient({
                 data-testid="execution-output-console"
               >
                 <div className="r26-terminal-console-header">
-                  <div className="r26-console-tabs" role="tablist">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={consoleOutputTab === 'stdout'}
-                      className={`r26-console-tab ${consoleOutputTab === 'stdout' ? 'active' : ''}`}
-                      data-testid="stdout-tab"
-                      onClick={() => setConsoleOutputTab('stdout')}
-                    >
-                      STDOUT
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={consoleOutputTab === 'stderr'}
-                      className={`r26-console-tab ${consoleOutputTab === 'stderr' ? 'active' : ''}`}
-                      data-testid="stderr-tab"
-                      onClick={() => setConsoleOutputTab('stderr')}
-                    >
-                      STDERR
-                    </button>
-                  </div>
+                  <HorizontalTabs<'stdout' | 'stderr'>
+                    id="candidate-console"
+                    label="Console output"
+                    active={consoleOutputTab}
+                    onSelect={setConsoleOutputTab}
+                    className="r26-console-tabs"
+                    tabClassName="r26-console-tab"
+                    tabs={[
+                      { id: 'stdout', label: 'STDOUT', testId: 'stdout-tab' },
+                      { id: 'stderr', label: 'STDERR', testId: 'stderr-tab' },
+                    ]}
+                  />
                   <div className="r26-terminal-console-meta">
                     {latestExecution?.exitCode !== null &&
                     latestExecution?.exitCode !== undefined ? (
@@ -3195,7 +3621,13 @@ export function R26CandidateClient({
                     ) : null}
                   </div>
                 </div>
-                <div className="r26-terminal-body">
+                <div
+                  className="r26-terminal-body"
+                  id="candidate-console-panel"
+                  role="tabpanel"
+                  aria-labelledby={`candidate-console-${consoleOutputTab}`}
+                  tabIndex={0}
+                >
                   <pre
                     className="r26-terminal-output"
                     data-testid={
@@ -3405,7 +3837,7 @@ export function R26CandidateClient({
             </section>
           ) : null}
 
-          {view && view.status !== 'CREATED' ? (
+          {view && view.status !== 'CREATED' && !activeWorkspace ? (
             <footer className="r26-status-bar">
               <div className="r26-status-bar-left">
                 {view.status === 'ACTIVE' ? (
@@ -3448,6 +3880,54 @@ export function R26CandidateClient({
             </footer>
           ) : null}
         </section>
+
+        {activeWorkspace ? (
+          <footer className="r26-status-bar r26-active-status">
+            <div className="r26-status-bar-left">
+              <div
+                className="r26-draft-state"
+                id="candidate-submit-save-status"
+                role="status"
+              >
+                {saveStatus === 'All changes saved' ? (
+                  <IconCheck
+                    className="r26-saved-check"
+                    size={17}
+                    aria-hidden="true"
+                  />
+                ) : busy || saveStatus === 'Saving…' ? (
+                  <IconLoader2
+                    className="r26-action-spinner"
+                    size={17}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <span
+                    className="r26-dot r26-dot-unsaved"
+                    aria-hidden="true"
+                  />
+                )}
+                {saveStatus}
+              </div>
+              {canEdit &&
+              pendingSave &&
+              !busy &&
+              !saveConflict &&
+              !pendingSubmit ? (
+                <button
+                  type="button"
+                  className="r26-pref-btn r26-retry-save"
+                  onClick={() => void save()}
+                >
+                  Retry save
+                </button>
+              ) : null}
+            </div>
+            {selectedPath ? (
+              <code className="r26-status-path">{selectedPath}</code>
+            ) : null}
+          </footer>
+        ) : null}
 
         {view?.capabilities.ai === true &&
         showAiDrawer &&
@@ -3814,12 +4294,17 @@ export function R26CandidateClient({
         <dialog
           className="r26-submit-modal"
           aria-labelledby="candidate-submit-modal-title"
+          aria-describedby="candidate-submit-modal-note"
+          aria-busy={busy}
           ref={(dialog) => {
             if (dialog && !dialog.open) dialog.showModal();
           }}
           onCancel={(event) => {
             event.preventDefault();
-            if (!busy) setSubmitConfirmOpen(false);
+            if (!busy) {
+              event.currentTarget.close();
+              setSubmitConfirmOpen(false);
+            }
           }}
           onClick={(event) => {
             if (event.target !== event.currentTarget || busy) return;
@@ -3829,21 +4314,25 @@ export function R26CandidateClient({
               event.clientX > box.right ||
               event.clientY < box.top ||
               event.clientY > box.bottom
-            )
+            ) {
+              event.currentTarget.close();
               setSubmitConfirmOpen(false);
+            }
           }}
         >
-          <h2 id="candidate-submit-modal-title">Submit your assessment?</h2>
-          <p className="hiring-gate-note">
-            Your hiring team will receive your saved files. You can view your
-            work after submitting.
+          <h2 id="candidate-submit-modal-title">Submit assessment?</h2>
+          <p id="candidate-submit-modal-note" className="hiring-gate-note">
+            Your saved files become read-only.
           </p>
           <div className="hiring-gate-actions">
             <button
               type="button"
               className="r26-button r26-button-secondary"
               disabled={busy}
-              onClick={() => setSubmitConfirmOpen(false)}
+              onClick={(event) => {
+                event.currentTarget.closest('dialog')?.close();
+                setSubmitConfirmOpen(false);
+              }}
             >
               Keep working
             </button>
@@ -3853,6 +4342,13 @@ export function R26CandidateClient({
               disabled={busy}
               onClick={() => void submit()}
             >
+              {busy ? (
+                <IconLoader2
+                  className="r26-action-spinner"
+                  size={16}
+                  aria-hidden="true"
+                />
+              ) : null}
               {busy ? 'Submitting…' : 'Confirm submit'}
             </button>
           </div>

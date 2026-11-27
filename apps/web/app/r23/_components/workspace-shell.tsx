@@ -2,11 +2,13 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
   IconBriefcase,
+  IconFilePencil,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconListDetails,
   IconSettings,
-  IconSparkles,
+  IconArrowUpRight,
+  IconUserCircle,
   IconUsers,
 } from '@tabler/icons-react';
 import {
@@ -16,7 +18,6 @@ import {
 import { isHiringPlatformEnabled } from '../../../src/runtime/profile';
 import type { SoftwareWorkspaceActiveSection } from '../../../src/ui/software-document';
 import { ThemeToggle } from '../../_components/theme-toggle';
-import { BrandMark } from '../../_components/brand-mark';
 
 function resolveRoleLabel(role: string): string {
   switch (role) {
@@ -69,7 +70,6 @@ export function OrganizationWorkspaceShell({
           href={homeHref}
           aria-label="Hirearchy Software home"
         >
-          <BrandMark />
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </Link>
@@ -81,9 +81,12 @@ export function OrganizationWorkspaceShell({
         <aside className="software-workspace-sidebar">
           <label
             className="software-workspace-rail-control"
-            title="Expand workspace navigation"
+            title="Toggle workspace navigation"
           >
-            <input type="checkbox" aria-label="Expand workspace navigation" />
+            <input
+              type="checkbox"
+              aria-label="Show full workspace navigation"
+            />
             <IconLayoutSidebarLeftExpand size={20} aria-hidden="true" />
             <IconLayoutSidebarLeftCollapse size={20} aria-hidden="true" />
             <span className="software-workspace-mobile-name">
@@ -95,7 +98,6 @@ export function OrganizationWorkspaceShell({
             role="region"
             aria-label="Active organization"
           >
-            <span className="software-eyebrow">Your workspace</span>
             <strong>{organizationName}</strong>
             <span>{resolveRoleLabel(role)}</span>
             {planBadge ? (
@@ -111,13 +113,30 @@ export function OrganizationWorkspaceShell({
               <IconUsers size={16} stroke={1.9} aria-hidden="true" />
               <span>Candidates</span>
             </Link>
+            <a
+              href={orgBase}
+              title="Assessments"
+              aria-current={active === 'assessments' ? 'page' : undefined}
+            >
+              <IconListDetails size={16} stroke={1.9} aria-hidden="true" />
+              <span>Assessments</span>
+            </a>
             <Link
               href={`${orgBase}/builder`}
+              aria-label="Assessment Builder"
               title="Assessment Builder"
               aria-current={active === 'builder' ? 'page' : undefined}
             >
-              <IconSparkles size={16} stroke={1.9} aria-hidden="true" />
-              <span>Assessment Builder</span>
+              <IconFilePencil size={16} stroke={1.9} aria-hidden="true" />
+              <span className="software-workspace-nav-label">
+                Assessment Builder
+              </span>
+              <span
+                className="software-workspace-rail-label"
+                aria-hidden="true"
+              >
+                Builder
+              </span>
             </Link>
             <Link
               href={`${orgBase}/handoffs`}
@@ -127,27 +146,40 @@ export function OrganizationWorkspaceShell({
               <IconBriefcase size={16} stroke={1.9} aria-hidden="true" />
               <span>Handoffs</span>
             </Link>
+            {role === 'cto' ? (
+              <a
+                data-testid="org-settings-link"
+                href={`${orgBase}/settings`}
+                title="Organization"
+                aria-current={active === 'settings' ? 'page' : undefined}
+              >
+                <IconSettings size={16} stroke={1.9} aria-hidden="true" />
+                <span>Organization</span>
+              </a>
+            ) : null}
+            {plan && plan.planTier !== 'ultra' ? (
+              <a
+                className="software-workspace-upgrade"
+                href={`${orgBase}/upgrade`}
+                title="Upgrade"
+                aria-current={active === 'plan' ? 'page' : undefined}
+              >
+                <IconArrowUpRight size={16} stroke={1.9} aria-hidden="true" />
+                <span>Upgrade</span>
+              </a>
+            ) : null}
             <a
-              href={orgBase}
-              title="Sessions"
-              aria-current={active === 'assessments' ? 'page' : undefined}
+              href="/r23/account"
+              title="My account"
+              aria-current={active === 'account' ? 'page' : undefined}
             >
-              <IconListDetails size={16} stroke={1.9} aria-hidden="true" />
-              <span>Sessions</span>
-            </a>
-            <a
-              data-testid="org-settings-link"
-              href={`${orgBase}/settings`}
-              title="Team &amp; Plan"
-              aria-current={active === 'settings' ? 'page' : undefined}
-            >
-              <IconSettings size={16} stroke={1.9} aria-hidden="true" />
-              <span>Team &amp; Plan</span>
+              <IconUserCircle size={16} stroke={1.9} aria-hidden="true" />
+              <span>My account</span>
             </a>
           </nav>
           <div className="software-workspace-sidebar-footer">
+            <span title={email}>{email}</span>
             <a href="/r23/organizations">Switch workspace</a>
-            <span>{email}</span>
             <form action="/r23/auth/logout" method="post">
               <input type="hidden" name="csrf" value={csrf} />
               <button type="submit">Sign out</button>

@@ -59,10 +59,9 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     priceLabel: 'Pay per candidate slot',
     canIssueAssessments: true,
     highlights: [
-      '1 credit per distinct candidate email (re-issuing to the same candidate reuses their slot)',
-      'Platform templates & AI Assessment Builder',
-      'Reusable saved problem library & Candidate Workspace AI assistant',
-      'Peer second-opinion reviews & managerial handoff dossiers',
+      'One slot per distinct candidate',
+      'Templates, AI authoring, and saved problems',
+      'Candidate AI assistant, peer reviews, and handoffs',
     ],
     features: {
       aiCandidateReview: false,
@@ -84,10 +83,8 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     priceLabel: 'Pro Subscription',
     canIssueAssessments: true,
     highlights: [
-      'Unlimited candidate invitations across your hiring pipeline',
-      'Platform templates & AI Assessment Builder',
-      'Reusable saved problem library & Candidate Workspace AI assistant',
-      'Peer second-opinion reviews & structured managerial handoffs',
+      'Unlimited candidate assessments',
+      'Authoring, candidate AI, and team tools from Per Candidate',
     ],
     features: {
       aiCandidateReview: false,
@@ -109,10 +106,9 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     priceLabel: 'Ultra Subscription',
     canIssueAssessments: true,
     highlights: [
-      'Everything in Pro with unlimited candidate assessments',
-      'AI-assisted session summaries (work timeline, key edits, and pacing)',
-      'Automated Hiring Manager Fit Report on candidate acceptance',
-      'Priority team handoffs & full evidence inspection',
+      'Everything in Pro',
+      'AI-assisted review summaries',
+      'Hiring Manager Fit Report on candidate acceptance',
     ],
     features: {
       aiCandidateReview: true,

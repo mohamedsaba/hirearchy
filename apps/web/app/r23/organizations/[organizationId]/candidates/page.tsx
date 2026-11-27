@@ -1,6 +1,8 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { Suspense } from 'react';
+import { IconPlus } from '@tabler/icons-react';
 
 import {
   groupCandidateSessions,
@@ -12,6 +14,7 @@ import {
   loadHiringOrganizationWorkspaceFromCookie,
 } from '../../../../../src/staging/browser';
 import { OrganizationWorkspaceShell } from '../../../_components/workspace-shell';
+import { WorkspaceContentLoading } from '../../../_components/workspace-loading';
 import { CandidatesPipelineClient } from './candidates-client';
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +41,42 @@ export default async function OrganizationCandidatesPage({
     );
   }
 
+  return (
+    <OrganizationWorkspaceShell
+      organizationId={workspace.organizationId}
+      organizationName={workspace.organizationName}
+      email={workspace.email}
+      role={workspace.role}
+      csrf={workspace.csrfToken}
+      active="candidates"
+      plan={workspace.plan}
+    >
+      <div className="hiring-page-shell team-candidates-page">
+        <header className="hiring-page-header">
+          <h1>Candidates</h1>
+          <Link
+            className="hiring-btn hiring-btn-primary"
+            href={`/r23/organizations/${encodeURIComponent(workspace.organizationId)}/builder?mode=new`}
+          >
+            <IconPlus size={17} aria-hidden="true" />
+            New assessment
+          </Link>
+        </header>
+        <Suspense fallback={<WorkspaceContentLoading section="candidates" />}>
+          <CandidatePipeline workspace={workspace} />
+        </Suspense>
+      </div>
+    </OrganizationWorkspaceShell>
+  );
+}
+
+async function CandidatePipeline({
+  workspace,
+}: {
+  workspace: NonNullable<
+    Awaited<ReturnType<typeof loadHiringOrganizationWorkspaceFromCookie>>
+  >;
+}) {
   const raw = (await workspace.dispatch('hiring.candidates.list', {
     organizationId: workspace.organizationId,
   })) as { rows?: RawHiringCandidateSessionRow[] };
@@ -64,39 +103,13 @@ export default async function OrganizationCandidatesPage({
     }
   });
 
-  const initialCandidates = groupCandidateSessions(hydratedRows);
-
   return (
-    <OrganizationWorkspaceShell
+    <CandidatesPipelineClient
       organizationId={workspace.organizationId}
-      organizationName={workspace.organizationName}
-      email={workspace.email}
-      role={workspace.role}
-      csrf={workspace.csrfToken}
-      active="candidates"
+      initialCandidates={groupCandidateSessions(hydratedRows)}
       plan={workspace.plan}
-    >
-      <div className="hiring-page-shell">
-        <header className="hiring-page-header">
-          <h1>Candidates</h1>
-          <div className="hiring-header-actions">
-            <Link
-              className="hiring-btn hiring-btn-primary"
-              href={`/r23/organizations/${encodeURIComponent(workspace.organizationId)}/builder`}
-            >
-              New assessment
-            </Link>
-          </div>
-        </header>
-
-        <CandidatesPipelineClient
-          organizationId={workspace.organizationId}
-          initialCandidates={initialCandidates}
-          plan={workspace.plan}
-          currentRole={workspace.role}
-          currentPrincipalId={workspace.orgContext.principalId}
-        />
-      </div>
-    </OrganizationWorkspaceShell>
+      currentRole={workspace.role}
+      currentPrincipalId={workspace.orgContext.principalId}
+    />
   );
 }

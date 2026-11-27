@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
+import { IconCheck } from '@tabler/icons-react';
 
 import {
   candidateEntryPath,
@@ -8,10 +9,10 @@ import {
 } from '../../../../src/hiring/candidate-entry';
 import { isHiringPlatformEnabled } from '../../../../src/runtime/profile';
 import { tryReadHiringAccountFromCookie } from '../../../../src/staging/browser';
-import { BrandMark } from '../../../_components/brand-mark';
 import { LocalTime } from '../../../_components/local-time';
 import { ThemeToggle } from '../../../_components/theme-toggle';
 import { RepositoryInspector } from '../../../r23/organizations/[organizationId]/builder/repository-inspector';
+import './submitted-work.css';
 
 export const dynamic = 'force-dynamic';
 export const metadata = {
@@ -44,46 +45,65 @@ export default async function CandidateSubmissionPage({
   if (!submission) notFound();
 
   return (
-    <div className="software-product software-document-body">
+    <div className="software-product software-document-body candidate-submitted">
       <a className="software-skip-link" href="#submitted-work">
         Skip to submitted work
       </a>
       <header className="software-document-header">
-        <Link
-          href="/candidate"
-          className="software-document-wordmark"
-          aria-label="Hirearchy Software assessments"
-        >
-          <BrandMark />
-          <span>Hirearchy</span>
-          <span className="software-document-product">Software</span>
-        </Link>
-        <ThemeToggle variant="header" />
+        <div className="candidate-submitted-brand">
+          <Link
+            href="/candidate"
+            className="software-document-wordmark"
+            aria-label="Hirearchy Software assessments"
+          >
+            <span>Hirearchy</span>
+            <span className="software-document-product">Software</span>
+          </Link>
+          <span className="candidate-submitted-masthead-title">
+            {submission.title}
+          </span>
+        </div>
+        <div className="candidate-submitted-header-actions">
+          <ThemeToggle variant="header" />
+          <span>Submitted</span>
+        </div>
       </header>
       <main
-        className="hiring-portal-main hiring-page-shell"
+        className="candidate-submitted-main"
         id="submitted-work"
         tabIndex={-1}
       >
-        <Link href="/candidate" className="hiring-muted-copy">
-          ← My assessments
-        </Link>
-        <header className="hiring-page-header">
-          <div>
-            <h1>{submission.title}</h1>
-            <p>
-              Submitted <LocalTime timestamp={submission.submittedAt} />
-            </p>
+        <nav className="candidate-submitted-breadcrumb" aria-label="Breadcrumb">
+          <Link href="/candidate">My assessments</Link>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">{submission.title}</span>
+        </nav>
+        <header className="candidate-submitted-receipt">
+          <div className="candidate-submitted-confirmation">
+            <IconCheck
+              className="candidate-submitted-check"
+              size={42}
+              aria-hidden="true"
+            />
+            <div>
+              <h1>Assessment submitted</h1>
+              <p>
+                <LocalTime timestamp={submission.submittedAt} absolute />
+                {' · '}
+                {submission.files.length}{' '}
+                {submission.files.length === 1 ? 'file' : 'files'} captured
+              </p>
+            </div>
           </div>
-          <span className="hiring-pill hiring-pill-success">
-            Submitted · Read-only
-          </span>
+          <Link href="/candidate" className="hiring-btn hiring-btn-primary">
+            Back to My assessments
+          </Link>
         </header>
         {submission.files.length ? (
           <RepositoryInspector
             files={submission.files}
-            workspaceName="Submitted files"
             label="Submitted files"
+            submitted
           />
         ) : (
           <p>No files were saved with this submission.</p>

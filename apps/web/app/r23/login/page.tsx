@@ -13,7 +13,7 @@ import {
   tryReadHiringAccountFromCookie,
   tryResolveSignedInLandingPath,
 } from '../../../src/staging/browser';
-import { BrandMark } from '../../_components/brand-mark';
+import { AuthCanvasBackdrop } from '../../_components/auth-canvas-backdrop';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
 import { SwitchSignInAccount } from '../../_components/switch-sign-in-account';
@@ -73,6 +73,7 @@ export default async function R23LoginPage({
 
   return (
     <div className="software-product software-document-access software-team-access">
+      <AuthCanvasBackdrop />
       <a className="software-skip-link" href="#main-content">
         Skip to sign in
       </a>
@@ -83,18 +84,24 @@ export default async function R23LoginPage({
           prefetch={false}
           aria-label="Hirearchy Software"
         >
-          <BrandMark />
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </Link>
         <ThemeToggle variant="header" />
       </header>
       <main className="software-document-shell" id="main-content" tabIndex={-1}>
-        <p className="software-access-principle">
-          Evidence informs.
-          <br />
-          <span>People decide.</span>
-        </p>
+        <div className="software-access-intro">
+          <p className="software-access-kicker">Engineering evaluation</p>
+          <p className="software-access-principle">
+            Evidence informs.
+            <br />
+            <span>People decide.</span>
+          </p>
+          <p className="software-access-lead">
+            Review real codebase work, inspect reconstructed timelines, and lead
+            structured hiring discussions.
+          </p>
+        </div>
         <section
           className="software-document-panel"
           aria-labelledby="signin-title"
@@ -150,25 +157,33 @@ export default async function R23LoginPage({
                 />
                 <button type="submit">Sign in</button>
               </form>
-              {founderUat ||
-              process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED ===
-                'true' ? (
-                <nav aria-label="Account help">
+              <nav aria-label="Account help">
+                <div className="software-access-switch">
+                  {founderUat ||
+                  process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED ===
+                    'true' ? (
+                    <p>
+                      New to Hirearchy?{' '}
+                      <Link
+                        href={
+                          safeNext
+                            ? `/r23/signup?next=${encodeURIComponent(safeNext)}`
+                            : '/r23/signup'
+                        }
+                        prefetch={false}
+                      >
+                        Create an account
+                      </Link>
+                    </p>
+                  ) : null}
                   <p>
-                    New to Hirearchy?{' '}
-                    <Link
-                      href={
-                        safeNext
-                          ? `/r23/signup?next=${encodeURIComponent(safeNext)}`
-                          : '/r23/signup'
-                      }
-                      prefetch={false}
-                    >
-                      Create an account
+                    Taking an assessment?{' '}
+                    <Link href="/candidate/login" prefetch={false}>
+                      Candidate sign in
                     </Link>
                   </p>
-                </nav>
-              ) : null}
+                </div>
+              </nav>
             </>
           )}
         </section>

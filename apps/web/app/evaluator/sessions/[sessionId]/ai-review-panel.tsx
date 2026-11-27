@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { IconRefresh } from '@tabler/icons-react';
+import { IconCheck, IconCopy, IconRefresh } from '@tabler/icons-react';
 
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
 import {
@@ -74,7 +74,24 @@ export const R27AiReviewPanel = ({
     onLoadingChange?.(next);
   };
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [questionsCopied, setQuestionsCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleCopyQuestions = async () => {
+    const items = report?.verificationQuestions ?? [];
+    if (!items.length) return;
+    const text = items
+      .map((item, idx) => `${idx + 1}. ${item.question} (${item.focus})`)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setQuestionsCopied(true);
+      setToastMsg('Verification questions copied.');
+      window.setTimeout(() => setQuestionsCopied(false), 2000);
+    } catch {
+      setError('Copy failed — copy manually from this browser.');
+    }
+  };
 
   const selectedOption =
     AI_REVIEW_MODEL_CATALOG.find((item) => item.id === selectedPreset) ??
@@ -149,6 +166,19 @@ export const R27AiReviewPanel = ({
     }
   };
 
+  if (hiring && planLocked && !report) {
+    return (
+      <p className="review-desk-advisory-note">
+        AI advisory ·{' '}
+        {planSettingsHref ? (
+          <a href={planSettingsHref}>Available on Ultra</a>
+        ) : (
+          'Available on Ultra'
+        )}
+      </p>
+    );
+  }
+
   return (
     <details
       className="r27-ai-review-card"
@@ -156,7 +186,7 @@ export const R27AiReviewPanel = ({
       open={Boolean(report)}
     >
       <summary>
-        <span>AI Candidate Review</span>
+        <span>{hiring ? 'AI advisory' : 'AI Candidate Review'}</span>
         {loading ? (
           <span className="evaluator-tab-weaving-dot" aria-label="Analyzing" />
         ) : null}
@@ -180,11 +210,7 @@ export const R27AiReviewPanel = ({
               : 'Generate an advisory report from the submitted work and recorded evidence. The evaluator owns the final review.'}
           </p>
 
-          {hiring ? (
-            <p className="r27-ai-review-context">
-              AI Candidate Review · Advisory
-            </p>
-          ) : (
+          {hiring ? null : (
             <div className="r27-ai-review-controls">
               <label className="r27-ai-review-field">
                 <span>AI model preset</span>
@@ -372,6 +398,38 @@ export const R27AiReviewPanel = ({
                   </li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+
+          {report.verificationQuestions &&
+          report.verificationQuestions.length > 0 ? (
+            <div
+              className="hiring-card-subtle"
+              data-testid="r27-ai-verification-questions"
+            >
+              <div className="hiring-preview-header">
+                <h4>Live verification questions (10-min defense)</h4>
+                <button
+                  type="button"
+                  className="r27-ai-review-secondary-btn"
+                  onClick={() => void handleCopyQuestions()}
+                >
+                  {questionsCopied ? (
+                    <IconCheck size={14} aria-hidden="true" />
+                  ) : (
+                    <IconCopy size={14} aria-hidden="true" />
+                  )}
+                  {questionsCopied ? 'Copied' : 'Copy questions'}
+                </button>
+              </div>
+              <ol className="hiring-ol-list">
+                {report.verificationQuestions.map((item, index) => (
+                  <li key={`${index}:${item.question}`}>
+                    <span>{item.question}</span>{' '}
+                    <span className="evaluator-muted-copy">({item.focus})</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           ) : null}
 

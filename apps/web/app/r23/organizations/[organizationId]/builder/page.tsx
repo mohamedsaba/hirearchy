@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -16,6 +17,7 @@ import {
   isAuthenticatedStaging,
   isHiringPlatformEnabled,
 } from '../../../../../src/runtime/profile';
+import { getLatestBuilderGenerationJob } from '../../../../../src/hiring/builder-generation-jobs';
 import { serializePlatformTemplates } from '../../../../../src/hiring/templates';
 import type {
   SavedLibraryProblem,
@@ -29,6 +31,7 @@ import {
 } from '../../../../../src/staging/browser';
 import { R23_CSRF_COOKIE } from '../../../../../src/r23-auth/config';
 import { OrganizationWorkspaceShell } from '../../../_components/workspace-shell';
+import { WorkspaceContentLoading } from '../../../_components/workspace-loading';
 import { RefreshBuilderSession } from './refresh-builder-session';
 import { AssessmentBuilderClient } from './assessment-builder-client';
 import { HiringAssessmentBuilderClient } from './hiring-assessment-builder-client';
@@ -46,19 +49,56 @@ export default async function AssessmentBuilderPage({
   params: Promise<{ organizationId: string }>;
   searchParams?: Promise<{
     mode?: string | string[];
+    stage?: string | string[];
     issuedSession?: string | string[];
     definitionId?: string | string[];
+    draft?: string | string[];
   }>;
 }) {
   const { organizationId } = await params;
   const query = await searchParams;
+  const hiring = isHiringPlatformEnabled();
   const initialIssuedSessionId =
     typeof query?.issuedSession === 'string' ? query.issuedSession : null;
   const requestedId = query?.definitionId;
-  const fresh = query?.mode === 'new';
-  if (query?.mode !== undefined && !fresh) notFound();
-  if (fresh && (requestedId !== undefined || initialIssuedSessionId))
-    notFound();
+  const rawMode = typeof query?.mode === 'string' ? query.mode : undefined;
+  const rawStage = typeof query?.stage === 'string' ? query.stage : undefined;
+  const fresh = rawMode === 'new';
+  const draftId = typeof query?.draft === 'string' ? query.draft : undefined;
+
+  if (hiring) {
+    if (
+      query?.draft !== undefined &&
+      (!draftId ||
+        !/^(?:legacy|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/.test(
+          draftId,
+        ) ||
+        fresh)
+    ) {
+      notFound();
+    }
+    if (
+      query?.mode !== undefined &&
+      rawMode !== 'templates' &&
+      rawMode !== 'ai' &&
+      rawMode !== 'library' &&
+      rawMode !== 'new'
+    ) {
+      notFound();
+    }
+    if (
+      query?.stage !== undefined &&
+      rawStage !== 'source' &&
+      rawStage !== 'preview' &&
+      rawStage !== 'invite'
+    ) {
+      notFound();
+    }
+  } else {
+    if (query?.mode !== undefined && !fresh) notFound();
+    if (fresh && (requestedId !== undefined || initialIssuedSessionId))
+      notFound();
+  }
   if (
     requestedId !== undefined &&
     (typeof requestedId !== 'string' ||
@@ -68,39 +108,26 @@ export default async function AssessmentBuilderPage({
   const jar = await cookies();
   const staging = isAuthenticatedStaging();
 
-  if (isHiringPlatformEnabled()) {
+  if (hiring) {
     const workspace = await loadHiringOrganizationWorkspaceFromCookie(
       jar.toString(),
       organizationId,
     );
     if (!workspace) {
+      const next = `/r23/organizations/${organizationId.toLowerCase()}/builder`;
+      const nextParams = new URLSearchParams();
+      if (rawMode) nextParams.set('mode', rawMode);
+      if (rawStage) nextParams.set('stage', rawStage);
+      if (draftId) nextParams.set('draft', draftId);
       redirect(
-        `/r23/login?next=${encodeURIComponent(`/r23/organizations/${organizationId.toLowerCase()}/builder`)}`,
+        `/r23/login?next=${encodeURIComponent(nextParams.size ? `${next}?${nextParams}` : next)}`,
       );
     }
 
-    const [libraryRes, membersRes] = await Promise.all([
-      workspace.dispatch('hiring.library.list', {
-        organizationId: workspace.organizationId,
-      }) as Promise<{ problems?: SavedLibraryProblem[] }>,
-      workspace.dispatch('organization.members.list', {
-        organizationId: workspace.organizationId,
-      }) as Promise<{ members?: OrganizationMemberItem[] }>,
-    ]);
-
-    const teamMembers: TeamMemberOption[] = (membersRes?.members ?? [])
-      .filter((m) => m.status === 'active')
-      .map((m) => ({
-        principalId: m.principalId,
-        displayName: m.displayName ?? m.email ?? 'Team Member',
-        email: m.email ?? '',
-        role:
-          m.role === 'cto' || m.role === 'recruiter'
-            ? (m.role as WorkspaceRoleKind)
-            : 'reviewer',
-        isOwner: Boolean(m.isOwner),
-      }));
-
+    const initialMode =
+      rawMode === 'ai' || rawMode === 'library' || rawMode === 'templates'
+        ? rawMode
+        : 'templates';
     return (
       <OrganizationWorkspaceShell
         organizationId={workspace.organizationId}
@@ -111,19 +138,19 @@ export default async function AssessmentBuilderPage({
         active="builder"
         plan={workspace.plan}
       >
-        <div className="hiring-page-shell">
+        <div className="hiring-page-shell team-builder-page">
           <header className="hiring-page-header">
             <h1>Assessment Builder</h1>
           </header>
 
-          <HiringAssessmentBuilderClient
-            organizationId={workspace.organizationId}
-            currentPrincipalId={workspace.orgContext.principalId}
-            initialPlan={workspace.plan}
-            initialLibrary={libraryRes?.problems ?? []}
-            initialTemplates={serializePlatformTemplates()}
-            teamMembers={teamMembers}
-          />
+          <Suspense fallback={<WorkspaceContentLoading section="builder" />}>
+            <HiringBuilder
+              workspace={workspace}
+              initialMode={initialMode}
+              fresh={fresh}
+              draftId={draftId}
+            />
+          </Suspense>
         </div>
       </OrganizationWorkspaceShell>
     );
@@ -259,6 +286,63 @@ export default async function AssessmentBuilderPage({
       reviewers={reviewers}
       isAuthenticatedStaging={staging}
       initialIssuedSessionId={initialIssuedSessionId}
+    />
+  );
+}
+
+async function HiringBuilder({
+  workspace,
+  initialMode,
+  fresh,
+  draftId,
+}: {
+  workspace: NonNullable<
+    Awaited<ReturnType<typeof loadHiringOrganizationWorkspaceFromCookie>>
+  >;
+  initialMode: 'templates' | 'ai' | 'library';
+  fresh: boolean;
+  draftId: string | undefined;
+}) {
+  const [libraryRes, membersRes] = await Promise.all([
+    workspace.dispatch('hiring.library.list', {
+      organizationId: workspace.organizationId,
+    }) as Promise<{ problems?: SavedLibraryProblem[] }>,
+    workspace.dispatch('organization.members.list', {
+      organizationId: workspace.organizationId,
+    }) as Promise<{ members?: OrganizationMemberItem[] }>,
+  ]);
+
+  const teamMembers: TeamMemberOption[] = (membersRes?.members ?? [])
+    .filter((m) => m.status === 'active')
+    .map((m) => ({
+      principalId: m.principalId,
+      displayName: m.displayName ?? m.email ?? 'Team Member',
+      email: m.email ?? '',
+      role:
+        m.role === 'cto' || m.role === 'recruiter'
+          ? (m.role as WorkspaceRoleKind)
+          : 'reviewer',
+      isOwner: Boolean(m.isOwner),
+    }));
+
+  const initialGenerationJob = getLatestBuilderGenerationJob(
+    workspace.organizationId,
+    workspace.orgContext.principalId,
+  );
+
+  return (
+    <HiringAssessmentBuilderClient
+      key={`${workspace.organizationId}:${fresh ? 'new' : (draftId ?? '')}`}
+      organizationId={workspace.organizationId}
+      currentPrincipalId={workspace.orgContext.principalId}
+      initialPlan={workspace.plan}
+      initialLibrary={libraryRes?.problems ?? []}
+      initialTemplates={serializePlatformTemplates()}
+      teamMembers={teamMembers}
+      initialMode={initialMode}
+      fresh={fresh}
+      draftId={draftId}
+      initialGenerationJob={initialGenerationJob}
     />
   );
 }

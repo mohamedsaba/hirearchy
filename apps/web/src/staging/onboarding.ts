@@ -82,6 +82,7 @@ export interface AccountProfile {
   readonly principalId: string;
   readonly displayName: string | null;
   readonly email: string;
+  readonly avatarWebp?: string;
 }
 
 export function invitationTokenHash(token: string): string {

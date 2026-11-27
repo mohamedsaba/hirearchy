@@ -1,4 +1,5 @@
 import { isHiringPlatformEnabled } from '../runtime/profile';
+import type { PlanTier } from '../plans/entitlements';
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => {
@@ -18,7 +19,13 @@ function escapeHtml(value: string): string {
 }
 
 export type SoftwareWorkspaceActiveSection =
-  'assessments' | 'settings' | 'candidates' | 'builder' | 'handoffs';
+  | 'assessments'
+  | 'settings'
+  | 'candidates'
+  | 'builder'
+  | 'handoffs'
+  | 'plan'
+  | 'account';
 
 export type SoftwareDocumentTheme = 'light' | 'dark';
 
@@ -30,6 +37,7 @@ export type SoftwareWorkspace = Readonly<{
   csrf: string;
   active: SoftwareWorkspaceActiveSection;
   planBadge?: string;
+  planTier?: PlanTier;
   theme?: SoftwareDocumentTheme;
   currentPath?: string;
 }>;
@@ -50,12 +58,69 @@ function resolveRoleLabel(role: string, hiringEnabled: boolean): string {
   }
 }
 
+// Outline paths from the same MIT-licensed Tabler icons used by the React workspace.
+const workspaceIconPaths = {
+  ArrowUpRight: ['M7 17l10 -10', 'M7 7h10v10'],
+  UserCircle: [
+    'M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0',
+    'M9 10a3 3 0 1 0 6 0a3 3 0 1 0 -6 0',
+    'M6.5 19v-1a3 3 0 0 1 3 -3h5a3 3 0 0 1 3 3v1',
+  ],
+  Users: [
+    'M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0',
+    'M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2',
+    'M16 3.13a4 4 0 0 1 0 7.75',
+    'M21 21v-2a4 4 0 0 0 -3 -3.85',
+  ],
+  FilePencil: [
+    'M14 3v4a1 1 0 0 0 1 1h4',
+    'M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2',
+    'M10 18l5 -5a1.414 1.414 0 0 0 -2 -2l-5 5v2h2',
+  ],
+  Briefcase: [
+    'M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9',
+    'M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2',
+    'M12 12l0 .01',
+    'M3 13a20 20 0 0 0 18 0',
+  ],
+  ListDetails: [
+    'M13 5h8',
+    'M13 9h5',
+    'M13 15h8',
+    'M13 19h5',
+    'M3 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4',
+    'M3 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4',
+  ],
+  Settings: [
+    'M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065',
+    'M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0',
+  ],
+  LayoutSidebarLeftExpand: [
+    'M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12',
+    'M9 4v16',
+    'M14 10l2 2l-2 2',
+  ],
+  LayoutSidebarLeftCollapse: [
+    'M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12',
+    'M9 4v16',
+    'M15 10l-2 2l2 2',
+  ],
+} as const;
+
+function workspaceIcon(
+  name: keyof typeof workspaceIconPaths,
+  size = 16,
+): string {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${workspaceIconPaths[name].map((path) => `<path d="${path}"></path>`).join('')}</svg>`;
+}
+
 export function renderSoftwareDocument(
   title: string,
   content: string,
   workspace?: SoftwareWorkspace,
   theme?: SoftwareDocumentTheme,
   currentPath?: string,
+  homeHref?: string,
 ): string {
   const safeTitle = escapeHtml(title);
   const hiringEnabled = isHiringPlatformEnabled();
@@ -70,11 +135,14 @@ export function renderSoftwareDocument(
   const organizationPath = workspace
     ? `/r23/organizations/${encodeURIComponent(workspace.organizationId)}`
     : '/r23/login';
-  const homeBrandHref = workspace
-    ? hiringEnabled
-      ? `${organizationPath}/candidates`
-      : organizationPath
-    : '/r23/login';
+  const homeBrandHref = escapeHtml(
+    homeHref ??
+      (workspace
+        ? hiringEnabled
+          ? `${organizationPath}/candidates`
+          : organizationPath
+        : '/r23/login'),
+  );
 
   const derivedWorkspacePath = workspace
     ? (workspace.currentPath ??
@@ -93,17 +161,32 @@ export function renderSoftwareDocument(
 
   const navLinks = workspace
     ? hiringEnabled
-      ? `<a href="${organizationPath}/candidates"${
-          workspace.active === 'candidates' ? ' aria-current="page"' : ''
-        }>Candidates</a><a href="${organizationPath}/builder"${
-          workspace.active === 'builder' ? ' aria-current="page"' : ''
-        }>Assessment Builder</a><a href="${organizationPath}/handoffs"${
-          workspace.active === 'handoffs' ? ' aria-current="page"' : ''
-        }>Handoffs</a><a href="${organizationPath}"${
-          workspace.active === 'assessments' ? ' aria-current="page"' : ''
-        }>Sessions</a><a data-testid="org-settings-link" href="${organizationPath}/settings"${
-          workspace.active === 'settings' ? ' aria-current="page"' : ''
-        }>Team &amp; Plan</a>`
+      ? (
+          [
+            ['candidates', '/candidates', 'Candidates', 'Users'],
+            ['assessments', '', 'Assessments', 'ListDetails'],
+            ['builder', '/builder', 'Assessment Builder', 'FilePencil'],
+            ['handoffs', '/handoffs', 'Handoffs', 'Briefcase'],
+            ['settings', '/settings', 'Organization', 'Settings'],
+            ['plan', '/upgrade', 'Upgrade', 'ArrowUpRight'],
+            ['account', '', 'My account', 'UserCircle'],
+          ] as const
+        )
+          .filter(
+            ([section]) =>
+              (section !== 'settings' || workspace.role === 'cto') &&
+              (section !== 'plan' ||
+                Boolean(workspace.planTier && workspace.planTier !== 'ultra')),
+          )
+          .map(([section, suffix, label, icon]) => {
+            const safeLabel = escapeHtml(label);
+            const href =
+              section === 'account'
+                ? '/r23/account'
+                : `${organizationPath}${suffix}`;
+            return `<a href="${href}" title="${safeLabel}"${section === 'settings' ? ' data-testid="org-settings-link"' : ''}${section === 'plan' ? ' class="software-workspace-upgrade"' : ''}${section === 'builder' ? ' aria-label="Assessment Builder"' : ''}${workspace.active === section ? ' aria-current="page"' : ''}>${workspaceIcon(icon)}${section === 'builder' ? '<span class="software-workspace-nav-label">Assessment Builder</span><span class="software-workspace-rail-label" aria-hidden="true">Builder</span>' : `<span>${safeLabel}</span>`}</a>`;
+          })
+          .join('')
       : `<a href="${organizationPath}"${
           workspace.active === 'assessments' ? ' aria-current="page"' : ''
         }>${
@@ -122,16 +205,16 @@ export function renderSoftwareDocument(
     ? `<aside class="software-workspace-sidebar">
         ${
           hiringEnabled
-            ? `<label class="software-workspace-rail-control software-document-mobile-nav-control"><input type="checkbox" aria-label="Expand workspace navigation"><span class="software-workspace-mobile-name">${escapeHtml(workspace.organizationName)}</span></label>`
+            ? `<label class="software-workspace-rail-control" title="Toggle workspace navigation"><input type="checkbox" aria-label="Show full workspace navigation">${workspaceIcon('LayoutSidebarLeftExpand', 20)}${workspaceIcon('LayoutSidebarLeftCollapse', 20)}<span class="software-workspace-mobile-name">${escapeHtml(workspace.organizationName)}</span></label>`
             : ''
         }
-        <div class="software-workspace-identity" role="region" aria-label="Active organization"><span class="software-eyebrow">Your workspace</span><strong>${escapeHtml(
+        <div class="software-workspace-identity" role="region" aria-label="Active organization">${hiringEnabled ? '' : '<span class="software-eyebrow">Your workspace</span>'}<strong>${escapeHtml(
           workspace.organizationName,
         )}</strong><span>${resolveRoleLabel(workspace.role, hiringEnabled)}</span>${planChip}</div>
         <nav aria-label="Workspace navigation">${navLinks}</nav>
-        <div class="software-workspace-sidebar-footer"><a href="/r23/organizations">Switch workspace</a><span>${escapeHtml(
+        <div class="software-workspace-sidebar-footer"><span title="${escapeHtml(workspace.email)}">${escapeHtml(
           workspace.email,
-        )}</span><form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${escapeHtml(
+        )}</span><a href="/r23/organizations">Switch workspace</a><form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${escapeHtml(
           workspace.csrf,
         )}"><button type="submit">Sign out</button></form></div>
       </aside>`
@@ -152,14 +235,16 @@ export function renderSoftwareDocument(
     : '';
   const htmlThemeAttr = resolvedTheme === 'dark' ? ' data-theme="dark"' : '';
 
-  const brandMark =
-    '<svg class="software-brand-mark" width="22" height="22" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#211426"/><rect x="0.75" y="0.75" width="62.5" height="62.5" rx="15.25" stroke="#f5efe6" stroke-opacity="0.16" stroke-width="1.5"/><rect x="17.5" y="15.5" width="7.5" height="33" rx="2.6" fill="#f5efe6"/><rect x="39" y="15.5" width="7.5" height="33" rx="2.6" fill="#f5efe6"/><path d="M 21 28.5 H 30.5 C 35.8 28.5 39 25.3 39 20 H 42 V 44 H 39 C 39 38.7 35.8 35.5 30.5 35.5 H 21 Z" fill="#f5efe6"/><rect x="26" y="29.8" width="12" height="4.4" rx="2.2" fill="#8ee3b8"/></svg>';
-
   const isCenteredWorkspacePicker =
     !workspace && resolvedNextPath === '/r23/organizations';
   const bodyAccessClasses = workspace
-    ? ` software-document-workspace${hiringEnabled ? ' software-document-mobile-nav' : ''}`
+    ? ` software-document-workspace${hiringEnabled ? ' software-document-compact-nav' : ''}`
     : ' software-document-access software-team-access';
 
-  return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/apple-icon.png"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${bodyAccessClasses}"><a class="software-skip-link" href="#main-content">Skip to main content</a><header class="software-document-header"><a class="software-document-wordmark" href="${homeBrandHref}" aria-label="Hirearchy Software home">${brandMark}<span>Hirearchy</span><span class="software-document-product">Software</span></a>${themeToggleForm}</header><div class="software-document-layout">${navigation}<main class="software-document-shell${isCenteredWorkspacePicker ? ' software-document-shell--centered' : ''}" id="main-content" tabindex="-1">${workspace ? '' : isCenteredWorkspacePicker ? '' : '<p class="software-access-principle">Evidence informs.<br><span>People decide.</span></p>'}<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
+  const accessIntro =
+    workspace || isCenteredWorkspacePicker
+      ? ''
+      : '<div class="software-access-intro"><p class="software-access-kicker">Engineering evaluation</p><p class="software-access-principle">Evidence informs.<br><span>People decide.</span></p><p class="software-access-lead">Review real codebase work, inspect reconstructed timelines, and lead structured hiring discussions.</p></div>';
+
+  return `<!doctype html><html lang="en"${htmlThemeAttr}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/software-ui.css">${hiringStylesheet}<title>${safeTitle}</title></head><body class="software-product software-document-body${bodyAccessClasses}"><a class="software-skip-link" href="#main-content">Skip to main content</a><header class="software-document-header"><a class="software-document-wordmark" href="${homeBrandHref}" aria-label="Hirearchy Software home"><span>Hirearchy</span><span class="software-document-product">Software</span></a>${themeToggleForm}</header><div class="software-document-layout">${navigation}<main class="software-document-shell${isCenteredWorkspacePicker ? ' software-document-shell--centered' : ''}" id="main-content" tabindex="-1">${accessIntro}<div class="software-document-panel">${fallbackHeading}${content}</div></main></div></body></html>`;
 }

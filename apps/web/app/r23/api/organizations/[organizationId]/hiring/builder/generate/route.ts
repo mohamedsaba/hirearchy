@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import { generateHiringAssessmentWithKimi } from '../../../../../../../../src/hiring/ai-builder';
+import {
+  consumeBuilderGenerationJob,
+  getLatestBuilderGenerationJob,
+  startBuilderGenerationJob,
+} from '../../../../../../../../src/hiring/builder-generation-jobs';
 import type {
   ExperienceLevelId,
   ProblemStructureId,
@@ -17,6 +22,67 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
 
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ organizationId: string }> },
+): Promise<Response> {
+  try {
+    const { organizationId } = await params;
+    const url = new URL(request.url);
+    const jobId = url.searchParams.get('jobId')?.trim() || undefined;
+    return await withHiringOrganizationSession(
+      request,
+      organizationId,
+      { requireOriginCsrf: false },
+      async ({ orgContext }) => {
+        const job = getLatestBuilderGenerationJob(
+          organizationId,
+          orgContext.principalId,
+          jobId,
+        );
+        return NextResponse.json(
+          { job },
+          { headers: { 'Cache-Control': 'private, no-store' } },
+        );
+      },
+    );
+  } catch (error) {
+    return hiringFailureJsonResponse(request, error);
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ organizationId: string }> },
+): Promise<Response> {
+  try {
+    const { organizationId } = await params;
+    const url = new URL(request.url);
+    const jobId = url.searchParams.get('jobId')?.trim() || '';
+    if (!jobId) {
+      throw new StagingBadRequest();
+    }
+    return await withHiringOrganizationSession(
+      request,
+      organizationId,
+      { requireOriginCsrf: true },
+      async ({ orgContext }) => {
+        const ok = consumeBuilderGenerationJob(
+          organizationId,
+          orgContext.principalId,
+          jobId,
+        );
+        return NextResponse.json(
+          { ok },
+          { headers: { 'Cache-Control': 'private, no-store' } },
+        );
+      },
+    );
+  } catch (error) {
+    return hiringFailureJsonResponse(request, error);
+  }
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ organizationId: string }> },
@@ -28,7 +94,7 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ plan }) => {
+      async ({ orgContext, plan }) => {
         if (!hasPlanFeature(plan.planTier, 'aiAssessmentBuilder')) {
           return NextResponse.json(
             {
@@ -83,6 +149,47 @@ export async function POST(
           typeof body.guidance === 'string' && body.guidance.trim()
             ? body.guidance.trim().slice(0, 600)
             : undefined;
+        const draftId =
+          typeof body.draftId === 'string' && body.draftId.trim()
+            ? body.draftId.trim().slice(0, 128)
+            : undefined;
+
+        if (body.async === true) {
+          const job = startBuilderGenerationJob(
+            {
+              organizationId,
+              principalId: orgContext.principalId,
+              draftId,
+              targetRole,
+              experienceLevel: expLevel as ExperienceLevelId,
+              yearsExperience,
+              skills,
+              problemStructure: structure as ProblemStructureId,
+              workKind,
+              domain,
+              durationMinutes,
+              integratedAi,
+              guidance,
+            },
+            () =>
+              generateHiringAssessmentWithKimi({
+                targetRole,
+                experienceLevel: expLevel as ExperienceLevelId,
+                yearsExperience,
+                skills,
+                problemStructure: structure as ProblemStructureId,
+                workKind,
+                domain,
+                durationMinutes,
+                integratedAi,
+                guidance,
+              }),
+          );
+          return NextResponse.json(
+            { job },
+            { status: 202, headers: { 'Cache-Control': 'private, no-store' } },
+          );
+        }
 
         try {
           const generated = await generateHiringAssessmentWithKimi({

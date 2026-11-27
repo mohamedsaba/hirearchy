@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   IconChevronDown,
-  IconChevronRight,
   IconCopy,
+  IconEyeCheck,
   IconMapPin,
   IconUserCheck,
   IconX,
 } from '@tabler/icons-react';
 
-import { filterAndSortCandidates } from '../../../../../src/hiring/candidates-view';
+import {
+  filterAndSortCandidates,
+  matchesCandidateSessionFilters,
+} from '../../../../../src/hiring/candidates-view';
 import {
   CANDIDATE_SORT_OPTIONS,
   EXPERIENCE_LEVELS,
@@ -22,9 +25,15 @@ import {
 } from '../../../../../src/hiring/catalogs';
 import type {
   OrgCandidateRecord,
+  OrgCandidateSessionItem,
   WorkspaceRoleKind,
 } from '../../../../../src/hiring/types';
 import { type OrganizationPlanSummary } from '../../../../../src/plans/entitlements';
+import {
+  readPersistedJson,
+  removePersistedKey,
+  writePersistedJson,
+} from '../../../../../src/ui/browser-state';
 import {
   formatLocalDateTime,
   formatRelativeTime,
@@ -95,40 +104,191 @@ export function CandidatesPipelineClient({
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<CandidateSortId>('recent');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<ReadonlySet<string>>(
     () => new Set(candidates.slice(0, 1).map((c) => c.candidateKey)),
   );
+  const defaultExpandedKey = candidates[0]?.candidateKey ?? null;
+
+  const filterStorageKey = `hirearchy:org:candidates-filters:v1:${organizationId}`;
 
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
       const params = new URLSearchParams(window.location.search);
-      const q = params.get('q');
-      const st = params.get('status') as PipelineStatusId | null;
-      if (q) setSearchQuery(q);
-      if (st && PIPELINE_STATUS_OPTIONS.some((item) => item.id === st)) {
-        setStatusFilter(st);
+      const hasUrlParams =
+        params.has('q') ||
+        params.has('status') ||
+        params.has('role') ||
+        params.has('sort');
+      const saved = readPersistedJson<{
+        searchQuery?: string;
+        statusFilter?: PipelineStatusId;
+        roleFilter?: string;
+        experienceFilter?: string;
+        yearsFilter?: string;
+        locationFilter?: string;
+        selectedSkills?: string[];
+        sortBy?: CandidateSortId;
+        moreFiltersOpen?: boolean;
+        expandedKeys?: string[];
+      }>(filterStorageKey, 'session');
+      if (hasUrlParams) {
+        const q = params.get('q');
+        const st = params.get('status') as PipelineStatusId | null;
+        const role = params.get('role');
+        const sort = params.get('sort') as CandidateSortId | null;
+        if (q) setSearchQuery(q);
+        if (st && PIPELINE_STATUS_OPTIONS.some((item) => item.id === st)) {
+          setStatusFilter(st);
+        }
+        if (role) setRoleFilter(role);
+        if (sort && CANDIDATE_SORT_OPTIONS.some((item) => item.id === sort)) {
+          setSortBy(sort);
+        }
+        if (typeof saved?.moreFiltersOpen === 'boolean') {
+          setMoreFiltersOpen(saved.moreFiltersOpen);
+        } else if (role || (sort && sort !== 'recent')) {
+          setMoreFiltersOpen(true);
+        }
+      } else if (saved && typeof saved === 'object') {
+        if (typeof saved.searchQuery === 'string') {
+          setSearchQuery(saved.searchQuery);
+        }
+        if (
+          saved.statusFilter &&
+          PIPELINE_STATUS_OPTIONS.some((item) => item.id === saved.statusFilter)
+        ) {
+          setStatusFilter(saved.statusFilter);
+        }
+        if (typeof saved.roleFilter === 'string') {
+          setRoleFilter(saved.roleFilter);
+        }
+        if (typeof saved.experienceFilter === 'string') {
+          setExperienceFilter(saved.experienceFilter);
+        }
+        if (typeof saved.yearsFilter === 'string') {
+          setYearsFilter(saved.yearsFilter);
+        }
+        if (typeof saved.locationFilter === 'string') {
+          setLocationFilter(saved.locationFilter);
+        }
+        if (Array.isArray(saved.selectedSkills)) {
+          setSelectedSkills(
+            saved.selectedSkills.filter(
+              (item): item is string => typeof item === 'string',
+            ),
+          );
+        }
+        if (
+          saved.sortBy &&
+          CANDIDATE_SORT_OPTIONS.some((item) => item.id === saved.sortBy)
+        ) {
+          setSortBy(saved.sortBy);
+        }
+        if (typeof saved.moreFiltersOpen === 'boolean') {
+          setMoreFiltersOpen(saved.moreFiltersOpen);
+        } else if (
+          (saved.roleFilter && saved.roleFilter !== 'all') ||
+          (saved.experienceFilter && saved.experienceFilter !== 'all') ||
+          (saved.yearsFilter && saved.yearsFilter !== 'all') ||
+          (saved.locationFilter && saved.locationFilter !== 'all') ||
+          (Array.isArray(saved.selectedSkills) &&
+            saved.selectedSkills.length > 0) ||
+          (saved.sortBy && saved.sortBy !== 'recent')
+        ) {
+          setMoreFiltersOpen(true);
+        }
       }
+      if (
+        saved &&
+        typeof saved === 'object' &&
+        Array.isArray(saved.expandedKeys)
+      ) {
+        setExpandedKeys(
+          new Set(
+            saved.expandedKeys.filter(
+              (item): item is string => typeof item === 'string',
+            ),
+          ),
+        );
+      }
+      setFiltersHydrated(true);
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [filterStorageKey]);
 
   useEffect(() => {
+    if (!filtersHydrated) return;
     const url = new URL(window.location.href);
     if (searchQuery.trim()) url.searchParams.set('q', searchQuery.trim());
     else url.searchParams.delete('q');
     if (statusFilter !== 'all') url.searchParams.set('status', statusFilter);
     else url.searchParams.delete('status');
+    if (roleFilter !== 'all') url.searchParams.set('role', roleFilter);
+    else url.searchParams.delete('role');
+    if (sortBy !== 'recent') url.searchParams.set('sort', sortBy);
+    else url.searchParams.delete('sort');
     window.history.replaceState(
       window.history.state,
       '',
       `${url.pathname}${url.search}`,
     );
-  }, [searchQuery, statusFilter]);
+
+    const expandedChanged = defaultExpandedKey
+      ? expandedKeys.size !== 1 || !expandedKeys.has(defaultExpandedKey)
+      : expandedKeys.size > 0;
+    const hasActiveState =
+      searchQuery.trim().length > 0 ||
+      selectedSkills.length > 0 ||
+      roleFilter !== 'all' ||
+      statusFilter !== 'all' ||
+      experienceFilter !== 'all' ||
+      yearsFilter !== 'all' ||
+      locationFilter !== 'all' ||
+      sortBy !== 'recent' ||
+      moreFiltersOpen ||
+      expandedChanged;
+    if (!hasActiveState) {
+      removePersistedKey(filterStorageKey);
+      return;
+    }
+    writePersistedJson(
+      filterStorageKey,
+      {
+        searchQuery,
+        statusFilter,
+        roleFilter,
+        experienceFilter,
+        yearsFilter,
+        locationFilter,
+        selectedSkills,
+        sortBy,
+        moreFiltersOpen,
+        expandedKeys: Array.from(expandedKeys),
+      },
+      'session',
+    );
+  }, [
+    defaultExpandedKey,
+    expandedKeys,
+    experienceFilter,
+    filterStorageKey,
+    filtersHydrated,
+    locationFilter,
+    moreFiltersOpen,
+    roleFilter,
+    searchQuery,
+    selectedSkills,
+    sortBy,
+    statusFilter,
+    yearsFilter,
+  ]);
 
   const copyTextWithToast = async (text: string, label: string) => {
     try {
@@ -165,7 +325,7 @@ export function CandidatesPipelineClient({
     };
   }, [candidates]);
 
-  const baseFiltered = filterAndSortCandidates(candidates, {
+  const criteria = {
     role: roleFilter,
     status: statusFilter,
     experienceLevel: experienceFilter,
@@ -173,7 +333,8 @@ export function CandidatesPipelineClient({
     location: locationFilter,
     skills: selectedSkills,
     sort: sortBy,
-  });
+  };
+  const baseFiltered = filterAndSortCandidates(candidates, criteria);
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filtered = normalizedQuery
     ? baseFiltered.filter(
@@ -218,6 +379,8 @@ export function CandidatesPipelineClient({
     setSelectedSkills([]);
     setSortBy('recent');
     setSearchQuery('');
+    setMoreFiltersOpen(false);
+    removePersistedKey(filterStorageKey);
   };
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
@@ -258,8 +421,125 @@ export function CandidatesPipelineClient({
     return items;
   }, [candidates, currentPrincipalId]);
 
+  const readyCount = candidates.reduce(
+    (count, candidate) =>
+      count +
+      candidate.sessions.filter(
+        (session) => session.pipelineStatus === 'ready_for_review',
+      ).length,
+    0,
+  );
+
+  const renderSession = (sess: OrgCandidateSessionItem) => {
+    const canReviewEvidence = sess.lifecycleStatus === 'SUBMITTED';
+    const reviewHref = canReviewEvidence
+      ? `/r27/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sess.sessionId)}`
+      : `${orgBase}/sessions/${encodeURIComponent(sess.sessionId)}`;
+    return (
+      <div
+        key={sess.sessionId}
+        className="hiring-session-subrow"
+        data-stage={sess.pipelineStatus}
+      >
+        <div>
+          <strong>{sess.scenarioTitle}</strong>
+          <div className="hiring-candidate-meta">
+            <span>{sess.targetRole}</span>
+            <span
+              title={formatLocalDateTime(sess.submittedAt ?? sess.createdAt)}
+            >
+              {sess.submittedAt ? 'Submitted' : 'Issued'}{' '}
+              {formatRelativeTime(sess.submittedAt ?? sess.createdAt) ||
+                formatDateShort(sess.submittedAt ?? sess.createdAt)}
+            </span>
+            <span>
+              {sess.assignedReviewerPrincipalId &&
+              sess.assignedReviewerPrincipalId === currentPrincipalId
+                ? 'Assigned to you'
+                : sess.assignedReviewerName
+                  ? `Reviewer: ${sess.assignedReviewerName}`
+                  : 'No reviewer assigned'}
+            </span>
+          </div>
+        </div>
+
+        <div className="hiring-chip-group">
+          <span className={statusPillClass(sess.pipelineStatus)}>
+            {statusLabel(sess.pipelineStatus)}
+          </span>
+          {sess.secondOpinions.length > 0
+            ? (() => {
+                const pending = sess.secondOpinions.filter(
+                  (o) => o.status === 'pending',
+                );
+                const approved = sess.secondOpinions.filter(
+                  (o) => o.status === 'completed' && o.verdict === 'approve',
+                );
+                const flagged = sess.secondOpinions.filter(
+                  (o) =>
+                    o.status === 'completed' && o.verdict === 'request_changes',
+                );
+                const pillClass =
+                  flagged.length > 0
+                    ? 'hiring-pill hiring-pill-danger'
+                    : approved.length > 0 && pending.length === 0
+                      ? 'hiring-pill hiring-pill-success'
+                      : pending.length > 0
+                        ? 'hiring-pill hiring-pill-warning'
+                        : 'hiring-pill';
+                const label =
+                  flagged.length > 0
+                    ? `${flagged.length} concern${flagged.length === 1 ? '' : 's'} flagged`
+                    : pending.length > 0
+                      ? `${pending.length} peer review${pending.length === 1 ? '' : 's'} pending`
+                      : approved.length > 0
+                        ? `${approved.length} peer approved`
+                        : `${sess.secondOpinions.length} peer review${sess.secondOpinions.length === 1 ? '' : 's'}`;
+                return (
+                  <span className={pillClass}>
+                    <IconUserCheck size={12} aria-hidden="true" /> {label}
+                  </span>
+                );
+              })()
+            : null}
+        </div>
+
+        <div className="hiring-header-actions">
+          {sess.candidateLink ? (
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-sm"
+              onClick={() =>
+                void copyTextWithToast(
+                  `${window.location.origin}${sess.candidateLink}`,
+                  'Candidate invite link copied.',
+                )
+              }
+            >
+              <IconCopy size={14} aria-hidden="true" /> Copy invite link
+            </button>
+          ) : null}
+          {sess.decision?.decision === 'accepted' ? (
+            <Link
+              className="hiring-btn hiring-btn-sm hiring-btn-mint"
+              href={`${orgBase}/handoffs/${encodeURIComponent(sess.sessionId)}`}
+            >
+              Open Handoff
+            </Link>
+          ) : null}
+          <a
+            className={`hiring-btn hiring-btn-sm${sess.pipelineStatus === 'ready_for_review' ? ' hiring-btn-primary' : ''}`}
+            href={reviewHref}
+          >
+            {canReviewEvidence ? 'Review submission' : 'Inspect session'}
+          </a>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="hiring-page-shell">
+    <div className="hiring-page-shell team-candidate-pipeline">
       {myPendingPeerReviews.length > 0 ? (
         <section
           className="hiring-card hiring-peer-queue-card"
@@ -311,10 +591,7 @@ export function CandidatesPipelineClient({
         <div className="hiring-banner hiring-banner-warning" role="status">
           <span>Activate an organization plan to issue assessments.</span>
           {currentRole === 'cto' ? (
-            <Link
-              className="hiring-btn hiring-btn-sm"
-              href={`${orgBase}/settings`}
-            >
+            <Link className="hiring-btn hiring-btn-sm" href={`${orgBase}/plan`}>
               Set up plan
             </Link>
           ) : null}
@@ -323,7 +600,11 @@ export function CandidatesPipelineClient({
 
       <div className="hiring-page-shell">
         {candidates.length > 0 ? (
-          <section className="hiring-filter-bar" aria-label="Filter candidates">
+          <section
+            className="hiring-filter-bar"
+            data-has-review-shortcut={readyCount > 0}
+            aria-label="Filter candidates"
+          >
             <div className="hiring-filter-primary">
               <div className="hiring-field">
                 <label htmlFor="candidate-search">Search</label>
@@ -354,16 +635,31 @@ export function CandidatesPipelineClient({
               </div>
             </div>
 
+            {readyCount > 0 ? (
+              <button
+                type="button"
+                className="hiring-btn team-review-filter"
+                aria-pressed={statusFilter === 'ready_for_review'}
+                onClick={() =>
+                  setStatusFilter(
+                    statusFilter === 'ready_for_review'
+                      ? 'all'
+                      : 'ready_for_review',
+                  )
+                }
+              >
+                <IconEyeCheck size={17} aria-hidden="true" />
+                {readyCount} {readyCount === 1 ? 'submission' : 'submissions'}{' '}
+                ready to review
+              </button>
+            ) : null}
+
             <details
               className="hiring-disclosure hiring-more-filters"
-              open={
-                roleFilter !== 'all' ||
-                sortBy !== 'recent' ||
-                experienceFilter !== 'all' ||
-                locationFilter !== 'all' ||
-                yearsFilter !== 'all' ||
-                selectedSkills.length > 0
-              }
+              open={moreFiltersOpen}
+              onToggle={(event) => {
+                setMoreFiltersOpen(event.currentTarget.open);
+              }}
             >
               <summary>More filters</summary>
               <div className="hiring-filter-grid hiring-mt-xs">
@@ -517,7 +813,7 @@ export function CandidatesPipelineClient({
           </div>
 
           {filtered.length === 0 ? (
-            <div className="hiring-card">
+            <div className="hiring-card team-candidate-empty">
               <h2>
                 {candidates.length === 0
                   ? 'No candidates yet'
@@ -528,11 +824,44 @@ export function CandidatesPipelineClient({
                   ? 'Candidates appear here when you send them an assessment.'
                   : 'Try a different search or clear your filters.'}
               </p>
+              {candidates.length > 0 ? (
+                <button
+                  type="button"
+                  className="hiring-btn"
+                  onClick={clearFilters}
+                >
+                  Clear filters
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="hiring-candidate-list">
               {filtered.map((candidate) => {
-                const expanded = expandedKeys.has(candidate.candidateKey);
+                const stageFiltered = statusFilter !== 'all';
+                const matches = (session: OrgCandidateSessionItem) =>
+                  matchesCandidateSessionFilters(candidate, session, criteria);
+                const readySessions = candidate.sessions.filter(
+                  (session) => session.pipelineStatus === 'ready_for_review',
+                );
+                const matchingSessions = stageFiltered
+                  ? candidate.sessions.filter(matches)
+                  : [
+                      ...readySessions,
+                      ...candidate.sessions.filter(
+                        (session) =>
+                          session.pipelineStatus !== 'ready_for_review',
+                      ),
+                    ];
+                const otherSessions = stageFiltered
+                  ? candidate.sessions.filter((session) => !matches(session))
+                  : [];
+                const expanded =
+                  stageFiltered || expandedKeys.has(candidate.candidateKey);
+                const cardStatus = stageFiltered
+                  ? statusFilter
+                  : readySessions.length
+                    ? 'ready_for_review'
+                    : candidate.latestPipelineStatus;
                 const locationLabel = [
                   candidate.locationCity,
                   candidate.locationCountry,
@@ -543,7 +872,7 @@ export function CandidatesPipelineClient({
                 return (
                   <article
                     key={candidate.candidateKey}
-                    className="hiring-candidate-card hiring-card-animated"
+                    className="hiring-candidate-card"
                   >
                     <div className="hiring-candidate-header">
                       <div className="hiring-candidate-identity">
@@ -553,12 +882,12 @@ export function CandidatesPipelineClient({
                         <div>
                           <div className="hiring-candidate-name">
                             <h2>{candidate.fullName}</h2>
-                            <span
-                              className={statusPillClass(
-                                candidate.latestPipelineStatus,
-                              )}
-                            >
-                              {statusLabel(candidate.latestPipelineStatus)}
+                            <span className={statusPillClass(cardStatus)}>
+                              {stageFiltered
+                                ? `${matchingSessions.length} ${statusLabel(cardStatus).toLowerCase()}`
+                                : readySessions.length
+                                  ? `${readySessions.length} ready to review`
+                                  : statusLabel(cardStatus)}
                             </span>
                           </div>
                           <div className="hiring-candidate-meta">
@@ -566,8 +895,9 @@ export function CandidatesPipelineClient({
                             {candidate.email ? (
                               <button
                                 type="button"
-                                className="hiring-btn hiring-btn-sm"
+                                className="hiring-btn hiring-btn-sm team-copy-email"
                                 aria-label={`Copy ${candidate.email}`}
+                                title="Copy email"
                                 onClick={() =>
                                   void copyTextWithToast(
                                     candidate.email,
@@ -575,8 +905,7 @@ export function CandidatesPipelineClient({
                                   )
                                 }
                               >
-                                <IconCopy size={13} aria-hidden="true" /> Copy
-                                email
+                                <IconCopy size={15} aria-hidden="true" />
                               </button>
                             ) : null}
                             <span>{candidate.headlineRole}</span>
@@ -585,9 +914,9 @@ export function CandidatesPipelineClient({
                                 ? experienceLevelLabel(
                                     candidate.experienceLevel,
                                   )
-                                : 'Level unspecified'}
+                                : null}
                               {candidate.yearsExperience !== null
-                                ? ` · ${candidate.yearsExperience} yrs`
+                                ? `${candidate.experienceLevel ? ' · ' : ''}${candidate.yearsExperience} yrs`
                                 : ''}
                             </span>
                             {candidate.hasAccount ? null : (
@@ -610,164 +939,40 @@ export function CandidatesPipelineClient({
                         ))}
                       </div>
 
-                      <button
-                        type="button"
-                        className="hiring-btn hiring-btn-sm"
-                        onClick={() => toggleExpanded(candidate.candidateKey)}
-                        aria-expanded={expanded}
-                      >
-                        {expanded ? (
-                          <>
-                            <IconChevronDown size={15} /> Hide{' '}
-                            {candidate.sessions.length} assessment
-                            {candidate.sessions.length === 1 ? '' : 's'}
-                          </>
-                        ) : (
-                          <>
-                            <IconChevronRight size={15} />{' '}
-                            {candidate.sessions.length} assessment
-                            {candidate.sessions.length === 1 ? '' : 's'}
-                          </>
-                        )}
-                      </button>
+                      {!stageFiltered ? (
+                        <button
+                          type="button"
+                          className="hiring-btn hiring-btn-sm team-assessments-toggle"
+                          onClick={() => toggleExpanded(candidate.candidateKey)}
+                          aria-expanded={expanded}
+                        >
+                          {candidate.sessions.length} assessment
+                          {candidate.sessions.length === 1 ? '' : 's'}
+                          <IconChevronDown size={15} aria-hidden="true" />
+                        </button>
+                      ) : null}
                     </div>
 
-                    {expanded ? (
+                    <div
+                      className="team-assessments-disclosure"
+                      data-expanded={expanded}
+                      inert={!expanded}
+                    >
                       <div className="hiring-session-sublist">
-                        {candidate.sessions.map((sess) => {
-                          const canReviewEvidence =
-                            sess.lifecycleStatus === 'SUBMITTED';
-                          const reviewHref = canReviewEvidence
-                            ? `/r27/organizations/${encodeURIComponent(organizationId)}/sessions/${encodeURIComponent(sess.sessionId)}`
-                            : `${orgBase}/sessions/${encodeURIComponent(sess.sessionId)}`;
-                          return (
-                            <div
-                              key={sess.sessionId}
-                              className="hiring-session-subrow"
-                            >
-                              <div>
-                                <strong>{sess.scenarioTitle}</strong>
-                                <div className="hiring-candidate-meta">
-                                  <span>{sess.targetRole}</span>
-                                  <span
-                                    title={formatLocalDateTime(sess.createdAt)}
-                                  >
-                                    Issued{' '}
-                                    {formatRelativeTime(sess.createdAt) ||
-                                      formatDateShort(sess.createdAt)}
-                                  </span>
-                                  {sess.submittedAt ? (
-                                    <span
-                                      title={formatLocalDateTime(
-                                        sess.submittedAt,
-                                      )}
-                                    >
-                                      Submitted{' '}
-                                      {formatRelativeTime(sess.submittedAt) ||
-                                        formatDateShort(sess.submittedAt)}
-                                    </span>
-                                  ) : null}
-                                  <span>
-                                    Reviewer:{' '}
-                                    {sess.assignedReviewerName ?? 'Unassigned'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="hiring-chip-group">
-                                <span
-                                  className={statusPillClass(
-                                    sess.pipelineStatus,
-                                  )}
-                                >
-                                  {statusLabel(sess.pipelineStatus)}
-                                </span>
-                                {sess.secondOpinions.length > 0
-                                  ? (() => {
-                                      const pending =
-                                        sess.secondOpinions.filter(
-                                          (o) => o.status === 'pending',
-                                        );
-                                      const approved =
-                                        sess.secondOpinions.filter(
-                                          (o) =>
-                                            o.status === 'completed' &&
-                                            o.verdict === 'approve',
-                                        );
-                                      const flagged =
-                                        sess.secondOpinions.filter(
-                                          (o) =>
-                                            o.status === 'completed' &&
-                                            o.verdict === 'request_changes',
-                                        );
-                                      const pillClass =
-                                        flagged.length > 0
-                                          ? 'hiring-pill hiring-pill-danger'
-                                          : approved.length > 0 &&
-                                              pending.length === 0
-                                            ? 'hiring-pill hiring-pill-success'
-                                            : pending.length > 0
-                                              ? 'hiring-pill hiring-pill-warning'
-                                              : 'hiring-pill';
-                                      const label =
-                                        flagged.length > 0
-                                          ? `${flagged.length} concern${flagged.length === 1 ? '' : 's'} flagged`
-                                          : pending.length > 0
-                                            ? `${pending.length} peer review${pending.length === 1 ? '' : 's'} pending`
-                                            : approved.length > 0
-                                              ? `${approved.length} peer approved`
-                                              : `${sess.secondOpinions.length} peer review${sess.secondOpinions.length === 1 ? '' : 's'}`;
-                                      return (
-                                        <span className={pillClass}>
-                                          <IconUserCheck
-                                            size={12}
-                                            aria-hidden="true"
-                                          />{' '}
-                                          {label}
-                                        </span>
-                                      );
-                                    })()
-                                  : null}
-                              </div>
-
-                              <div className="hiring-header-actions">
-                                {sess.candidateLink ? (
-                                  <button
-                                    type="button"
-                                    className="hiring-btn hiring-btn-sm"
-                                    onClick={() =>
-                                      void copyTextWithToast(
-                                        `${window.location.origin}${sess.candidateLink}`,
-                                        'Candidate invite link copied.',
-                                      )
-                                    }
-                                  >
-                                    <IconCopy size={14} aria-hidden="true" />{' '}
-                                    Copy invite link
-                                  </button>
-                                ) : null}
-                                {sess.decision?.decision === 'accepted' ? (
-                                  <Link
-                                    className="hiring-btn hiring-btn-sm hiring-btn-mint"
-                                    href={`${orgBase}/handoffs/${encodeURIComponent(sess.sessionId)}`}
-                                  >
-                                    Open Handoff
-                                  </Link>
-                                ) : null}
-                                <a
-                                  className="hiring-btn hiring-btn-sm hiring-btn-primary"
-                                  href={reviewHref}
-                                >
-                                  {canReviewEvidence
-                                    ? 'Review & Decide'
-                                    : 'Inspect Session'}
-                                </a>
-                              </div>
+                        {matchingSessions.map(renderSession)}
+                        {otherSessions.length > 0 ? (
+                          <details className="hiring-other-assessments">
+                            <summary>
+                              {otherSessions.length} other assessment
+                              {otherSessions.length === 1 ? '' : 's'}
+                            </summary>
+                            <div className="hiring-session-sublist">
+                              {otherSessions.map(renderSession)}
                             </div>
-                          );
-                        })}
+                          </details>
+                        ) : null}
                       </div>
-                    ) : null}
+                    </div>
                   </article>
                 );
               })}

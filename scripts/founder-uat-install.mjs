@@ -345,8 +345,8 @@ async function main() {
   try {
     const result = await applyMigrations(migrator);
     assert(
-      result.appliedVersions.includes('0020'),
-      'Founder UAT requires migration 0020',
+      result.appliedVersions.includes('0021'),
+      'Founder UAT requires migration 0021',
     );
     console.log(
       `Migrations verified through ${result.appliedVersions.at(-1)} (${result.appliedVersions.length} total).`,

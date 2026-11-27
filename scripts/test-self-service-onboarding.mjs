@@ -895,6 +895,49 @@ try {
   });
   assert.equal(updatedProfile.displayName, 'Alice Founder');
 
+  const avatarWebp =
+    'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEABUB8JaQAA3AA/vuUAAA=';
+  await callStaging({
+    identity: aliceIdentity,
+    op: 'account.avatar.update',
+    args: { avatarWebp },
+  });
+  assert.equal(
+    (
+      await callStaging({
+        identity: aliceIdentity,
+        op: 'account.profile.get',
+        args: {},
+      })
+    ).avatarWebp,
+    avatarWebp,
+  );
+  assert.equal(
+    (
+      await callStaging({
+        identity: carolIdentity,
+        op: 'account.profile.get',
+        args: {},
+      })
+    ).avatarWebp,
+    undefined,
+  );
+  await callStaging({
+    identity: aliceIdentity,
+    op: 'account.avatar.update',
+    args: { avatarWebp: null },
+  });
+  assert.equal(
+    (
+      await callStaging({
+        identity: aliceIdentity,
+        op: 'account.profile.get',
+        args: {},
+      })
+    ).avatarWebp,
+    undefined,
+  );
+
   // Organization update
   const updatedOrg = await callStaging({
     identity: aliceIdentity,
@@ -917,6 +960,33 @@ try {
     }),
     (err) => err.code === '42501',
     'Reviewer denied organization update',
+  );
+
+  const updatePlan = (identity, planTier, creditsMode, creditsAmount) =>
+    callStaging({
+      identity,
+      op: 'hiring.plan.update',
+      args: { organizationId: orgId, planTier, creditsMode, creditsAmount },
+    });
+  const initialPlan = await updatePlan(
+    aliceIdentity,
+    'per_candidate',
+    'set',
+    5,
+  );
+  assert.equal(initialPlan.candidateCreditsPurchased, 5);
+  const withSlots = await updatePlan(aliceIdentity, 'current', 'add', 2);
+  assert.equal(withSlots.candidateCreditsPurchased, 7);
+  const upgraded = await updatePlan(aliceIdentity, 'ultra', 'add', 0);
+  assert.equal(upgraded.planTier, 'ultra');
+  assert.equal(upgraded.candidateCreditsPurchased, 7);
+  const downgraded = await updatePlan(aliceIdentity, 'per_candidate', 'add', 0);
+  assert.equal(downgraded.planTier, 'per_candidate');
+  assert.equal(downgraded.candidateCreditsPurchased, 7);
+  await assert.rejects(
+    updatePlan(carolIdentity, 'pro', 'add', 0),
+    (error) => error.code === '42501',
+    'Reviewer denied plan changes',
   );
 
   // Members list

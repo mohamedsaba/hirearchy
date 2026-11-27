@@ -4,10 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   candidateConfirmationParams,
+  candidateRecoveryPath,
   candidateSignInPath,
 } from '../../../src/hiring/candidate-entry';
 import { useRouter } from 'next/navigation';
-import { BrandMark } from '../../_components/brand-mark';
+import { AuthCanvasBackdrop } from '../../_components/auth-canvas-backdrop';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
 import { SwitchSignInAccount } from '../../_components/switch-sign-in-account';
@@ -16,13 +17,20 @@ export interface CandidateAuthClientProps {
   readonly mode: 'login' | 'signup';
   readonly nextPath: string;
   readonly verified?: boolean;
-  readonly activeAccount?: { email: string; csrfToken: string } | null;
+  readonly reset?: boolean;
+  readonly activeAccount?: {
+    email: string;
+    csrfToken: string;
+    hasCandidateContext?: boolean;
+    hasTeamWorkspace?: boolean;
+  } | null;
 }
 
 export function CandidateAuthClient({
   mode,
   nextPath,
   verified = false,
+  reset = false,
   activeAccount,
 }: CandidateAuthClientProps) {
   const router = useRouter();
@@ -108,6 +116,7 @@ export function CandidateAuthClient({
 
   return (
     <div className="software-product software-document-access software-candidate-access">
+      <AuthCanvasBackdrop />
       <a className="software-skip-link" href="#main-content">
         Skip to sign in
       </a>
@@ -117,7 +126,6 @@ export function CandidateAuthClient({
           href="/candidate"
           aria-label="Hirearchy Software for candidates"
         >
-          <BrandMark />
           <span>Hirearchy</span>
           <span className="software-document-product">Software</span>
         </Link>
@@ -126,10 +134,15 @@ export function CandidateAuthClient({
 
       <main className="software-document-shell" id="main-content" tabIndex={-1}>
         <div className="software-candidate-intro">
+          <p className="software-access-kicker">Candidate portal</p>
           <p className="software-access-principle">
             Work worth
             <br />
             <span>seeing.</span>
+          </p>
+          <p className="software-access-lead">
+            Complete a realistic engineering task in a real workspace and share
+            your work in full context.
           </p>
           <ol
             className="software-candidate-steps"
@@ -155,6 +168,9 @@ export function CandidateAuthClient({
           {verified ? (
             <p role="status">Email confirmed. Sign in to continue.</p>
           ) : null}
+          {reset ? (
+            <p role="status">Password updated. Sign in to continue.</p>
+          ) : null}
           {errorMsg ? (
             <p role="alert">
               {errorMsg}
@@ -172,7 +188,27 @@ export function CandidateAuthClient({
               csrfToken={activeAccount.csrfToken}
               signInPath={loginPath}
               continuePath={
-                nextPath === '/candidate' ? '/candidate' : undefined
+                nextPath === '/candidate' && activeAccount.hasCandidateContext
+                  ? '/candidate'
+                  : undefined
+              }
+              switchLabel="Switch to your invited email"
+              notice={
+                activeAccount.hasCandidateContext
+                  ? undefined
+                  : nextPath === '/candidate'
+                    ? `No candidate invitation or profile is linked to ${activeAccount.email}.`
+                    : `This account does not match the invitation. Switch to the email address that received your assessment link.`
+              }
+              secondaryHref={
+                activeAccount.hasTeamWorkspace
+                  ? '/r23/organizations'
+                  : undefined
+              }
+              secondaryLabel={
+                activeAccount.hasTeamWorkspace
+                  ? 'Back to team workspace'
+                  : undefined
               }
             />
           ) : signupSuccess ? (
@@ -210,7 +246,10 @@ export function CandidateAuthClient({
                 {signIn ? (
                   <div className="software-field-heading">
                     <label htmlFor="cand-password">Password</label>
-                    <Link href="/r23/recover" prefetch={false}>
+                    <Link
+                      href={candidateRecoveryPath(nextPath)}
+                      prefetch={false}
+                    >
                       Forgot password?
                     </Link>
                   </div>
@@ -240,15 +279,20 @@ export function CandidateAuthClient({
                 </button>
               </form>
               <nav aria-label="Account help">
-                {signIn ? (
-                  <Link
-                    href={`/candidate/signup?next=${encodeURIComponent(nextPath)}`}
-                  >
-                    Create a candidate account
-                  </Link>
-                ) : (
-                  <Link href={loginPath}>Already registered? Sign in</Link>
-                )}
+                <div className="software-access-switch">
+                  {signIn ? (
+                    <Link
+                      href={`/candidate/signup?next=${encodeURIComponent(nextPath)}`}
+                    >
+                      Create a candidate account
+                    </Link>
+                  ) : (
+                    <Link href={loginPath}>Already registered? Sign in</Link>
+                  )}
+                  <p>
+                    Hiring team? <Link href="/r23/login">Team sign in</Link>
+                  </p>
+                </div>
               </nav>
             </>
           )}

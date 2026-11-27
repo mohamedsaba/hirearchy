@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react';
 import type { BriefingSessionDuration } from '../../../../src/evaluator/evaluator-briefing';
 import type { SessionClosureReason } from '../../../../src/sessions/session';
 import { formatEvaluatorClosureReason } from '../../../../src/evaluator/evaluator-review-presentation';
+import { IconChevronRight } from '@tabler/icons-react';
 import Link from 'next/link';
 import { LocalTime } from '../../../_components/local-time';
 import { ThemeToggle } from '../../../_components/theme-toggle';
@@ -14,6 +16,8 @@ type EvaluatorHeaderProps = Readonly<{
   backHref?: string;
   backLabel?: string;
   showTheme?: boolean;
+  desktopReview?: boolean;
+  action?: ReactNode;
   candidateName?: string | null;
   candidateEmail?: string | null;
   candidateCode?: string | null;
@@ -40,6 +44,8 @@ export const EvaluatorHeader = ({
   backHref = '/evaluator',
   backLabel = '← Back to reviews',
   showTheme,
+  desktopReview = false,
+  action,
   candidateName,
   candidateEmail,
   candidateCode,
@@ -50,6 +56,46 @@ export const EvaluatorHeader = ({
   diffSummary,
 }: EvaluatorHeaderProps) => {
   const displayName = candidateName?.trim() || candidateEmail?.trim() || null;
+
+  if (desktopReview) {
+    const name = displayName ?? scenarioTitle;
+    return (
+      <header className="evaluator-report-heading review-desk-heading">
+        <nav className="review-desk-breadcrumb" aria-label="Candidate review">
+          <Link className="evaluator-back-link" href={backHref}>
+            Candidates
+          </Link>
+          <IconChevronRight size={14} aria-hidden="true" />
+          <span aria-current="page">{name}</span>
+        </nav>
+        <div className="review-desk-head-row">
+          <div className="review-desk-person">
+            <span className="evaluator-avatar-pill" aria-hidden="true">
+              {candidateInitials(name)}
+            </span>
+            <div>
+              <h1>{name}</h1>
+              <p className="review-desk-subject">
+                {[
+                  displayName ? scenarioTitle : null,
+                  targetRole,
+                  experienceLevel,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+              <div className="review-desk-status">
+                <span className="evaluator-report-status">Submitted</span>
+                <LocalTime timestamp={submittedAt} absolute />
+                {closureReason === 'timeout' ? <span>Time expired</span> : null}
+              </div>
+            </div>
+          </div>
+          {action}
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="evaluator-report-heading">

@@ -1630,7 +1630,9 @@ BEGIN
     'principalId', p.id::pg_catalog.text,
     'displayName', p.display_name,
     'email', u.email
-  ) INTO v_profile
+  ) || CASE WHEN p.avatar_webp IS NULL THEN '{}'::pg_catalog.jsonb
+    ELSE pg_catalog.jsonb_build_object('avatarWebp', p.avatar_webp) END
+    INTO v_profile
   FROM hirearchy.application_principals p
   JOIN auth.users u ON u.id = p.auth_user_id
   WHERE p.id = p_principal_id;
@@ -1675,6 +1677,28 @@ BEGIN
     'principalId', p_principal_id::pg_catalog.text,
     'displayName', v_display_name
   );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.onboarding_update_avatar(
+  p_principal_id pg_catalog.uuid,
+  p_avatar_webp pg_catalog.text
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+BEGIN
+  UPDATE hirearchy.application_principals
+  SET avatar_webp = p_avatar_webp
+  WHERE id = p_principal_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Account profile unavailable' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object('updated', true);
 END
 $function$;
 
@@ -2370,10 +2394,12 @@ AS $function$
 DECLARE
   v_owner_id pg_catalog.uuid;
   v_role pg_catalog.text;
+  v_current_plan_tier pg_catalog.text;
+  v_next_plan_tier pg_catalog.text := p_plan_tier;
   v_existing_credits pg_catalog.int4 := 0;
   v_next_credits pg_catalog.int4 := 0;
 BEGIN
-  IF p_plan_tier NOT IN ('per_candidate', 'pro', 'ultra') THEN
+  IF p_plan_tier NOT IN ('per_candidate', 'pro', 'ultra', 'current') THEN
     RAISE EXCEPTION 'Invalid paid plan tier' USING ERRCODE = '22023';
   END IF;
   IF p_credits_mode NOT IN ('set', 'add') OR p_credits_amount < 0 THEN
@@ -2395,7 +2421,7 @@ BEGIN
     RAISE EXCEPTION 'Plan management requires CTO or owner permission' USING ERRCODE = '42501';
   END IF;
 
-  SELECT candidate_credits_purchased INTO v_existing_credits
+  SELECT candidate_credits_purchased, plan_tier INTO v_existing_credits, v_current_plan_tier
   FROM hirearchy.organization_plans
   WHERE organization_id = p_organization_id
   FOR UPDATE;
@@ -2404,7 +2430,14 @@ BEGIN
     v_existing_credits := 0;
   END IF;
 
-  IF p_plan_tier = 'per_candidate' THEN
+  IF p_plan_tier = 'current' THEN
+    IF v_current_plan_tier IS DISTINCT FROM 'per_candidate' THEN
+      RAISE EXCEPTION 'Candidate slots can only be adjusted on the Per Candidate plan' USING ERRCODE = '22023';
+    END IF;
+    v_next_plan_tier := v_current_plan_tier;
+  END IF;
+
+  IF v_next_plan_tier = 'per_candidate' THEN
     IF p_credits_mode = 'add' THEN
       v_next_credits := GREATEST(0, v_existing_credits + p_credits_amount);
     ELSE
@@ -2417,7 +2450,7 @@ BEGIN
   INSERT INTO hirearchy.organization_plans (
     organization_id, plan_tier, candidate_credits_purchased, updated_by_principal_id, updated_at
   ) VALUES (
-    p_organization_id, p_plan_tier, v_next_credits, p_caller_principal_id, pg_catalog.clock_timestamp()
+    p_organization_id, v_next_plan_tier, v_next_credits, p_caller_principal_id, pg_catalog.clock_timestamp()
   )
   ON CONFLICT (organization_id) DO UPDATE SET
     plan_tier = EXCLUDED.plan_tier,
@@ -3588,6 +3621,10 @@ BEGIN
     RAISE EXCEPTION 'Session access denied' USING ERRCODE = '42501';
   END IF;
 
+  IF p_reviewer_principal_id = p_caller_principal_id THEN
+    RAISE EXCEPTION 'Peer review requires a different team member' USING ERRCODE = '22023';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM hirearchy.organization_memberships
     WHERE organization_id = p_organization_id
@@ -3992,6 +4029,7 @@ GRANT EXECUTE ON FUNCTION staging.onboarding_remove_member(pg_catalog.uuid, pg_c
 GRANT EXECUTE ON FUNCTION staging.onboarding_update_organization(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_get_profile(pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_update_profile(pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
+GRANT EXECUTE ON FUNCTION staging.onboarding_update_avatar(pg_catalog.uuid, pg_catalog.text) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_list_user_memberships(pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.onboarding_get_organization_metadata(pg_catalog.uuid, pg_catalog.uuid) TO staging_verifier_owner;
 GRANT EXECUTE ON FUNCTION staging.hiring_create_team_invitation(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) TO staging_verifier_owner;
@@ -4028,6 +4066,7 @@ REVOKE ALL ON FUNCTION staging.onboarding_remove_member(pg_catalog.uuid, pg_cata
 REVOKE ALL ON FUNCTION staging.onboarding_update_organization(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.onboarding_get_profile(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.onboarding_update_profile(pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.onboarding_update_avatar(pg_catalog.uuid, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.onboarding_list_user_memberships(pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.onboarding_get_organization_metadata(pg_catalog.uuid, pg_catalog.uuid) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
 REVOKE ALL ON FUNCTION staging.hiring_create_team_invitation(pg_catalog.uuid, pg_catalog.uuid, pg_catalog.uuid, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text) FROM PUBLIC, r23_gateway, app_evaluator, app_candidate_gateway, app_control_worker, hirearchy_migrator;
@@ -4358,6 +4397,7 @@ def validate_operation_args(operation, args):
         'organization.member.remove': (('organizationId', 'targetPrincipalId'), ()),
         'account.profile.get': ((), ()),
         'account.profile.update': (('displayName',), ()),
+        'account.avatar.update': (('avatarWebp',), ()),
         'candidate.profile.get': ((), ()),
         'candidate.profile.upsert': (('profile',), ()),
         'candidate.portal.list': ((), ()),
@@ -6502,6 +6542,20 @@ def dispatch_account(op, args, subject_id, auth_session_id, principal_id):
         )
         return safe_json_value(rows[0]['result'])
 
+    if op == 'account.avatar.update':
+        avatar = args.get('avatarWebp')
+        if avatar is not None and (
+            not isinstance(avatar, str) or not 16 <= len(avatar) <= 24000
+            or not re.fullmatch(r'UklGR[A-Za-z0-9+/]+={0,2}', avatar)
+        ):
+            error('Invalid account photo', '22023')
+        rows = run(
+            "SELECT staging.onboarding_update_avatar($1::pg_catalog.uuid, $2) AS result",
+            ['uuid', 'text'],
+            [principal_id, avatar],
+        )
+        return safe_json_value(rows[0]['result'])
+
     if op == 'account.profile.update':
         raw_name = args.get('displayName')
         if not isinstance(raw_name, str):
@@ -6639,7 +6693,7 @@ PRE_PRINCIPAL_OPERATIONS = {
     'candidate.session.verify_access',
     'candidate.session.submitted_read',
 }
-ACCOUNT_OPERATIONS = {'account.profile.get', 'account.profile.update'}
+ACCOUNT_OPERATIONS = {'account.profile.get', 'account.profile.update', 'account.avatar.update'}
 
 if proof['op'] in PRE_PRINCIPAL_OPERATIONS:
     user_rows = run(

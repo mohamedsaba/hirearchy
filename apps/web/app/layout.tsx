@@ -14,6 +14,18 @@ const dmSans = localFont({
   variable: '--font-dm-sans',
   display: 'swap',
 });
+const newsreader = localFont({
+  src: '../public/fonts/newsreader-latin.woff2',
+  weight: '200 800',
+  variable: '--font-newsreader',
+  display: 'swap',
+});
+const jetbrainsMono = localFont({
+  src: '../public/fonts/jetbrains-mono-latin.woff2',
+  weight: '100 800',
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
 export const metadata: Metadata = {
   title: { default: 'Hirearchy', template: '%s | Hirearchy' },
   description:
@@ -55,7 +67,9 @@ export default async function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
-      <body className={dmSans.variable}>
+      <body
+        className={`${dmSans.variable} ${newsreader.variable} ${jetbrainsMono.variable}`}
+      >
         {children}
         <IntentPrefetch />
       </body>

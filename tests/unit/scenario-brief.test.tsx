@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { ScenarioBrief } from '../../apps/web/src/ui/scenario-brief';
+import {
+  ScenarioBrief,
+  reconcileScenarioBriefForWorkspace,
+} from '../../apps/web/src/ui/scenario-brief';
 
 const approvedBrief = readFileSync(
   new URL(
@@ -75,5 +78,39 @@ describe('ScenarioBrief', () => {
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<a ');
     expect(html).not.toContain('<img ');
+  });
+
+  it('reconciles nonexistent README and disabled test commands when workspaceContext is supplied', () => {
+    const markdown = [
+      'Please edit `src/service.py` and document it in `README.md`.',
+      '',
+      'Run `pytest -q` before submitting.',
+      '',
+      '```bash',
+      'python -m pytest tests/test_service.py',
+      '```',
+    ].join('\n');
+
+    const adjusted = reconcileScenarioBriefForWorkspace(markdown, {
+      filePaths: ['src/service.py', 'tests/test_service.py'],
+      testsRunnable: false,
+      integratedAiEnabled: false,
+    });
+
+    expect(adjusted).not.toContain('README.md');
+    expect(adjusted).not.toContain('pytest');
+    expect(adjusted).toContain('In-workspace test execution is disabled');
+
+    const html = renderToStaticMarkup(
+      <ScenarioBrief
+        markdown={markdown}
+        workspaceContext={{
+          filePaths: ['src/service.py', 'tests/test_service.py'],
+          testsRunnable: false,
+        }}
+      />,
+    );
+    expect(html).not.toContain('pytest');
+    expect(html).not.toContain('README.md');
   });
 });

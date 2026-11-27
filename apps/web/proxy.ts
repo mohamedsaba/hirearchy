@@ -103,6 +103,8 @@ const STAGING_BROWSER_DELETE_PATTERNS: readonly RegExp[] = [
 
 const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
   /^\/hiring-platform\.css$/,
+  /^\/r23\/account$/,
+  /^\/r23\/organizations\/[^/]+\/(?:plan|upgrade)$/,
   /^\/candidate$/,
   /^\/candidate\/login$/,
   /^\/candidate\/signup$/,
@@ -116,11 +118,14 @@ const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/candidates$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/library$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/handoffs$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/builder\/generate$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/sessions\/[^/]+\/review$/,
 ];
 
 const HIRING_PLATFORM_POST_PATTERNS: readonly RegExp[] = [
   /^\/api\/theme$/,
+  /^\/r23\/account$/,
+  /^\/r23\/organizations\/[^/]+\/plan$/,
   /^\/api\/candidate-portal$/,
   /^\/r26\/api\/candidate\/[^/]+\/ai$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/plan$/,
@@ -129,6 +134,10 @@ const HIRING_PLATFORM_POST_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/issue$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/handoffs$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/sessions\/[^/]+\/review$/,
+];
+
+const HIRING_PLATFORM_DELETE_PATTERNS: readonly RegExp[] = [
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/builder\/generate$/,
 ];
 
 function isAllowedAuthenticatedStagingRequest(
@@ -142,6 +151,8 @@ function isAllowedAuthenticatedStagingRequest(
       pathname === '/software-ui.css' ||
       (hiring && pathname === '/hiring-platform.css') ||
       pathname === '/fonts/dm-sans-latin.woff2' ||
+      pathname === '/fonts/newsreader-latin.woff2' ||
+      pathname === '/fonts/jetbrains-mono-latin.woff2' ||
       pathname === '/favicon.ico')
   ) {
     return true;
@@ -171,8 +182,14 @@ function isAllowedAuthenticatedStagingRequest(
     );
   }
   if (method === 'DELETE') {
-    return STAGING_BROWSER_DELETE_PATTERNS.some((pattern) =>
-      pattern.test(pathname),
+    return (
+      STAGING_BROWSER_DELETE_PATTERNS.some((pattern) =>
+        pattern.test(pathname),
+      ) ||
+      (hiring &&
+        HIRING_PLATFORM_DELETE_PATTERNS.some((pattern) =>
+          pattern.test(pathname),
+        ))
     );
   }
   return false;

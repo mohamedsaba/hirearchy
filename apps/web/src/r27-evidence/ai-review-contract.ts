@@ -87,6 +87,10 @@ export interface R27AiReviewReport {
     status: 'met' | 'partial' | 'not_observed';
     evidence: string;
   }>;
+  verificationQuestions?: Array<{
+    question: string;
+    focus: string;
+  }>;
   metrics: {
     submittedFilesCount: number;
     modifiedFilesCount: number;
@@ -225,6 +229,7 @@ export function buildDeterministicEvidencePreviewReport(
     fallbackReason?: string;
   },
 ): R27AiReviewReport {
+  const presentation = buildR27Presentation(evidence);
   const summary = computeEvidenceMetricsAndDiffSummary(evidence);
   const modifiedFiles = summary.files.filter((f) => f.changed);
   const changedPathsLabel = modifiedFiles
@@ -367,6 +372,9 @@ export function buildDeterministicEvidencePreviewReport(
     strengths: strengths.slice(0, 5),
     weaknesses: weaknesses.slice(0, 4),
     evidenceHighlights,
+    verificationQuestions: presentation.liveVerificationQuestions.map(
+      ({ question, focus }) => ({ question, focus }),
+    ),
     metrics: {
       submittedFilesCount: summary.submittedFilesCount,
       modifiedFilesCount: summary.modifiedFilesCount,

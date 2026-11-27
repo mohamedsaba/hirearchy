@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
 import {
@@ -9,6 +9,11 @@ import {
   experienceLevelLabel,
 } from '../../../../../src/hiring/catalogs';
 import type { HandoffDossierItem } from '../../../../../src/hiring/types';
+import {
+  readPersistedJson,
+  removePersistedKey,
+  writePersistedJson,
+} from '../../../../../src/ui/browser-state';
 import {
   formatLocalDateTime,
   formatRelativeTime,
@@ -58,6 +63,124 @@ export function HandoffsHubClient({
   const [statusFilter, setStatusFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
+  const filterStorageKey = `hirearchy:org:handoffs-filters:v1:${organizationId}`;
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const params = new URLSearchParams(window.location.search);
+      const hasUrlParams =
+        params.has('q') ||
+        params.has('status') ||
+        params.has('stage') ||
+        params.has('role');
+      const saved = readPersistedJson<{
+        searchQuery?: string;
+        statusFilter?: string;
+        stageFilter?: string;
+        roleFilter?: string;
+        moreFiltersOpen?: boolean;
+      }>(filterStorageKey, 'session');
+      if (hasUrlParams) {
+        const q = params.get('q');
+        const st = params.get('status');
+        const stage = params.get('stage');
+        const role = params.get('role');
+        if (q) setSearchQuery(q);
+        if (st && ['pending', 'reviewed', 'completed'].includes(st)) {
+          setStatusFilter(st);
+        }
+        if (stage) setStageFilter(stage);
+        if (role) setRoleFilter(role);
+        if (typeof saved?.moreFiltersOpen === 'boolean') {
+          setMoreFiltersOpen(saved.moreFiltersOpen);
+        } else if (stage || role) {
+          setMoreFiltersOpen(true);
+        }
+      } else {
+        if (saved && typeof saved === 'object') {
+          if (typeof saved.searchQuery === 'string') {
+            setSearchQuery(saved.searchQuery);
+          }
+          if (
+            saved.statusFilter &&
+            ['pending', 'reviewed', 'completed'].includes(saved.statusFilter)
+          ) {
+            setStatusFilter(saved.statusFilter);
+          }
+          if (typeof saved.stageFilter === 'string') {
+            setStageFilter(saved.stageFilter);
+          }
+          if (typeof saved.roleFilter === 'string') {
+            setRoleFilter(saved.roleFilter);
+          }
+          if (typeof saved.moreFiltersOpen === 'boolean') {
+            setMoreFiltersOpen(saved.moreFiltersOpen);
+          } else if (
+            (saved.stageFilter && saved.stageFilter !== 'all') ||
+            (saved.roleFilter && saved.roleFilter !== 'all')
+          ) {
+            setMoreFiltersOpen(true);
+          }
+        }
+      }
+      setFiltersHydrated(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [filterStorageKey]);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    const url = new URL(window.location.href);
+    if (searchQuery.trim()) url.searchParams.set('q', searchQuery.trim());
+    else url.searchParams.delete('q');
+    if (statusFilter !== 'all') url.searchParams.set('status', statusFilter);
+    else url.searchParams.delete('status');
+    if (stageFilter !== 'all') url.searchParams.set('stage', stageFilter);
+    else url.searchParams.delete('stage');
+    if (roleFilter !== 'all') url.searchParams.set('role', roleFilter);
+    else url.searchParams.delete('role');
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${url.pathname}${url.search}`,
+    );
+
+    const hasActiveFilters =
+      searchQuery.trim().length > 0 ||
+      statusFilter !== 'all' ||
+      stageFilter !== 'all' ||
+      roleFilter !== 'all' ||
+      moreFiltersOpen;
+    if (!hasActiveFilters) {
+      removePersistedKey(filterStorageKey);
+      return;
+    }
+    writePersistedJson(
+      filterStorageKey,
+      {
+        searchQuery,
+        statusFilter,
+        stageFilter,
+        roleFilter,
+        moreFiltersOpen,
+      },
+      'session',
+    );
+  }, [
+    filterStorageKey,
+    filtersHydrated,
+    moreFiltersOpen,
+    roleFilter,
+    searchQuery,
+    stageFilter,
+    statusFilter,
+  ]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const isFiltered =
@@ -101,6 +224,8 @@ export function HandoffsHubClient({
     setStatusFilter('all');
     setRoleFilter('all');
     setSearchQuery('');
+    setMoreFiltersOpen(false);
+    removePersistedKey(filterStorageKey);
   };
 
   const orgBase = `/r23/organizations/${encodeURIComponent(organizationId)}`;
@@ -137,7 +262,10 @@ export function HandoffsHubClient({
           </div>
           <details
             className="hiring-disclosure hiring-more-filters"
-            open={stageFilter !== 'all' || roleFilter !== 'all'}
+            open={moreFiltersOpen}
+            onToggle={(event) => {
+              setMoreFiltersOpen(event.currentTarget.open);
+            }}
           >
             <summary>More filters</summary>
             <div className="hiring-filter-grid hiring-mt-xs">

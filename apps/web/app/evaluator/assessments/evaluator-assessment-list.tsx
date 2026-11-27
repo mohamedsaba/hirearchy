@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LocalTime } from '../../_components/local-time';
 import './evaluator-assessment-list.css';
 
 export type SessionStatus = 'CREATED' | 'ACTIVE' | 'SUBMITTED';
@@ -61,14 +62,6 @@ const reviewStatusLabels: Record<
   next_step_recorded: 'Next step recorded',
 };
 
-const timeFormatter = new Intl.DateTimeFormat('en-US', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-});
-
-const formatTime = (isoString: string) =>
-  timeFormatter.format(new Date(isoString));
 const formatBudget = (seconds: number | null) =>
   seconds === null ? 'Untimed (legacy)' : `${Math.round(seconds / 60)} min`;
 
@@ -100,6 +93,7 @@ export const EvaluatorAssessmentList = ({
     initialNextCursor ?? null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lifecycleFilter, setLifecycleFilter] =
     useState<LifecycleFilter>('all');
@@ -116,6 +110,7 @@ export const EvaluatorAssessmentList = ({
     if (loading) return;
     setLoading(true);
     setError(null);
+    setLoadMoreError(null);
     onRefresh?.();
     setRefreshKey((current) => current + 1);
   }, [loading, onRefresh]);
@@ -182,28 +177,37 @@ export const EvaluatorAssessmentList = ({
   const loadMore = async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
+    setLoadMoreError(null);
     try {
       const baseEndpoint = endpoint ?? '/api/evaluator/assessments';
       const separator = baseEndpoint.includes('?') ? '&' : '?';
       const url = `${baseEndpoint}${separator}cursor=${encodeURIComponent(nextCursor)}`;
       const response = await fetch(url, { cache: 'no-store' });
-      if (!response.ok) throw new Error('Failed to load more sessions');
+      if (!response.ok) {
+        throw new Error('Could not load more assessments.');
+      }
       const data = (await response.json()) as {
         assessments?: readonly AssessmentLifecycleItem[];
         nextCursor?: string | null;
       };
-      if (Array.isArray(data.assessments)) {
-        setAssessments((current) => {
-          const existingIds = new Set(current.map((item) => item.sessionId));
-          const newItems = (data.assessments ?? []).filter(
-            (item) => !existingIds.has(item.sessionId),
-          );
-          return [...current, ...newItems];
-        });
-        setNextCursor(data.nextCursor ?? null);
+      if (!Array.isArray(data.assessments)) {
+        throw new Error('Could not load more assessments.');
       }
-    } catch {
-      // Keep nextCursor so user can retry
+      setAssessments((current) => {
+        const existingIds = new Set(current.map((item) => item.sessionId));
+        const newItems = (data.assessments ?? []).filter(
+          (item) => !existingIds.has(item.sessionId),
+        );
+        return [...current, ...newItems];
+      });
+      setNextCursor(data.nextCursor ?? null);
+    } catch (loadError) {
+      // Keep existing assessments and nextCursor so the user can retry inline.
+      setLoadMoreError(
+        loadError instanceof Error && loadError.message
+          ? loadError.message
+          : 'Could not load more assessments. Please try again.',
+      );
     } finally {
       setLoadingMore(false);
     }
@@ -530,9 +534,7 @@ export const EvaluatorAssessmentList = ({
                         <p className="lifecycle-current-timestamp">
                           <span>{currentTimestampLabel}</span>
                           {currentTimestamp ? (
-                            <time dateTime={currentTimestamp}>
-                              {formatTime(currentTimestamp)} UTC
-                            </time>
+                            <LocalTime timestamp={currentTimestamp} absolute />
                           ) : (
                             <span>Not recorded</span>
                           )}
@@ -633,18 +635,20 @@ export const EvaluatorAssessmentList = ({
                               <div>
                                 <dt>Issued</dt>
                                 <dd>
-                                  <time dateTime={item.createdAt}>
-                                    {formatTime(item.createdAt)} UTC
-                                  </time>
+                                  <LocalTime
+                                    timestamp={item.createdAt}
+                                    absolute
+                                  />
                                 </dd>
                               </div>
                               <div>
                                 <dt>Started</dt>
                                 <dd>
                                   {item.activatedAt ? (
-                                    <time dateTime={item.activatedAt}>
-                                      {formatTime(item.activatedAt)} UTC
-                                    </time>
+                                    <LocalTime
+                                      timestamp={item.activatedAt}
+                                      absolute
+                                    />
                                   ) : (
                                     'Not recorded'
                                   )}
@@ -654,9 +658,10 @@ export const EvaluatorAssessmentList = ({
                                 <dt>Submitted</dt>
                                 <dd>
                                   {item.submittedAt ? (
-                                    <time dateTime={item.submittedAt}>
-                                      {formatTime(item.submittedAt)} UTC
-                                    </time>
+                                    <LocalTime
+                                      timestamp={item.submittedAt}
+                                      absolute
+                                    />
                                   ) : item.status === 'SUBMITTED' ? (
                                     'Not recorded'
                                   ) : (
@@ -750,13 +755,30 @@ export const EvaluatorAssessmentList = ({
 
               {nextCursor ? (
                 <div className="lifecycle-pagination">
+                  {loadMoreError ? (
+                    <div className="lifecycle-pagination-error" role="alert">
+                      <span>{loadMoreError}</span>
+                      <button
+                        className="software-button software-button-secondary lifecycle-retry-button"
+                        type="button"
+                        onClick={() => void loadMore()}
+                        disabled={loadingMore}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : null}
                   <button
                     className="software-button software-button-secondary lifecycle-load-more-button"
                     type="button"
                     onClick={() => void loadMore()}
                     disabled={loadingMore}
                   >
-                    {loadingMore ? 'Loading more…' : 'Load more sessions'}
+                    {loadingMore
+                      ? 'Loading more…'
+                      : loadMoreError
+                        ? 'Retry loading assessments'
+                        : 'Load more assessments'}
                   </button>
                 </div>
               ) : null}

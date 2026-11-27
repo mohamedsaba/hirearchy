@@ -4,9 +4,21 @@ const localDateFormatter = new Intl.DateTimeFormat('en-GB', {
   year: 'numeric',
 });
 
-const localDateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
+const dateTimeOptions = {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZoneName: 'short',
+} as const;
+const localDateTimeFormatter = new Intl.DateTimeFormat(
+  undefined,
+  dateTimeOptions,
+);
+const utcDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  ...dateTimeOptions,
+  timeZone: 'UTC',
 });
 
 export function formatRelativeTime(iso: string | null | undefined): string {
@@ -31,8 +43,19 @@ export function formatRelativeTime(iso: string | null | undefined): string {
 }
 
 export function formatLocalDateTime(iso: string | null | undefined): string {
+  return formatDateTime(iso, localDateTimeFormatter);
+}
+
+export function formatUtcDateTime(iso: string | null | undefined): string {
+  return formatDateTime(iso, utcDateTimeFormatter);
+}
+
+function formatDateTime(
+  iso: string | null | undefined,
+  formatter: Intl.DateTimeFormat,
+): string {
   if (!iso) return '';
   const ts = Date.parse(iso);
   if (!Number.isFinite(ts)) return '';
-  return localDateTimeFormatter.format(new Date(ts));
+  return formatter.format(new Date(ts));
 }

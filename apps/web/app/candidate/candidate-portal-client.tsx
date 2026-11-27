@@ -1,8 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import { IconLogout, IconPlayerPlay, IconUser } from '@tabler/icons-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  IconCheck,
+  IconLogout,
+  IconPlayerPlay,
+  IconUser,
+} from '@tabler/icons-react';
 
 import {
   CURATED_COUNTRIES,
@@ -21,11 +26,17 @@ import type {
   SafePortalAssessmentView,
 } from '../../src/hiring/types';
 import {
+  readPersistedJson,
+  removePersistedKey,
+  writePersistedJson,
+} from '../../src/ui/browser-state';
+import {
   formatLocalDateTime,
   formatRelativeTime,
 } from '../../src/ui/relative-time';
-import { BrandMark } from '../_components/brand-mark';
+import { CandidateOutcome } from '../_components/candidate-outcome';
 import { CommonThreadToast } from '../_components/common-thread-toast';
+import { LocalTime } from '../_components/local-time';
 import { ThemeToggle } from '../_components/theme-toggle';
 
 export interface CandidatePortalClientProps {
@@ -62,8 +73,8 @@ const candidateStatusLabels: Record<PipelineStatusId, string> = {
   all: 'All statuses',
   invited: 'Invited',
   in_progress: 'In progress',
-  ready_for_review: 'Awaiting feedback',
-  second_opinion: 'Awaiting feedback',
+  ready_for_review: 'Submitted',
+  second_opinion: 'Submitted',
   accepted: 'Accepted',
   rejected: 'Rejected',
 };
@@ -78,17 +89,28 @@ const candidateStageOrder: Record<PipelineStatusId, number> = {
   all: 6,
 };
 
-const shortDateFormatter = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-});
+function assessmentPriorityRank(item: SafePortalAssessmentView): number {
+  if (item.status === 'ACTIVE' && item.canLaunch) return 0;
+  if (item.status === 'CREATED' && item.canLaunch) return 1;
+  if (item.status !== 'SUBMITTED') return 2;
+  return 3;
+}
 
-function formatPortalDate(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return null;
-  return shortDateFormatter.format(new Date(ms));
+function compareAssessmentsByPriority(
+  a: SafePortalAssessmentView,
+  b: SafePortalAssessmentView,
+): number {
+  const rankDiff = assessmentPriorityRank(a) - assessmentPriorityRank(b);
+  if (rankDiff !== 0) return rankDiff;
+  if (a.status === 'CREATED' && b.status === 'CREATED') {
+    const aExp = a.invitationExpiresAt ?? '9999-12-31T23:59:59Z';
+    const bExp = b.invitationExpiresAt ?? '9999-12-31T23:59:59Z';
+    const expDiff = aExp.localeCompare(bExp);
+    if (expDiff !== 0) return expDiff;
+  }
+  const aStamp = a.activatedAt ?? a.submittedAt ?? a.createdAt;
+  const bStamp = b.activatedAt ?? b.submittedAt ?? b.createdAt;
+  return bStamp.localeCompare(aStamp);
 }
 
 export function CandidatePortalClient({
@@ -103,10 +125,11 @@ export function CandidatePortalClient({
   );
   const [assessments] =
     useState<readonly SafePortalAssessmentView[]>(initialAssessments);
+  const [pendingLaunchSessionId, setPendingLaunchSessionId] = useState<
+    string | null
+  >(() => (nextPath ? (nextPath.split('/').at(-1) ?? null) : null));
   const [tab, setTab] = useState<'assessments' | 'profile'>(
-    setupMode || !initialProfile?.profileCompletedAt
-      ? 'profile'
-      : 'assessments',
+    setupMode && initialAssessments.length > 0 ? 'profile' : 'assessments',
   );
 
   // Filters on Assessments tab
@@ -114,8 +137,16 @@ export function CandidatePortalClient({
   const [statusFilter, setStatusFilter] = useState<PipelineStatusId>('all');
   const [companyFilter, setCompanyFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [sortBy, setSortBy] = useState<'recent' | 'company' | 'status'>(
-    'recent',
+  const [sortBy, setSortBy] = useState<
+    'priority' | 'recent' | 'company' | 'status'
+  >('priority');
+
+  const firstActionableAssessment = useMemo(
+    () =>
+      [...initialAssessments]
+        .sort(compareAssessmentsByPriority)
+        .find((item) => item.canLaunch) ?? initialAssessments[0],
+    [initialAssessments],
   );
 
   // Editable Profile fields
@@ -131,14 +162,18 @@ export function CandidatePortalClient({
     initialProfile?.workMode ?? 'any',
   );
   const [headlineRole, setHeadlineRole] = useState(
-    initialProfile?.headlineRole ?? '',
+    initialProfile?.headlineRole || firstActionableAssessment?.targetRole || '',
   );
   const [yearsExperience, setYearsExperience] = useState(
     initialProfile?.yearsExperience?.toString() ?? '',
   );
   const [experienceLevel, setExperienceLevel] = useState<
     ExperienceLevelId | ''
-  >(initialProfile?.experienceLevel ?? '');
+  >(
+    initialProfile?.experienceLevel ||
+      (firstActionableAssessment?.experienceLevel as ExperienceLevelId | '') ||
+      '',
+  );
   const [skills, setSkills] = useState<string[]>([
     ...(initialProfile?.skills ?? []),
   ]);
@@ -150,6 +185,225 @@ export function CandidatePortalClient({
     initialProfile?.portfolioUrl ?? '',
   );
   const [bio, setBio] = useState(initialProfile?.bio ?? '');
+  const [portalHydrated, setPortalHydrated] = useState(false);
+
+  const normalizedEmail = email.toLowerCase();
+  const profileDraftStorageKey = `hirearchy:candidate:profile-draft:v1:${normalizedEmail}`;
+  const portalFiltersStorageKey = `hirearchy:candidate:portal-filters:v1:${normalizedEmail}`;
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const params = new URLSearchParams(window.location.search);
+      const urlTab = params.get('tab');
+      if (!setupMode && (urlTab === 'assessments' || urlTab === 'profile')) {
+        setTab(urlTab);
+      }
+
+      const savedFilters = readPersistedJson<{
+        showFilters?: boolean;
+        statusFilter?: PipelineStatusId;
+        companyFilter?: string;
+        roleFilter?: string;
+        sortBy?: 'priority' | 'recent' | 'company' | 'status';
+      }>(portalFiltersStorageKey, 'session');
+      if (savedFilters && typeof savedFilters === 'object') {
+        if (typeof savedFilters.showFilters === 'boolean') {
+          setShowFilters(savedFilters.showFilters);
+        }
+        if (savedFilters.statusFilter) {
+          setStatusFilter(savedFilters.statusFilter);
+        }
+        if (typeof savedFilters.companyFilter === 'string') {
+          setCompanyFilter(savedFilters.companyFilter);
+        }
+        if (typeof savedFilters.roleFilter === 'string') {
+          setRoleFilter(savedFilters.roleFilter);
+        }
+        if (
+          savedFilters.sortBy &&
+          ['priority', 'recent', 'company', 'status'].includes(
+            savedFilters.sortBy,
+          )
+        ) {
+          setSortBy(savedFilters.sortBy);
+        }
+      }
+
+      const savedProfileDraft = readPersistedJson<{
+        fullName?: string;
+        phone?: string;
+        locationCountry?: string;
+        locationCity?: string;
+        workMode?: WorkModeId;
+        headlineRole?: string;
+        yearsExperience?: string;
+        experienceLevel?: ExperienceLevelId | '';
+        skills?: string[];
+        linkedinUrl?: string;
+        githubUrl?: string;
+        portfolioUrl?: string;
+        bio?: string;
+      }>(profileDraftStorageKey, 'durable');
+      if (savedProfileDraft && typeof savedProfileDraft === 'object') {
+        if (typeof savedProfileDraft.fullName === 'string') {
+          setFullName(savedProfileDraft.fullName);
+        }
+        if (typeof savedProfileDraft.phone === 'string') {
+          setPhone(savedProfileDraft.phone);
+        }
+        if (typeof savedProfileDraft.locationCountry === 'string') {
+          setLocationCountry(savedProfileDraft.locationCountry);
+        }
+        if (typeof savedProfileDraft.locationCity === 'string') {
+          setLocationCity(savedProfileDraft.locationCity);
+        }
+        if (savedProfileDraft.workMode) {
+          setWorkMode(savedProfileDraft.workMode);
+        }
+        if (typeof savedProfileDraft.headlineRole === 'string') {
+          setHeadlineRole(savedProfileDraft.headlineRole);
+        }
+        if (typeof savedProfileDraft.yearsExperience === 'string') {
+          setYearsExperience(savedProfileDraft.yearsExperience);
+        }
+        if (savedProfileDraft.experienceLevel !== undefined) {
+          setExperienceLevel(savedProfileDraft.experienceLevel);
+        }
+        if (Array.isArray(savedProfileDraft.skills)) {
+          setSkills(savedProfileDraft.skills);
+        }
+        if (typeof savedProfileDraft.linkedinUrl === 'string') {
+          setLinkedinUrl(savedProfileDraft.linkedinUrl);
+        }
+        if (typeof savedProfileDraft.githubUrl === 'string') {
+          setGithubUrl(savedProfileDraft.githubUrl);
+        }
+        if (typeof savedProfileDraft.portfolioUrl === 'string') {
+          setPortfolioUrl(savedProfileDraft.portfolioUrl);
+        }
+        if (typeof savedProfileDraft.bio === 'string') {
+          setBio(savedProfileDraft.bio);
+        }
+      }
+      setPortalHydrated(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [portalFiltersStorageKey, profileDraftStorageKey, setupMode]);
+
+  useEffect(() => {
+    if (!portalHydrated) return;
+    const url = new URL(window.location.href);
+    if (tab !== 'assessments') url.searchParams.set('tab', tab);
+    else url.searchParams.delete('tab');
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${url.pathname}${url.search}`,
+    );
+  }, [portalHydrated, tab]);
+
+  useEffect(() => {
+    if (!portalHydrated) return;
+    const isDefaultFilters =
+      !showFilters &&
+      statusFilter === 'all' &&
+      companyFilter === 'all' &&
+      roleFilter === 'all' &&
+      sortBy === 'priority';
+    if (isDefaultFilters) {
+      removePersistedKey(portalFiltersStorageKey);
+      return;
+    }
+    writePersistedJson(
+      portalFiltersStorageKey,
+      {
+        showFilters,
+        statusFilter,
+        companyFilter,
+        roleFilter,
+        sortBy,
+      },
+      'session',
+    );
+  }, [
+    companyFilter,
+    portalFiltersStorageKey,
+    portalHydrated,
+    roleFilter,
+    showFilters,
+    sortBy,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    if (!portalHydrated) return;
+    const baselineHeadline =
+      profile?.headlineRole || firstActionableAssessment?.targetRole || '';
+    const baselineLevel =
+      profile?.experienceLevel ||
+      (firstActionableAssessment?.experienceLevel as ExperienceLevelId | '') ||
+      '';
+    const isDirty =
+      fullName !== (profile?.fullName ?? '') ||
+      phone !== (profile?.phone ?? '') ||
+      locationCountry !== (profile?.locationCountry ?? '') ||
+      locationCity !== (profile?.locationCity ?? '') ||
+      workMode !== (profile?.workMode ?? 'any') ||
+      headlineRole !== baselineHeadline ||
+      yearsExperience !== (profile?.yearsExperience?.toString() ?? '') ||
+      experienceLevel !== baselineLevel ||
+      JSON.stringify(skills) !== JSON.stringify(profile?.skills ?? []) ||
+      linkedinUrl !== (profile?.linkedinUrl ?? '') ||
+      githubUrl !== (profile?.githubUrl ?? '') ||
+      portfolioUrl !== (profile?.portfolioUrl ?? '') ||
+      bio !== (profile?.bio ?? '');
+    if (!isDirty) {
+      removePersistedKey(profileDraftStorageKey);
+      return;
+    }
+    writePersistedJson(
+      profileDraftStorageKey,
+      {
+        fullName,
+        phone,
+        locationCountry,
+        locationCity,
+        workMode,
+        headlineRole,
+        yearsExperience,
+        experienceLevel,
+        skills,
+        linkedinUrl,
+        githubUrl,
+        portfolioUrl,
+        bio,
+      },
+      'durable',
+    );
+  }, [
+    bio,
+    experienceLevel,
+    firstActionableAssessment?.experienceLevel,
+    firstActionableAssessment?.targetRole,
+    fullName,
+    githubUrl,
+    headlineRole,
+    linkedinUrl,
+    locationCity,
+    locationCountry,
+    phone,
+    portalHydrated,
+    portfolioUrl,
+    profile,
+    profileDraftStorageKey,
+    skills,
+    workMode,
+    yearsExperience,
+  ]);
 
   const [busy, setBusy] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -158,7 +412,9 @@ export function CandidatePortalClient({
     message: string;
     tone: 'success' | 'error';
   } | null>(null);
-  const isQuickWelcome = Boolean(setupMode && !profile?.profileCompletedAt);
+  const isQuickWelcome = Boolean(
+    !profile?.profileCompletedAt && (setupMode || pendingLaunchSessionId),
+  );
 
   const companies = useMemo(() => {
     return [
@@ -187,6 +443,9 @@ export function CandidatePortalClient({
     });
     const sorted = [...base];
     sorted.sort((a, b) => {
+      if (sortBy === 'priority') {
+        return compareAssessmentsByPriority(a, b);
+      }
       if (sortBy === 'company') {
         return a.organizationName.localeCompare(b.organizationName);
       }
@@ -261,11 +520,15 @@ export function CandidatePortalClient({
       }
 
       setProfile(data.profile);
+      removePersistedKey(profileDraftStorageKey);
 
       setStatusMsg('Profile saved.');
       setToast({ message: 'Profile saved.', tone: 'success' });
-      if (setupMode && nextPath) {
-        await handleLaunchAssessment(nextPath.split('/').at(-1) ?? '');
+      const launchTarget =
+        pendingLaunchSessionId ??
+        (setupMode && nextPath ? (nextPath.split('/').at(-1) ?? '') : '');
+      if (launchTarget) {
+        await handleLaunchAssessment(launchTarget);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Save failed.';
@@ -302,7 +565,17 @@ export function CandidatePortalClient({
 
       if (!response.ok || !data?.launchUrl) {
         if (data?.error?.code === 'PROFILE_REQUIRED') {
+          setPendingLaunchSessionId(sessionId);
+          const matched = assessments.find((a) => a.sessionId === sessionId);
+          if (!headlineRole && matched?.targetRole) {
+            setHeadlineRole(matched.targetRole);
+          }
+          if (!experienceLevel && matched?.experienceLevel) {
+            setExperienceLevel(matched.experienceLevel as ExperienceLevelId);
+          }
           setTab('profile');
+          setBusy(null);
+          return;
         }
         throw new Error(
           data?.error?.message ?? 'Unable to launch assessment session.',
@@ -337,7 +610,6 @@ export function CandidatePortalClient({
             className="software-document-wordmark"
             aria-label="Hirearchy Software assessments"
           >
-            <BrandMark />
             <span>Hirearchy</span>
             <span className="software-document-product">Software</span>
           </a>
@@ -366,7 +638,7 @@ export function CandidatePortalClient({
             <h1>{tab === 'assessments' ? 'My assessments' : 'My profile'}</h1>
             <p className="hiring-portal-mobile-email">Signed in as {email}</p>
           </div>
-          {tab === 'assessments' && assessments.length === 2 ? (
+          {tab === 'assessments' && assessments.length >= 2 ? (
             <button
               type="button"
               className="hiring-btn hiring-btn-sm"
@@ -377,10 +649,12 @@ export function CandidatePortalClient({
             </button>
           ) : null}
         </div>
-        {setupMode || !profile?.profileCompletedAt ? (
+        {!profile?.profileCompletedAt &&
+        assessments.some((item) => item.canLaunch) &&
+        (setupMode || pendingLaunchSessionId || tab === 'profile') ? (
           <div className="hiring-banner hiring-banner-warning" role="status">
             <div>
-              Finish setting up your profile to start your first assessment.
+              Confirm your details before opening your first assessment.
             </div>
           </div>
         ) : null}
@@ -431,14 +705,12 @@ export function CandidatePortalClient({
         {tab === 'assessments' ? (
           <div
             className={
-              assessments.length > 2 ||
-              (assessments.length === 2 && showFilters)
+              showFilters && assessments.length >= 2
                 ? 'software-directory'
                 : 'hiring-page-shell'
             }
           >
-            {assessments.length > 2 ||
-            (assessments.length === 2 && showFilters) ? (
+            {showFilters && assessments.length >= 2 ? (
               <section
                 className="hiring-filter-bar"
                 aria-label="Filter your assessments"
@@ -502,10 +774,12 @@ export function CandidatePortalClient({
                       value={sortBy}
                       onChange={(e) =>
                         setSortBy(
-                          e.target.value as 'recent' | 'company' | 'status',
+                          e.target.value as
+                            'priority' | 'recent' | 'company' | 'status',
                         )
                       }
                     >
+                      <option value="priority">Action needed first</option>
                       <option value="recent">Newest issued</option>
                       <option value="company">Company name</option>
                       <option value="status">Assessment stage</option>
@@ -524,13 +798,24 @@ export function CandidatePortalClient({
                   <h2>
                     {assessments.length
                       ? 'No assessments match these filters'
-                      : 'No invitations yet'}
+                      : 'No invitations for this account'}
                   </h2>
                   <p>
                     {assessments.length
                       ? 'Choose another status, company, or role.'
-                      : 'Invitations sent to your verified email will appear here.'}
+                      : `No candidate invitations were found for ${email}. If your invitation was sent to another address, switch to your invited email.`}
                   </p>
+                  {!assessments.length ? (
+                    <div className="hiring-header-actions hiring-mt-sm">
+                      <button
+                        type="button"
+                        className="hiring-btn hiring-btn-primary"
+                        onClick={() => void handleSignOut()}
+                      >
+                        Switch to your invited email
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="hiring-candidate-list">
@@ -567,13 +852,16 @@ export function CandidatePortalClient({
                                 : 'Untimed'}
                             </span>
                             {item.status === 'CREATED' &&
-                            formatPortalDate(item.invitationExpiresAt) ? (
+                            item.invitationExpiresAt ? (
                               <span>
                                 Expires{' '}
-                                {formatPortalDate(item.invitationExpiresAt)}
+                                <LocalTime
+                                  timestamp={item.invitationExpiresAt}
+                                  absolute
+                                />
                               </span>
                             ) : null}
-                            {formatPortalDate(item.submittedAt) ? (
+                            {item.submittedAt ? (
                               <span
                                 title={formatLocalDateTime(item.submittedAt)}
                               >
@@ -586,7 +874,7 @@ export function CandidatePortalClient({
                         {item.canLaunch ? (
                           <button
                             type="button"
-                            className="hiring-btn hiring-btn-primary"
+                            className="hiring-btn hiring-btn-primary hiring-portal-card-cta"
                             disabled={busy !== null}
                             onClick={() =>
                               void handleLaunchAssessment(item.sessionId)
@@ -596,12 +884,12 @@ export function CandidatePortalClient({
                             {busy === `launch:${item.sessionId}`
                               ? 'Launching…'
                               : item.status === 'ACTIVE'
-                                ? 'Resume Assessment'
+                                ? 'Continue assessment'
                                 : 'Open assessment'}
                           </button>
                         ) : item.status === 'SUBMITTED' ? (
                           <Link
-                            className="hiring-btn"
+                            className="hiring-btn hiring-portal-card-cta"
                             href={`/candidate/submissions/${encodeURIComponent(item.sessionId)}`}
                             prefetch={false}
                           >
@@ -611,57 +899,7 @@ export function CandidatePortalClient({
                       </div>
 
                       {item.publishedOutcome ? (
-                        <div className="hiring-outcome-box hiring-mt-md">
-                          <div className="hiring-candidate-name">
-                            <strong>
-                              {item.publishedOutcome.decision === 'accepted'
-                                ? `Next step · ${item.publishedOutcome.nextStageLabel ?? 'Next interview'}`
-                                : 'Feedback'}
-                            </strong>
-                            <span
-                              className={`hiring-pill ${item.publishedOutcome.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
-                            >
-                              {
-                                candidateStatusLabels[
-                                  item.publishedOutcome.decision
-                                ]
-                              }
-                            </span>
-                          </div>
-
-                          {item.publishedOutcome.feedbackNote ? (
-                            <p className="hiring-outcome-note">
-                              {item.publishedOutcome.feedbackNote}
-                            </p>
-                          ) : null}
-
-                          <div className="hiring-two-col">
-                            {item.publishedOutcome.strengths.length > 0 ? (
-                              <div>
-                                <strong>Strengths noted</strong>
-                                <ul className="hiring-bullet-list">
-                                  {item.publishedOutcome.strengths.map(
-                                    (s, i) => (
-                                      <li key={i}>{s}</li>
-                                    ),
-                                  )}
-                                </ul>
-                              </div>
-                            ) : null}
-                            {item.publishedOutcome.weaknesses.length > 0 ? (
-                              <div>
-                                <strong>Areas for growth</strong>
-                                <ul className="hiring-bullet-list">
-                                  {item.publishedOutcome.weaknesses.map(
-                                    (w, i) => (
-                                      <li key={i}>{w}</li>
-                                    ),
-                                  )}
-                                </ul>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
+                        <CandidateOutcome outcome={item.publishedOutcome} />
                       ) : null}
                     </article>
                   ))}
@@ -682,7 +920,7 @@ export function CandidatePortalClient({
               </h2>
               <p className="hiring-muted-copy hiring-mt-xs">
                 {isQuickWelcome
-                  ? 'Three quick details so your hiring team knows who submitted the work. You can add skills and links later.'
+                  ? 'Confirm your name to begin. Role and level are prefilled from your invitation—you can add optional skills and links later.'
                   : 'Your hiring teams can see the experience, skills, and links you add.'}
               </p>
             </div>
@@ -797,6 +1035,13 @@ export function CandidatePortalClient({
                           onClick={() => toggleSkill(skill)}
                           aria-pressed={active}
                         >
+                          {active ? (
+                            <IconCheck
+                              size={13}
+                              stroke={2.4}
+                              aria-hidden="true"
+                            />
+                          ) : null}
                           {skill}
                         </button>
                       );

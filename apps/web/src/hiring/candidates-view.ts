@@ -261,22 +261,33 @@ export interface CandidateFilterCriteria {
   readonly sort: CandidateSortId;
 }
 
+export function matchesCandidateSessionFilters(
+  candidate: OrgCandidateRecord,
+  session: OrgCandidateSessionItem,
+  criteria: Pick<
+    CandidateFilterCriteria,
+    'role' | 'status' | 'experienceLevel'
+  >,
+): boolean {
+  return (
+    (criteria.role === 'all' ||
+      candidate.headlineRole === criteria.role ||
+      session.targetRole === criteria.role) &&
+    (criteria.status === 'all' || session.pipelineStatus === criteria.status) &&
+    (criteria.experienceLevel === 'all' ||
+      candidate.experienceLevel === criteria.experienceLevel ||
+      session.experienceLevel === criteria.experienceLevel)
+  );
+}
+
 export function filterAndSortCandidates(
   candidates: readonly OrgCandidateRecord[],
   criteria: CandidateFilterCriteria,
 ): OrgCandidateRecord[] {
   const filtered = candidates.filter((candidate) => {
     if (
-      !candidate.sessions.some(
-        (session) =>
-          (criteria.role === 'all' ||
-            candidate.headlineRole === criteria.role ||
-            session.targetRole === criteria.role) &&
-          (criteria.status === 'all' ||
-            session.pipelineStatus === criteria.status) &&
-          (criteria.experienceLevel === 'all' ||
-            candidate.experienceLevel === criteria.experienceLevel ||
-            session.experienceLevel === criteria.experienceLevel),
+      !candidate.sessions.some((session) =>
+        matchesCandidateSessionFilters(candidate, session, criteria),
       )
     )
       return false;

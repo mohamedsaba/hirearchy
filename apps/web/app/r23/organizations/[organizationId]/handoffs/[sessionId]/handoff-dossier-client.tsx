@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { IconSparkles } from '@tabler/icons-react';
+import { IconCheck, IconCopy, IconFileAnalytics } from '@tabler/icons-react';
 
 import { experienceLevelLabel } from '../../../../../../src/hiring/catalogs';
 import type { HandoffDossierItem } from '../../../../../../src/hiring/types';
@@ -53,6 +53,7 @@ export function HandoffDossierClient({
   const [busy, setBusy] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [questionsCopied, setQuestionsCopied] = useState(false);
 
   const canGenerateFitReport = hasPlanFeature(
     plan.planTier,
@@ -153,11 +154,6 @@ export function HandoffDossierClient({
       {errorMsg ? (
         <div className="hiring-banner hiring-banner-danger" role="alert">
           {errorMsg}
-        </div>
-      ) : null}
-      {statusMsg ? (
-        <div className="hiring-banner hiring-banner-success" role="status">
-          {statusMsg}
         </div>
       ) : null}
 
@@ -348,7 +344,7 @@ export function HandoffDossierClient({
                   disabled={busy !== null}
                   onClick={() => void regenerateFitReport()}
                 >
-                  <IconSparkles size={15} />{' '}
+                  <IconFileAnalytics size={15} aria-hidden="true" />{' '}
                   {busy === 'regen'
                     ? 'Generating fit report…'
                     : report
@@ -358,7 +354,7 @@ export function HandoffDossierClient({
               ) : (
                 <a
                   className="hiring-btn hiring-btn-sm"
-                  href={`${orgBase}/settings`}
+                  href={`${orgBase}/plan`}
                 >
                   Upgrade to Ultra
                 </a>
@@ -406,7 +402,7 @@ export function HandoffDossierClient({
                     </ul>
                   </div>
                   <div className="hiring-card-subtle">
-                    <strong>Questions for the next interview</strong>
+                    <strong>Not yet verified (open areas)</strong>
                     <ul className="hiring-bullet-list">
                       {report.unclearOrNotAssessed.map((item, i) => (
                         <li key={i}>{item}</li>
@@ -432,7 +428,42 @@ export function HandoffDossierClient({
 
                 {report.suggestedNextInterviewQuestions.length > 0 ? (
                   <div className="hiring-card-subtle">
-                    <strong>Recommended Follow-Up Interview Questions</strong>
+                    <div className="hiring-preview-header">
+                      <strong>
+                        Live verification questions (10-min defense)
+                      </strong>
+                      <button
+                        type="button"
+                        className="hiring-btn hiring-btn-sm"
+                        onClick={() => {
+                          const text = report.suggestedNextInterviewQuestions
+                            .map((q, idx) => `${idx + 1}. ${q}`)
+                            .join('\n');
+                          void navigator.clipboard
+                            .writeText(text)
+                            .then(() => {
+                              setQuestionsCopied(true);
+                              setStatusMsg('Verification questions copied.');
+                              window.setTimeout(
+                                () => setQuestionsCopied(false),
+                                2000,
+                              );
+                            })
+                            .catch(() => {
+                              setErrorMsg(
+                                'Copy failed — copy manually from this browser.',
+                              );
+                            });
+                        }}
+                      >
+                        {questionsCopied ? (
+                          <IconCheck size={14} aria-hidden="true" />
+                        ) : (
+                          <IconCopy size={14} aria-hidden="true" />
+                        )}
+                        {questionsCopied ? 'Copied' : 'Copy questions'}
+                      </button>
+                    </div>
                     <ol className="hiring-ol-list">
                       {report.suggestedNextInterviewQuestions.map((q, i) => (
                         <li key={i}>{q}</li>

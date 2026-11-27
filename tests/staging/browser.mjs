@@ -601,6 +601,27 @@ async function assertUnassignedReviewerWritesDenied({
   }
 }
 
+async function assertPageDenied(page, url, forbiddenContent) {
+  const response = await page.goto(url);
+  const status = response.status();
+  const html = await response.text();
+  if (status === 200) {
+    // A loading boundary can commit the response before Next renders notFound().
+    assert.ok(
+      /NEXT_HTTP_ERROR_FALLBACK;404|<meta name="robots" content="noindex"/.test(
+        html,
+      ),
+      'Streamed response must contain a not-found marker',
+    );
+  } else {
+    assert.ok(
+      status === 403 || status === 404,
+      `Page must deny access (got ${status})`,
+    );
+  }
+  assert.ok(!forbiddenContent.test(html), 'Denied page must omit protected UI');
+}
+
 /**
  * End-to-end browser acceptance suite verifying R2.15 authenticated staging workflow
  * against real Chromium browser, GoTrue auth, PostgreSQL proofs, and Next.js server.
@@ -1002,13 +1023,10 @@ export async function checkBrowserAcceptance({
       'Browser Acceptance [5/8]: Testing role separation and evaluator access...',
     );
     {
-      // Recruiter attempts to access reviewer evidence page -> 403 Forbidden or 404 Not Found
-      const recruiterEvRes = await recruiterPage.goto(
+      await assertPageDenied(
+        recruiterPage,
         `${appUrl}/r27/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}`,
-      );
-      assert.ok(
-        recruiterEvRes.status() === 403 || recruiterEvRes.status() === 404,
-        `Recruiter must be denied access to evaluator evidence route (got ${recruiterEvRes.status()})`,
+        /unsubmitted-evidence-unavailable|evaluator-review-shell/,
       );
 
       // Reviewer 1 (assigned reviewer) signs in
@@ -1073,13 +1091,10 @@ export async function checkBrowserAcceptance({
         'Evaluation team',
       );
 
-      // Reviewer attempts to access recruiter builder -> 403 Forbidden or 404 Not Found
-      const revBuilderRes = await reviewerPage.goto(
+      await assertPageDenied(
+        reviewerPage,
         `${appUrl}/r23/organizations/${organizationId.toLowerCase()}/builder`,
-      );
-      assert.ok(
-        revBuilderRes.status() === 403 || revBuilderRes.status() === 404,
-        `Reviewer must be denied access to assessment builder (got ${revBuilderRes.status()})`,
+        /validate-assessment-button|issue-assessment-button/,
       );
 
       // Assigned reviewer views session summary (/r23/.../sessions/[sessionId]) -> 200 OK
@@ -1169,13 +1184,10 @@ export async function checkBrowserAcceptance({
         `Unassigned reviewer must be denied session summary (got ${otherSummaryRes.status()})`,
       );
 
-      // Unassigned reviewer visits evidence workbench -> 403 Forbidden or 404 Not Found
-      const otherEvidenceRes = await otherReviewerPage.goto(
+      await assertPageDenied(
+        otherReviewerPage,
         `${appUrl}/r27/organizations/${organizationId.toLowerCase()}/sessions/${newlyIssuedSessionId}`,
-      );
-      assert.ok(
-        otherEvidenceRes.status() === 403 || otherEvidenceRes.status() === 404,
-        `Unassigned reviewer must be denied evidence access (got ${otherEvidenceRes.status()})`,
+        /unsubmitted-evidence-unavailable|evaluator-review-shell/,
       );
 
       await otherReviewerContext.close();

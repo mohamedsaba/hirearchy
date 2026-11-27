@@ -7,6 +7,7 @@ import {
 } from 'node:crypto';
 
 import { readFounderUatConfiguration } from '../runtime/founder-uat';
+import { candidateEntryPath } from '../hiring/candidate-entry';
 import {
   assertR23StagingEligibleIdentity,
   type R23VerifiedIdentity,
@@ -39,6 +40,8 @@ export type FounderUatRecoveryState = Readonly<{
   email: string;
   accessToken: string;
   expiresAt: number;
+  audience?: 'candidate';
+  next?: string;
 }>;
 
 function stateKey(): Buffer {
@@ -253,6 +256,9 @@ export function founderUatRecoveryCookie(
   ) {
     throw new TypeError('Recovery context unavailable');
   }
+  const safeAudience = value.audience === 'candidate' ? 'candidate' : undefined;
+  const safeNext =
+    safeAudience === 'candidate' ? candidateEntryPath(value.next) : null;
   const state: FounderUatRecoveryState = Object.freeze({
     v: 1,
     purpose: 'recovery',
@@ -260,6 +266,8 @@ export function founderUatRecoveryCookie(
     email: value.email.trim().toLowerCase(),
     accessToken: value.accessToken,
     expiresAt: Math.floor(Date.now() / 1000) + ttl,
+    ...(safeAudience ? { audience: safeAudience } : {}),
+    ...(safeNext ? { next: safeNext } : {}),
   });
   return setCookie(
     FOUNDER_UAT_RECOVERY_COOKIE,
@@ -288,6 +296,8 @@ export function readFounderUatRecovery(
   ) {
     return null;
   }
+  const audience = state.audience === 'candidate' ? 'candidate' : undefined;
+  const next = audience === 'candidate' ? candidateEntryPath(state.next) : null;
   return Object.freeze({
     v: 1,
     purpose: 'recovery',
@@ -295,6 +305,8 @@ export function readFounderUatRecovery(
     email: state.email.trim().toLowerCase(),
     accessToken: state.accessToken,
     expiresAt: state.expiresAt,
+    ...(audience ? { audience } : {}),
+    ...(next ? { next } : {}),
   });
 }
 

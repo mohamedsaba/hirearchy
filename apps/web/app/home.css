@@ -2134,12 +2134,12 @@
   height: 3px;
   border-radius: 4px;
   background: var(--ct-mint);
-  transition: width 220ms;
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ct-scroll-cue .ct-arrow {
   width: 20px;
   transform: rotate(90deg);
-  transition: transform 220ms;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ct-scroll-cue:is(:hover, :focus-visible)::before {
   width: 42px;

@@ -7,34 +7,46 @@ export interface CommonThreadLoaderProps {
   readonly sublabel?: string;
   readonly stages?: readonly string[];
   readonly stageIntervalMs?: number;
+  readonly startedAt?: number;
   readonly compact?: boolean;
   readonly className?: string;
 }
 
+function computeElapsedSeconds(startedAt?: number): number {
+  if (!startedAt || !Number.isFinite(startedAt)) return 0;
+  return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+}
+
 /**
- * Brand-unique loading mark derived from the Common Thread emblem:
- * the mint shuttle weaves across the two warm-ivory pillars with spring motion.
+ * Animated loading indicator built around Hirearchy's three-node Common Thread
+ * motif (without repeating a product logo mark), supporting real elapsed-time
+ * continuation when resuming an in-flight background task.
  */
 export function CommonThreadLoader({
   label = 'Loading',
   sublabel,
   stages,
   stageIntervalMs = 2600,
+  startedAt,
   compact = false,
   className = '',
 }: CommonThreadLoaderProps) {
   const [stageIndex, setStageIndex] = useState(0);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(() =>
+    computeElapsedSeconds(startedAt),
+  );
 
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
       setStageIndex(0);
-      setElapsedSeconds(0);
+      setElapsedSeconds(computeElapsedSeconds(startedAt));
     });
     const secTimer = window.setInterval(() => {
-      setElapsedSeconds((s) => s + 1);
+      setElapsedSeconds((prev) =>
+        startedAt ? computeElapsedSeconds(startedAt) : prev + 1,
+      );
     }, 1000);
     let stageTimer: number | undefined;
     if (stages && stages.length > 1) {
@@ -47,7 +59,7 @@ export function CommonThreadLoader({
       window.clearInterval(secTimer);
       if (stageTimer !== undefined) window.clearInterval(stageTimer);
     };
-  }, [stages, stageIntervalMs]);
+  }, [stages, stageIntervalMs, startedAt]);
 
   const activeStage =
     stages && stages.length > 0 ? stages[stageIndex] : undefined;
@@ -60,52 +72,38 @@ export function CommonThreadLoader({
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width={compact ? 26 : 38}
-        height={compact ? 26 : 38}
-        viewBox="0 0 64 64"
+        width={compact ? 24 : 34}
+        height={compact ? 24 : 34}
+        viewBox="0 0 36 36"
         fill="none"
         aria-hidden="true"
         className="ct-loader-mark"
       >
-        <rect width="64" height="64" rx="16" fill="#211426" />
         <rect
-          x="0.75"
-          y="0.75"
-          width="62.5"
-          height="62.5"
-          rx="15.25"
-          stroke="#f5efe6"
-          strokeOpacity="0.16"
+          x="1"
+          y="1"
+          width="34"
+          height="34"
+          rx="10"
+          fill="#211426"
+          stroke="rgba(245, 239, 230, 0.16)"
+        />
+        <line
+          x1="8"
+          y1="18"
+          x2="28"
+          y2="18"
+          stroke="rgba(245, 239, 230, 0.28)"
           strokeWidth="1.5"
+          strokeLinecap="round"
         />
-        <rect
-          className="ct-loader-pillar ct-loader-pillar-left"
-          x="17.5"
-          y="15.5"
-          width="7.5"
-          height="33"
-          rx="2.6"
-          fill="#f5efe6"
-        />
-        <rect
-          className="ct-loader-pillar ct-loader-pillar-right"
-          x="39"
-          y="15.5"
-          width="7.5"
-          height="33"
-          rx="2.6"
-          fill="#f5efe6"
-        />
-        <path
-          d="M 21 28.5 H 30.5 C 35.8 28.5 39 25.3 39 20 H 42 V 44 H 39 C 39 38.7 35.8 35.5 30.5 35.5 H 21 Z"
-          fill="#f5efe6"
-          fillOpacity="0.35"
-        />
+        <circle cx="9.5" cy="18" r="2.2" fill="#f5efe6" />
+        <circle cx="26.5" cy="18" r="2.2" fill="#f5efe6" />
         <rect
           className="ct-loader-shuttle"
-          x="22"
-          y="29.5"
-          width="14"
+          x="12"
+          y="15.5"
+          width="8"
           height="5"
           rx="2.5"
           fill="#8ee3b8"

@@ -55,7 +55,7 @@ export default async function FounderUatMailPage({
             <h1 id="mail-title">Check your inbox</h1>
             <p>
               {candidate
-                ? 'Confirm your account. Messages stay on this machine during local testing.'
+                ? 'Confirm your account or reset your password. Messages stay on this machine during local testing.'
                 : 'Confirm your account, recover access, or open team peer-review notifications. Messages stay on this machine during local testing.'}
             </p>
           </div>

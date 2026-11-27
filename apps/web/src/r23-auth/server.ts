@@ -556,8 +556,14 @@ export function disabledResponse(request?: Request): Response {
   return htmlResponse('Not found', '<p>Not found.</p>', 404);
 }
 
+const R23_PERSISTENT_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+
 function cookieHeader(name: string, value: string, httpOnly: boolean): string {
-  return `${name}=${value}; Path=/; Secure; SameSite=Strict${httpOnly ? '; HttpOnly' : ''}`;
+  const maxAge =
+    name === R23_SESSION_COOKIE || name === R23_CSRF_COOKIE
+      ? `; Max-Age=${R23_PERSISTENT_COOKIE_MAX_AGE_SECONDS}`
+      : '';
+  return `${name}=${value}; Path=/; Secure; SameSite=Strict${httpOnly ? '; HttpOnly' : ''}${maxAge}`;
 }
 
 function clearCookieHeader(name: string, httpOnly: boolean): string {

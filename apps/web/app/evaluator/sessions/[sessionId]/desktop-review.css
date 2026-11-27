@@ -1,0 +1,1178 @@
+.review-desk-legacy-sections {
+  display: contents;
+}
+
+.evaluator-evidence-product .software-product-header[data-compact-review] {
+  min-block-size: 3.5rem;
+}
+
+.evaluator-evidence-product
+  .software-product-header[data-compact-review]
+  .software-product-capsule {
+  background: var(--software-mint);
+  color: var(--software-brand-plum);
+}
+
+[data-hiring-review='true'] {
+  --review-desk-paper: var(--software-canvas);
+  --review-desk-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --review-desk-quick: 150ms;
+  --review-desk-expand: 220ms;
+}
+
+[data-hiring-review='true'] .evaluator-workbench-shell {
+  background: var(--review-desk-paper);
+}
+
+[data-hiring-review='true'] .review-desk-heading {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.review-desk-breadcrumb,
+.review-desk-person,
+.review-desk-status {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  gap: 0.6rem;
+}
+
+.review-desk-breadcrumb {
+  color: var(--software-muted);
+  font-size: 0.825rem;
+}
+
+.review-desk-breadcrumb span {
+  overflow-wrap: anywhere;
+}
+
+.review-desk-person {
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.review-desk-person > div {
+  min-inline-size: 0;
+}
+
+[data-hiring-review='true'] .review-desk-person h1 {
+  margin: 0;
+  color: var(--software-ink);
+  font-family: var(--software-serif);
+  font-weight: 500;
+  font-optical-sizing: auto;
+  font-size: clamp(1.9rem, 2.7vw, 2.45rem);
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.review-desk-person .evaluator-avatar-pill {
+  flex: none;
+  margin: 0;
+  color: var(--software-ink);
+  background: var(--software-surface-subtle);
+  border: 1px solid var(--software-border);
+  font-weight: 650;
+}
+
+html[data-theme='dark'] .review-desk-person .evaluator-avatar-pill {
+  color: var(--software-on-plum);
+  background: var(--software-surface-note);
+}
+
+.review-desk-subject,
+.review-desk-status {
+  margin: 0.2rem 0 0;
+  color: var(--software-muted);
+  font-size: 0.875rem;
+}
+
+.review-desk-status {
+  flex-wrap: wrap;
+  gap: 0.4rem 0.65rem;
+}
+
+.review-desk-status .evaluator-report-status {
+  color: var(--software-status-success);
+}
+
+[data-hiring-review='true'] .evaluator-review-next {
+  display: inline-flex;
+  gap: 0.65rem;
+  align-items: center;
+  color: var(--software-btn-primary-fg);
+  background: var(--software-btn-primary-bg);
+  border-color: var(--software-btn-primary-bg);
+}
+
+[data-hiring-review='true'] .evaluator-review-next:hover {
+  color: var(--software-btn-primary-fg);
+  background: var(--software-btn-primary-bg-hover);
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-review-next, .review-desk-event)
+  svg {
+  transition: transform var(--review-desk-quick) var(--review-desk-ease);
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-review-next, .review-desk-event):hover
+  svg {
+  transform: translateX(3px);
+}
+
+.review-desk-evidence-content {
+  min-inline-size: 0;
+}
+
+/* The details panel is a sibling of the code pane so opening it preserves the viewer and its scroll position. */
+.review-desk-file-layout[data-evidence-open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 0fr);
+  gap: 0;
+  min-inline-size: 0;
+  transition: grid-template-rows var(--review-desk-expand)
+    var(--review-desk-ease);
+}
+
+.review-desk-file-layout[data-evidence-open='true'] {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.review-desk-code-pane {
+  min-inline-size: 0;
+}
+
+.review-desk-file-evidence {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--software-ink);
+}
+
+.review-desk-file-evidence-inner {
+  min-inline-size: 0;
+  height: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface-subtle);
+  opacity: 0;
+  transform: translateX(0.5rem);
+  transition:
+    opacity var(--review-desk-quick) var(--review-desk-ease),
+    transform var(--review-desk-expand) var(--review-desk-ease);
+}
+
+[data-evidence-open='true'] .review-desk-file-evidence-inner {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.review-desk-file-evidence-inner > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-block-end: 0.35rem;
+}
+
+.review-desk-file-evidence-inner :is(h3, p) {
+  margin: 0;
+}
+
+.review-desk-file-evidence-inner > code,
+.review-desk-reference code {
+  display: block;
+  color: var(--software-muted);
+  overflow-wrap: anywhere;
+}
+
+.review-desk-file-evidence-inner > header button,
+.review-desk-file-trigger {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: 2.5rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  font: 600 0.85rem/1.25 var(--software-sans);
+  color: var(--software-ink);
+  background: var(--software-surface);
+  cursor: pointer;
+  transition:
+    background-color var(--review-desk-quick) ease,
+    border-color var(--review-desk-quick) ease;
+}
+
+.review-desk-file-evidence-inner > header button {
+  padding-inline: 0.5rem;
+}
+
+.review-desk-file-evidence-inner > header button:hover,
+.review-desk-file-trigger:hover {
+  background: var(--software-surface-note);
+}
+
+.review-desk-file-trigger[aria-expanded='true'] {
+  color: var(--software-btn-primary-fg);
+  background: var(--software-btn-primary-bg);
+  border-color: var(--software-btn-primary-bg);
+}
+
+.review-desk-reference {
+  display: grid;
+  gap: 0.45rem;
+  margin-block: 0.85rem;
+  font-size: 0.8rem;
+}
+
+.review-desk-reference code {
+  max-inline-size: 100%;
+  max-block-size: 5em;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.review-desk-reference button {
+  justify-self: start;
+}
+
+.review-desk-file-heading h2 {
+  margin-block: 0;
+}
+
+.review-desk-file-match {
+  margin: 0.2rem 0 0;
+  color: var(--software-muted);
+  font: 0.82rem/1.4 var(--software-sans);
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure, .r27-ai-review-card)
+  > summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  min-block-size: 2.5rem;
+  margin: 0;
+  padding: 0.55rem 0.25rem;
+  border: 0;
+  border-top: 1px solid var(--software-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--software-ink);
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition:
+    color var(--review-desk-quick) ease,
+    background-color var(--review-desk-quick) ease;
+}
+
+[data-hiring-review='true'] .r27-ai-review-card {
+  border: 1px solid var(--software-border);
+  border-radius: 0.875rem;
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-card);
+  overflow: hidden;
+}
+
+[data-hiring-review='true'] .r27-ai-review-card > summary {
+  border-top: 0;
+  padding: 0.75rem 1rem;
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure, .r27-ai-review-card)
+  > summary::-webkit-details-marker {
+  display: none;
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure, .r27-ai-review-card)
+  > summary::after {
+  content: '';
+  flex: none;
+  inline-size: 0.42rem;
+  block-size: 0.42rem;
+  margin-inline-start: auto;
+  margin-inline-end: 0.25rem;
+  border-inline-end: 1.75px solid currentColor;
+  border-block-end: 1.75px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--review-desk-expand) var(--review-desk-ease);
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure, .r27-ai-review-card)[open]
+  > summary::after {
+  transform: rotate(45deg);
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure)
+  > summary:hover,
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure)[open]
+  > summary {
+  background: rgba(33, 20, 38, 0.03);
+  color: var(--software-ink);
+}
+
+html[data-theme='dark']
+  [data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure)
+  > summary:hover,
+html[data-theme='dark']
+  [data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure)[open]
+  > summary {
+  background: rgba(244, 239, 232, 0.04);
+}
+
+[data-hiring-review='true'] .r27-ai-review-card > summary:hover,
+[data-hiring-review='true'] .r27-ai-review-card[open] > summary {
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure)::details-content {
+  border: 0;
+  background: transparent;
+}
+
+[data-hiring-review='true'] .r27-ai-review-card::details-content {
+  border-top: 1px solid var(--software-border-subtle);
+  background: var(--software-surface);
+}
+
+[data-hiring-review='true']
+  :is(.evaluator-source-details, .hiring-disclosure)
+  > :not(summary) {
+  margin-inline: 0.25rem;
+  padding-block-end: 0.65rem;
+}
+
+@supports (interpolate-size: allow-keywords) and
+  (transition-behavior: allow-discrete) {
+  [data-hiring-review='true']
+    :is(
+      .evaluator-source-details,
+      .hiring-disclosure,
+      .r27-ai-review-card
+    )::details-content {
+    interpolate-size: allow-keywords;
+    overflow: clip;
+    block-size: 0;
+    opacity: 0;
+    transition:
+      block-size var(--review-desk-expand) var(--review-desk-ease),
+      opacity var(--review-desk-quick) ease,
+      content-visibility var(--review-desk-expand) allow-discrete;
+  }
+
+  [data-hiring-review='true']
+    :is(
+      .evaluator-source-details,
+      .hiring-disclosure,
+      .r27-ai-review-card
+    )[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+
+[data-hiring-review='true']
+  :is(button, summary, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--software-focus);
+  outline-offset: 2px;
+}
+
+.review-desk-decision-form,
+.review-desk-decision-editor,
+.review-desk-candidate-preview,
+.review-desk-feedback {
+  display: grid;
+  min-inline-size: 0;
+  align-content: start;
+  gap: 1rem;
+}
+
+.review-desk-decision-editor :is(h3, h4),
+.review-desk-candidate-preview h4 {
+  margin: 0;
+  color: var(--software-ink);
+  font-family: var(--software-serif);
+  font-weight: 500;
+  font-optical-sizing: auto;
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.review-desk-decision-editor h4,
+.review-desk-candidate-preview h4 {
+  font-family: var(--software-sans);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.review-desk-outcomes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.review-desk-outcomes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-block-size: 3.25rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.75rem;
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: 600 0.925rem/1.25 var(--software-sans);
+  box-shadow: var(--software-shadow-card);
+  cursor: pointer;
+  transition:
+    color var(--review-desk-quick) ease,
+    border-color var(--review-desk-quick) ease,
+    background-color var(--review-desk-quick) ease,
+    box-shadow var(--review-desk-quick) ease,
+    transform var(--review-desk-quick) var(--review-desk-ease);
+}
+
+.review-desk-outcomes button:hover {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-subtle);
+}
+
+.review-desk-outcomes button:active,
+.review-desk-file-trigger:active {
+  transform: scale(0.985);
+}
+
+.review-desk-outcomes button[aria-pressed='true'] {
+  background: var(--software-surface-note);
+  border-color: var(--software-focus);
+  box-shadow: inset 0 0 0 1px var(--software-focus);
+}
+
+.review-desk-outcomes button[data-outcome='accepted'][aria-pressed='true'] {
+  background: var(--software-status-success-surface);
+  border-color: rgba(22, 101, 52, 0.45);
+  color: var(--software-status-success);
+  box-shadow:
+    inset 0 0 0 1px rgba(22, 101, 52, 0.25),
+    var(--software-shadow-card);
+}
+
+.review-desk-outcomes button[data-outcome='rejected'][aria-pressed='true'] {
+  background: var(--software-status-danger-surface);
+  border-color: rgba(159, 29, 24, 0.42);
+  color: var(--software-status-danger);
+  box-shadow:
+    inset 0 0 0 1px rgba(159, 29, 24, 0.22),
+    var(--software-shadow-card);
+}
+
+.review-desk-outcomes button svg {
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity var(--review-desk-quick) ease,
+    transform var(--review-desk-expand) var(--review-desk-ease);
+}
+
+.review-desk-outcomes button[aria-pressed='true'] svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.review-desk-feedback .hiring-decision-feedback {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.review-desk-feedback textarea,
+.review-desk-private textarea {
+  min-block-size: 3rem;
+  resize: vertical;
+}
+
+.review-desk-private .hiring-field {
+  padding-block: 0.5rem;
+}
+
+.review-desk-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.review-desk-preview-stage {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.15rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.875rem;
+  background: var(--software-surface-subtle);
+}
+
+.review-desk-preview-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+}
+
+.review-desk-preview-header p {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.review-desk-candidate-preview :is(p, .hiring-outcome-box) {
+  margin-block: 0;
+}
+
+.review-desk-preview-empty,
+.review-desk-candidate-preview .hiring-outcome-box {
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.75rem;
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-card);
+}
+
+.review-desk-preview-empty {
+  color: var(--software-muted);
+  box-shadow: none;
+  border-style: dashed;
+  background: transparent;
+}
+
+.review-desk-advisory-note {
+  padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--software-border);
+  color: var(--software-muted);
+  font-size: 0.875rem;
+}
+
+.review-desk-publish {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  border-block-start: 1px solid var(--software-border);
+  background: var(--review-desk-paper);
+  padding-block: 0.8rem;
+}
+
+.review-desk-publish > span,
+.review-desk-back-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--software-muted);
+  font-size: 0.86rem;
+}
+
+.review-desk-publish > span svg {
+  color: var(--software-status-success);
+}
+
+.review-desk-back-code {
+  border: 0;
+  min-block-size: 2.5rem;
+  background: none;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+[data-hiring-review='true'] .review-desk-publish-button:disabled {
+  color: var(--software-muted);
+  background: var(--software-surface-subtle);
+  border-color: var(--software-border-strong);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+@media (min-width: 64rem) {
+  .evaluator-evidence-product:has([data-hiring-review='true']) {
+    background: var(--software-canvas);
+  }
+
+  [data-hiring-review='true'] .evaluator-workbench-shell {
+    max-inline-size: 82rem;
+  }
+
+  [data-hiring-review='true'][data-workbench-mode='evidence']
+    .evaluator-workbench-shell {
+    max-inline-size: 100rem;
+  }
+
+  [data-hiring-review='true']
+    .evaluator-workbench-shell
+    > .review-desk-heading {
+    padding-block: 1.35rem 0.85rem;
+  }
+
+  [data-hiring-review='true']:not([data-workbench-mode='summary'])
+    .review-desk-breadcrumb {
+    display: none;
+  }
+
+  [data-hiring-review='true']:not([data-workbench-mode='summary'])
+    .review-desk-person
+    h1 {
+    font-size: clamp(1.45rem, 2.15vw, 2rem);
+  }
+
+  [data-hiring-review='true'] .evaluator-workbench-topline {
+    margin-block: 0 1.6rem;
+    border-block-end: 1px solid var(--software-border);
+  }
+
+  [data-hiring-review='true'] .evaluator-workbench-modes {
+    --review-tab-index: 0;
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, 8.5rem);
+    gap: 0;
+    border: 0;
+  }
+
+  [data-hiring-review='true'][data-workbench-mode='evidence']
+    .evaluator-workbench-modes {
+    --review-tab-index: 1;
+  }
+
+  [data-hiring-review='true'][data-workbench-mode='review']
+    .evaluator-workbench-modes {
+    --review-tab-index: 2;
+  }
+
+  [data-hiring-review='true'] .evaluator-workbench-modes::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    inset-block-end: 0;
+    inset-inline-start: 0;
+    inline-size: 8.5rem;
+    block-size: 2px;
+    background: var(--software-focus);
+    transform: translateX(calc(var(--review-tab-index) * 8.5rem));
+    transition: transform var(--review-desk-expand) var(--review-desk-ease);
+  }
+
+  [data-hiring-review='true'] .evaluator-workbench-modes button,
+  [data-hiring-review='true']
+    .evaluator-workbench-modes
+    button[aria-selected='true'] {
+    border-color: transparent;
+  }
+
+  [data-hiring-review='true'] .workbench-summary-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(15.5rem, 28%);
+    gap: clamp(1.4rem, 3vw, 2.7rem);
+    align-items: start;
+  }
+
+  [data-hiring-review='true'] .workbench-summary-content,
+  [data-hiring-review='true'] .workbench-summary-sidebar {
+    gap: 1.45rem;
+  }
+
+  [data-hiring-review='true'] .workbench-summary-content > .review-desk-brief {
+    padding: 1.35rem 1.5rem;
+    border: 1px solid var(--software-border);
+    border-radius: 0.875rem;
+    background: var(--software-surface);
+    box-shadow: var(--software-shadow-card);
+  }
+
+  [data-hiring-review='true']
+    .workbench-summary-content
+    > .review-desk-activity,
+  [data-hiring-review='true']
+    .workbench-summary-sidebar
+    > .evaluator-review-card {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .review-desk-metrics-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--software-border);
+    border-radius: 0.875rem;
+    background: var(--software-surface);
+    box-shadow: var(--software-shadow-card);
+    overflow: hidden;
+  }
+
+  .review-desk-metrics-strip > div {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.85rem 1.1rem;
+  }
+
+  .review-desk-metrics-strip > div + div {
+    border-inline-start: 1px solid var(--software-border-subtle);
+  }
+
+  .review-desk-metrics-strip span {
+    color: var(--software-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .review-desk-metrics-strip strong {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    color: var(--software-ink);
+    font-family: var(--software-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.95rem;
+    font-weight: 650;
+  }
+
+  .review-desk-metrics-strip small {
+    color: var(--software-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  [data-hiring-review='true'] .review-desk-brief-lead {
+    max-inline-size: 66ch;
+    font-size: 0.98rem;
+    line-height: 1.65;
+  }
+
+  [data-hiring-review='true'] .workbench-summary-sidebar {
+    border-inline-start: 1px solid var(--software-border);
+    padding-inline-start: 1.35rem;
+  }
+
+  [data-hiring-review='true'] .workbench-summary-sidebar > section + section {
+    padding-block-start: 1rem !important;
+    border-block-start: 1px solid var(--software-border) !important;
+  }
+
+  [data-hiring-review='true']
+    .review-desk-activity
+    .workbench-progression-list {
+    margin: 0.6rem 0 0;
+    border: 1px solid var(--software-border);
+    border-radius: 0.75rem;
+    background: var(--software-surface);
+    overflow: hidden;
+  }
+
+  [data-hiring-review='true']
+    .review-desk-activity
+    .workbench-progression-list
+    li {
+    display: grid;
+    align-items: center;
+    grid-template-columns: 5rem minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 0;
+    min-block-size: 3rem;
+  }
+
+  [data-hiring-review='true']
+    .review-desk-activity
+    .workbench-progression-list
+    time {
+    padding-inline: 0.75rem;
+    font-family: var(--software-mono);
+  }
+
+  [data-hiring-review='true'] .review-desk-event {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+    min-block-size: 3rem;
+    padding: 0.55rem 0.75rem;
+    border: 0;
+    border-inline-start: 1px solid var(--software-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--software-ink);
+    font: 600 0.9rem/1.35 var(--software-sans);
+    cursor: pointer;
+    text-align: start;
+    transition: background-color var(--review-desk-quick) ease;
+  }
+
+  [data-hiring-review='true'] .review-desk-event:hover {
+    background: var(--software-surface-subtle);
+  }
+
+  [data-hiring-review='true'] .evaluator-evidence-browser {
+    grid-template-columns: clamp(12.5rem, 16vw, 15rem) minmax(0, 1fr);
+    gap: 0;
+    border: 1px solid var(--software-border);
+    border-radius: 0.875rem;
+    background: var(--software-surface);
+    box-shadow: var(--software-shadow-card);
+    overflow: hidden;
+  }
+
+  [data-hiring-review='true'] .evaluator-evidence-list-panel {
+    min-block-size: 100%;
+    padding: 1rem 0.85rem;
+    border: 0;
+    border-inline-end: 1px solid var(--software-border);
+    border-radius: 0;
+    background: var(--software-surface-subtle);
+  }
+
+  [data-hiring-review='true']
+    .evaluator-evidence-list-panel
+    .evaluator-evidence-filter-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    margin-block: 0.85rem 0;
+    padding-block-start: 0.45rem;
+    border-block-start: 1px solid var(--software-border);
+  }
+
+  [data-hiring-review='true'] .evaluator-evidence-filter-bar button {
+    justify-content: flex-start;
+    min-block-size: 2.5rem;
+    padding-inline: 0.55rem;
+    border-block-end: 0;
+    border-inline-start: 2px solid transparent;
+    border-radius: 0;
+    text-align: start;
+  }
+
+  [data-hiring-review='true']
+    .evaluator-evidence-filter-bar
+    button[aria-selected='true'] {
+    border-inline-start-color: var(--software-focus);
+    background: var(--software-surface-note);
+  }
+
+  [data-hiring-review='true']
+    .evaluator-source-row[data-file='true'][aria-pressed='true'] {
+    border-inline-start-color: var(--software-focus);
+    background: var(--software-surface-note);
+  }
+
+  [data-hiring-review='true']
+    .review-desk-evidence-content
+    > .evaluator-source-inspector {
+    padding: 1rem 1.15rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  [data-hiring-review='true']
+    .review-desk-code-pane
+    .evaluator-revision-mode-selector {
+    justify-content: flex-start;
+    inline-size: fit-content;
+  }
+
+  [data-hiring-review='true'] .evaluator-workflow-slot.is-dedicated {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  [data-hiring-review='true'] .r27-review-stack {
+    display: block;
+  }
+
+  [data-hiring-review='true'] .software-review-decision {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .review-desk-decision-form {
+    grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.86fr);
+    column-gap: clamp(1.45rem, 3vw, 3rem);
+  }
+
+  .review-desk-candidate-preview {
+    min-block-size: 100%;
+    border-inline-start: 0;
+    padding-inline-start: 0;
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+  }
+
+  .review-desk-publish {
+    z-index: 3;
+    position: sticky;
+    inset-block-end: 0;
+    grid-column: 1 / -1;
+    margin-block-start: 0.5rem;
+    background: rgba(246, 243, 238, 0.88);
+    backdrop-filter: blur(10px);
+  }
+
+  html[data-theme='dark'] .review-desk-publish {
+    background: rgba(20, 15, 26, 0.88);
+  }
+}
+
+@media (min-width: 72rem) {
+  .review-desk-file-layout[data-evidence-open] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0px);
+    grid-template-rows: auto;
+    transition: grid-template-columns var(--review-desk-expand)
+      var(--review-desk-ease);
+  }
+
+  .review-desk-file-layout[data-evidence-open='true'] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 19rem);
+    grid-template-rows: auto;
+  }
+
+  .review-desk-file-evidence-inner {
+    min-inline-size: 19rem;
+    margin-inline-start: 0.75rem;
+  }
+}
+
+@media (max-width: 38rem) {
+  [data-hiring-review='true'] .evaluator-review-next {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-hiring-review='true'] {
+    --review-desk-quick: 0ms;
+    --review-desk-expand: 0ms;
+  }
+
+  [data-hiring-review='true']
+    :is(
+      .evaluator-source-details,
+      .hiring-disclosure,
+      .r27-ai-review-card
+    )::details-content,
+  [data-hiring-review='true'] .evaluator-workbench-modes::after {
+    transition: none;
+  }
+}
+
+.review-desk-filter-note {
+  display: block;
+  color: var(--software-muted);
+  font-size: 0.76rem;
+  font-weight: 450;
+}
+
+.review-desk-handoff-reveal {
+  display: grid;
+  grid-template-rows: minmax(0, 0fr);
+  opacity: 0;
+  margin-block-start: -1rem;
+  transition:
+    grid-template-rows var(--review-desk-expand) var(--review-desk-ease),
+    margin-block-start var(--review-desk-expand) var(--review-desk-ease),
+    opacity var(--review-desk-quick) ease;
+}
+
+.review-desk-handoff-reveal[data-open='true'] {
+  grid-template-rows: minmax(0, 1fr);
+  opacity: 1;
+  margin-block-start: 0;
+}
+
+.review-desk-handoff-reveal > div {
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.review-desk-handoff-reveal[data-open='true'] .review-desk-handoff {
+  padding: 0.2rem 0.2rem 0.35rem;
+}
+
+[data-hiring-review='true']
+  :is(.hiring-btn, .evaluator-mode-button, .evaluator-source-row) {
+  transition:
+    border-color var(--review-desk-quick) ease,
+    background-color var(--review-desk-quick) ease,
+    color var(--review-desk-quick) ease,
+    transform var(--review-desk-quick) var(--review-desk-ease);
+}
+
+[data-hiring-review='true']
+  :is(.hiring-btn, .evaluator-mode-button):active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.review-desk-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.review-desk-brief
+  .evaluator-source-details:not(.review-desk-criteria)
+  > summary,
+.workbench-summary-sidebar .evaluator-source-details > summary,
+.review-desk-reference-group > summary {
+  min-block-size: 2.4rem;
+  padding-inline: 0.55rem;
+  background: transparent;
+}
+
+[data-hiring-review='true']
+  .review-desk-file-evidence-inner
+  .evaluator-source-details {
+  margin-block-start: 0.8rem;
+}
+
+[data-hiring-review='true']
+  .review-desk-file-evidence-inner
+  .evaluator-source-metadata {
+  font-size: 0.82rem;
+}
+
+[data-hiring-review='true']
+  .review-desk-file-evidence-inner
+  .evaluator-source-metadata
+  > div {
+  grid-template-columns: minmax(4.4rem, 0.62fr) minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.review-desk-code-pane :is(.review-token-keyword, .review-token-type) {
+  color: color-mix(
+    in srgb,
+    var(--software-ink) 57%,
+    var(--software-border-strong)
+  );
+  font-weight: 700;
+}
+
+.review-desk-code-pane :is(.review-token-string, .review-token-property) {
+  color: var(--software-status-success);
+}
+
+.review-desk-code-pane :is(.review-token-function, .review-token-number) {
+  color: color-mix(
+    in srgb,
+    var(--software-ink) 42%,
+    var(--software-status-success)
+  );
+}
+
+.review-desk-code-pane .review-token-comment {
+  color: var(--software-muted);
+  font-style: italic;
+}
+
+@media (min-width: 64rem) {
+  [data-hiring-review='true'] .review-desk-brief > header h2,
+  [data-hiring-review='true'] .review-desk-activity > header h2 {
+    font-size: 1.0625rem;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+  }
+
+  [data-hiring-review='true'] .workbench-summary-sidebar h2 {
+    color: var(--software-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+
+  [data-hiring-review='true']
+    .review-desk-activity
+    .evaluator-review-section-heading {
+    padding-block-end: 0;
+    border: 0;
+  }
+
+  [data-hiring-review='true']
+    .review-desk-activity
+    .workbench-progression-list {
+    margin-block-start: 0.5rem;
+  }
+
+  [data-hiring-review='true']
+    .review-desk-code-pane
+    :is(.code-file-pre, .code-diff-pre):not(.code-diff-pre-empty) {
+    min-block-size: min(22rem, 42vh);
+    max-block-size: min(39rem, 59vh);
+    background: var(--software-surface);
+    font: 0.8125rem/1.65 var(--software-mono);
+    scrollbar-gutter: stable;
+  }
+}
+
+@media (max-width: 767px) {
+  [data-hiring-review='true']
+    .review-desk-evidence-content
+    > .evaluator-source-inspector {
+    display: none;
+  }
+}
+
+@media (max-width: 56rem) {
+  .evaluator-evidence-browser
+    > .review-desk-legacy-sections
+    > .evaluator-source-inspector {
+    display: none;
+  }
+}
+
+@media (min-width: 72rem) {
+  .review-desk-file-evidence {
+    max-block-size: min(39rem, 59vh);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .review-desk-file-evidence[aria-hidden='true'] {
+    max-block-size: 0;
+  }
+}

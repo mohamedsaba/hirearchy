@@ -1,5 +1,11 @@
 'use client';
 
+import { useMemo } from 'react';
+import {
+  detectSyntaxLanguage,
+  tokenizeCodeLines,
+} from '../../../../src/hiring/syntax-highlight';
+
 type DiffRow =
   | Readonly<{
       kind: 'hunk';
@@ -192,16 +198,26 @@ export const CodeFileViewer = ({
   content,
   ariaLabel,
   emptyMessage,
+  filePath,
 }: Readonly<{
   content: string | null;
   ariaLabel: string;
   emptyMessage: string;
+  filePath?: string;
 }>) => {
+  const highlighted = useMemo(
+    () =>
+      filePath && content !== null
+        ? tokenizeCodeLines(content, detectSyntaxLanguage(filePath))
+        : null,
+    [content, filePath],
+  );
+
   if (content === null) {
     return <p className="evaluator-muted-copy">{emptyMessage}</p>;
   }
 
-  const lines = content.split('\n');
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
   return (
     <pre className="code-file-pre" tabIndex={0} aria-label={ariaLabel}>
       {lines.map((line, index) => (
@@ -209,7 +225,18 @@ export const CodeFileViewer = ({
           <span className="code-diff-num" aria-hidden="true">
             {index + 1}
           </span>
-          <code className="code-diff-code">{line || ' '}</code>
+          <code className="code-diff-code">
+            {highlighted && highlighted[index]?.length
+              ? highlighted[index].map((token, tokenIndex) => (
+                  <span
+                    key={tokenIndex}
+                    className={`review-token-${token.kind}`}
+                  >
+                    {token.text}
+                  </span>
+                ))
+              : line || ' '}
+          </code>
         </span>
       ))}
     </pre>

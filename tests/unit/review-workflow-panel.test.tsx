@@ -103,10 +103,12 @@ describe('review workflow panel', () => {
       ([, init]) => (init as RequestInit | undefined)?.method === method,
     );
   const clearDrafts = () => {
-    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
-      const key = sessionStorage.key(index);
-      if (key?.startsWith('hirearchy-review-draft:')) {
-        sessionStorage.removeItem(key);
+    for (const store of [sessionStorage, localStorage]) {
+      for (let index = store.length - 1; index >= 0; index -= 1) {
+        const key = store.key(index);
+        if (key?.startsWith('hirearchy-review-draft:')) {
+          store.removeItem(key);
+        }
       }
     }
   };
@@ -1093,5 +1095,6 @@ describe('review workflow panel', () => {
       'Unsaved next-step context',
     );
     sessionStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    localStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
   });
 });

@@ -331,6 +331,27 @@ export async function updateR23Password(
   await readJson(response, 65536);
 }
 
+export async function requestR23EmailChange(
+  config: R23IdentityConfig,
+  accessToken: string,
+  email: string,
+  returnUrl: string,
+): Promise<boolean> {
+  const url = endpoint(config, '/user');
+  url.searchParams.set('redirect_to', returnUrl);
+  const response = await requestAuth(url, {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email }),
+  });
+  await response.body?.cancel();
+  return response.ok;
+}
+
 export async function verifyR23AccessToken(
   config: R23IdentityConfig,
   accessToken: string,

@@ -103,7 +103,7 @@ describe('checkOperationalReadiness', () => {
     const report = await checkOperationalReadiness();
     expect(report.status).toBe('not_ready');
     expect(report.database.connected).toBe(false);
-    expect(report.database.targetMigrationVersion).toBe('0020');
+    expect(report.database.targetMigrationVersion).toBe('0021');
     expect(report.capabilities).toEqual({
       liveCodeExecutionEnabled: false,
       liveAiAssistanceEnabled: false,

@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { BrandMark } from '../_components/brand-mark';
 import { ThemeToggle } from '../_components/theme-toggle';
 import './software-product-header.css';
 
@@ -31,23 +30,34 @@ export const SoftwareProductHeader = ({
   readOnlyMode?: boolean;
 }>) => {
   const allowIssuance = !readOnlyMode && !tenantScope;
-  const sessionSummaryHref = stagingReview
-    ? `/r23/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
+  const organizationHref = stagingReview
+    ? `/r23/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}`
     : null;
+  const sessionSummaryHref =
+    stagingReview && organizationHref
+      ? `${organizationHref}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
+      : null;
+  const workspaceHref =
+    organizationHref && stagingReview?.compact
+      ? `${organizationHref}/candidates`
+      : (sessionSummaryHref ??
+        tenantScope?.switchOrganizationHref ??
+        '/evaluator');
 
   return (
-    <header className="software-product-header">
+    <header
+      className="software-product-header"
+      data-compact-review={stagingReview?.compact || undefined}
+    >
       <Link
         className="software-wordmark"
-        href={
-          sessionSummaryHref ??
-          (tenantScope ? tenantScope.switchOrganizationHref : '/evaluator')
-        }
+        href={workspaceHref}
         aria-label="Hirearchy Software home"
       >
-        <BrandMark />
         <span>Hirearchy</span>
-        <span className="software-product-capsule">Software</span>
+        <span className="software-product-capsule">
+          {stagingReview?.compact ? 'Evaluator' : 'Software'}
+        </span>
       </Link>
       {tenantScope ? (
         <div

@@ -153,12 +153,18 @@ describe('evaluator evidence workbench', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     sessionStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    localStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    sessionStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
+    localStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
   });
 
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
     sessionStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    localStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    sessionStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
+    localStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
     vi.unstubAllGlobals();
   });
 

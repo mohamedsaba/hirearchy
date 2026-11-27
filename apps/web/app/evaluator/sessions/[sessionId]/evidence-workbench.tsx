@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useId, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import {
+  IconCheck,
+  IconCopy,
+  IconFileDescription,
+  IconX,
+} from '@tabler/icons-react';
 import type { EvaluatorAiConversation } from '../../../../src/evaluator/evaluator-ai-conversations';
 import type {
   EvaluatorReviewEvidence,
@@ -57,6 +63,7 @@ import {
   computeDiffStats,
 } from './code-diff-viewer';
 import { EvidenceItemCard } from './evidence-item-card';
+import { formatLocalDateTime } from '../../../../src/ui/relative-time';
 import { SubmittedWork } from './submitted-work';
 import { TechnicalRecord } from './technical-record';
 
@@ -561,11 +568,7 @@ export const formatEvidenceTime = (
   const timestamp = source.timestamp;
   if (!timestamp) return 'Time unavailable';
   return (
-    formatElapsedValue(activatedAt, timestamp) ??
-    new Date(timestamp).toLocaleString(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })
+    formatElapsedValue(activatedAt, timestamp) ?? formatLocalDateTime(timestamp)
   );
 };
 
@@ -670,6 +673,7 @@ type R27InspectorProps = Readonly<{
   source: EvidenceSource | null;
   r27Evidence: R27Evidence;
   headingRef?: RefObject<HTMLHeadingElement | null>;
+  fileEvidencePanel?: FileEvidencePanel;
 }>;
 
 const R29ObservationPanel = ({
@@ -1887,6 +1891,11 @@ const R28WorkspaceRevisionView = ({
   );
 };
 
+type FileEvidencePanel = Readonly<{
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}>;
+
 const R27FileInspector = ({
   file,
   source,
@@ -1896,6 +1905,7 @@ const R27FileInspector = ({
   sourceReference,
   copySourceReference,
   copyStatus,
+  fileEvidencePanel,
 }: Readonly<{
   file: Extract<R27PresentationSource, { kind: 'file' }>['file'];
   source: EvidenceSource;
@@ -1905,6 +1915,7 @@ const R27FileInspector = ({
   sourceReference: string | null | undefined;
   copySourceReference: (reference: string) => Promise<void>;
   copyStatus: string | null;
+  fileEvidencePanel?: FileEvidencePanel;
 }>) => {
   const diffStats = computeDiffStats(file.diff);
   const hasNetChanges =
@@ -1914,6 +1925,29 @@ const R27FileInspector = ({
   const [viewMode, setViewMode] = useState<'diff' | 'submitted' | 'starter'>(
     () => (file.diff !== null && hasNetChanges ? 'diff' : 'submitted'),
   );
+
+  const drawerId = useId();
+  const referenceCopied = copyStatus === 'Stable source reference copied.';
+  const drawerTrigger = useRef<HTMLButtonElement>(null);
+  const drawerClose = useRef<HTMLButtonElement>(null);
+  const closeDetails = () => {
+    fileEvidencePanel?.onOpenChange(false);
+    drawerTrigger.current?.focus({ preventScroll: true });
+  };
+  const toggleDetails = () => {
+    if (!fileEvidencePanel) return;
+    if (fileEvidencePanel.open) closeDetails();
+    else {
+      fileEvidencePanel.onOpenChange(true);
+      requestAnimationFrame(() =>
+        drawerClose.current?.focus({ preventScroll: true }),
+      );
+    }
+  };
+  const matchesStarter =
+    !hasNetChanges &&
+    file.starterContent !== null &&
+    file.submittedContent !== null;
 
   const matchingEvent = [...r27Evidence.events]
     .reverse()
@@ -1944,123 +1978,13 @@ const R27FileInspector = ({
     r27Evidence.submission.workspaceDigest;
   const evidenceDigest = rawDigest.replace(/^sha256:/i, '').toLowerCase();
 
-  return (
-    <section
-      className="evaluator-source-inspector"
-      aria-labelledby={headingId}
-      data-source-inspector="true"
-      data-source-ref={source.key}
-      data-file-inspector="true"
-      style={{ minWidth: 0, maxWidth: '100%' }}
-    >
-      <header className="evaluator-source-inspector-heading">
-        <div>
-          <h2 id={headingId} ref={headingRef} tabIndex={-1}>
-            {file.path}
-          </h2>
-        </div>
-        <div className="evaluator-source-status-group">
-          {hasNetChanges ? (
-            <>
-              {diffStats.additions > 0 ? (
-                <span className="code-diff-stat-add">
-                  +{diffStats.additions}
-                </span>
-              ) : null}
-              {diffStats.deletions > 0 ? (
-                <span className="code-diff-stat-del">
-                  -{diffStats.deletions}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            <span className="code-diff-stat-neutral">Unchanged</span>
-          )}
-          {file.starterContent === null || file.submittedContent === null ? (
-            <span className="evaluator-source-status">
-              {captureStatus(source)}
-            </span>
-          ) : null}
-        </div>
-      </header>
-
-      <div
-        className="evaluator-revision-mode-selector"
-        role="group"
-        aria-label="File view mode"
-      >
-        <button
-          type="button"
-          aria-pressed={viewMode === 'diff'}
-          onClick={() => setViewMode('diff')}
-          className={`evaluator-mode-button${viewMode === 'diff' ? ' is-active' : ''}`}
-        >
-          Diff
-        </button>
-        <button
-          type="button"
-          aria-pressed={viewMode === 'submitted'}
-          onClick={() => setViewMode('submitted')}
-          className={`evaluator-mode-button${viewMode === 'submitted' ? ' is-active' : ''}`}
-        >
-          Submitted
-        </button>
-        <button
-          type="button"
-          aria-pressed={viewMode === 'starter'}
-          onClick={() => setViewMode('starter')}
-          className={`evaluator-mode-button${viewMode === 'starter' ? ' is-active' : ''}`}
-        >
-          Starter
-        </button>
-      </div>
-
-      <div
-        className="evaluator-source-inspector-output"
-        style={{ minWidth: 0, maxWidth: '100%' }}
-      >
-        {viewMode === 'diff' ? (
-          <>
-            <h3 className="visually-hidden">Changes from starter</h3>
-            {file.diff === null ? (
-              <p className="evaluator-muted-copy">
-                The starter baseline is unavailable, so a diff is not derived.
-              </p>
-            ) : (
-              <CodeDiffViewer
-                diff={file.diff}
-                filePath={file.path}
-                ariaLabel={`Derived diff for ${file.path}`}
-                emptyMessage="No net content change compared to starter baseline."
-              />
-            )}
-          </>
-        ) : viewMode === 'submitted' ? (
-          <>
-            <h3 className="visually-hidden">Submitted code</h3>
-            <CodeFileViewer
-              content={file.submittedContent}
-              ariaLabel={`Submitted content for ${file.path}`}
-              emptyMessage="This path is absent from the frozen submitted workspace."
-            />
-          </>
-        ) : (
-          <>
-            <h3>Starter content</h3>
-            <CodeFileViewer
-              content={file.starterContent}
-              ariaLabel={`Starter content for ${file.path}`}
-              emptyMessage="Starter content was not available in the authorized snapshot."
-            />
-          </>
-        )}
-      </div>
-
+  const fileMetadata = (
+    <>
       <details
         className="evaluator-source-details"
         style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
       >
-        <summary>File version and digest metadata</summary>
+        <summary>File version and digests</summary>
         <dl className="evaluator-source-metadata">
           <div>
             <dt>Starter version</dt>
@@ -2148,7 +2072,7 @@ const R27FileInspector = ({
         </p>
       </details>
 
-      {sourceReference ? (
+      {sourceReference && !fileEvidencePanel ? (
         <details
           className="evaluator-source-details"
           style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
@@ -2167,6 +2091,7 @@ const R27FileInspector = ({
             </code>
           </p>
           <button
+            className="hiring-btn hiring-btn-sm"
             type="button"
             onClick={() => void copySourceReference(sourceReference)}
           >
@@ -2175,6 +2100,231 @@ const R27FileInspector = ({
           {copyStatus ? <span role="status">{copyStatus}</span> : null}
         </details>
       ) : null}
+    </>
+  );
+
+  return (
+    <section
+      className="evaluator-source-inspector"
+      aria-labelledby={headingId}
+      data-source-inspector="true"
+      data-source-ref={source.key}
+      data-file-inspector="true"
+      style={{ minWidth: 0, maxWidth: '100%' }}
+    >
+      <header className="evaluator-source-inspector-heading review-desk-file-heading">
+        <div>
+          <h2 id={headingId} ref={headingRef} tabIndex={-1}>
+            {file.path}
+          </h2>
+          {fileEvidencePanel && matchesStarter ? (
+            <p className="review-desk-file-match">Matches starter code.</p>
+          ) : null}
+        </div>
+        <div className="evaluator-source-status-group">
+          {hasNetChanges ? (
+            <>
+              {diffStats.additions > 0 ? (
+                <span className="code-diff-stat-add">
+                  +{diffStats.additions}
+                </span>
+              ) : null}
+              {diffStats.deletions > 0 ? (
+                <span className="code-diff-stat-del">
+                  -{diffStats.deletions}
+                </span>
+              ) : null}
+            </>
+          ) : fileEvidencePanel ? null : (
+            <span className="code-diff-stat-neutral">Unchanged</span>
+          )}
+          {file.starterContent === null || file.submittedContent === null ? (
+            <span className="evaluator-source-status">
+              {captureStatus(source)}
+            </span>
+          ) : null}
+          {fileEvidencePanel ? (
+            <button
+              type="button"
+              ref={drawerTrigger}
+              className="review-desk-file-trigger"
+              onClick={toggleDetails}
+              aria-controls={drawerId}
+              aria-expanded={fileEvidencePanel.open}
+            >
+              <IconFileDescription size={17} aria-hidden="true" /> File evidence
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      <div
+        className="review-desk-file-layout"
+        data-evidence-open={fileEvidencePanel?.open}
+      >
+        <div className="review-desk-code-pane">
+          <div
+            className="evaluator-revision-mode-selector"
+            role="group"
+            aria-label="File view mode"
+          >
+            {!fileEvidencePanel || (file.diff !== null && hasNetChanges) ? (
+              <button
+                type="button"
+                aria-pressed={viewMode === 'diff'}
+                onClick={() => setViewMode('diff')}
+                className={`evaluator-mode-button${viewMode === 'diff' ? ' is-active' : ''}`}
+              >
+                Diff
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-pressed={viewMode === 'submitted'}
+              onClick={() => setViewMode('submitted')}
+              className={`evaluator-mode-button${viewMode === 'submitted' ? ' is-active' : ''}`}
+            >
+              Submitted
+            </button>
+            <button
+              type="button"
+              aria-pressed={viewMode === 'starter'}
+              onClick={() => setViewMode('starter')}
+              className={`evaluator-mode-button${viewMode === 'starter' ? ' is-active' : ''}`}
+            >
+              Starter
+            </button>
+          </div>
+
+          <div
+            className="evaluator-source-inspector-output"
+            style={{ minWidth: 0, maxWidth: '100%' }}
+          >
+            {viewMode === 'diff' ? (
+              <>
+                <h3 className="visually-hidden">Changes from starter</h3>
+                {file.diff === null ? (
+                  <p className="evaluator-muted-copy">
+                    The starter baseline is unavailable, so a diff is not
+                    derived.
+                  </p>
+                ) : (
+                  <CodeDiffViewer
+                    diff={file.diff}
+                    filePath={file.path}
+                    ariaLabel={`Derived diff for ${file.path}`}
+                    emptyMessage="No net content change compared to starter baseline."
+                  />
+                )}
+              </>
+            ) : viewMode === 'submitted' ? (
+              <>
+                <h3 className="visually-hidden">Submitted code</h3>
+                <CodeFileViewer
+                  content={file.submittedContent}
+                  filePath={fileEvidencePanel ? file.path : undefined}
+                  ariaLabel={`Submitted content for ${file.path}`}
+                  emptyMessage="This path is absent from the frozen submitted workspace."
+                />
+              </>
+            ) : (
+              <>
+                <h3>Starter content</h3>
+                <CodeFileViewer
+                  content={file.starterContent}
+                  filePath={fileEvidencePanel ? file.path : undefined}
+                  ariaLabel={`Starter content for ${file.path}`}
+                  emptyMessage="Starter content was not available in the authorized snapshot."
+                />
+              </>
+            )}
+          </div>
+        </div>
+        {fileEvidencePanel ? (
+          <aside
+            id={drawerId}
+            className="review-desk-file-evidence"
+            aria-label="File evidence"
+            aria-hidden={!fileEvidencePanel.open}
+            inert={!fileEvidencePanel.open}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && fileEvidencePanel.open) {
+                event.stopPropagation();
+                closeDetails();
+              }
+            }}
+          >
+            <div className="review-desk-file-evidence-inner">
+              <header>
+                <h3>File evidence</h3>
+                <button
+                  type="button"
+                  ref={drawerClose}
+                  aria-label="Close file evidence"
+                  onClick={closeDetails}
+                >
+                  <IconX size={19} aria-hidden="true" />
+                </button>
+              </header>
+              <code>{file.path}</code>
+              <details className="evaluator-source-details review-desk-file-source">
+                <summary>Source details</summary>
+                <dl className="evaluator-source-metadata">
+                  <div>
+                    <dt>Source</dt>
+                    <dd>
+                      {file.submittedContent === null
+                        ? 'Starter snapshot'
+                        : 'Submitted snapshot'}
+                    </dd>
+                  </div>
+                  {sourceReference ? (
+                    <div>
+                      <dt>Reference</dt>
+                      <dd>
+                        <code title={sourceReference}>
+                          …{sourceReference.slice(-16)}
+                        </code>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+                {sourceReference ? (
+                  <div className="review-desk-reference">
+                    <button
+                      type="button"
+                      className="hiring-btn hiring-btn-sm"
+                      onClick={() => void copySourceReference(sourceReference)}
+                    >
+                      {referenceCopied ? (
+                        <IconCheck size={15} aria-hidden="true" />
+                      ) : (
+                        <IconCopy size={15} aria-hidden="true" />
+                      )}
+                      {referenceCopied ? 'Copied' : 'Copy reference'}
+                    </button>
+                    {copyStatus ? (
+                      <p
+                        role="status"
+                        className={
+                          referenceCopied ? 'visually-hidden' : undefined
+                        }
+                      >
+                        {copyStatus}
+                      </p>
+                    ) : null}
+                    {copyStatus && !referenceCopied ? (
+                      <code>{sourceReference}</code>
+                    ) : null}
+                  </div>
+                ) : null}
+              </details>
+              {fileMetadata}
+            </div>
+          </aside>
+        ) : null}
+      </div>
+      {fileEvidencePanel ? null : fileMetadata}
 
       <R29ObservationPanel
         organizationId={r27Evidence.organizationId}
@@ -2194,11 +2344,13 @@ const R27EvidenceSourceInspector = ({
   r27Evidence,
   headingId,
   headingRef,
+  fileEvidencePanel,
 }: Readonly<{
   source: EvidenceSource | null;
   r27Evidence: R27Evidence;
   headingId: string;
   headingRef?: RefObject<HTMLHeadingElement | null>;
+  fileEvidencePanel?: FileEvidencePanel;
 }>) => {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const copySourceReference = async (reference: string) => {
@@ -2928,6 +3080,7 @@ const R27EvidenceSourceInspector = ({
       sourceReference={sourceReference}
       copySourceReference={copySourceReference}
       copyStatus={copyStatus}
+      fileEvidencePanel={fileEvidencePanel}
     />
   );
 };
@@ -2947,6 +3100,7 @@ export const EvidenceSourceInspector = (
         r27Evidence={props.r27Evidence}
         headingId={headingId}
         headingRef={props.headingRef}
+        fileEvidencePanel={props.fileEvidencePanel}
       />
     );
 
