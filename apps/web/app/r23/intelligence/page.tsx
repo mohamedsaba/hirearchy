@@ -38,6 +38,7 @@ export default async function ProductIntelligencePage() {
       <header className="software-document-header">
         <Link
           href="/r23/organizations"
+          prefetch={false}
           className="software-document-wordmark"
           aria-label="Hirearchy Software workspaces"
         >
@@ -45,7 +46,11 @@ export default async function ProductIntelligencePage() {
           <span className="software-document-product">Software</span>
         </Link>
         <div className="software-header-controls">
-          <Link href="/r23/organizations" className="hiring-btn hiring-btn-sm">
+          <Link
+            href="/r23/organizations"
+            prefetch={false}
+            className="hiring-btn hiring-btn-sm"
+          >
             Workspaces
           </Link>
           <ThemeToggle variant="header" />

@@ -176,6 +176,7 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
           <Link
             className="software-wordmark"
             href="/products/software"
+            prefetch={false}
             aria-label="Hirearchy Software product overview"
           >
             <span>Hirearchy</span>

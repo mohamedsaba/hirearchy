@@ -3326,6 +3326,11 @@ html[data-theme='dark']
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.65rem 1rem;
+  min-width: 0;
+}
+.team-section-header-row .hiring-builder-tabs {
+  flex-wrap: wrap;
+  max-inline-size: 100%;
 }
 .team-section-header-row .hiring-pill {
   margin-block-start: 0;
@@ -3763,12 +3768,15 @@ html[data-theme='dark']
 
 /* Founder / Operator Product Intelligence Dashboard */
 .intel-main {
+  min-width: 0;
   inline-size: min(100%, 78rem);
   margin-inline: auto;
   padding: clamp(1.25rem, 3vw, 2.5rem) clamp(1rem, 3vw, 2rem);
 }
 .intel-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 1.35rem;
 }
 .intel-header {
@@ -3789,7 +3797,21 @@ html[data-theme='dark']
 }
 .intel-section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 0.85rem;
+}
+.intel-main .software-overflow-region {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.intel-main .software-overflow-region:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--software-focus);
+  outline-offset: 2px;
 }
 .intel-section-head {
   display: flex;
@@ -3874,8 +3896,17 @@ html[data-theme='dark']
 .intel-stat-pairs span {
   color: var(--software-muted);
 }
+.intel-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  text-align: left;
+}
 .intel-table th,
 .intel-table td {
+  padding: 0.7rem 0.65rem;
+  border-bottom: 1px solid var(--software-border);
+  vertical-align: middle;
   white-space: nowrap;
 }
 .intel-feedback-list {
