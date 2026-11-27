@@ -8,6 +8,7 @@ import '../public/hiring-platform.css';
 import './workspace.css';
 import './home.css';
 import { IntentPrefetch } from './home/intent-prefetch';
+import { TelemetryTracker } from './_components/telemetry-tracker';
 const dmSans = localFont({
   src: '../public/fonts/dm-sans-latin.woff2',
   weight: '100 1000',
@@ -72,6 +73,7 @@ export default async function RootLayout({
       >
         {children}
         <IntentPrefetch />
+        <TelemetryTracker />
       </body>
     </html>
   );

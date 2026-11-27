@@ -43,6 +43,11 @@ import type {
   R213CandidateExecutionView,
   R213RecordedOperation,
 } from '../../../../src/r213-execution/contract';
+import {
+  flushClientTelemetry,
+  trackClientEvent,
+} from '../../../../src/telemetry/client';
+import { ProductFeedbackPulse } from '../../../_components/product-feedback-pulse';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { HorizontalTabs } from '../../../_components/horizontal-tabs';
 import { LocalTime } from '../../../_components/local-time';
@@ -784,6 +789,7 @@ export function R26CandidateClient({
       setPendingAiPrompt(prompt);
 
       const reqId = requestId();
+      const startedAt = Date.now();
 
       try {
         const response = await fetch(
@@ -807,6 +813,16 @@ export function R26CandidateClient({
         const result = (await response.json().catch(() => null)) as {
           error?: { message?: string };
         } | null;
+
+        trackClientEvent({
+          eventName: 'candidate.ai.queried',
+          category: 'candidate_funnel',
+          actorType: 'candidate',
+          sessionId,
+          status: response.ok ? 'ok' : 'error',
+          durationMs: Date.now() - startedAt,
+          properties: { httpStatus: response.status },
+        });
 
         if (!response.ok) {
           const errorMsg =
@@ -904,15 +920,34 @@ export function R26CandidateClient({
       (latestExecution as { isSynthetic?: boolean }).isSynthetic === false),
   );
 
-  const applyView = useCallback((next: R26CandidateGetResponse) => {
-    viewRef.current = next;
-    setView(next);
-    if (next.status === 'SUBMITTED') setPendingSubmit(null);
-    setServerOffsetMs(Date.parse(next.serverNow) - Date.now());
-    setClockNow(Date.now());
-    setLoadFailure('');
-    setAccessUnavailable(false);
-  }, []);
+  const openedTrackedRef = useRef(false);
+  const applyView = useCallback(
+    (next: R26CandidateGetResponse) => {
+      viewRef.current = next;
+      setView(next);
+      if (!openedTrackedRef.current) {
+        openedTrackedRef.current = true;
+        trackClientEvent({
+          eventName: 'candidate.workspace.opened',
+          category: 'candidate_funnel',
+          actorType: 'candidate',
+          sessionId,
+          properties: {
+            lifecycleStatus: next.status,
+            aiEnabled: next.capabilities.ai,
+            executionEnabled: next.capabilities.execution,
+            durationSeconds: next.durationSeconds,
+          },
+        });
+      }
+      if (next.status === 'SUBMITTED') setPendingSubmit(null);
+      setServerOffsetMs(Date.parse(next.serverNow) - Date.now());
+      setClockNow(Date.now());
+      setLoadFailure('');
+      setAccessUnavailable(false);
+    },
+    [sessionId],
+  );
 
   const callApi = useCallback(
     async (
@@ -1358,6 +1393,18 @@ export function R26CandidateClient({
       const next = await callApi('POST', { action: 'activate', input });
       focusTaskOnStart.current = isHiringExperience && next.status === 'ACTIVE';
       applyView(next);
+      if (next.status === 'ACTIVE') {
+        trackClientEvent({
+          eventName: 'candidate.session.started',
+          category: 'candidate_funnel',
+          actorType: 'candidate',
+          sessionId,
+          properties: {
+            aiEnabled: next.capabilities.ai,
+            executionEnabled: next.capabilities.execution,
+          },
+        });
+      }
       setMobileTab('task');
       if (!isHiringExperience)
         setMessage('Assessment activated. Your time has started.');
@@ -1537,6 +1584,7 @@ export function R26CandidateClient({
       lastExecutedDigestRef.current = workspaceDigest;
     }
     const currentRequestId = executionRequestIdRef.current;
+    const runStartedAt = Date.now();
 
     try {
       const response = await fetch(
@@ -1561,6 +1609,16 @@ export function R26CandidateClient({
         operationId?: string;
         error?: { message?: string };
       } | null;
+
+      trackClientEvent({
+        eventName: 'candidate.code.run',
+        category: 'candidate_funnel',
+        actorType: 'candidate',
+        sessionId,
+        status: response.ok ? 'ok' : 'error',
+        durationMs: Date.now() - runStartedAt,
+        properties: { httpStatus: response.status },
+      });
 
       if (!response.ok) {
         const errorMsg =
@@ -1737,6 +1795,20 @@ export function R26CandidateClient({
       applyView(next);
       setPendingSubmit(null);
       setSubmitConfirmOpen(false);
+      if (next.status === 'SUBMITTED') {
+        trackClientEvent({
+          eventName: 'candidate.session.submitted',
+          category: 'candidate_funnel',
+          actorType: 'candidate',
+          sessionId,
+          properties: {
+            closureReason: next.closureReason ?? 'candidate_submit',
+            fileCount: next.files.length,
+            executionCount: executionView?.operations.length ?? 0,
+          },
+        });
+        flushClientTelemetry();
+      }
 
       if (
         activeWorkspace &&
@@ -2426,57 +2498,74 @@ export function R26CandidateClient({
       ) : null}
 
       {isHiringExperience && view && submitted ? (
-        <section
-          className="r26-submission-receipt-top"
-          aria-label="Submission confirmation"
-          role="status"
-        >
-          <div className="r26-submission-receipt-copy">
-            <span className="hiring-pill hiring-pill-success">Submitted</span>
-            <h2>
-              {view.closureReason === 'timeout'
-                ? 'Closed when time ended'
-                : 'Assessment submitted'}
-            </h2>
-            <p>
-              {view.submittedAt ? (
-                <>
-                  Submitted{' '}
-                  <time dateTime={view.submittedAt}>
-                    {formatLocalDateTime(view.submittedAt)}
-                  </time>
-                  .{' '}
-                </>
-              ) : null}
-              Captured {view.files.length} saved workspace file
-              {view.files.length === 1 ? '' : 's'}
-              {view.capabilities.execution
-                ? executionView?.operations.length
-                  ? ` and ${executionView.operations.length} recorded test run${executionView.operations.length === 1 ? '' : 's'}`
-                  : ' and execution records'
-                : ' (test runner disabled for this assessment)'}
-              {view.capabilities.ai ? ' and AI conversation records' : ''}. Your
-              code below is now read-only.
-            </p>
-            {isHiringExperience ? (
+        <>
+          <section
+            className="r26-submission-receipt-top"
+            aria-label="Submission confirmation"
+            role="status"
+          >
+            <div className="r26-submission-receipt-copy">
+              <span className="hiring-pill hiring-pill-success">Submitted</span>
+              <h2>
+                {view.closureReason === 'timeout'
+                  ? 'Closed when time ended'
+                  : 'Assessment submitted'}
+              </h2>
               <p>
-                Your hiring team can now review your submission. Any feedback
-                they share will appear in My assessments.
+                {view.submittedAt ? (
+                  <>
+                    Submitted{' '}
+                    <time dateTime={view.submittedAt}>
+                      {formatLocalDateTime(view.submittedAt)}
+                    </time>
+                    .{' '}
+                  </>
+                ) : null}
+                Captured {view.files.length} saved workspace file
+                {view.files.length === 1 ? '' : 's'}
+                {view.capabilities.execution
+                  ? executionView?.operations.length
+                    ? ` and ${executionView.operations.length} recorded test run${executionView.operations.length === 1 ? '' : 's'}`
+                    : ' and execution records'
+                  : ' (test runner disabled for this assessment)'}
+                {view.capabilities.ai ? ' and AI conversation records' : ''}.
+                Your code below is now read-only.
               </p>
-            ) : null}
-          </div>
-          <div className="r26-submission-receipt-actions">
-            <a
-              className="r26-button r26-button-primary"
-              href={`/candidate/submissions/${encodeURIComponent(sessionId)}`}
-            >
-              View submitted work
-            </a>
-            <a className="r26-button r26-button-secondary" href="/candidate">
-              Return to My assessments
-            </a>
-          </div>
-        </section>
+              {isHiringExperience ? (
+                <p>
+                  Your hiring team can now review your submission. Any feedback
+                  they share will appear in My assessments.
+                </p>
+              ) : null}
+            </div>
+            <div className="r26-submission-receipt-actions">
+              <a
+                className="r26-button r26-button-primary"
+                href={`/candidate/submissions/${encodeURIComponent(sessionId)}`}
+              >
+                View submitted work
+              </a>
+              <a className="r26-button r26-button-secondary" href="/candidate">
+                Return to My assessments
+              </a>
+            </div>
+          </section>
+          <ProductFeedbackPulse
+            surface="candidate_post_submit"
+            actorType="candidate"
+            sessionId={sessionId}
+            storageKey={`hirearchy:fb:candidate:${sessionId}`}
+            title="How fair and smooth was this assessment workspace?"
+            privacyNote="Private to Hirearchy to improve the platform — never shared with the hiring team."
+            tags={[
+              'Clear & realistic',
+              'Smooth experience',
+              'Instructions unclear',
+              'Editor or test issue',
+              'Time felt tight',
+            ]}
+          />
+        </>
       ) : null}
 
       <div

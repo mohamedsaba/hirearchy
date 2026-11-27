@@ -37,7 +37,7 @@ if (!preflightPassed) {
 }
 
 // 2. Database Migration Engine
-console.log('\n--- Step 2: Database Migration Check (0001 - 0021) ---');
+console.log('\n--- Step 2: Database Migration Check (0001 - 0022) ---');
 const migratorUrl = process.env.STAGING_MIGRATOR_DATABASE_URL;
 
 assert(migratorUrl, 'Database migrator connection URL is required');
@@ -54,8 +54,8 @@ try {
     `✓ Schema migrations current up to: ${migrationRes.appliedVersions[migrationRes.appliedVersions.length - 1]} (Total: ${migrationRes.appliedVersions.length})`,
   );
   assert(
-    migrationRes.appliedVersions.includes('0021'),
-    'Migration 0021_account_avatar is required',
+    migrationRes.appliedVersions.includes('0022'),
+    'Migration 0022_product_intelligence is required',
   );
 } finally {
   await migratorClient.end().catch(() => {});

@@ -161,9 +161,14 @@ import {
 import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
 import {
   renderSoftwareDocument,
+  resolveWorkspaceRoleLabel,
   type SoftwareDocumentTheme,
   type SoftwareWorkspace,
 } from '../ui/software-document';
+import {
+  readAttributionCookie,
+  recordServerTelemetryEvent,
+} from '../telemetry/server';
 
 const ENVELOPE_VERSION = 1;
 const NONCE_LENGTH = 12;
@@ -6092,6 +6097,21 @@ export async function stagingOrganizationBootstrapPost(
           { organizationId },
         );
 
+        const attr = readAttributionCookie(request);
+        recordServerTelemetryEvent({
+          eventName: 'acquisition.org_created',
+          category: 'acquisition',
+          actorType: 'team_member',
+          anonymousId: attr?.anonymousId,
+          attribution: attr,
+          organizationId,
+          principalId: identity.subjectId,
+          route: '/r23/organization/bootstrap',
+          properties: {
+            hiringPlatform: isHiringPlatformEnabled(),
+          },
+        });
+
         const updatedSession: StagingBrowserSessionPayload = Object.freeze({
           ...session,
           selectedOrganizationId: organizationId,
@@ -6161,47 +6181,10 @@ export async function stagingAccountGet(request: Request): Promise<Response> {
           notice === 'email_unavailable' ||
           notice === 'email_same';
         const csrfField = `<input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">`;
+        const displayTitle = profile.displayName || email || 'Account';
         const avatar = profile.avatarWebp
-          ? `<img width="64" height="64" alt="" src="data:image/webp;base64,${safeHtml(profile.avatarWebp)}">`
-          : `<span aria-hidden="true">${safeHtml((profile.displayName || email || '?').slice(0, 1).toUpperCase())}</span>`;
-        const content = `<div class="team-account-page">
-        <header class="software-page-heading"><h1>My account</h1></header>
-        ${message ? `<p class="hiring-banner ${needsAttention ? 'hiring-banner-warning' : 'hiring-banner-success'}" role="${needsAttention ? 'alert' : 'status'}">${message}</p>` : ''}
-        <section class="software-settings-section team-account-profile" aria-labelledby="team-account-profile-title">
-          <h2 id="team-account-profile-title">Profile</h2>
-          <div class="team-account-photo">
-            <div class="team-account-avatar">${avatar}</div>
-            <div class="team-account-photo-controls">
-              <form class="hiring-header-actions" action="${ACCOUNT_PATH}" method="post" enctype="multipart/form-data">
-                ${csrfField}<input type="hidden" name="action" value="update_avatar">
-                <div class="hiring-field"><label for="account-photo">Profile photo</label><input id="account-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required aria-describedby="photo-help"></div>
-                <button type="submit">Save photo</button>
-              </form>
-              <p class="software-field-help" id="photo-help">JPG, PNG or WebP, up to 2 MB.</p>
-              ${profile.avatarWebp ? `<form class="team-account-remove-photo" action="${ACCOUNT_PATH}" method="post">${csrfField}<input type="hidden" name="action" value="remove_avatar"><button type="submit">Remove photo</button></form>` : ''}
-            </div>
-          </div>
-          <form class="team-account-field-form" action="${ACCOUNT_PATH}" method="post">
-            ${csrfField}<input type="hidden" name="action" value="update_account_profile">
-            <div class="hiring-field"><label for="account-display-name">Display name</label><input id="account-display-name" name="displayName" value="${safeHtml(profile.displayName || '')}" maxlength="100" autocomplete="name" required></div>
-            <button type="submit">Save name</button>
-          </form>
-        </section>
-        <section class="software-settings-section team-account-security" aria-labelledby="team-account-security-title">
-          <h2 id="team-account-security-title">Sign-in details</h2>
-          <div class="team-account-sign-in-row"><div><h3>Email address</h3><p>${safeHtml(email)}</p></div></div>
-          <details class="hiring-disclosure team-account-email-change"${needsAttention && notice !== 'invalid_avatar' ? ' open' : ''}>
-            <summary>Change email</summary>
-            <p>Confirm the change at your current and new address.</p>
-            <form class="team-account-field-form" action="${ACCOUNT_PATH}" method="post">
-              ${csrfField}<input type="hidden" name="action" value="change_email">
-              <div class="hiring-field"><label for="account-new-email">New email address</label><input id="account-new-email" name="email" type="email" autocomplete="email" maxlength="254" required></div>
-              <button type="submit">Send confirmation</button>
-            </form>
-          </details>
-          <div class="team-account-sign-in-row"><h3>Password</h3><a class="hiring-btn" href="/r23/recover">Change password</a></div>
-        </section>
-      </div>`;
+          ? `<img width="72" height="72" alt="" src="data:image/webp;base64,${safeHtml(profile.avatarWebp)}">`
+          : `<span aria-hidden="true">${safeHtml(displayTitle.slice(0, 1).toUpperCase())}</span>`;
 
         let workspace: SoftwareWorkspace | undefined;
         const organizationId = session.selectedOrganizationId;
@@ -6238,6 +6221,77 @@ export async function stagingAccountGet(request: Request): Promise<Response> {
             if (errorDetails(error).status !== 403) throw error;
           }
         }
+
+        const workspaceRolePill = workspace
+          ? `<span class="hiring-pill hiring-pill-plum">${safeHtml(workspace.organizationName)} · ${safeHtml(resolveWorkspaceRoleLabel(workspace.role, true))}</span>`
+          : '';
+        const workspaceSignInRow = workspace
+          ? `<div class="team-account-sign-in-row"><div><h3>Active workspace</h3><p>${safeHtml(workspace.organizationName)}</p></div><a class="hiring-btn" href="/r23/organizations">Switch workspace</a></div>`
+          : '';
+
+        const content = `<div class="team-account-page">
+        <header class="software-page-heading team-account-header">
+          <div>
+            <h1>My account</h1>
+            <p class="team-page-subtitle">Manage your profile identity, avatar, and sign-in security.</p>
+          </div>
+        </header>
+        ${message ? `<p class="hiring-banner ${needsAttention ? 'hiring-banner-warning' : 'hiring-banner-success'}" role="${needsAttention ? 'alert' : 'status'}">${message}</p>` : ''}
+        <section class="team-account-hero" aria-label="Account summary">
+          <div class="team-account-avatar">${avatar}</div>
+          <div class="team-account-hero-meta">
+            <strong>${safeHtml(displayTitle)}</strong>
+            <span>${safeHtml(email)}</span>
+            ${workspaceRolePill}
+          </div>
+        </section>
+        <div class="team-account-grid">
+          <section class="software-settings-section team-account-profile" aria-labelledby="team-account-profile-title">
+            <header class="software-section-intro">
+              <h2 id="team-account-profile-title">Profile</h2>
+              <p>How your name and avatar appear across reviews, comments, and the problem library.</p>
+            </header>
+            <div class="team-account-photo-block">
+              <form class="team-account-photo-form" action="${ACCOUNT_PATH}" method="post" enctype="multipart/form-data">
+                ${csrfField}<input type="hidden" name="action" value="update_avatar">
+                <div class="hiring-field"><label for="account-photo">Profile photo</label><input id="account-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required aria-describedby="photo-help"></div>
+                <button type="submit" class="hiring-btn">Save photo</button>
+              </form>
+              <div class="team-account-photo-meta">
+                <p class="software-field-help" id="photo-help">JPG, PNG or WebP, up to 2 MB.</p>
+                ${profile.avatarWebp ? `<form class="team-account-remove-photo" action="${ACCOUNT_PATH}" method="post">${csrfField}<input type="hidden" name="action" value="remove_avatar"><button type="submit">Remove photo</button></form>` : ''}
+              </div>
+            </div>
+            <form class="team-account-field-form" action="${ACCOUNT_PATH}" method="post">
+              ${csrfField}<input type="hidden" name="action" value="update_account_profile">
+              <div class="hiring-field"><label for="account-display-name">Display name</label><input id="account-display-name" name="displayName" value="${safeHtml(profile.displayName || '')}" maxlength="100" autocomplete="name" required></div>
+              <button type="submit" class="hiring-btn hiring-btn-primary">Save name</button>
+            </form>
+          </section>
+          <section class="software-settings-section team-account-security" aria-labelledby="team-account-security-title">
+            <header class="software-section-intro">
+              <h2 id="team-account-security-title">Sign-in details</h2>
+              <p>Credentials and workspace session controls.</p>
+            </header>
+            <div class="team-account-rows">
+              <div class="team-account-email-block">
+                <div class="team-account-sign-in-row"><div><h3>Email address</h3><p>${safeHtml(email)}</p></div></div>
+                <details class="hiring-disclosure team-account-email-change"${needsAttention && notice !== 'invalid_avatar' ? ' open' : ''}>
+                  <summary>Change email</summary>
+                  <p>Confirm the change at your current and new address.</p>
+                  <form class="team-account-field-form" action="${ACCOUNT_PATH}" method="post">
+                    ${csrfField}<input type="hidden" name="action" value="change_email">
+                    <div class="hiring-field"><label for="account-new-email">New email address</label><input id="account-new-email" name="email" type="email" autocomplete="email" maxlength="254" required></div>
+                    <button type="submit" class="hiring-btn hiring-btn-primary">Send confirmation</button>
+                  </form>
+                </details>
+              </div>
+              <div class="team-account-sign-in-row"><div><h3>Password</h3><p>Send a verification link to reset your password.</p></div><a class="hiring-btn" href="/r23/recover">Change password</a></div>
+              ${workspaceSignInRow}
+            </div>
+          </section>
+        </div>
+      </div>`;
         const headers = securityHeaders();
         headers.set(
           'Content-Security-Policy',
@@ -6416,8 +6470,14 @@ export async function stagingOrganizationPlanGet(
         const cards = PAID_PLAN_ORDER.map((tier) => {
           const definition = getPlanDefinition(tier);
           const isCurrent = tier === plan.planTier;
-          return `<article class="hiring-plan-card team-plan-card" data-tier="${tier}" data-current="${isCurrent}">
-          <div class="team-plan-card-title"><h2>${safeHtml(definition.name)}</h2>${isCurrent ? '<span class="hiring-pill hiring-pill-plum">Current plan</span>' : ''}</div>
+          const isRecommended = tier === 'ultra' && !isCurrent;
+          const statusChip = isCurrent
+            ? '<span class="hiring-pill hiring-pill-plum">Current plan</span>'
+            : isRecommended
+              ? '<span class="hiring-pill hiring-pill-mint">Recommended</span>'
+              : '';
+          return `<article class="hiring-plan-card team-plan-card" data-tier="${tier}" data-current="${isCurrent}"${isRecommended ? ' data-recommended="true"' : ''}>
+          <div class="team-plan-card-title"><h2>${safeHtml(definition.name)}</h2>${statusChip}</div>
           <p class="team-plan-model">${safeHtml(definition.priceLabel)}</p>
           <ul>${definition.highlights.map((item) => `<li>${safeHtml(item)}</li>`).join('')}</ul>
           ${canChange && !isCurrent ? `<a class="hiring-btn ${tier === 'ultra' ? 'hiring-btn-primary' : ''}" href="${path}?target=${tier}#plan-review">${actionFor(tier)} ${safeHtml(definition.name)}</a>` : ''}
@@ -6447,7 +6507,7 @@ export async function stagingOrganizationPlanGet(
           <p>${safeHtml(current.name)} → ${safeHtml(nextPlan.name)}. ${safeHtml(nextCapacity)}${isUltra ? ' AI review summaries and hiring manager fit reports are available on Ultra.' : ''}</p>
           <form class="hiring-header-actions" action="${postAction}" method="post">
             ${csrfField}<input type="hidden" name="action" value="save_plan"><input type="hidden" name="planTier" value="${target}">
-            <button type="submit">Confirm plan change</button><a class="hiring-btn" href="${path}">Cancel</a>
+            <button type="submit" class="hiring-btn hiring-btn-primary">Confirm plan change</button><a class="hiring-btn" href="${path}">Cancel</a>
           </form>
         </section>`;
         }
@@ -6457,14 +6517,14 @@ export async function stagingOrganizationPlanGet(
             ? `<form class="team-plan-slot-review" action="${postAction}" method="post">${csrfField}
             <input type="hidden" name="action" value="update_slots"><input type="hidden" name="slotMode" value="add"><input type="hidden" name="slotAmount" value="${slots}">
             <p>Purchased slots will increase from <strong>${plan.candidateCreditsPurchased}</strong> to <strong>${plan.candidateCreditsPurchased + slots}</strong>.</p>
-            <div class="hiring-header-actions"><button type="submit">Add ${slots} ${slots === 1 ? 'slot' : 'slots'}</button><a class="hiring-btn" href="${path}#add-ons">Cancel</a></div>
+            <div class="hiring-header-actions"><button type="submit" class="hiring-btn hiring-btn-primary">Add ${slots} ${slots === 1 ? 'slot' : 'slots'}</button><a class="hiring-btn" href="${path}#add-ons">Cancel</a></div>
           </form>`
             : '';
         const slotForm =
           hasSlots && canChange && !slotReview
             ? `<form class="team-plan-slot-form hiring-header-actions" method="get" action="${path}#add-ons">
             <div class="hiring-field"><label for="candidate-slots">Slots to add</label><input id="candidate-slots" name="slots" type="number" min="1" max="10000" required></div>
-            <button type="submit">Review add-on</button>
+            <button type="submit" class="hiring-btn hiring-btn-primary">Review add-on</button>
           </form>`
             : '';
         const notice = url.searchParams.get('notice');
@@ -6475,8 +6535,29 @@ export async function stagingOrganizationPlanGet(
               ? 'Plan updated.'
               : '';
         const title = isUltra ? 'Plan & add-ons' : 'Upgrade';
+        recordServerTelemetryEvent({
+          eventName: 'monetization.upgrade_viewed',
+          category: 'monetization',
+          actorType: 'team_member',
+          organizationId,
+          principalId: org.principalId,
+          planTier: plan.planTier,
+          route: `/r23/organizations/:id/${page}`,
+          properties: {
+            surface: page,
+            canChange,
+          },
+        });
+        const planSubtitle = isUltra
+          ? 'Review your active Ultra subscription, compare tiers, or adjust workspace plan settings.'
+          : 'Scale your engineering hiring pipeline and unlock AI-assisted review workflows.';
         const content = `<div class="team-plan-page">
-        <header class="software-page-heading"><h1>${safeHtml(title)}</h1></header>
+        <header class="software-page-heading">
+          <div>
+            <h1>${safeHtml(title)}</h1>
+            <p class="team-page-subtitle">${safeHtml(planSubtitle)}</p>
+          </div>
+        </header>
         ${noticeText ? `<p class="hiring-banner hiring-banner-success" role="status">${noticeText}</p>` : ''}
         <section class="team-plan-current" aria-labelledby="current-plan-title">
           <div><p class="team-plan-kicker">Current plan</p><h2 id="current-plan-title">${safeHtml(current.name)}</h2></div>
@@ -6610,10 +6691,16 @@ export async function stagingOrganizationSettingsGet(
 
       const membersRows = members
         .map((m) => {
+          const displayLabel = m.displayName || 'No display name';
+          const memberInitial = (m.displayName || m.email || '?')
+            .trim()
+            .slice(0, 1)
+            .toUpperCase();
           const ownerLabel =
             !hiring && m.isOwner
               ? '<span class="software-owner-badge">Owner</span>'
               : '';
+          const roleKey = hiring && m.isOwner ? 'owner' : m.role;
           const roleDisplay =
             hiring && m.isOwner
               ? 'Owner'
@@ -6624,13 +6711,17 @@ export async function stagingOrganizationSettingsGet(
                   : m.role === 'recruiter'
                     ? 'Recruiter'
                     : m.role;
+          const statusClass =
+            m.status === 'active'
+              ? 'hiring-pill hiring-pill-success'
+              : 'software-state-badge';
           const removeButton =
             !m.isOwner && (isOrgAdmin || m.principalId === profile.principalId)
               ? `<form action="/r23/organizations/${safeOrgId}/settings" method="post">
                   <input type="hidden" name="csrf" value="${safeCsrf}">
                   <input type="hidden" name="action" value="remove_member">
                   <input type="hidden" name="principalId" value="${safeHtml(m.principalId)}">
-                  <button type="submit" aria-label="Remove member ${safeHtml(m.email || m.principalId)}">Remove member</button>
+                  <button type="submit" class="hiring-btn hiring-btn-sm team-danger-btn" aria-label="Remove member ${safeHtml(m.email || m.principalId)}">Remove member</button>
                 </form>`
               : m.isOwner && !hiring
                 ? '<span class="software-field-help">Workspace owner</span>'
@@ -6638,10 +6729,10 @@ export async function stagingOrganizationSettingsGet(
 
           return `
             <tr>
-              <td>${safeHtml(m.displayName || 'No display name')}</td>
+              <td>${hiring ? `<div class="team-member-cell"><span class="team-member-avatar" aria-hidden="true">${safeHtml(memberInitial)}</span><span>${safeHtml(displayLabel)}</span></div>` : safeHtml(displayLabel)}</td>
               <td>${safeHtml(m.email || 'Email unavailable')}</td>
-              <td><span class="${hiring && m.isOwner ? 'software-owner-badge' : 'software-role-badge'}">${safeHtml(roleDisplay)}</span></td>
-              <td>${safeHtml(m.status.charAt(0).toUpperCase() + m.status.slice(1))} ${ownerLabel}</td>
+              <td><span class="${hiring && m.isOwner ? 'software-owner-badge' : 'software-role-badge'}" data-role="${safeHtml(roleKey)}">${safeHtml(roleDisplay)}</span></td>
+              <td><span class="${hiring ? statusClass : ''}">${safeHtml(m.status.charAt(0).toUpperCase() + m.status.slice(1))}</span> ${ownerLabel}</td>
               <td><time datetime="${safeHtml(m.joinedAt)}" title="${safeHtml(m.joinedAt)}">${safeHtml(new Date(m.joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time></td>
               <td>${removeButton}</td>
             </tr>
@@ -6650,6 +6741,9 @@ export async function stagingOrganizationSettingsGet(
         .join('');
 
       const candidateEncryptionKey = loadCandidateTokenEncryptionKey();
+      const pendingInviteCount = invitations.filter(
+        (inv) => inv.status === 'active',
+      ).length;
       const invitationsList = invitations
         .map((inv) => {
           let linkHtml = '';
@@ -6676,7 +6770,7 @@ export async function stagingOrganizationSettingsGet(
                   <input type="hidden" name="csrf" value="${safeCsrf}">
                   <input type="hidden" name="action" value="revoke_invitation">
                   <input type="hidden" name="invitationId" value="${safeHtml(inv.id)}">
-                  <button type="submit" aria-label="Revoke invitation for ${safeHtml(inv.targetEmail)}">Revoke invitation</button>
+                  <button type="submit" class="hiring-btn hiring-btn-sm team-danger-btn" aria-label="Revoke invitation for ${safeHtml(inv.targetEmail)}">Revoke invitation</button>
                 </form>`
               : '';
 
@@ -6687,11 +6781,18 @@ export async function stagingOrganizationSettingsGet(
                 ? 'Recruiter invitation'
                 : 'Evaluator invitation';
 
+          const statusBadgeClass =
+            inv.status === 'active'
+              ? 'hiring-pill hiring-pill-warning'
+              : inv.status === 'accepted'
+                ? 'hiring-pill hiring-pill-success'
+                : 'software-role-badge';
+
           return `
-            <li class="software-invitation-row">
+            <li class="software-invitation-row" data-status="${safeHtml(inv.status)}">
               <div class="software-invitation-heading">
                 <div><strong>${safeHtml(inv.targetEmail)}</strong><span>${inviteRoleText}</span></div>
-                <span class="software-role-badge">${inv.status === 'active' ? 'Pending' : safeHtml(inv.status)}</span>
+                <span class="${hiring ? statusBadgeClass : 'software-role-badge'}">${inv.status === 'active' ? 'Pending' : safeHtml(inv.status)}</span>
               </div>
               <p class="software-invitation-meta">Expires <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(formatUtcDateTime(inv.expiresAt))}</time>${inv.acceptedAt ? ` · Accepted <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(new Date(inv.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : ''}</p>
               ${linkHtml}
@@ -6737,42 +6838,114 @@ export async function stagingOrganizationSettingsGet(
 
       `;
       const organizationDetailsHtml = `
-          <section id="organization-details" class="software-settings-section" aria-labelledby="org-profile-heading">
+          <section id="organization-details" class="software-settings-section${hiring ? ' team-org-identity-card' : ''}" aria-labelledby="org-profile-heading">
             <header class="software-section-intro"><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></header>
             ${
               isOrgAdmin
                 ? `
-              <form action="/r23/organizations/${safeOrgId}/settings" method="post">
+              <form class="${hiring ? 'team-org-inline-form' : ''}" action="/r23/organizations/${safeOrgId}/settings" method="post">
                 <input type="hidden" name="csrf" value="${safeCsrf}">
                 <input type="hidden" name="action" value="update_organization_profile">
-                <label for="orgDisplayName">Organization display name</label>
-                <input id="orgDisplayName" name="organizationDisplayName" type="text" required maxlength="100" value="${safeOrgName}">
-                <button type="submit">Update organization name</button>
+                <div class="${hiring ? 'hiring-field' : ''}"><label for="orgDisplayName">Organization display name</label><input id="orgDisplayName" name="organizationDisplayName" type="text" required maxlength="100" value="${safeOrgName}"></div>
+                <button type="submit"${hiring ? ' class="hiring-btn hiring-btn-primary"' : ''}>Update organization name</button>
               </form>`
                 : `<p>${safeOrgName}</p>`
             }
-            <details class="software-reference-details"><summary>Workspace reference</summary><code>${safeOrgId}</code></details>
+            <details class="${hiring ? 'hiring-disclosure team-org-ref-details' : 'software-reference-details'}"><summary>${hiring ? 'Workspace ID' : 'Workspace reference'}</summary><code>${safeOrgId}</code></details>
           </section>
       `;
 
-      const content = `
+      const hiringPlanCardHtml =
+        hiring && planSummary
+          ? (() => {
+              const planDef = getPlanDefinition(planSummary.planTier);
+              const isUltraPlan = planSummary.planTier === 'ultra';
+              const capacityText =
+                planSummary.planTier === 'per_candidate'
+                  ? `${planSummary.candidateCreditsRemaining ?? 0} of ${planSummary.candidateCreditsPurchased} candidate slots available`
+                  : planSummary.planTier === 'none'
+                    ? 'Activate a plan to issue assessments'
+                    : 'Unlimited candidate assessments';
+              const upgradeHook =
+                planSummary.planTier === 'pro'
+                  ? 'Upgrade to Ultra to unlock AI review summaries and hiring manager fit reports.'
+                  : planSummary.planTier === 'per_candidate'
+                    ? 'Add candidate slots or upgrade to Pro/Ultra for unlimited assessments.'
+                    : planSummary.planTier === 'none'
+                      ? 'Choose a plan to start inviting candidates.'
+                      : 'All Ultra AI evaluation and team workflows are active.';
+              const actionHtml = isUltraPlan
+                ? `<a class="hiring-btn" href="/r23/organizations/${safeOrgId}/plan">Manage plan &amp; add-ons</a>`
+                : `<a class="hiring-btn hiring-btn-primary" href="/r23/organizations/${safeOrgId}/upgrade">${planSummary.planTier === 'pro' ? 'Upgrade to Ultra' : 'Upgrade plan'}</a>`;
+              return `<section class="software-settings-section team-org-plan-card" data-tier="${safeHtml(planSummary.planTier)}" aria-labelledby="org-plan-heading">
+                <div class="team-org-plan-head">
+                  <span class="software-eyebrow">Subscription &amp; capacity</span>
+                  <span class="hiring-pill hiring-pill-plum">${safeHtml(formatPlanBadge(planSummary))}</span>
+                </div>
+                <h2 id="org-plan-heading">${safeHtml(planDef.name)}</h2>
+                <p class="team-org-plan-capacity">${safeHtml(capacityText)}</p>
+                <p class="team-org-plan-hook">${safeHtml(upgradeHook)}</p>
+                <div class="team-org-plan-actions">${actionHtml}</div>
+              </section>`;
+            })()
+          : '';
+
+      const content = hiring
+        ? `<div class="team-org-page">
+          <header class="software-page-heading team-org-header">
+            <div>
+              <h1>Organization</h1>
+              <p class="team-page-subtitle">Manage workspace identity, team access, and plan capacity.</p>
+            </div>
+          </header>
+          ${noticeBannerHtml}
+          <div class="team-org-overview">${organizationDetailsHtml}${hiringPlanCardHtml}</div>
+          <section id="team" class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
+            <header class="software-section-intro team-section-header-row">
+              <div>
+                <h2 id="team-members-heading">Your team</h2>
+                <p>People with access to this workspace and its assigned reviews.</p>
+              </div>
+              <span class="hiring-pill">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
+            </header>
+            <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
+              <table class="software-members-table">
+                <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+                <tbody>${membersRows}</tbody>
+              </table>
+            </div>
+          </section>
+          <section id="team-invitations" class="software-settings-section team-org-invites-section" aria-labelledby="invitations-heading">
+            <header class="software-section-intro team-section-header-row">
+              <div>
+                <h2 id="invitations-heading">Invite a teammate</h2>
+                <p>Create an invitation link to share with your teammate.</p>
+              </div>
+              ${pendingInviteCount > 0 ? `<span class="hiring-pill hiring-pill-warning">${pendingInviteCount} pending</span>` : ''}
+            </header>
+            ${
+              isOrgAdmin
+                ? `<form class="software-invite-form team-org-invite-form" action="/r23/organizations/${safeOrgId}/settings" method="post">
+                    <input type="hidden" name="csrf" value="${safeCsrf}">
+                    <input type="hidden" name="action" value="create_invitation">
+                    <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
+                    <div class="hiring-field"><label for="targetEmail">Teammate email</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
+                    ${inviteRoleFieldHtml}
+                    <button type="submit" class="hiring-btn hiring-btn-primary">Create team invitation</button>
+                  </form>`
+                : ''
+            }
+            <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
+          </section>
+        </div>`
+        : `
         <header class="software-page-heading">
-          <div>${hiring ? '' : `<p class="software-eyebrow">${safeOrgName}</p>`}<h1>${hiring ? 'Organization' : 'Team &amp; settings'}</h1></div>
-          ${hiring ? '' : `<a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to Assessments</a>`}
+          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1></div>
+          <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to Assessments</a>
         </header>
 
         ${noticeBannerHtml}
-        ${
-          hiring
-            ? `<nav class="hiring-header-actions software-settings-jump" aria-label="Organization sections">
-          <a class="hiring-btn hiring-btn-sm" href="#team">Team</a>
-          ${isOrgAdmin ? '<a class="hiring-btn hiring-btn-sm" href="#team-invitations">Invite a teammate</a>' : ''}
-          <a class="hiring-btn hiring-btn-sm" href="#organization-details">Workspace details</a>
-          ${planSummary?.planTier === 'ultra' ? `<a class="hiring-btn hiring-btn-sm" href="/r23/organizations/${safeOrgId}/plan">Manage plan</a>` : ''}
-        </nav>`
-            : ''
-        }
-        ${hiring ? '' : `<div class="software-settings-grid">${legacyProfileHtml}${organizationDetailsHtml}</div>`}
+        <div class="software-settings-grid">${legacyProfileHtml}${organizationDetailsHtml}</div>
         <section id="team" class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
           <header class="software-section-intro"><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></header>
           <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
@@ -6784,7 +6957,7 @@ export async function stagingOrganizationSettingsGet(
         </section>
 
         <section id="team-invitations" class="software-settings-section" aria-labelledby="invitations-heading">
-          <header class="software-section-intro"><h2 id="invitations-heading">${hiring ? 'Invite a teammate' : 'Invite an evaluator'}</h2></header>
+          <header class="software-section-intro"><h2 id="invitations-heading">Invite an evaluator</h2></header>
           ${
             isOrgAdmin
               ? `
@@ -6793,15 +6966,13 @@ export async function stagingOrganizationSettingsGet(
               <input type="hidden" name="csrf" value="${safeCsrf}">
               <input type="hidden" name="action" value="create_invitation">
               <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
-              <div><label for="targetEmail">${hiring ? 'Teammate email' : 'Reviewer email'}</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
-              ${inviteRoleFieldHtml}
-              <button type="submit">${hiring ? 'Create team invitation' : 'Create reviewer invitation'}</button>
+              <div><label for="targetEmail">Reviewer email</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
+              <button type="submit">Create reviewer invitation</button>
             </form>`
               : ''
           }
           <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
         </section>
-        ${hiring ? organizationDetailsHtml : ''}
       `;
 
       const response = htmlResponse(
@@ -6887,6 +7058,16 @@ export async function stagingOrganizationSettingsPost(
               creditsAmount,
             },
           );
+          recordServerTelemetryEvent({
+            eventName: 'monetization.slots_added',
+            category: 'monetization',
+            actorType: 'team_member',
+            organizationId: orgIdLower,
+            principalId: identity.subjectId,
+            planTier: 'per_candidate',
+            route: '/r23/organizations/:id/upgrade',
+            properties: { creditsAmount },
+          });
         } else if (
           (action === 'save_plan' || action === 'update_plan') &&
           isHiringPlatformEnabled()
@@ -6915,6 +7096,16 @@ export async function stagingOrganizationSettingsPost(
               creditsAmount,
             },
           );
+          recordServerTelemetryEvent({
+            eventName: 'monetization.plan_changed',
+            category: 'monetization',
+            actorType: 'team_member',
+            organizationId: orgIdLower,
+            principalId: identity.subjectId,
+            planTier,
+            route: '/r23/organizations/:id/upgrade',
+            properties: { planTier, creditsAmount },
+          });
         } else if (action === 'update_account_profile') {
           const displayName = requiredText(body, 'displayName', 100);
           await dispatchVerifiedStagingOperation(
@@ -7261,6 +7452,21 @@ export async function stagingInvitationAcceptPost(
           'session.open',
           { organizationId },
         );
+
+        const attr = readAttributionCookie(request);
+        recordServerTelemetryEvent({
+          eventName: 'acquisition.invite_accepted',
+          category: 'acquisition',
+          actorType: 'team_member',
+          anonymousId: attr?.anonymousId,
+          attribution: attr,
+          organizationId,
+          principalId: identity.subjectId,
+          route: '/r23/invitations/accept',
+          properties: {
+            hiringPlatform: isHiringPlatformEnabled(),
+          },
+        });
 
         const updatedSession: StagingBrowserSessionPayload = Object.freeze({
           ...session,

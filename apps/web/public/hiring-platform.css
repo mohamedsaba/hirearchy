@@ -306,6 +306,12 @@
   background: var(--software-surface-note);
 }
 
+.hiring-pill-mint {
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+
 .hiring-banner {
   display: flex;
   align-items: center;
@@ -2205,62 +2211,292 @@ html[data-theme='dark'] .software-repository {
   line-height: 1.12;
 }
 
+.software-document-compact-nav .software-workspace-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--software-sidebar-border);
+  border-radius: 0.75rem;
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-card);
+}
+
+.software-org-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 2.15rem;
+  block-size: 2.15rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface-note);
+  color: var(--software-link);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.software-workspace-identity-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-inline-size: 0;
+}
+
+.software-document-compact-nav .software-workspace-identity strong {
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  color: var(--software-sidebar-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.software-document-compact-nav .software-workspace-identity-copy > span {
+  color: var(--software-sidebar-muted);
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.software-nav-group-label {
+  padding: 0.7rem 0.65rem 0.25rem;
+  color: var(--software-sidebar-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.software-nav-group-label:first-child {
+  padding-top: 0.25rem;
+}
+
+.software-sidebar-plan-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--software-plum-line);
+  background: linear-gradient(155deg, #35183c 0%, #211426 100%);
+  color: var(--software-on-plum);
+  box-shadow: var(--software-shadow-card);
+}
+
+html[data-theme='dark'] .software-sidebar-plan-card {
+  border-color: rgba(142, 227, 184, 0.24);
+  background: linear-gradient(155deg, #271a33 0%, #17101f 100%);
+  color: var(--software-ink);
+}
+
+.software-sidebar-plan-card[data-tier='ultra'] {
+  border-color: var(--software-sidebar-border);
+  background: var(--software-surface);
+  color: var(--software-ink);
+}
+
+.software-sidebar-plan-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.software-sidebar-plan-dot {
+  inline-size: 0.48rem;
+  block-size: 0.48rem;
+  border-radius: 50%;
+  background: var(--software-mint);
+  box-shadow: 0 0 0 3px rgba(142, 227, 184, 0.2);
+  flex: none;
+}
+
+.software-sidebar-plan-tier {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.software-sidebar-plan-copy {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--software-on-plum-muted);
+}
+
+.software-sidebar-plan-card[data-tier='ultra'] .software-sidebar-plan-copy {
+  color: var(--software-muted);
+}
+
+.software-document-compact-nav
+  .software-workspace-sidebar
+  a.software-workspace-upgrade {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+  padding: 0.46rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(142, 227, 184, 0.45);
+  background: var(--software-mint);
+  color: #191020;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    background-color var(--team-motion),
+    transform var(--team-motion);
+}
+
+.software-document-compact-nav
+  .software-workspace-sidebar
+  a.software-workspace-upgrade:hover,
+.software-document-compact-nav
+  .software-workspace-sidebar
+  a.software-workspace-upgrade[aria-current='page'] {
+  background: #a7edc9;
+  color: #140b1a;
+}
+
+.software-document-compact-nav
+  .software-workspace-sidebar
+  a.software-sidebar-plan-manage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+  padding: 0.38rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    border-color var(--team-motion),
+    background-color var(--team-motion);
+}
+
+.software-document-compact-nav
+  .software-workspace-sidebar
+  a.software-sidebar-plan-manage:hover,
+.software-document-compact-nav
+  .software-workspace-sidebar
+  a.software-sidebar-plan-manage[aria-current='page'] {
+  border-color: var(--software-border-strong);
+  background: var(--team-selected);
+}
+
+.software-document-compact-nav .software-workspace-sidebar-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin-top: 0;
+  padding: 0.75rem 0.25rem 0;
+  border-top: 1px solid var(--software-sidebar-border);
+}
+
+.software-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.35rem;
+  min-inline-size: 0;
+}
+
+.software-user-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 1.55rem;
+  block-size: 1.55rem;
+  border-radius: 50%;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.software-sidebar-user-email {
+  font-size: 0.76rem;
+  color: var(--software-sidebar-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.software-sidebar-footer-actions {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.software-sidebar-footer-actions form {
+  margin: 0;
+}
+
+.software-document-compact-nav
+  .software-workspace-sidebar-footer
+  .software-sidebar-action {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  inline-size: 100%;
+  min-block-size: 2rem;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--software-sidebar-btn);
+  font-size: 0.79rem;
+  font-weight: 500;
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--team-motion),
+    color var(--team-motion);
+}
+
+.software-document-compact-nav
+  .software-workspace-sidebar-footer
+  .software-sidebar-action:hover {
+  background: var(--software-sidebar-hover);
+  color: var(--software-sidebar-fg);
+  text-decoration: none;
+}
+
+.software-document-compact-nav
+  .software-workspace-sidebar-footer
+  .software-sidebar-signout:hover {
+  color: var(--software-status-danger);
+}
+
 @media (min-width: 1025px) {
   .software-document-compact-nav .software-document-layout {
-    grid-template-columns: 14rem minmax(0, 1fr);
+    grid-template-columns: 15.5rem minmax(0, 1fr);
   }
 
   .software-document-compact-nav .software-workspace-sidebar {
-    gap: 1.15rem;
-    padding: 1.25rem 0.85rem 1rem;
+    gap: 0.75rem;
+    padding: 1.1rem 0.85rem 0.95rem;
     border-inline-end: 1px solid var(--software-sidebar-border);
     background: var(--software-sidebar-bg);
     color: var(--software-sidebar-fg);
   }
 
-  .software-document-compact-nav .software-workspace-identity {
-    gap: 0.2rem;
-    padding: 0.2rem 0.55rem 0.9rem;
-    border: 0;
-    border-bottom: 1px solid var(--software-sidebar-border);
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .software-document-compact-nav .software-workspace-identity strong {
-    font-size: 0.9375rem;
-    font-weight: 650;
-    letter-spacing: -0.015em;
-    line-height: 1.35;
-    color: var(--software-sidebar-fg);
-  }
-
-  .software-document-compact-nav
-    .software-workspace-identity
-    .hiring-sidebar-plan-badge {
-    width: fit-content;
-    max-width: 100%;
-    margin-block-start: 0.35rem;
-    border-color: var(--software-border);
-    background: var(--software-surface);
-    color: var(--software-muted);
-  }
-
-  .software-document-compact-nav
-    :is(.software-workspace-identity, .software-workspace-sidebar-footer)
-    > span:not([class]) {
-    color: var(--software-sidebar-muted);
-    font-size: 0.78rem;
-  }
-
   .software-document-compact-nav .software-workspace-sidebar nav {
-    gap: 0.2rem;
+    gap: 0.18rem;
   }
 
   .software-document-compact-nav .software-workspace-sidebar nav a {
-    min-block-size: 2.5rem;
-    padding: 0.45rem 0.65rem;
-    gap: 0.6rem;
+    position: relative;
+    min-block-size: 2.38rem;
+    padding: 0.42rem 0.68rem;
+    gap: 0.62rem;
     border: 1px solid transparent;
     border-radius: 0.55rem;
     color: var(--software-sidebar-link);
@@ -2275,7 +2511,7 @@ html[data-theme='dark'] .software-repository {
 
   .software-document-compact-nav .software-workspace-sidebar nav a svg {
     flex: none;
-    opacity: 0.75;
+    opacity: 0.78;
     transition: opacity var(--team-motion);
   }
 
@@ -2306,39 +2542,25 @@ html[data-theme='dark'] .software-repository {
 
   .software-document-compact-nav
     .software-workspace-sidebar
+    nav
+    a[aria-current='page']::before {
+    content: '';
+    position: absolute;
+    inset-block: 0.45rem;
+    inset-inline-start: 0.2rem;
+    inline-size: 2.5px;
+    border-radius: 999px;
+    background: var(--software-focus);
+  }
+
+  .software-document-compact-nav
+    .software-workspace-sidebar
     :is(a, button):focus-visible {
     outline-color: var(--software-focus);
   }
 
-  .software-document-compact-nav .software-workspace-sidebar-footer {
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 0.4rem;
-    row-gap: 0.15rem;
-    padding: 0.75rem 0.5rem 0;
-    border-color: var(--software-sidebar-border);
-  }
-
-  .software-document-compact-nav .software-workspace-sidebar-footer > span {
-    grid-column: 1 / -1;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .software-document-compact-nav
-    .software-workspace-sidebar-footer
-    :is(a, button) {
-    min-block-size: 2.25rem;
-    font-size: 0.8125rem;
-    color: var(--software-sidebar-btn);
-    text-decoration: none;
-  }
-
-  .software-document-compact-nav
-    .software-workspace-sidebar-footer
-    :is(a, button):hover {
-    color: var(--software-sidebar-fg);
-    text-decoration: underline;
+  .software-sidebar-plan-card {
+    margin-top: auto;
   }
 
   .software-document-compact-nav .software-table-hint {
@@ -2909,60 +3131,239 @@ html[data-theme='dark'] .software-repository {
   }
 }
 
-/* Plans and personal settings use the same workspace typography and navigation. */
-.software-document-compact-nav
-  .software-workspace-sidebar
-  nav
-  a.software-workspace-upgrade {
-  color: var(--software-link);
-  background: transparent;
-  border-color: var(--software-border-strong);
-  border-style: dashed;
-  font-weight: 600;
-}
-
-.software-document-compact-nav
-  .software-workspace-sidebar
-  nav
-  a.software-workspace-upgrade:hover,
-.software-document-compact-nav
-  .software-workspace-sidebar
-  nav
-  a.software-workspace-upgrade[aria-current='page'] {
-  background: var(--software-sidebar-active-bg);
-  border-color: var(--software-sidebar-active-border);
-  border-style: solid;
-  box-shadow: var(--software-sidebar-active-shadow);
-  color: var(--software-ink);
-}
-
+/* Plans, organization management, and account settings */
 .team-plan-page,
-.team-account-page {
+.team-account-page,
+.team-org-page {
   display: grid;
   gap: clamp(1rem, 2vw, 1.5rem);
   min-inline-size: 0;
 }
 
+.team-page-subtitle {
+  margin-top: 0.35rem;
+  color: var(--software-muted);
+  font-size: 0.92rem;
+}
+
 .software-document-panel
-  :is(.team-plan-page, .team-account-page)
+  :is(.team-plan-page, .team-account-page, .team-org-page)
   .software-page-heading {
   margin: 0;
 }
-.software-document-panel :is(.team-plan-page, .team-account-page) > section {
+.software-document-panel
+  :is(.team-plan-page, .team-account-page, .team-org-page)
+  > section {
   margin-block: 0;
 }
 .team-account-page {
-  inline-size: min(100%, 54rem);
-  margin-inline: auto;
+  inline-size: min(100%, 62rem);
 }
 .team-compare-plans {
   display: grid;
   gap: 0.8rem;
 }
 .software-document-panel
-  :is(.team-plan-page, .team-account-page)
+  :is(.team-plan-page, .team-account-page, .team-org-page)
   :is(h2, h3, p) {
   margin-block: 0;
+}
+
+/* Organization management overview */
+.team-org-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.1rem;
+  align-items: stretch;
+}
+.software-document-panel .team-org-overview > section {
+  margin-top: 0;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+.team-org-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 0.75rem;
+}
+.team-org-inline-form .hiring-field {
+  flex: 1 1 13rem;
+  min-inline-size: 0;
+}
+.team-org-inline-form button[type='submit'] {
+  margin-top: 0;
+}
+.team-org-ref-details {
+  padding: 0.45rem 0.75rem;
+}
+.team-org-ref-details summary {
+  font-size: 0.8rem;
+  color: var(--software-muted);
+}
+.team-org-ref-details code {
+  display: block;
+  margin-top: 0.45rem;
+  font-family: var(--software-mono);
+  font-size: 0.78rem;
+  color: var(--software-ink);
+  overflow-wrap: anywhere;
+}
+
+.software-document-panel .team-org-plan-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  border-color: var(--software-border-strong);
+  background: var(--software-surface);
+}
+.software-document-panel .team-org-plan-card:not([data-tier='ultra']) {
+  border-color: var(--software-plum-line);
+  background: linear-gradient(155deg, #35183c 0%, #211426 100%);
+  color: var(--software-on-plum);
+}
+html[data-theme='dark']
+  .software-document-panel
+  .team-org-plan-card:not([data-tier='ultra']) {
+  border-color: rgba(142, 227, 184, 0.28);
+  background: linear-gradient(155deg, #271a33 0%, #17101f 100%);
+  color: var(--software-ink);
+}
+.team-org-plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.software-document-panel
+  .team-org-plan-card:not([data-tier='ultra'])
+  .software-eyebrow {
+  margin: 0;
+  color: var(--software-on-plum-muted);
+}
+.software-document-panel
+  .team-org-plan-card[data-tier='ultra']
+  .software-eyebrow {
+  margin: 0;
+}
+.software-document-panel
+  .team-org-plan-card:not([data-tier='ultra'])
+  .hiring-pill {
+  margin-block-start: 0;
+  border-color: rgba(142, 227, 184, 0.35);
+  background: rgba(142, 227, 184, 0.14);
+  color: var(--software-mint);
+}
+.software-document-panel .team-org-plan-card h2 {
+  font-family: var(--software-serif);
+  font-size: 1.55rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.software-document-panel .team-org-plan-card:not([data-tier='ultra']) h2 {
+  color: var(--software-on-plum);
+}
+.team-org-plan-capacity {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--software-status-success);
+}
+.software-document-panel
+  .team-org-plan-card:not([data-tier='ultra'])
+  .team-org-plan-capacity {
+  color: var(--software-mint);
+}
+.team-org-plan-hook {
+  font-size: 0.84rem;
+  color: var(--software-muted);
+}
+.software-document-panel
+  .team-org-plan-card:not([data-tier='ultra'])
+  .team-org-plan-hook {
+  color: var(--software-on-plum-muted);
+}
+.team-org-plan-actions {
+  margin-top: auto;
+  padding-top: 0.35rem;
+}
+.software-document-panel
+  .team-org-plan-card:not([data-tier='ultra'])
+  .hiring-btn-primary {
+  border-color: var(--software-mint);
+  background: var(--software-mint);
+  color: #191020;
+}
+.software-document-panel
+  .team-org-plan-card:not([data-tier='ultra'])
+  .hiring-btn-primary:hover {
+  border-color: #a7edc9;
+  background: #a7edc9;
+  color: #140b1a;
+}
+
+.team-section-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+}
+.team-section-header-row .hiring-pill {
+  margin-block-start: 0;
+}
+
+.team-member-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.team-member-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 1.85rem;
+  block-size: 1.85rem;
+  border-radius: 50%;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface-note);
+  color: var(--software-link);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.software-product .hiring-btn.team-danger-btn {
+  margin-top: 0;
+  border-color: var(--software-border);
+  background: transparent;
+  color: var(--software-muted);
+}
+.software-product .hiring-btn.team-danger-btn:not(:disabled):hover {
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
+}
+
+.software-document-panel .software-invite-form.team-org-invite-form {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1.4fr) minmax(11rem, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem 0.9rem;
+}
+.software-document-panel .software-invite-form.team-org-invite-form button {
+  grid-column: auto;
+  margin-top: 0;
+}
+
+@media (max-width: 860px) {
+  .team-org-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .software-document-panel .software-invite-form.team-org-invite-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .team-plan-current {
@@ -3021,11 +3422,20 @@ html[data-theme='dark'] .software-repository {
     var(--software-shadow-card),
     inset 0 2px 0 var(--software-status-success);
 }
+.team-compare-plans .team-plan-card[data-recommended='true'] {
+  border-color: var(--software-border-strong);
+  box-shadow:
+    var(--software-shadow-elevated),
+    inset 0 2px 0 var(--software-focus);
+}
 .team-plan-card-title {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem 0.7rem;
   align-items: center;
+}
+.team-plan-card-title .hiring-pill {
+  margin-block-start: 0;
 }
 .team-plan-model,
 .team-plan-help {
@@ -3034,13 +3444,22 @@ html[data-theme='dark'] .software-repository {
 }
 .team-plan-card ul {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.6rem;
   margin: 0;
-  padding-inline-start: 1.2rem;
+  padding-inline-start: 0;
+  list-style: none;
   font-size: 0.88rem;
 }
-.team-plan-card li::marker {
-  color: var(--software-border-strong);
+.team-plan-card li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.team-plan-card li::before {
+  content: '✓';
+  flex: none;
+  color: var(--software-status-success);
+  font-weight: 700;
 }
 .team-plan-card .hiring-btn {
   margin-block-start: auto;
@@ -3055,7 +3474,8 @@ html[data-theme='dark'] .software-repository {
 .team-account-profile,
 .team-account-security {
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
+  align-content: start;
 }
 .team-plan-slot-form,
 .team-account-field-form {
@@ -3073,43 +3493,96 @@ html[data-theme='dark'] .software-repository {
   justify-content: flex-start;
 }
 
-.team-account-photo {
+/* Account & profile page */
+.team-account-hero {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 1.1rem;
+  padding: 1.25rem 1.45rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.95rem;
+  background: var(--software-surface);
+  box-shadow: var(--software-shadow-card);
 }
 .team-account-avatar {
   display: grid;
   place-items: center;
-  inline-size: 4rem;
-  block-size: 4rem;
+  flex: none;
+  inline-size: 4.5rem;
+  block-size: 4.5rem;
   overflow: hidden;
   border-radius: 50%;
   background: var(--software-surface-note);
-  color: var(--software-ink);
-  border: 1px solid var(--software-border);
-  font-size: 1.45rem;
+  color: var(--software-link);
+  border: 1px solid var(--software-border-strong);
+  font-size: 1.55rem;
   font-weight: 700;
 }
 .team-account-avatar img {
   display: block;
+  inline-size: 100%;
+  block-size: 100%;
   object-fit: cover;
 }
-.team-account-photo-controls {
+.team-account-hero-meta {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
   min-inline-size: 0;
 }
-.team-account-photo-controls .hiring-header-actions {
+.team-account-hero-meta strong {
+  font-family: var(--software-serif);
+  font-size: 1.4rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.team-account-hero-meta > span:not(.hiring-pill) {
+  color: var(--software-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.team-account-hero-meta .hiring-pill {
+  margin-block-start: 0.2rem;
+}
+
+.team-account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.1rem;
+  align-items: start;
+}
+.software-document-panel .team-account-grid > section {
+  margin-top: 0;
+}
+@media (max-width: 860px) {
+  .team-account-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.team-account-photo-block {
+  display: grid;
+  gap: 0.45rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--software-border-subtle);
+}
+.team-account-photo-form {
+  display: flex;
+  flex-wrap: wrap;
   align-items: end;
-  justify-content: start;
+  gap: 0.65rem 0.75rem;
 }
-.team-account-photo-controls input[type='file'] {
+.team-account-photo-form .hiring-field {
+  flex: 1 1 13rem;
+  min-inline-size: 0;
+}
+.team-account-photo-form input[type='file'] {
   max-inline-size: 100%;
+  padding: 0.45rem 0.55rem;
 }
-.team-account-photo-controls input::file-selector-button {
-  padding: 0.25rem 0.55rem;
+.team-account-photo-form input::file-selector-button {
+  padding: 0.25rem 0.6rem;
   margin-inline-end: 0.55rem;
   border: 1px solid var(--software-border);
   border-radius: var(--software-radius-control);
@@ -3118,23 +3591,54 @@ html[data-theme='dark'] .software-repository {
   font: inherit;
   cursor: pointer;
 }
+.team-account-photo-form button[type='submit'] {
+  margin-top: 0;
+}
+.team-account-photo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.8rem;
+}
 .team-account-remove-photo {
-  justify-self: start;
+  margin: 0;
 }
 .software-product .team-account-remove-photo button {
+  min-height: auto;
+  margin-top: 0;
+  padding: 0.15rem 0;
   border: 0;
   background: transparent;
-  color: var(--software-link);
-  padding-inline: 0;
+  color: var(--software-status-danger);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 .team-account-field-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem 0.8rem;
+  gap: 0.65rem 0.75rem;
 }
 .team-account-field-form .hiring-field {
-  flex: 1 1 14rem;
-  max-inline-size: 28rem;
+  flex: 1 1 13rem;
+  min-inline-size: 0;
+}
+.team-account-field-form button[type='submit'] {
+  margin-top: 0;
+}
+
+.team-account-rows {
+  display: grid;
+  gap: 0.9rem;
+}
+.team-account-rows > :not(:last-child) {
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--software-border-subtle);
+}
+.team-account-email-block {
+  display: grid;
+  gap: 0.65rem;
 }
 .team-account-sign-in-row {
   display: flex;
@@ -3144,7 +3648,9 @@ html[data-theme='dark'] .software-repository {
   gap: 0.65rem;
 }
 .team-account-sign-in-row p {
+  margin-top: 0.15rem;
   color: var(--software-muted);
+  font-size: 0.85rem;
   overflow-wrap: anywhere;
 }
 .team-account-email-change > :is(p, form) {
@@ -3152,11 +3658,232 @@ html[data-theme='dark'] .software-repository {
 }
 .team-account-email-change p {
   color: var(--software-muted);
-  font-size: 0.875rem;
+  font-size: 0.85rem;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   :is(.team-plan-review, .team-plan-slot-review) {
     animation: team-pane-enter 180ms ease-out both;
   }
+}
+
+/* Product Micro-Feedback Pulse */
+.hiring-feedback-pulse {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-start: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--software-border);
+  border-radius: 0.85rem;
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+}
+.hiring-feedback-pulse--done {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.hiring-feedback-pulse-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+.hiring-feedback-pulse-header svg {
+  flex: none;
+  margin-top: 0.15rem;
+  color: var(--software-link);
+}
+.hiring-feedback-pulse-header strong {
+  display: block;
+  font-size: 0.9rem;
+}
+.hiring-feedback-pulse-note {
+  margin: 0.15rem 0 0;
+  color: var(--software-muted);
+  font-size: 0.79rem;
+}
+.hiring-feedback-rating-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.hiring-feedback-rate-btn {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--software-border);
+  border-radius: 999px;
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+.hiring-feedback-rate-btn:hover {
+  border-color: var(--software-border-strong);
+  background: var(--team-selected);
+}
+.hiring-feedback-rate-btn.is-selected {
+  border-color: var(--software-btn-primary-bg);
+  background: var(--software-btn-primary-bg);
+  color: var(--software-btn-primary-fg);
+}
+.hiring-feedback-pulse-form {
+  display: grid;
+  gap: 0.7rem;
+}
+.hiring-feedback-pulse-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* Founder / Operator Product Intelligence Dashboard */
+.intel-main {
+  inline-size: min(100%, 78rem);
+  margin-inline: auto;
+  padding: clamp(1.25rem, 3vw, 2.5rem) clamp(1rem, 3vw, 2rem);
+}
+.intel-stack {
+  display: grid;
+  gap: 1.35rem;
+}
+.intel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+}
+.intel-header h1 {
+  margin: 0.15rem 0 0.35rem;
+}
+.intel-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+.intel-section {
+  display: grid;
+  gap: 0.85rem;
+}
+.intel-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.intel-section-head svg {
+  color: var(--software-link);
+}
+.intel-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+  gap: 0.85rem;
+}
+.intel-kpi-card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem 1.1rem;
+}
+.intel-kpi-label {
+  color: var(--software-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.intel-kpi-value {
+  font-family: var(--software-serif);
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--software-ink);
+}
+.intel-kpi-sub {
+  color: var(--software-muted);
+  font-size: 0.78rem;
+}
+.intel-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+@media (max-width: 900px) {
+  .intel-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.intel-funnel-list {
+  display: grid;
+  gap: 0.55rem;
+}
+.intel-funnel-row {
+  display: grid;
+  grid-template-columns: minmax(9.5rem, 12rem) minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.84rem;
+}
+.intel-funnel-label {
+  color: var(--software-ink-soft);
+}
+.intel-funnel-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.intel-stat-pairs {
+  display: grid;
+  gap: 0.65rem;
+}
+.intel-stat-pairs > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--software-border-subtle);
+  font-size: 0.85rem;
+}
+.intel-stat-pairs > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.intel-stat-pairs span {
+  color: var(--software-muted);
+}
+.intel-table th,
+.intel-table td {
+  white-space: nowrap;
+}
+.intel-feedback-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.intel-feedback-item {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--software-border-subtle);
+  border-radius: 0.65rem;
+  background: var(--software-surface-subtle);
+  font-size: 0.88rem;
+}
+.intel-feedback-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+.intel-feedback-meta .hiring-pill {
+  margin-block-start: 0;
 }

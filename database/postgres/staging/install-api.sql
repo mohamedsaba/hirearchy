@@ -8278,4 +8278,663 @@ GRANT EXECUTE ON FUNCTION staging.hiring_r213_admit(pg_catalog.text, pg_catalog.
 GRANT EXECUTE ON FUNCTION staging.hiring_r213_complete(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int8, pg_catalog.int4, pg_catalog.int4, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, boolean, boolean, pg_catalog.int4, pg_catalog.text, pg_catalog.text) TO app_candidate_gateway;
 GRANT EXECUTE ON FUNCTION staging.hiring_r213_fail(pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int8, pg_catalog.int4, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.text, pg_catalog.int4, pg_catalog.text, boolean, pg_catalog.text) TO app_candidate_gateway;
 
+-- Product, Marketing & Hiring Intelligence RPCs
+CREATE OR REPLACE FUNCTION staging.telemetry_record_events(
+  p_events pg_catalog.jsonb
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+DECLARE
+  v_item pg_catalog.jsonb;
+  v_inserted pg_catalog.int4 := 0;
+  v_event_name pg_catalog.text;
+  v_category pg_catalog.text;
+  v_actor_type pg_catalog.text;
+  v_anon_id pg_catalog.text;
+  v_org_id pg_catalog.uuid;
+  v_principal_id pg_catalog.uuid;
+  v_session_id pg_catalog.text;
+  v_route pg_catalog.text;
+  v_plan_tier pg_catalog.text;
+  v_status pg_catalog.text;
+  v_duration_ms pg_catalog.int4;
+  v_props pg_catalog.jsonb;
+  v_attr pg_catalog.jsonb;
+  v_attr_source pg_catalog.text;
+  v_attr_medium pg_catalog.text;
+  v_attr_campaign pg_catalog.text;
+  v_attr_term pg_catalog.text;
+  v_attr_content pg_catalog.text;
+  v_attr_referrer pg_catalog.text;
+  v_attr_landing pg_catalog.text;
+  v_attr_actor pg_catalog.text;
+BEGIN
+  IF p_events IS NULL OR pg_catalog.jsonb_typeof(p_events) <> 'array' THEN
+    RETURN pg_catalog.jsonb_build_object('accepted', 0);
+  END IF;
+
+  FOR v_item IN
+    SELECT elem
+    FROM pg_catalog.jsonb_array_elements(p_events) AS elem
+    LIMIT 50
+  LOOP
+    IF pg_catalog.jsonb_typeof(v_item) <> 'object' THEN
+      CONTINUE;
+    END IF;
+
+    v_event_name := pg_catalog.left(COALESCE(v_item ->> 'eventName', ''), 80);
+    v_category := COALESCE(v_item ->> 'category', '');
+    v_actor_type := COALESCE(v_item ->> 'actorType', 'visitor');
+    IF v_event_name !~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,4}$'
+       OR v_category NOT IN (
+         'acquisition', 'team_funnel', 'candidate_funnel', 'ai_quality',
+         'monetization', 'ux_friction', 'performance', 'error'
+       )
+       OR v_actor_type NOT IN ('visitor', 'team_member', 'candidate', 'system') THEN
+      CONTINUE;
+    END IF;
+
+    v_anon_id := NULLIF(pg_catalog.left(COALESCE(v_item ->> 'anonymousId', ''), 80), '');
+    v_route := pg_catalog.left(COALESCE(v_item ->> 'route', ''), 200);
+    v_status := COALESCE(v_item ->> 'status', 'ok');
+    IF v_status NOT IN ('ok', 'error', 'abandoned', 'blocked') THEN
+      v_status := 'ok';
+    END IF;
+
+    v_plan_tier := NULLIF(COALESCE(v_item ->> 'planTier', ''), '');
+    IF v_plan_tier IS NOT NULL AND v_plan_tier NOT IN ('none', 'per_candidate', 'pro', 'ultra') THEN
+      v_plan_tier := NULL;
+    END IF;
+
+    v_duration_ms := NULL;
+    IF (v_item ->> 'durationMs') ~ '^\d{1,7}$' THEN
+      v_duration_ms := LEAST(3600000, (v_item ->> 'durationMs')::pg_catalog.int4);
+    END IF;
+
+    v_org_id := NULL;
+    IF COALESCE(v_item ->> 'organizationId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      SELECT o.id INTO v_org_id
+      FROM hirearchy.organizations AS o
+      WHERE o.id = (v_item ->> 'organizationId')::pg_catalog.uuid;
+    END IF;
+
+    v_principal_id := NULL;
+    IF COALESCE(v_item ->> 'principalId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      SELECT p.id INTO v_principal_id
+      FROM hirearchy.application_principals AS p
+      WHERE p.id = (v_item ->> 'principalId')::pg_catalog.uuid;
+    END IF;
+
+    v_session_id := NULL;
+    IF COALESCE(v_item ->> 'sessionId', '') <> '' THEN
+      SELECT s.id INTO v_session_id
+      FROM hirearchy.assessment_sessions AS s
+      WHERE s.id = v_item ->> 'sessionId';
+    END IF;
+
+    v_props := CASE
+      WHEN pg_catalog.jsonb_typeof(v_item -> 'properties') = 'object' THEN v_item -> 'properties'
+      ELSE '{}'::pg_catalog.jsonb
+    END;
+
+    INSERT INTO hirearchy.product_events (
+      event_name, category, actor_type, anonymous_id,
+      organization_id, principal_id, session_id,
+      route, plan_tier, status, duration_ms, properties
+    ) VALUES (
+      v_event_name, v_category, v_actor_type, v_anon_id,
+      v_org_id, v_principal_id, v_session_id,
+      v_route, v_plan_tier, v_status, v_duration_ms, v_props
+    );
+    v_inserted := v_inserted + 1;
+
+    v_attr := v_item -> 'attribution';
+    IF v_attr IS NOT NULL AND pg_catalog.jsonb_typeof(v_attr) = 'object' THEN
+      v_anon_id := COALESCE(v_anon_id, NULLIF(pg_catalog.left(COALESCE(v_attr ->> 'anonymousId', ''), 80), ''));
+      IF v_anon_id IS NOT NULL AND pg_catalog.char_length(v_anon_id) BETWEEN 8 AND 80 THEN
+        v_attr_source := pg_catalog.left(COALESCE(v_attr ->> 'utmSource', ''), 160);
+        v_attr_medium := pg_catalog.left(COALESCE(v_attr ->> 'utmMedium', ''), 160);
+        v_attr_campaign := pg_catalog.left(COALESCE(v_attr ->> 'utmCampaign', ''), 160);
+        v_attr_term := pg_catalog.left(COALESCE(v_attr ->> 'utmTerm', ''), 160);
+        v_attr_content := pg_catalog.left(COALESCE(v_attr ->> 'utmContent', ''), 160);
+        v_attr_referrer := pg_catalog.left(COALESCE(v_attr ->> 'referrerDomain', ''), 160);
+        v_attr_landing := pg_catalog.left(COALESCE(v_attr ->> 'landingPath', v_route), 200);
+        v_attr_actor := CASE
+          WHEN v_actor_type IN ('team_member', 'candidate') THEN v_actor_type
+          ELSE 'visitor'
+        END;
+
+        INSERT INTO hirearchy.acquisition_attributions (
+          anonymous_id,
+          first_utm_source, first_utm_medium, first_utm_campaign,
+          first_utm_term, first_utm_content, first_referrer_domain, first_landing_path,
+          last_utm_source, last_utm_medium, last_utm_campaign,
+          last_referrer_domain, last_landing_path,
+          actor_type, principal_id, organization_id,
+          first_seen_at, last_seen_at, converted_at
+        ) VALUES (
+          v_anon_id,
+          v_attr_source, v_attr_medium, v_attr_campaign,
+          v_attr_term, v_attr_content, v_attr_referrer, v_attr_landing,
+          v_attr_source, v_attr_medium, v_attr_campaign,
+          v_attr_referrer, v_attr_landing,
+          v_attr_actor, v_principal_id, v_org_id,
+          pg_catalog.clock_timestamp(), pg_catalog.clock_timestamp(),
+          CASE WHEN v_org_id IS NOT NULL OR v_principal_id IS NOT NULL THEN pg_catalog.clock_timestamp() ELSE NULL END
+        )
+        ON CONFLICT (anonymous_id) DO UPDATE SET
+          last_utm_source = CASE WHEN EXCLUDED.last_utm_source <> '' THEN EXCLUDED.last_utm_source ELSE acquisition_attributions.last_utm_source END,
+          last_utm_medium = CASE WHEN EXCLUDED.last_utm_medium <> '' THEN EXCLUDED.last_utm_medium ELSE acquisition_attributions.last_utm_medium END,
+          last_utm_campaign = CASE WHEN EXCLUDED.last_utm_campaign <> '' THEN EXCLUDED.last_utm_campaign ELSE acquisition_attributions.last_utm_campaign END,
+          last_referrer_domain = CASE WHEN EXCLUDED.last_referrer_domain <> '' THEN EXCLUDED.last_referrer_domain ELSE acquisition_attributions.last_referrer_domain END,
+          last_landing_path = CASE WHEN EXCLUDED.last_landing_path <> '' THEN EXCLUDED.last_landing_path ELSE acquisition_attributions.last_landing_path END,
+          actor_type = CASE WHEN EXCLUDED.actor_type IN ('team_member', 'candidate') THEN EXCLUDED.actor_type ELSE acquisition_attributions.actor_type END,
+          principal_id = COALESCE(acquisition_attributions.principal_id, EXCLUDED.principal_id),
+          organization_id = COALESCE(acquisition_attributions.organization_id, EXCLUDED.organization_id),
+          last_seen_at = pg_catalog.clock_timestamp(),
+          converted_at = COALESCE(acquisition_attributions.converted_at, EXCLUDED.converted_at);
+      END IF;
+    END IF;
+  END LOOP;
+
+  RETURN pg_catalog.jsonb_build_object('accepted', v_inserted);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.telemetry_record_feedback(
+  p_payload pg_catalog.jsonb
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+DECLARE
+  v_actor_type pg_catalog.text;
+  v_surface pg_catalog.text;
+  v_rating pg_catalog.int2;
+  v_org_id pg_catalog.uuid;
+  v_principal_id pg_catalog.uuid;
+  v_session_id pg_catalog.text;
+  v_tags pg_catalog.jsonb;
+  v_comment pg_catalog.text;
+  v_context pg_catalog.jsonb;
+  v_id pg_catalog.uuid;
+  v_created_at pg_catalog.timestamptz;
+BEGIN
+  IF p_payload IS NULL OR pg_catalog.jsonb_typeof(p_payload) <> 'object' THEN
+    RAISE EXCEPTION 'Invalid feedback payload' USING ERRCODE = '22023';
+  END IF;
+
+  v_actor_type := COALESCE(p_payload ->> 'actorType', '');
+  v_surface := COALESCE(p_payload ->> 'surface', '');
+  IF v_actor_type NOT IN ('team_member', 'candidate')
+     OR v_surface NOT IN ('candidate_post_submit', 'builder_ai_generated', 'evaluator_review', 'general') THEN
+    RAISE EXCEPTION 'Invalid feedback actor or surface' USING ERRCODE = '22023';
+  END IF;
+
+  IF COALESCE(p_payload ->> 'rating', '') !~ '^[1-5]$' THEN
+    RAISE EXCEPTION 'Rating must be between 1 and 5' USING ERRCODE = '22023';
+  END IF;
+  v_rating := (p_payload ->> 'rating')::pg_catalog.int2;
+
+  v_org_id := NULL;
+  IF COALESCE(p_payload ->> 'organizationId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    SELECT o.id INTO v_org_id
+    FROM hirearchy.organizations AS o
+    WHERE o.id = (p_payload ->> 'organizationId')::pg_catalog.uuid;
+  END IF;
+
+  v_principal_id := NULL;
+  IF COALESCE(p_payload ->> 'principalId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    SELECT p.id INTO v_principal_id
+    FROM hirearchy.application_principals AS p
+    WHERE p.id = (p_payload ->> 'principalId')::pg_catalog.uuid;
+  END IF;
+
+  v_session_id := NULL;
+  IF COALESCE(p_payload ->> 'sessionId', '') <> '' THEN
+    SELECT s.id INTO v_session_id
+    FROM hirearchy.assessment_sessions AS s
+    WHERE s.id = p_payload ->> 'sessionId';
+  END IF;
+
+  v_tags := CASE
+    WHEN pg_catalog.jsonb_typeof(p_payload -> 'tags') = 'array' THEN p_payload -> 'tags'
+    ELSE '[]'::pg_catalog.jsonb
+  END;
+  v_comment := pg_catalog.left(trim(COALESCE(p_payload ->> 'comment', '')), 1000);
+  v_context := CASE
+    WHEN pg_catalog.jsonb_typeof(p_payload -> 'context') = 'object' THEN p_payload -> 'context'
+    ELSE '{}'::pg_catalog.jsonb
+  END;
+
+  INSERT INTO hirearchy.product_feedback (
+    actor_type, surface, organization_id, principal_id, session_id,
+    rating, tags, comment, context
+  ) VALUES (
+    v_actor_type, v_surface, v_org_id, v_principal_id, v_session_id,
+    v_rating, v_tags, v_comment, v_context
+  )
+  RETURNING id, created_at INTO v_id, v_created_at;
+
+  INSERT INTO hirearchy.product_events (
+    event_name, category, actor_type, organization_id, principal_id, session_id,
+    route, status, properties
+  ) VALUES (
+    'feedback.submitted',
+    'ux_friction',
+    v_actor_type,
+    v_org_id,
+    v_principal_id,
+    v_session_id,
+    COALESCE(NULLIF(pg_catalog.left(COALESCE(v_context ->> 'route', ''), 200), ''), ''),
+    'ok',
+    pg_catalog.jsonb_build_object(
+      'surface', v_surface,
+      'rating', v_rating,
+      'tagCount', pg_catalog.jsonb_array_length(v_tags)
+    )
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'id', v_id::pg_catalog.text,
+    'createdAt', pg_catalog.to_char(v_created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+  );
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION staging.telemetry_insights_report(
+  p_days pg_catalog.int4 DEFAULT 30
+)
+RETURNS pg_catalog.jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, hirearchy, pg_temp
+AS $function$
+DECLARE
+  v_days pg_catalog.int4 := GREATEST(1, LEAST(3650, COALESCE(p_days, 30)));
+  v_since pg_catalog.timestamptz := pg_catalog.clock_timestamp() - pg_catalog.make_interval(days => v_days);
+  v_marketing pg_catalog.jsonb;
+  v_channels pg_catalog.jsonb;
+  v_funnel pg_catalog.jsonb;
+  v_assessment_health pg_catalog.jsonb;
+  v_ai_perf pg_catalog.jsonb;
+  v_monetization pg_catalog.jsonb;
+  v_ux_friction pg_catalog.jsonb;
+  v_recent_feedback pg_catalog.jsonb;
+BEGIN
+  WITH sess AS (
+    SELECT
+      s.id,
+      s.organization_id,
+      s.status,
+      s.created_at,
+      s.activated_at,
+      s.submitted_at,
+      COALESCE((s.ai_capability_snapshot ->> 'enabled')::boolean, false) AS ai_enabled
+    FROM hirearchy.assessment_sessions AS s
+    WHERE s.created_at >= v_since
+  ),
+  decs AS (
+    SELECT d.session_id, d.decision, d.published_at, s.submitted_at
+    FROM hirearchy.hiring_decisions AS d
+    JOIN hirearchy.assessment_sessions AS s ON s.id = d.session_id
+    WHERE d.published_at >= v_since
+  ),
+  cand_fb AS (
+    SELECT f.rating
+    FROM hirearchy.product_feedback AS f
+    WHERE f.created_at >= v_since
+      AND f.actor_type = 'candidate'
+  )
+  SELECT pg_catalog.jsonb_build_object(
+    'totalOrganizations', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.organizations),
+    'activeOrganizations', (SELECT COUNT(DISTINCT s.organization_id)::pg_catalog.int4 FROM sess AS s),
+    'totalSessionsIssued', (SELECT COUNT(*)::pg_catalog.int4 FROM sess),
+    'sessionsStarted', (SELECT COUNT(*)::pg_catalog.int4 FROM sess WHERE activated_at IS NOT NULL),
+    'sessionsSubmitted', (SELECT COUNT(*)::pg_catalog.int4 FROM sess WHERE submitted_at IS NOT NULL),
+    'candidateStartRatePct', COALESCE((
+      SELECT ROUND((COUNT(*) FILTER (WHERE activated_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*), 0), 1)
+      FROM sess
+    ), 0),
+    'candidateCompletionRatePct', COALESCE((
+      SELECT ROUND((COUNT(*) FILTER (WHERE submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE activated_at IS NOT NULL), 0), 1)
+      FROM sess
+    ), 0),
+    'medianCandidateMinutes', (
+      SELECT ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (submitted_at - activated_at)) / 60.0))::numeric, 1)
+      FROM sess
+      WHERE activated_at IS NOT NULL AND submitted_at IS NOT NULL AND submitted_at >= activated_at
+    ),
+    'medianReviewTurnaroundHours', (
+      SELECT ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (published_at - submitted_at)) / 3600.0))::numeric, 1)
+      FROM decs
+      WHERE submitted_at IS NOT NULL AND published_at >= submitted_at
+    ),
+    'decisionsPublished', (SELECT COUNT(*)::pg_catalog.int4 FROM decs),
+    'acceptanceRatePct', COALESCE((
+      SELECT ROUND((COUNT(*) FILTER (WHERE decision = 'accepted') * 100.0) / NULLIF(COUNT(*), 0), 1)
+      FROM decs
+    ), 0),
+    'aiAssistantEnabledPct', COALESCE((
+      SELECT ROUND((COUNT(*) FILTER (WHERE ai_enabled) * 100.0) / NULLIF(COUNT(*), 0), 1)
+      FROM sess
+    ), 0),
+    'candidateSatisfactionAvg', (SELECT ROUND(AVG(rating)::numeric, 2) FROM cand_fb),
+    'candidateFairnessPositivePct', COALESCE((
+      SELECT ROUND((COUNT(*) FILTER (WHERE rating >= 4) * 100.0) / NULLIF(COUNT(*), 0), 1)
+      FROM cand_fb
+    ), 0),
+    'totalCandidateFeedback', (SELECT COUNT(*)::pg_catalog.int4 FROM cand_fb)
+  ) INTO v_marketing;
+
+  SELECT COALESCE(pg_catalog.jsonb_agg(row_obj ORDER BY visitors DESC), '[]'::pg_catalog.jsonb)
+  INTO v_channels
+  FROM (
+    SELECT
+      pg_catalog.jsonb_build_object(
+        'source', src,
+        'medium', med,
+        'campaign', camp,
+        'visitors', COUNT(*)::pg_catalog.int4,
+        'signups', COUNT(*) FILTER (WHERE principal_id IS NOT NULL)::pg_catalog.int4,
+        'orgsCreated', COUNT(*) FILTER (WHERE organization_id IS NOT NULL)::pg_catalog.int4,
+        'conversionRatePct', COALESCE(ROUND((COUNT(*) FILTER (WHERE principal_id IS NOT NULL OR organization_id IS NOT NULL) * 100.0) / NULLIF(COUNT(*), 0), 1), 0)
+      ) AS row_obj,
+      COUNT(*) AS visitors
+    FROM (
+      SELECT
+        COALESCE(NULLIF(first_utm_source, ''), NULLIF(first_referrer_domain, ''), 'direct') AS src,
+        COALESCE(NULLIF(first_utm_medium, ''), CASE WHEN first_referrer_domain <> '' THEN 'referral' ELSE 'none' END) AS med,
+        COALESCE(NULLIF(first_utm_campaign, ''), '—') AS camp,
+        principal_id,
+        organization_id
+      FROM hirearchy.acquisition_attributions
+      WHERE last_seen_at >= v_since
+    ) AS raw_ch
+    GROUP BY src, med, camp
+    ORDER BY visitors DESC
+    LIMIT 15
+  ) AS ch;
+
+  WITH ran_sessions AS (
+    SELECT DISTINCT eo.session_id
+    FROM hirearchy.candidate_execution_operations AS eo
+    WHERE eo.created_at >= v_since
+  ),
+  opened_sessions AS (
+    SELECT DISTINCT pe.session_id
+    FROM hirearchy.product_events AS pe
+    WHERE pe.occurred_at >= v_since
+      AND pe.event_name = 'candidate.workspace.opened'
+      AND pe.session_id IS NOT NULL
+  )
+  SELECT pg_catalog.jsonb_build_object(
+    'orgsCreated', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM (
+        SELECT o.id, MIN(om.joined_at) AS first_joined_at
+        FROM hirearchy.organizations AS o
+        JOIN hirearchy.organization_memberships AS om ON om.organization_id = o.id
+        GROUP BY o.id
+      ) AS org_dates
+      WHERE org_dates.first_joined_at >= v_since
+    ),
+    'assessmentsAuthored', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.assessment_library_entries WHERE created_at >= v_since),
+    'invitesIssued', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.assessment_sessions WHERE created_at >= v_since),
+    'candidatesOpened', (
+      SELECT COUNT(DISTINCT s.id)::pg_catalog.int4
+      FROM hirearchy.assessment_sessions AS s
+      WHERE s.created_at >= v_since
+        AND (s.activated_at IS NOT NULL OR s.id IN (SELECT session_id FROM opened_sessions))
+    ),
+    'candidatesStarted', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.assessment_sessions
+      WHERE created_at >= v_since AND activated_at IS NOT NULL
+    ),
+    'candidatesRanCode', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.assessment_sessions AS s
+      WHERE s.created_at >= v_since AND s.id IN (SELECT session_id FROM ran_sessions)
+    ),
+    'candidatesSubmitted', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.assessment_sessions
+      WHERE created_at >= v_since AND submitted_at IS NOT NULL
+    ),
+    'decisionsPublished', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.hiring_decisions
+      WHERE published_at >= v_since
+    ),
+    'handoffsCompleted', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.hiring_decisions
+      WHERE published_at >= v_since AND handoff_status = 'completed'
+    )
+  ) INTO v_funnel;
+
+  SELECT COALESCE(pg_catalog.jsonb_agg(item_obj ORDER BY issued DESC, title ASC), '[]'::pg_catalog.jsonb)
+  INTO v_assessment_health
+  FROM (
+    SELECT
+      row_title AS title,
+      COUNT(*)::pg_catalog.int4 AS issued,
+      pg_catalog.jsonb_build_object(
+        'title', row_title,
+        'sourceKind', COALESCE(MAX(source_kind), 'template'),
+        'targetRole', COALESCE(NULLIF(MAX(target_role), ''), 'General'),
+        'issued', COUNT(*)::pg_catalog.int4,
+        'started', COUNT(*) FILTER (WHERE activated_at IS NOT NULL)::pg_catalog.int4,
+        'submitted', COUNT(*) FILTER (WHERE submitted_at IS NOT NULL)::pg_catalog.int4,
+        'completionRatePct', COALESCE(ROUND((COUNT(*) FILTER (WHERE submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE activated_at IS NOT NULL), 0), 1), 0),
+        'medianMinutes', ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN submitted_at IS NOT NULL AND activated_at IS NOT NULL AND submitted_at >= activated_at THEN EXTRACT(EPOCH FROM (submitted_at - activated_at)) / 60.0 ELSE NULL END))::numeric, 1),
+        'executionErrorRatePct', COALESCE(ROUND((SUM(err_ops) * 100.0) / NULLIF(SUM(total_ops), 0), 1), 0),
+        'avgCandidateRating', ROUND(AVG(fb_rating)::numeric, 2),
+        'healthFlag', CASE
+          WHEN COUNT(*) FILTER (WHERE activated_at IS NOT NULL) < 3 THEN 'low_sample'
+          WHEN COALESCE((SUM(err_ops) * 100.0) / NULLIF(SUM(total_ops), 0), 0) >= 35 THEN 'runner_errors'
+          WHEN COALESCE((COUNT(*) FILTER (WHERE submitted_at IS NOT NULL) * 100.0) / NULLIF(COUNT(*) FILTER (WHERE activated_at IS NOT NULL), 0), 0) < 55 THEN 'high_dropoff'
+          WHEN COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN submitted_at IS NOT NULL AND activated_at IS NOT NULL AND submitted_at >= activated_at THEN EXTRACT(EPOCH FROM (submitted_at - activated_at)) / 60.0 ELSE NULL END), 0) >= (MAX(duration_seconds) / 60.0) * 0.9 THEN 'time_pressure'
+          ELSE 'healthy'
+        END
+      ) AS item_obj
+    FROM (
+      SELECT
+        s.id,
+        s.scenario_title AS row_title,
+        s.activated_at,
+        s.submitted_at,
+        s.duration_seconds,
+        lib.source_kind,
+        m.target_role,
+        COALESCE(op_stats.total_ops, 0) AS total_ops,
+        COALESCE(op_stats.err_ops, 0) AS err_ops,
+        fb.avg_rating AS fb_rating
+      FROM hirearchy.assessment_sessions AS s
+      LEFT JOIN hirearchy.hiring_session_metadata AS m ON m.session_id = s.id
+      LEFT JOIN hirearchy.assessment_library_entries AS lib ON lib.definition_id = m.definition_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) AS total_ops,
+          COUNT(*) FILTER (WHERE status IN ('FAILED', 'TIMED_OUT', 'UNKNOWN')) AS err_ops
+        FROM hirearchy.candidate_execution_operations AS eo
+        WHERE eo.session_id = s.id
+      ) AS op_stats ON true
+      LEFT JOIN LATERAL (
+        SELECT AVG(f.rating)::numeric AS avg_rating
+        FROM hirearchy.product_feedback AS f
+        WHERE f.session_id = s.id AND f.actor_type = 'candidate'
+      ) AS fb ON true
+      WHERE s.created_at >= v_since
+    ) AS raw_rows
+    GROUP BY row_title
+    ORDER BY issued DESC, row_title ASC
+    LIMIT 25
+  ) AS grouped;
+
+  WITH ai_ev AS (
+    SELECT event_name, duration_ms
+    FROM hirearchy.product_events
+    WHERE occurred_at >= v_since
+      AND event_name IN (
+        'builder.ai_generate.started',
+        'builder.ai_generate.completed',
+        'builder.ai_generate.failed',
+        'hiring.fit_report.generated',
+        'evaluator.ai_review.opened'
+      )
+  )
+  SELECT pg_catalog.jsonb_build_object(
+    'generateStarted', (SELECT COUNT(*)::pg_catalog.int4 FROM ai_ev WHERE event_name = 'builder.ai_generate.started'),
+    'generateCompleted', (SELECT COUNT(*)::pg_catalog.int4 FROM ai_ev WHERE event_name = 'builder.ai_generate.completed'),
+    'generateFailed', (SELECT COUNT(*)::pg_catalog.int4 FROM ai_ev WHERE event_name = 'builder.ai_generate.failed'),
+    'successRatePct', COALESCE((
+      SELECT ROUND((COUNT(*) FILTER (WHERE event_name = 'builder.ai_generate.completed') * 100.0) / NULLIF(COUNT(*) FILTER (WHERE event_name IN ('builder.ai_generate.completed', 'builder.ai_generate.failed')), 0), 1)
+      FROM ai_ev
+    ), 0),
+    'medianLatencyMs', (
+      SELECT ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms))::numeric, 0)
+      FROM ai_ev WHERE event_name = 'builder.ai_generate.completed' AND duration_ms IS NOT NULL
+    ),
+    'p95LatencyMs', (
+      SELECT ROUND((percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms))::numeric, 0)
+      FROM ai_ev WHERE event_name = 'builder.ai_generate.completed' AND duration_ms IS NOT NULL
+    ),
+    'problemsSaved', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.assessment_library_entries
+      WHERE created_at >= v_since AND source_kind = 'ai_generated'
+    ),
+    'aiProblemsIssued', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.assessment_sessions AS s
+      JOIN hirearchy.hiring_session_metadata AS m ON m.session_id = s.id
+      JOIN hirearchy.assessment_library_entries AS lib ON lib.definition_id = m.definition_id
+      WHERE s.created_at >= v_since AND lib.source_kind = 'ai_generated'
+    ),
+    'avgAiQualityRating', (
+      SELECT ROUND(AVG(rating)::numeric, 2)
+      FROM hirearchy.product_feedback
+      WHERE created_at >= v_since AND surface = 'builder_ai_generated'
+    ),
+    'aiFeedbackCount', (
+      SELECT COUNT(*)::pg_catalog.int4
+      FROM hirearchy.product_feedback
+      WHERE created_at >= v_since AND surface = 'builder_ai_generated'
+    ),
+    'advisoryReviewOpened', (
+      SELECT COUNT(*)::pg_catalog.int4 FROM ai_ev WHERE event_name = 'evaluator.ai_review.opened'
+    )
+  ) INTO v_ai_perf;
+
+  SELECT pg_catalog.jsonb_build_object(
+    'planDistribution', pg_catalog.jsonb_build_object(
+      'none', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.organization_plans WHERE plan_tier = 'none'),
+      'per_candidate', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.organization_plans WHERE plan_tier = 'per_candidate'),
+      'pro', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.organization_plans WHERE plan_tier = 'pro'),
+      'ultra', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.organization_plans WHERE plan_tier = 'ultra')
+    ),
+    'planGateHits', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.product_events WHERE occurred_at >= v_since AND event_name = 'monetization.plan_gate_hit'),
+    'upgradePageVisits', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.product_events WHERE occurred_at >= v_since AND event_name = 'monetization.upgrade_viewed'),
+    'planUpgrades', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.product_events WHERE occurred_at >= v_since AND event_name = 'monetization.plan_changed'),
+    'slotAddons', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.product_events WHERE occurred_at >= v_since AND event_name = 'monetization.slots_added')
+  ) INTO v_monetization;
+
+  SELECT pg_catalog.jsonb_build_object(
+    'topErrors', COALESCE((
+      SELECT pg_catalog.jsonb_agg(e_obj ORDER BY cnt DESC)
+      FROM (
+        SELECT COUNT(*) AS cnt, pg_catalog.jsonb_build_object(
+          'eventName', event_name,
+          'route', COALESCE(NULLIF(route, ''), '—'),
+          'count', COUNT(*)::pg_catalog.int4
+        ) AS e_obj
+        FROM hirearchy.product_events
+        WHERE occurred_at >= v_since AND status = 'error'
+        GROUP BY event_name, route
+        ORDER BY cnt DESC
+        LIMIT 10
+      ) AS errs
+    ), '[]'::pg_catalog.jsonb),
+    'topRoutes', COALESCE((
+      SELECT pg_catalog.jsonb_agg(r_obj ORDER BY cnt DESC)
+      FROM (
+        SELECT COUNT(*) AS cnt, pg_catalog.jsonb_build_object(
+          'route', COALESCE(NULLIF(route, ''), '/'),
+          'views', COUNT(*)::pg_catalog.int4
+        ) AS r_obj
+        FROM hirearchy.product_events
+        WHERE occurred_at >= v_since AND event_name = 'ux.page_view'
+        GROUP BY route
+        ORDER BY cnt DESC
+        LIMIT 10
+      ) AS rts
+    ), '[]'::pg_catalog.jsonb),
+    'themeSplit', pg_catalog.jsonb_build_object(
+      'light', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.product_events WHERE occurred_at >= v_since AND event_name = 'ux.page_view' AND (properties ->> 'theme') = 'light'),
+      'dark', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.product_events WHERE occurred_at >= v_since AND event_name = 'ux.page_view' AND (properties ->> 'theme') = 'dark')
+    ),
+    'clientErrorCount', (SELECT COUNT(*)::pg_catalog.int4 FROM hirearchy.product_events WHERE occurred_at >= v_since AND event_name = 'error.client_runtime'),
+    'p95ApiDurationMs', (
+      SELECT ROUND((percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms))::numeric, 0)
+      FROM hirearchy.product_events
+      WHERE occurred_at >= v_since AND duration_ms IS NOT NULL
+    )
+  ) INTO v_ux_friction;
+
+  SELECT COALESCE(pg_catalog.jsonb_agg(f_obj ORDER BY created_at DESC), '[]'::pg_catalog.jsonb)
+  INTO v_recent_feedback
+  FROM (
+    SELECT created_at, pg_catalog.jsonb_build_object(
+      'id', id::pg_catalog.text,
+      'createdAt', pg_catalog.to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      'actorType', actor_type,
+      'surface', surface,
+      'rating', rating,
+      'tags', tags,
+      'comment', comment,
+      'context', context
+    ) AS f_obj
+    FROM hirearchy.product_feedback
+    WHERE created_at >= v_since
+    ORDER BY created_at DESC
+    LIMIT 30
+  ) AS fb_rows;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'windowDays', v_days,
+    'generatedAt', pg_catalog.to_char(pg_catalog.clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'marketingProof', v_marketing,
+    'acquisitionChannels', v_channels,
+    'hiringFunnel', v_funnel,
+    'assessmentHealth', v_assessment_health,
+    'aiPerformance', v_ai_perf,
+    'monetization', v_monetization,
+    'uxFriction', v_ux_friction,
+    'recentFeedback', v_recent_feedback
+  );
+END
+$function$;
+
+ALTER FUNCTION staging.telemetry_record_events(pg_catalog.jsonb) OWNER TO postgres;
+ALTER FUNCTION staging.telemetry_record_feedback(pg_catalog.jsonb) OWNER TO postgres;
+ALTER FUNCTION staging.telemetry_insights_report(pg_catalog.int4) OWNER TO postgres;
+
+REVOKE ALL ON FUNCTION staging.telemetry_record_events(pg_catalog.jsonb)
+  FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.telemetry_record_feedback(pg_catalog.jsonb)
+  FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+REVOKE ALL ON FUNCTION staging.telemetry_insights_report(pg_catalog.int4)
+  FROM PUBLIC, app_evaluator, app_candidate_gateway, app_control_worker, staging_verifier_owner, staging_readiness_owner, hirearchy_migrator;
+
+GRANT EXECUTE ON FUNCTION staging.telemetry_record_events(pg_catalog.jsonb) TO r23_gateway;
+GRANT EXECUTE ON FUNCTION staging.telemetry_record_feedback(pg_catalog.jsonb) TO r23_gateway;
+GRANT EXECUTE ON FUNCTION staging.telemetry_insights_report(pg_catalog.int4) TO r23_gateway;
+
 COMMIT;

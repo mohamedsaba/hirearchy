@@ -11,6 +11,7 @@ import {
   StagingBadRequest,
   withHiringOrganizationSession,
 } from '../../../../../../../src/staging/browser';
+import { recordServerTelemetryEvent } from '../../../../../../../src/telemetry/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -53,7 +54,7 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ dispatch, organizationId: orgId }) => {
+      async ({ dispatch, organizationId: orgId, orgContext }) => {
         const planTier = body.planTier;
         if (!isPlanTier(planTier)) throw new StagingBadRequest();
         const creditsMode = body.creditsMode === 'set' ? 'set' : 'add';
@@ -68,6 +69,23 @@ export async function POST(
           creditsMode,
           creditsAmount,
         })) as OrganizationPlanSummary;
+
+        recordServerTelemetryEvent({
+          eventName:
+            creditsAmount > 0
+              ? 'monetization.slots_added'
+              : 'monetization.plan_changed',
+          category: 'monetization',
+          actorType: 'team_member',
+          organizationId: orgId,
+          principalId: orgContext.principalId,
+          planTier: updated.planTier,
+          route: '/r23/organizations/:id/upgrade',
+          properties: {
+            planTier: updated.planTier,
+            creditsAmount,
+          },
+        });
 
         return NextResponse.json(
           { plan: updated },

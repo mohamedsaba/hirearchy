@@ -49,6 +49,8 @@ import { HorizontalTabs } from '../../../../_components/horizontal-tabs';
 import { LocalTime } from '../../../../_components/local-time';
 import { CommonThreadLoader } from '../../../../_components/common-thread-loader';
 import { CommonThreadToast } from '../../../../_components/common-thread-toast';
+import { ProductFeedbackPulse } from '../../../../_components/product-feedback-pulse';
+import { trackClientEvent } from '../../../../../src/telemetry/client';
 
 const RepositoryInspector = dynamic(
   () => import('./repository-inspector').then((m) => m.RepositoryInspector),
@@ -954,6 +956,19 @@ export function HiringAssessmentBuilderClient({
   ]);
 
   const selectTemplate = (tpl: PlatformTemplateView) => {
+    trackClientEvent({
+      eventName: 'builder.template.selected',
+      category: 'team_funnel',
+      actorType: 'team_member',
+      organizationId,
+      principalId: currentPrincipalId,
+      planTier: plan.planTier,
+      properties: {
+        templateId: tpl.templateId,
+        targetRole: tpl.targetRole,
+        experienceLevel: tpl.experienceLevel,
+      },
+    });
     const nextDraft: R211AssessmentDraftInput = {
       ...tpl.baseDraft,
       durationMinutes: tplDuration,
@@ -1538,7 +1553,18 @@ export function HiringAssessmentBuilderClient({
               id="builder-source"
               label="Assessment source mode"
               active={mode}
-              onSelect={setMode}
+              onSelect={(nextMode) => {
+                setMode(nextMode);
+                trackClientEvent({
+                  eventName: 'builder.mode.selected',
+                  category: 'team_funnel',
+                  actorType: 'team_member',
+                  organizationId,
+                  principalId: currentPrincipalId,
+                  planTier: plan.planTier,
+                  properties: { mode: nextMode },
+                });
+              }}
               className="hiring-builder-tabs"
               tabClassName="hiring-builder-tab"
               tabs={[
@@ -2182,6 +2208,28 @@ export function HiringAssessmentBuilderClient({
               />
             </div>
           )}
+          {activeSourceMeta.sourceKind === 'ai_generated' ? (
+            <ProductFeedbackPulse
+              surface="builder_ai_generated"
+              actorType="team_member"
+              organizationId={organizationId}
+              storageKey={`hirearchy:fb:builder:${activeDraftId ?? activeDraft.title}`}
+              title="How ready was this AI-generated assessment?"
+              tags={[
+                'Ready to send',
+                'Needed minor edits',
+                'Wrong difficulty',
+                'Off-topic',
+                'Great rubric',
+              ]}
+              context={{
+                targetRole: activeSourceMeta.targetRole,
+                experienceLevel: activeSourceMeta.experienceLevel,
+                problemStructure: activeSourceMeta.problemStructure,
+                durationMinutes: activeDraft.durationMinutes,
+              }}
+            />
+          ) : null}
         </section>
 
         <section

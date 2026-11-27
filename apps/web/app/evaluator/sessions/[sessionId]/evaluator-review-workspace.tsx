@@ -45,6 +45,7 @@ import {
   removePersistedKey,
   writePersistedJson,
 } from '../../../../src/ui/browser-state';
+import { trackClientEvent } from '../../../../src/telemetry/client';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
 import { R27AiReviewPanel } from './ai-review-panel';
 import {
@@ -1854,6 +1855,17 @@ export const EvaluatorReviewWorkspace = (
   );
   const setMode = (nextMode: WorkbenchMode) => {
     setModeState(nextMode);
+    trackClientEvent({
+      eventName: 'evaluator.tab.viewed',
+      category: 'team_funnel',
+      actorType: 'team_member',
+      organizationId: hiringReviewContext?.organizationId,
+      sessionId,
+      properties: {
+        tab: nextMode.toLowerCase(),
+        hasHiringContext: Boolean(hiringReviewContext),
+      },
+    });
     setVisitedModes((current) => {
       if (current.has(nextMode)) return current;
       const next = new Set(current);

@@ -17,6 +17,7 @@ import {
   StagingBadRequest,
   withHiringOrganizationSession,
 } from '../../../../../../../../src/staging/browser';
+import { recordServerTelemetryEvent } from '../../../../../../../../src/telemetry/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -96,6 +97,17 @@ export async function POST(
       { requireOriginCsrf: true, body },
       async ({ orgContext, plan }) => {
         if (!hasPlanFeature(plan.planTier, 'aiAssessmentBuilder')) {
+          recordServerTelemetryEvent({
+            eventName: 'monetization.plan_gate_hit',
+            category: 'monetization',
+            actorType: 'team_member',
+            organizationId,
+            principalId: orgContext.principalId,
+            planTier: plan.planTier,
+            status: 'blocked',
+            route: '/r23/organizations/:id/builder',
+            properties: { feature: 'aiAssessmentBuilder' },
+          });
           return NextResponse.json(
             {
               error: {
@@ -154,6 +166,81 @@ export async function POST(
             ? body.draftId.trim().slice(0, 128)
             : undefined;
 
+        const runTrackedGeneration = async () => {
+          const startedAt = Date.now();
+          recordServerTelemetryEvent({
+            eventName: 'builder.ai_generate.started',
+            category: 'ai_quality',
+            actorType: 'team_member',
+            organizationId,
+            principalId: orgContext.principalId,
+            planTier: plan.planTier,
+            route: '/r23/organizations/:id/builder',
+            properties: {
+              targetRole,
+              experienceLevel: expLevel,
+              problemStructure: structure,
+              workKind,
+              domain,
+              durationMinutes,
+              integratedAi,
+              asyncMode: body.async === true,
+            },
+          });
+          try {
+            const generated = await generateHiringAssessmentWithKimi({
+              targetRole,
+              experienceLevel: expLevel as ExperienceLevelId,
+              yearsExperience,
+              skills,
+              problemStructure: structure as ProblemStructureId,
+              workKind,
+              domain,
+              durationMinutes,
+              integratedAi,
+              guidance,
+            });
+            recordServerTelemetryEvent({
+              eventName: 'builder.ai_generate.completed',
+              category: 'ai_quality',
+              actorType: 'team_member',
+              organizationId,
+              principalId: orgContext.principalId,
+              planTier: plan.planTier,
+              durationMs: Date.now() - startedAt,
+              route: '/r23/organizations/:id/builder',
+              properties: {
+                modelId: generated.modelId,
+                targetRole,
+                experienceLevel: expLevel,
+                problemStructure: structure,
+                durationMinutes,
+                integratedAi,
+              },
+            });
+            return generated;
+          } catch (genErr) {
+            recordServerTelemetryEvent({
+              eventName: 'builder.ai_generate.failed',
+              category: 'ai_quality',
+              actorType: 'team_member',
+              organizationId,
+              principalId: orgContext.principalId,
+              planTier: plan.planTier,
+              status: 'error',
+              durationMs: Date.now() - startedAt,
+              route: '/r23/organizations/:id/builder',
+              properties: {
+                targetRole,
+                problemStructure: structure,
+                errorKind:
+                  genErr instanceof Error ? genErr.name : 'UnknownError',
+              },
+            });
+            throw genErr;
+          }
+        };
+
         if (body.async === true) {
           const job = startBuilderGenerationJob(
             {
@@ -171,19 +258,7 @@ export async function POST(
               integratedAi,
               guidance,
             },
-            () =>
-              generateHiringAssessmentWithKimi({
-                targetRole,
-                experienceLevel: expLevel as ExperienceLevelId,
-                yearsExperience,
-                skills,
-                problemStructure: structure as ProblemStructureId,
-                workKind,
-                domain,
-                durationMinutes,
-                integratedAi,
-                guidance,
-              }),
+            runTrackedGeneration,
           );
           return NextResponse.json(
             { job },
@@ -192,18 +267,7 @@ export async function POST(
         }
 
         try {
-          const generated = await generateHiringAssessmentWithKimi({
-            targetRole,
-            experienceLevel: expLevel as ExperienceLevelId,
-            yearsExperience,
-            skills,
-            problemStructure: structure as ProblemStructureId,
-            workKind,
-            domain,
-            durationMinutes,
-            integratedAi,
-            guidance,
-          });
+          const generated = await runTrackedGeneration();
 
           return NextResponse.json(
             {

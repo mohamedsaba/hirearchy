@@ -143,8 +143,8 @@ try {
      ALTER ROLE r23_gateway PASSWORD '${gatewayPassword}';`,
   );
 
-  // Apply migrations 0001 - 0021
-  console.log('2. Applying schema migrations 0001 through 0021...');
+  // Apply migrations 0001 - 0022
+  console.log('2. Applying schema migrations 0001 through 0022...');
   migratorClient = new Client({
     host: '127.0.0.1',
     port: pgPort,
@@ -156,8 +156,8 @@ try {
   await migratorClient.connect();
   const migrationResult = await applyMigrations(migratorClient);
   assert(
-    migrationResult.appliedVersions.includes('0021'),
-    'Migration 0021 applied',
+    migrationResult.appliedVersions.includes('0022'),
+    'Migration 0022 applied',
   );
 
   // Start GoTrue
@@ -237,8 +237,8 @@ try {
   );
   assert.equal(
     readiness.database.migrationVersion,
-    '0021',
-    'Current migration level is 0021',
+    '0022',
+    'Current migration level is 0022',
   );
   assert.equal(readiness.database.isMigrationCurrent, true);
   assert.equal(readiness.database.markers.candidateLifecycle, true);

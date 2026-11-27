@@ -1,5 +1,5 @@
 import { isHiringPlatformEnabled } from '../runtime/profile';
-import type { PlanTier } from '../plans/entitlements';
+import { getPlanDefinition, type PlanTier } from '../plans/entitlements';
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => {
@@ -42,7 +42,10 @@ export type SoftwareWorkspace = Readonly<{
   currentPath?: string;
 }>;
 
-function resolveRoleLabel(role: string, hiringEnabled: boolean): string {
+export function resolveWorkspaceRoleLabel(
+  role: string,
+  hiringEnabled = true,
+): string {
   if (!hiringEnabled) {
     return role === 'recruiter' ? 'Recruiting team' : 'Evaluation team';
   }
@@ -58,9 +61,48 @@ function resolveRoleLabel(role: string, hiringEnabled: boolean): string {
   }
 }
 
+export function getSidebarPlanCopy(
+  planTier: PlanTier,
+  planBadge?: string,
+): Readonly<{ badge: string; hook: string; cta: string }> {
+  const badge = planBadge ?? getPlanDefinition(planTier).badgeLabel;
+  switch (planTier) {
+    case 'none':
+      return {
+        badge,
+        hook: 'Activate a plan to issue assessments.',
+        cta: 'Activate plan',
+      };
+    case 'per_candidate':
+      return {
+        badge,
+        hook: 'Add slots or scale to unlimited seats.',
+        cta: 'Upgrade plan',
+      };
+    case 'pro':
+      return {
+        badge,
+        hook: 'Unlock AI review summaries & fit reports.',
+        cta: 'Upgrade to Ultra',
+      };
+    case 'ultra':
+      return {
+        badge,
+        hook: 'All AI & team features active.',
+        cta: 'Manage plan',
+      };
+  }
+}
+
 // Outline paths from the same MIT-licensed Tabler icons used by the React workspace.
 const workspaceIconPaths = {
   ArrowUpRight: ['M7 17l10 -10', 'M7 7h10v10'],
+  ArrowsExchange: ['M7 10h14l-4 -4', 'M17 14h-14l4 4'],
+  Logout: [
+    'M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2',
+    'M9 12h12l-3 -3',
+    'M18 15l3 -3',
+  ],
   UserCircle: [
     'M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0',
     'M9 10a3 3 0 1 0 6 0a3 3 0 1 0 -6 0',
@@ -159,7 +201,7 @@ export function renderSoftwareDocument(
 
   const resolvedNextPath = derivedWorkspacePath ?? currentPath;
 
-  const navLinks = workspace
+  const workspaceNavLinks = workspace
     ? hiringEnabled
       ? (
           [
@@ -167,24 +209,12 @@ export function renderSoftwareDocument(
             ['assessments', '', 'Assessments', 'ListDetails'],
             ['builder', '/builder', 'Assessment Builder', 'FilePencil'],
             ['handoffs', '/handoffs', 'Handoffs', 'Briefcase'],
-            ['settings', '/settings', 'Organization', 'Settings'],
-            ['plan', '/upgrade', 'Upgrade', 'ArrowUpRight'],
-            ['account', '', 'My account', 'UserCircle'],
           ] as const
         )
-          .filter(
-            ([section]) =>
-              (section !== 'settings' || workspace.role === 'cto') &&
-              (section !== 'plan' ||
-                Boolean(workspace.planTier && workspace.planTier !== 'ultra')),
-          )
           .map(([section, suffix, label, icon]) => {
             const safeLabel = escapeHtml(label);
-            const href =
-              section === 'account'
-                ? '/r23/account'
-                : `${organizationPath}${suffix}`;
-            return `<a href="${href}" title="${safeLabel}"${section === 'settings' ? ' data-testid="org-settings-link"' : ''}${section === 'plan' ? ' class="software-workspace-upgrade"' : ''}${section === 'builder' ? ' aria-label="Assessment Builder"' : ''}${workspace.active === section ? ' aria-current="page"' : ''}>${workspaceIcon(icon)}${section === 'builder' ? '<span class="software-workspace-nav-label">Assessment Builder</span><span class="software-workspace-rail-label" aria-hidden="true">Builder</span>' : `<span>${safeLabel}</span>`}</a>`;
+            const href = `${organizationPath}${suffix}`;
+            return `<a href="${href}" title="${safeLabel}"${section === 'builder' ? ' aria-label="Assessment Builder"' : ''}${workspace.active === section ? ' aria-current="page"' : ''}>${workspaceIcon(icon)}${section === 'builder' ? '<span class="software-workspace-nav-label">Assessment Builder</span><span class="software-workspace-rail-label" aria-hidden="true">Builder</span>' : `<span>${safeLabel}</span>`}</a>`;
           })
           .join('')
       : `<a href="${organizationPath}"${
@@ -196,10 +226,86 @@ export function renderSoftwareDocument(
         }>Team &amp; settings</a>`
     : '';
 
-  const planChip =
-    workspace && hiringEnabled && workspace.planBadge
-      ? `<span class="hiring-sidebar-plan-badge">${escapeHtml(workspace.planBadge)}</span>`
+  const settingsNavLinks =
+    workspace && hiringEnabled
+      ? (
+          [
+            ...(workspace.role === 'cto'
+              ? ([
+                  ['settings', '/settings', 'Organization', 'Settings'],
+                ] as const)
+              : []),
+            ['account', '', 'My account', 'UserCircle'] as const,
+          ] as const
+        )
+          .map(([section, suffix, label, icon]) => {
+            const safeLabel = escapeHtml(label);
+            const href =
+              section === 'account'
+                ? '/r23/account'
+                : `${organizationPath}${suffix}`;
+            return `<a href="${href}" title="${safeLabel}"${section === 'settings' ? ' data-testid="org-settings-link"' : ''}${workspace.active === section ? ' aria-current="page"' : ''}>${workspaceIcon(icon)}<span>${safeLabel}</span></a>`;
+          })
+          .join('')
       : '';
+
+  const navLinks =
+    workspace && hiringEnabled
+      ? `<span class="software-nav-group-label" aria-hidden="true">Workspace</span>${workspaceNavLinks}<span class="software-nav-group-label" aria-hidden="true">Settings</span>${settingsNavLinks}`
+      : workspaceNavLinks;
+
+  const planCard = (() => {
+    if (!workspace || !hiringEnabled || !workspace.planTier) return '';
+    const planCopy = getSidebarPlanCopy(
+      workspace.planTier,
+      workspace.planBadge,
+    );
+    const isUltra = workspace.planTier === 'ultra';
+    const currentAttr =
+      workspace.active === 'plan' ? ' aria-current="page"' : '';
+    const actionLink = isUltra
+      ? `<a class="software-sidebar-plan-manage" href="${organizationPath}/plan" title="Plan &amp; add-ons"${currentAttr}><span>${escapeHtml(planCopy.cta)}</span>${workspaceIcon('ArrowUpRight', 14)}</a>`
+      : `<a class="software-workspace-upgrade" href="${organizationPath}/upgrade" title="Upgrade"${currentAttr}><span>${escapeHtml(planCopy.cta)}</span>${workspaceIcon('ArrowUpRight', 14)}</a>`;
+    return `<div class="software-sidebar-plan-card" data-tier="${escapeHtml(workspace.planTier)}">
+      <div class="software-sidebar-plan-head">
+        <span class="software-sidebar-plan-dot" aria-hidden="true"></span>
+        <span class="software-sidebar-plan-tier">${escapeHtml(planCopy.badge)}</span>
+      </div>
+      <p class="software-sidebar-plan-copy">${escapeHtml(planCopy.hook)}</p>
+      ${actionLink}
+    </div>`;
+  })();
+
+  const orgInitial = workspace
+    ? escapeHtml((workspace.organizationName.trim()[0] ?? 'W').toUpperCase())
+    : '';
+  const userInitial = workspace
+    ? escapeHtml((workspace.email.trim()[0] ?? 'U').toUpperCase())
+    : '';
+
+  const identityBlock = workspace
+    ? hiringEnabled
+      ? `<div class="software-workspace-identity" role="region" aria-label="Active organization"><span class="software-org-avatar" aria-hidden="true">${orgInitial}</span><div class="software-workspace-identity-copy"><strong>${escapeHtml(
+          workspace.organizationName,
+        )}</strong><span>${resolveWorkspaceRoleLabel(workspace.role, true)}</span></div></div>`
+      : `<div class="software-workspace-identity" role="region" aria-label="Active organization"><span class="software-eyebrow">Your workspace</span><strong>${escapeHtml(
+          workspace.organizationName,
+        )}</strong><span>${resolveWorkspaceRoleLabel(workspace.role, false)}</span></div>`
+    : '';
+
+  const footerBlock = workspace
+    ? hiringEnabled
+      ? `<div class="software-workspace-sidebar-footer"><div class="software-sidebar-user"><span class="software-user-avatar" aria-hidden="true">${userInitial}</span><span class="software-sidebar-user-email" title="${escapeHtml(workspace.email)}">${escapeHtml(
+          workspace.email,
+        )}</span></div><div class="software-sidebar-footer-actions"><a href="/r23/organizations" class="software-sidebar-action" title="Switch workspace">${workspaceIcon('ArrowsExchange', 14)}<span>Switch workspace</span></a><form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${escapeHtml(
+          workspace.csrf,
+        )}"><button type="submit" class="software-sidebar-action software-sidebar-signout">${workspaceIcon('Logout', 14)}<span>Sign out</span></button></form></div></div>`
+      : `<div class="software-workspace-sidebar-footer"><span title="${escapeHtml(workspace.email)}">${escapeHtml(
+          workspace.email,
+        )}</span><a href="/r23/organizations">Switch workspace</a><form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${escapeHtml(
+          workspace.csrf,
+        )}"><button type="submit">Sign out</button></form></div>`
+    : '';
 
   const navigation = workspace
     ? `<aside class="software-workspace-sidebar">
@@ -208,15 +314,10 @@ export function renderSoftwareDocument(
             ? `<label class="software-workspace-rail-control" title="Toggle workspace navigation"><input type="checkbox" aria-label="Show full workspace navigation">${workspaceIcon('LayoutSidebarLeftExpand', 20)}${workspaceIcon('LayoutSidebarLeftCollapse', 20)}<span class="software-workspace-mobile-name">${escapeHtml(workspace.organizationName)}</span></label>`
             : ''
         }
-        <div class="software-workspace-identity" role="region" aria-label="Active organization">${hiringEnabled ? '' : '<span class="software-eyebrow">Your workspace</span>'}<strong>${escapeHtml(
-          workspace.organizationName,
-        )}</strong><span>${resolveRoleLabel(workspace.role, hiringEnabled)}</span>${planChip}</div>
+        ${identityBlock}
         <nav aria-label="Workspace navigation">${navLinks}</nav>
-        <div class="software-workspace-sidebar-footer"><span title="${escapeHtml(workspace.email)}">${escapeHtml(
-          workspace.email,
-        )}</span><a href="/r23/organizations">Switch workspace</a><form action="/r23/auth/logout" method="post"><input type="hidden" name="csrf" value="${escapeHtml(
-          workspace.csrf,
-        )}"><button type="submit">Sign out</button></form></div>
+        ${planCard}
+        ${footerBlock}
       </aside>`
     : '';
 

@@ -124,6 +124,8 @@ const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
 
 const HIRING_PLATFORM_POST_PATTERNS: readonly RegExp[] = [
   /^\/api\/theme$/,
+  /^\/api\/telemetry$/,
+  /^\/api\/feedback$/,
   /^\/r23\/account$/,
   /^\/r23\/organizations\/[^/]+\/plan$/,
   /^\/api\/candidate-portal$/,
@@ -222,7 +224,9 @@ function isFounderUatRoute(method: string, pathname: string): boolean {
       pathname === '/api/founder-uat/mail' ||
       /^\/api\/founder-uat\/mail\/template\/(confirmation|recovery)$/.test(
         pathname,
-      )
+      ) ||
+      (isFounderUatEnabled() &&
+        (pathname === '/r23/intelligence' || pathname === '/api/intelligence'))
     );
   }
   return (

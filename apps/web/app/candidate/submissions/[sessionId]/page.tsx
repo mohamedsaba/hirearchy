@@ -10,6 +10,7 @@ import {
 import { isHiringPlatformEnabled } from '../../../../src/runtime/profile';
 import { tryReadHiringAccountFromCookie } from '../../../../src/staging/browser';
 import { LocalTime } from '../../../_components/local-time';
+import { ProductFeedbackPulse } from '../../../_components/product-feedback-pulse';
 import { ThemeToggle } from '../../../_components/theme-toggle';
 import { RepositoryInspector } from '../../../r23/organizations/[organizationId]/builder/repository-inspector';
 import './submitted-work.css';
@@ -99,6 +100,21 @@ export default async function CandidateSubmissionPage({
             Back to My assessments
           </Link>
         </header>
+        <ProductFeedbackPulse
+          surface="candidate_post_submit"
+          actorType="candidate"
+          sessionId={sessionId}
+          storageKey={`hirearchy:fb:candidate:${sessionId}`}
+          title="How fair and smooth was this assessment workspace?"
+          privacyNote="Private to Hirearchy to improve the platform — never shared with the hiring team."
+          tags={[
+            'Clear & realistic',
+            'Smooth experience',
+            'Instructions unclear',
+            'Editor or test issue',
+            'Time felt tight',
+          ]}
+        />
         {submission.files.length ? (
           <RepositoryInspector
             files={submission.files}

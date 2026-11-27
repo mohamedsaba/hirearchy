@@ -19,6 +19,7 @@ import {
   StagingBadRequest,
   withHiringOrganizationSession,
 } from '../../../../../../../src/staging/browser';
+import { recordServerTelemetryEvent } from '../../../../../../../src/telemetry/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -60,7 +61,7 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ dispatch, organizationId: orgId }) => {
+      async ({ dispatch, organizationId: orgId, orgContext, plan }) => {
         const rawDraft = body.draft as R211AssessmentDraftInput | undefined;
         if (!rawDraft || typeof rawDraft !== 'object') {
           throw new StagingBadRequest();
@@ -166,6 +167,26 @@ export async function POST(
             },
           },
         })) as { definitionId: string; validatedVersionId: string };
+
+        recordServerTelemetryEvent({
+          eventName: 'builder.problem.saved',
+          category: 'team_funnel',
+          actorType: 'team_member',
+          organizationId: orgId,
+          principalId: orgContext.principalId,
+          planTier: plan.planTier,
+          route: '/r23/organizations/:id/builder',
+          properties: {
+            sourceKind:
+              meta.sourceKind === 'template' ? 'template' : 'ai_generated',
+            problemStructure:
+              meta.problemStructure === 'single_module'
+                ? 'single_module'
+                : 'multi_file',
+            durationMinutes: preparedDraft.durationMinutes,
+            integratedAi: preparedDraft.integratedAi,
+          },
+        });
 
         return NextResponse.json(
           {
