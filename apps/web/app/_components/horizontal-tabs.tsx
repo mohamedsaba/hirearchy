@@ -1,6 +1,7 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import { useSlidingIndicator } from '../../src/ui/use-sliding-indicator';
 
 export function HorizontalTabs<T extends string>({
   id,
@@ -24,8 +25,18 @@ export function HorizontalTabs<T extends string>({
   className: string;
   tabClassName: string;
 }>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const indicatorReady = useSlidingIndicator(containerRef, active);
+
   return (
-    <div className={className} role="tablist" aria-label={label}>
+    <div
+      ref={containerRef}
+      className={className ? `ct-tabs-root ${className}` : 'ct-tabs-root'}
+      role="tablist"
+      aria-label={label}
+      data-indicator-ready={indicatorReady ? 'true' : undefined}
+    >
+      <span className="ct-tab-indicator" aria-hidden="true" />
       {tabs.map((tab, index) => (
         <button
           key={tab.id}

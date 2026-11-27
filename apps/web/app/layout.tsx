@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { cookies } from 'next/headers';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import './styles.css';
 import '../public/software-ui.css';
 import '../public/hiring-platform.css';
@@ -9,6 +9,8 @@ import './workspace.css';
 import './home.css';
 import { IntentPrefetch } from './home/intent-prefetch';
 import { TelemetryTracker } from './_components/telemetry-tracker';
+import { RouteProgressBar } from './_components/route-progress-bar';
+import { BrandToastViewport } from './_components/brand-toast';
 const dmSans = localFont({
   src: '../public/fonts/dm-sans-latin.woff2',
   weight: '100 1000',
@@ -71,7 +73,11 @@ export default async function RootLayout({
       <body
         className={`${dmSans.variable} ${newsreader.variable} ${jetbrainsMono.variable}`}
       >
+        <Suspense fallback={null}>
+          <RouteProgressBar />
+        </Suspense>
         {children}
+        <BrandToastViewport />
         <IntentPrefetch />
         <TelemetryTracker />
       </body>
