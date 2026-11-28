@@ -1,11 +1,5 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
-import {
-  COLORS,
-  EASE_CAMERA,
-  EASE_EDITORIAL,
-  lerp,
-  prog,
-} from '../tokens';
+import { COLORS, EASE_CAMERA, EASE_EDITORIAL, lerp, prog } from '../tokens';
 import {
   Curtain,
   RevealLine,
@@ -52,7 +46,12 @@ export function Act1Illusion() {
   return (
     <AbsoluteFill>
       {/* LAYER 1: Deep archival plum studio with Hasselblad silk macro plate */}
-      <TactileBackdrop kind="opening" t={t} duration={8.5} dim={0.18 + receiptsIn * 0.24}>
+      <TactileBackdrop
+        kind="opening"
+        t={t}
+        duration={8.5}
+        dim={0.18 + receiptsIn * 0.24}
+      >
         {/* Subtle top editorial index */}
         <div
           className="hc-kicker"
@@ -109,7 +108,9 @@ export function Act1Illusion() {
           >
             <span>Two candidates.</span>
             <span style={{ color: COLORS.onPlum, fontWeight: 560 }}>
-              {xray < 0.35 ? 'Identical final code.' : 'Completely different engineers.'}
+              {xray < 0.35
+                ? 'Identical final code.'
+                : 'Completely different engineers.'}
             </span>
           </div>
 
@@ -142,7 +143,10 @@ export function Act1Illusion() {
                   marginBottom: 24,
                 }}
               >
-                <span className="hc-kicker" style={{ fontSize: 13, color: COLORS.onPlumMuted }}>
+                <span
+                  className="hc-kicker"
+                  style={{ fontSize: 13, color: COLORS.onPlumMuted }}
+                >
                   CANDIDATE A
                 </span>
                 <span
@@ -195,7 +199,10 @@ export function Act1Illusion() {
                   <span style={{ color: COLORS.failDark, fontWeight: 600 }}>
                     00:41 total elapsed
                   </span>
-                  <span className="hc-mono" style={{ color: COLORS.onPlumFaint, fontSize: 13 }}>
+                  <span
+                    className="hc-mono"
+                    style={{ color: COLORS.onPlumFaint, fontSize: 13 }}
+                  >
                     0 iterations
                   </span>
                 </div>
@@ -222,7 +229,13 @@ export function Act1Illusion() {
                     }}
                   />
                 </div>
-                <div style={{ fontSize: 18, color: COLORS.onPlumMuted, lineHeight: 1.45 }}>
+                <div
+                  style={{
+                    fontSize: 18,
+                    color: COLORS.onPlumMuted,
+                    lineHeight: 1.45,
+                  }}
+                >
                   Single bulk paste at <span className="hc-mono">00:39</span>.
                   <br />
                   No exploration, no debugging, no verification trail.
@@ -313,7 +326,10 @@ export function Act1Illusion() {
                   <span style={{ color: COLORS.mint, fontWeight: 600 }}>
                     14:22 observable trajectory
                   </span>
-                  <span className="hc-mono" style={{ color: COLORS.onPlumMuted, fontSize: 13 }}>
+                  <span
+                    className="hc-mono"
+                    style={{ color: COLORS.onPlumMuted, fontSize: 13 }}
+                  >
                     6 verified events
                   </span>
                 </div>

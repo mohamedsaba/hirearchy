@@ -87,8 +87,10 @@ export function Act2Builder() {
           }}
         >
           Pick a production scenario, generate one with{' '}
-          <strong style={{ color: COLORS.ink, fontWeight: 620 }}>Advisory AI</strong>, or reuse
-          from your team library.
+          <strong style={{ color: COLORS.ink, fontWeight: 620 }}>
+            Advisory AI
+          </strong>
+          , or reuse from your team library.
         </div>
 
         {/* Dynamic live status proof on left */}
@@ -104,12 +106,44 @@ export function Act2Builder() {
             transform: `translateY(${(1 - togglesOn) * 14}px)`,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 17, color: COLORS.ink, fontWeight: 560 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: COLORS.pass }} />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 17,
+              color: COLORS.ink,
+              fontWeight: 560,
+            }}
+          >
+            <span
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: '50%',
+                background: COLORS.pass,
+              }}
+            />
             Isolated Docker execution active
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 17, color: COLORS.ink, fontWeight: 560 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: COLORS.mintDeep }} />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 17,
+              color: COLORS.ink,
+              fontWeight: 560,
+            }}
+          >
+            <span
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: '50%',
+                background: COLORS.mintDeep,
+              }}
+            />
             Workspace AI allowed &amp; transparently logged
           </div>
         </div>
@@ -143,8 +177,23 @@ export function Act2Builder() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
               <BrandWordmark size={22} dark />
-              <div style={{ display: 'flex', gap: 22, fontSize: 13.5, color: COLORS.onPlumMuted }}>
-                <span style={{ color: COLORS.onPlum, fontWeight: 600, borderBottom: `2px solid ${COLORS.mint}`, paddingBottom: 17, marginTop: 19 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 22,
+                  fontSize: 13.5,
+                  color: COLORS.onPlumMuted,
+                }}
+              >
+                <span
+                  style={{
+                    color: COLORS.onPlum,
+                    fontWeight: 600,
+                    borderBottom: `2px solid ${COLORS.mint}`,
+                    paddingBottom: 17,
+                    marginTop: 19,
+                  }}
+                >
                   Builder
                 </span>
                 <span>Candidates</span>
@@ -181,41 +230,103 @@ export function Act2Builder() {
             }}
           >
             {/* Stage Rail */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14,
+                paddingTop: 6,
+              }}
+            >
               {[
-                { n: '01', title: 'Problem', sub: 'Role & scenario', active: true },
-                { n: '02', title: 'Preview', sub: 'Repo & rubric', active: scenarioSelected > 0.5 },
-                { n: '03', title: 'Issue', sub: 'Assign & send', active: issuedState > 0.1 },
+                {
+                  n: '01',
+                  title: 'Problem',
+                  sub: 'Role & scenario',
+                  active: true,
+                },
+                {
+                  n: '02',
+                  title: 'Preview',
+                  sub: 'Repo & rubric',
+                  active: scenarioSelected > 0.5,
+                },
+                {
+                  n: '03',
+                  title: 'Issue',
+                  sub: 'Assign & send',
+                  active: issuedState > 0.1,
+                },
               ].map((step) => (
                 <div
                   key={step.n}
                   style={{
                     padding: '13px 15px',
                     borderRadius: 12,
-                    background: step.active ? COLORS.paperElevated : 'transparent',
-                    border: step.active ? `1px solid ${COLORS.border}` : '1px solid transparent',
+                    background: step.active
+                      ? COLORS.paperElevated
+                      : 'transparent',
+                    border: step.active
+                      ? `1px solid ${COLORS.border}`
+                      : '1px solid transparent',
                   }}
                 >
-                  <div className="hc-mono" style={{ fontSize: 11, color: step.active ? COLORS.mintDeep : COLORS.muted, fontWeight: 600 }}>
+                  <div
+                    className="hc-mono"
+                    style={{
+                      fontSize: 11,
+                      color: step.active ? COLORS.mintDeep : COLORS.muted,
+                      fontWeight: 600,
+                    }}
+                  >
                     STAGE {step.n}
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 640, color: COLORS.ink, marginTop: 2 }}>
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 640,
+                      color: COLORS.ink,
+                      marginTop: 2,
+                    }}
+                  >
                     {step.title}
                   </div>
-                  <div style={{ fontSize: 13, color: COLORS.muted }}>{step.sub}</div>
+                  <div style={{ fontSize: 13, color: COLORS.muted }}>
+                    {step.sub}
+                  </div>
                 </div>
               ))}
             </div>
 
             {/* Main Authoring Canvas */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-end',
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: 30, fontWeight: 650, letterSpacing: '-0.04em', color: COLORS.ink }}>
+                  <div
+                    style={{
+                      fontSize: 30,
+                      fontWeight: 650,
+                      letterSpacing: '-0.04em',
+                      color: COLORS.ink,
+                    }}
+                  >
                     Assessment Builder
                   </div>
-                  <div style={{ fontSize: 14.5, color: COLORS.muted, marginTop: 3 }}>
-                    Configure a bounded real-repository task with transparent tooling policy.
+                  <div
+                    style={{
+                      fontSize: 14.5,
+                      color: COLORS.muted,
+                      marginTop: 3,
+                    }}
+                  >
+                    Configure a bounded real-repository task with transparent
+                    tooling policy.
                   </div>
                 </div>
               </div>
@@ -256,7 +367,9 @@ export function Act2Builder() {
                           fontSize: 10.5,
                           padding: '2px 7px',
                           borderRadius: 999,
-                          background: isActive ? 'rgba(176,240,206,0.18)' : 'rgba(36,24,43,0.06)',
+                          background: isActive
+                            ? 'rgba(176,240,206,0.18)'
+                            : 'rgba(36,24,43,0.06)',
                           color: isActive ? COLORS.mint : COLORS.muted,
                         }}
                       >
@@ -284,11 +397,21 @@ export function Act2Builder() {
                   }}
                 >
                   <div>
-                    <div className="hc-mono" style={{ fontSize: 11, color: COLORS.mint, letterSpacing: '0.12em' }}>
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 11,
+                        color: COLORS.mint,
+                        letterSpacing: '0.12em',
+                      }}
+                    >
                       ADVISORY AI · ROLE-TAILORED REPO GENERATOR
                     </div>
-                    <div style={{ fontSize: 17, fontWeight: 560, marginTop: 4 }}>
-                      Senior Backend · Python · Concurrency &amp; Idempotency → 4 starter files + pytest suite
+                    <div
+                      style={{ fontSize: 17, fontWeight: 560, marginTop: 4 }}
+                    >
+                      Senior Backend · Python · Concurrency &amp; Idempotency →
+                      4 starter files + pytest suite
                     </div>
                   </div>
                   <Pill tone="darkMint">Multi-file repo</Pill>
@@ -300,36 +423,74 @@ export function Act2Builder() {
                 className="hc-card"
                 style={{
                   padding: '22px 24px',
-                  borderColor: scenarioSelected > 0.3 ? COLORS.mintDeep : COLORS.border,
+                  borderColor:
+                    scenarioSelected > 0.3 ? COLORS.mintDeep : COLORS.border,
                   boxShadow:
                     scenarioSelected > 0.3
                       ? '0 14px 36px rgba(47, 111, 84, 0.12), 0 0 0 1px rgba(47, 111, 84, 0.28)'
                       : undefined,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: 10,
+                  }}
+                >
                   <div>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                       <Pill tone="plum">{SCENARIO.role}</Pill>
                       <Pill tone="neutral">{SCENARIO.level}</Pill>
                       <Pill tone="mint">{SCENARIO.duration}</Pill>
                     </div>
-                    <div style={{ fontSize: 23, fontWeight: 660, letterSpacing: '-0.03em', color: COLORS.ink }}>
+                    <div
+                      style={{
+                        fontSize: 23,
+                        fontWeight: 660,
+                        letterSpacing: '-0.03em',
+                        color: COLORS.ink,
+                      }}
+                    >
                       {SCENARIO.title}
                     </div>
                   </div>
-                  <div className="hc-mono" style={{ fontSize: 12, color: COLORS.muted, textAlign: 'right' }}>
+                  <div
+                    className="hc-mono"
+                    style={{
+                      fontSize: 12,
+                      color: COLORS.muted,
+                      textAlign: 'right',
+                    }}
+                  >
                     4 files · pytest
                     <br />
                     src/webhook_handler.py
                   </div>
                 </div>
-                <div style={{ fontSize: 14.5, color: COLORS.inkSoft, lineHeight: 1.5 }}>
-                  Duplicate upstream webhook deliveries double-credit merchant balances, and delayed{' '}
-                  <span className="hc-mono" style={{ fontSize: 13, background: COLORS.paperSubtle, padding: '1px 5px', borderRadius: 4 }}>
+                <div
+                  style={{
+                    fontSize: 14.5,
+                    color: COLORS.inkSoft,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Duplicate upstream webhook deliveries double-credit merchant
+                  balances, and delayed{' '}
+                  <span
+                    className="hc-mono"
+                    style={{
+                      fontSize: 13,
+                      background: COLORS.paperSubtle,
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                    }}
+                  >
                     payment.authorized
                   </span>{' '}
-                  events regress settled payments. Fix deduplication and monotonic state ordering.
+                  events regress settled payments. Fix deduplication and
+                  monotonic state ordering.
                 </div>
               </div>
 
@@ -364,14 +525,28 @@ export function Act2Builder() {
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       borderColor: ctrl.active ? '#9fe5c2' : COLORS.border,
-                      background: ctrl.active ? '#f7fdf9' : COLORS.paperElevated,
+                      background: ctrl.active
+                        ? '#f7fdf9'
+                        : COLORS.paperElevated,
                     }}
                   >
                     <div style={{ paddingRight: 12 }}>
-                      <div style={{ fontSize: 15, fontWeight: 640, color: COLORS.ink }}>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 640,
+                          color: COLORS.ink,
+                        }}
+                      >
                         {ctrl.title}
                       </div>
-                      <div style={{ fontSize: 12.5, color: COLORS.muted, marginTop: 3 }}>
+                      <div
+                        style={{
+                          fontSize: 12.5,
+                          color: COLORS.muted,
+                          marginTop: 3,
+                        }}
+                      >
                         {ctrl.desc}
                       </div>
                     </div>
@@ -416,18 +591,46 @@ export function Act2Builder() {
               >
                 <div style={{ display: 'flex', gap: 28 }}>
                   <div>
-                    <div className="hc-mono" style={{ fontSize: 10.5, color: COLORS.muted, letterSpacing: '0.1em' }}>
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 10.5,
+                        color: COLORS.muted,
+                        letterSpacing: '0.1em',
+                      }}
+                    >
                       CANDIDATE
                     </div>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, color: COLORS.ink, marginTop: 2 }}>
+                    <div
+                      style={{
+                        fontSize: 14.5,
+                        fontWeight: 600,
+                        color: COLORS.ink,
+                        marginTop: 2,
+                      }}
+                    >
                       {SCENARIO.candidateEmail}
                     </div>
                   </div>
                   <div>
-                    <div className="hc-mono" style={{ fontSize: 10.5, color: COLORS.muted, letterSpacing: '0.1em' }}>
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 10.5,
+                        color: COLORS.muted,
+                        letterSpacing: '0.1em',
+                      }}
+                    >
                       ASSIGNED EVALUATOR
                     </div>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, color: COLORS.ink, marginTop: 2 }}>
+                    <div
+                      style={{
+                        fontSize: 14.5,
+                        fontWeight: 600,
+                        color: COLORS.ink,
+                        marginTop: 2,
+                      }}
+                    >
                       {SCENARIO.evaluatorName} · {SCENARIO.evaluatorRole}
                     </div>
                   </div>
@@ -437,7 +640,8 @@ export function Act2Builder() {
                   style={{
                     padding: '13px 24px',
                     borderRadius: 10,
-                    background: issuedState > 0.1 ? COLORS.mintDeep : COLORS.plum,
+                    background:
+                      issuedState > 0.1 ? COLORS.mintDeep : COLORS.plum,
                     color: COLORS.onPlum,
                     fontSize: 15,
                     fontWeight: 640,
@@ -447,7 +651,9 @@ export function Act2Builder() {
                     transform: `scale(${issueClick ? 0.96 : 1})`,
                   }}
                 >
-                  {issuedState > 0.1 ? '✓ Assessment Issued' : 'Issue Assessment →'}
+                  {issuedState > 0.1
+                    ? '✓ Assessment Issued'
+                    : 'Issue Assessment →'}
                 </div>
               </div>
             </div>

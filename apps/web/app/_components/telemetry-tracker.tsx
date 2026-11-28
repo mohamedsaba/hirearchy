@@ -42,11 +42,12 @@ function resolveActorType(
  * Zero-DOM global telemetry listener tracking normalized route views, marketing attribution,
  * theme/viewport distribution, and unhandled client runtime errors.
  */
-export function TelemetryTracker() {
+export function TelemetryTracker({ enabled = true }: { enabled?: boolean }) {
   const pathname = usePathname() ?? '/';
   const lastTrackedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     const attribution = captureClientAttribution();
     const normalized = normalizeRoutePath(pathname);
     if (lastTrackedPathRef.current === normalized) return;
@@ -73,9 +74,10 @@ export function TelemetryTracker() {
       },
       attribution,
     });
-  }, [pathname]);
+  }, [enabled, pathname]);
 
   useEffect(() => {
+    if (!enabled) return;
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         flushClientTelemetry();
@@ -128,7 +130,7 @@ export function TelemetryTracker() {
       window.removeEventListener('unhandledrejection', handleRejection);
       flushClientTelemetry();
     };
-  }, []);
+  }, [enabled]);
 
   return null;
 }

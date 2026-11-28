@@ -45,7 +45,12 @@ function ReelAct1Hook() {
 
   return (
     <AbsoluteFill>
-      <TactileBackdrop kind="vertical" t={t} duration={6.0} dim={0.22 + cardsIn * 0.22}>
+      <TactileBackdrop
+        kind="vertical"
+        t={t}
+        duration={6.0}
+        dim={0.22 + cardsIn * 0.22}
+      >
         <div
           style={{
             position: 'absolute',
@@ -55,15 +60,25 @@ function ReelAct1Hook() {
             opacity: 1 - paperTurn,
           }}
         >
-          <div className="hc-kicker" style={{ color: COLORS.mint, fontSize: 15, marginBottom: 20 }}>
+          <div
+            className="hc-kicker"
+            style={{ color: COLORS.mint, fontSize: 15, marginBottom: 20 }}
+          >
             HIREARCHY SOFTWARE
           </div>
-          <div className="hc-headline" style={{ fontSize: 74, color: COLORS.onPlum, marginBottom: 56 }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 74, color: COLORS.onPlum, marginBottom: 56 }}
+          >
             <RevealLine p={prog(t, 0.15, 0.8)}>
               {xray < 0.35 ? 'Same 100% score.' : 'Two very different'}
             </RevealLine>
             <RevealLine p={prog(t, 0.3, 0.95)}>
-              <span style={{ color: xray < 0.35 ? COLORS.onPlumMuted : COLORS.mint }}>
+              <span
+                style={{
+                  color: xray < 0.35 ? COLORS.onPlumMuted : COLORS.mint,
+                }}
+              >
                 {xray < 0.35 ? 'Identical final code.' : 'engineers.'}
               </span>
             </RevealLine>
@@ -81,11 +96,23 @@ function ReelAct1Hook() {
               transform: `translateY(${(1 - cardsIn) * 24}px)`,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="hc-kicker" style={{ fontSize: 14, color: COLORS.onPlumMuted }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span
+                className="hc-kicker"
+                style={{ fontSize: 14, color: COLORS.onPlumMuted }}
+              >
                 CANDIDATE A
               </span>
-              <span className="hc-tabular" style={{ fontSize: 56, fontWeight: 700, color: COLORS.onPlum }}>
+              <span
+                className="hc-tabular"
+                style={{ fontSize: 56, fontWeight: 700, color: COLORS.onPlum }}
+              >
                 100%
               </span>
             </div>
@@ -97,11 +124,33 @@ function ReelAct1Hook() {
                 opacity: xray,
               }}
             >
-              <div className="hc-mono" style={{ fontSize: 16, color: COLORS.failDark, fontWeight: 650 }}>
+              <div
+                className="hc-mono"
+                style={{
+                  fontSize: 16,
+                  color: COLORS.failDark,
+                  fontWeight: 650,
+                }}
+              >
                 00:41 elapsed · Single bulk paste · 0 iterations
               </div>
-              <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,138,128,0.18)', marginTop: 14, overflow: 'hidden' }}>
-                <div style={{ width: `${xray * 15}%`, height: '100%', background: COLORS.failDark, marginLeft: 'auto' }} />
+              <div
+                style={{
+                  height: 6,
+                  borderRadius: 999,
+                  background: 'rgba(255,138,128,0.18)',
+                  marginTop: 14,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${xray * 15}%`,
+                    height: '100%',
+                    background: COLORS.failDark,
+                    marginLeft: 'auto',
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -118,11 +167,23 @@ function ReelAct1Hook() {
               transform: `translateY(${(1 - prog(t, 0.5, 1.25)) * 24}px)`,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="hc-kicker" style={{ fontSize: 14, color: COLORS.mint }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span
+                className="hc-kicker"
+                style={{ fontSize: 14, color: COLORS.mint }}
+              >
                 CANDIDATE B
               </span>
-              <span className="hc-tabular" style={{ fontSize: 56, fontWeight: 700, color: COLORS.mint }}>
+              <span
+                className="hc-tabular"
+                style={{ fontSize: 56, fontWeight: 700, color: COLORS.mint }}
+              >
                 100%
               </span>
             </div>
@@ -134,13 +195,27 @@ function ReelAct1Hook() {
                 opacity: xray,
               }}
             >
-              <div className="hc-mono" style={{ fontSize: 16, color: COLORS.mint, fontWeight: 650, marginBottom: 14 }}>
+              <div
+                className="hc-mono"
+                style={{
+                  fontSize: 16,
+                  color: COLORS.mint,
+                  fontWeight: 650,
+                  marginBottom: 14,
+                }}
+              >
                 14:22 trajectory · 6 observable events
               </div>
-              <div style={{ fontSize: 20, color: COLORS.onPlum, lineHeight: 1.55 }}>
-                Read ledger → <span style={{ color: COLORS.failDark }}>2 tests failed</span> →{' '}
-                <span style={{ color: COLORS.purple }}>1 logged AI query</span> → fixed state guard →{' '}
-                <span style={{ color: COLORS.mint, fontWeight: 650 }}>4/4 passed</span>
+              <div
+                style={{ fontSize: 20, color: COLORS.onPlum, lineHeight: 1.55 }}
+              >
+                Read ledger →{' '}
+                <span style={{ color: COLORS.failDark }}>2 tests failed</span> →{' '}
+                <span style={{ color: COLORS.purple }}>1 logged AI query</span>{' '}
+                → fixed state guard →{' '}
+                <span style={{ color: COLORS.mint, fontWeight: 650 }}>
+                  4/4 passed
+                </span>
               </div>
             </div>
           </div>
@@ -160,11 +235,17 @@ function ReelAct1Hook() {
                 padding: '0 80px',
               }}
             >
-              <div className="hc-headline" style={{ fontSize: 94, color: COLORS.muted, marginBottom: 18 }}>
+              <div
+                className="hc-headline"
+                style={{ fontSize: 94, color: COLORS.muted, marginBottom: 18 }}
+              >
                 <RevealLine p={prog(t, 5.25, 5.95)}>The answer</RevealLine>
                 <RevealLine p={prog(t, 5.4, 6.05)}>is cheap.</RevealLine>
               </div>
-              <div className="hc-headline" style={{ fontSize: 102, color: COLORS.ink }}>
+              <div
+                className="hc-headline"
+                style={{ fontSize: 102, color: COLORS.ink }}
+              >
                 <RevealLine p={prog(t, 5.8, 6.55)}>The work is</RevealLine>
                 <RevealLine p={prog(t, 5.98, 6.72)}>
                   everything<span style={{ color: COLORS.mintDeep }}>.</span>
@@ -186,17 +267,26 @@ function ReelAct2Ide() {
   const enter = prog(t, 0, 0.55, EASE_CAMERA);
   const failShown = prog(t, 1.5, 2.0);
   const fixText = [...CODE_ADDED_DEDUPE, '', ...CODE_ADDED_GUARD].join('\n');
-  const typed = fixText.slice(0, Math.floor(prog(t, 2.8, 6.2, EASE_CAMERA) * fixText.length));
+  const typed = fixText.slice(
+    0,
+    Math.floor(prog(t, 2.8, 6.2, EASE_CAMERA) * fixText.length),
+  );
   const passShown = prog(t, 6.55, 7.05);
 
   return (
     <Curtain p={enter} from="bottom">
       <TactileBackdrop kind="plum" t={t} duration={9.5}>
         <div style={{ position: 'absolute', left: 68, right: 68, top: 118 }}>
-          <div className="hc-kicker" style={{ color: COLORS.mint, fontSize: 15, marginBottom: 16 }}>
+          <div
+            className="hc-kicker"
+            style={{ color: COLORS.mint, fontSize: 15, marginBottom: 16 }}
+          >
             01 / AUTHENTIC IDE · ZERO SPYWARE
           </div>
-          <div className="hc-headline" style={{ fontSize: 70, color: COLORS.onPlum, marginBottom: 26 }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 70, color: COLORS.onPlum, marginBottom: 26 }}
+          >
             Real repo. Real tests.
             <br />
             Neutral logged AI.
@@ -234,10 +324,16 @@ function ReelAct2Ide() {
                 alignItems: 'center',
               }}
             >
-              <span className="hc-mono" style={{ fontSize: 16, color: COLORS.mint, fontWeight: 600 }}>
+              <span
+                className="hc-mono"
+                style={{ fontSize: 16, color: COLORS.mint, fontWeight: 600 }}
+              >
                 src/webhook_handler.py
               </span>
-              <span className="hc-mono" style={{ fontSize: 14, color: COLORS.onPlumMuted }}>
+              <span
+                className="hc-mono"
+                style={{ fontSize: 14, color: COLORS.onPlumMuted }}
+              >
                 {passShown > 0.2 ? 'Saved v2 · 11:05' : '48:19 left'}
               </span>
             </div>
@@ -253,14 +349,21 @@ function ReelAct2Ide() {
               }}
             >
               <div style={{ color: COLORS.onPlumMuted, marginBottom: 10 }}>
-                <PythonLine text="def handle_webhook(ledger, event) -> str:" theme="dark" />
+                <PythonLine
+                  text="def handle_webhook(ledger, event) -> str:"
+                  theme="dark"
+                />
               </div>
               {typed.split('\n').map((line, i) => (
                 <div
                   key={i}
                   style={{
-                    background: line.trim() ? 'rgba(176, 240, 206, 0.09)' : 'transparent',
-                    borderLeft: line.trim() ? `3px solid ${COLORS.mint}` : '3px solid transparent',
+                    background: line.trim()
+                      ? 'rgba(176, 240, 206, 0.09)'
+                      : 'transparent',
+                    borderLeft: line.trim()
+                      ? `3px solid ${COLORS.mint}`
+                      : '3px solid transparent',
                     paddingLeft: 12,
                     whiteSpace: 'pre-wrap',
                   }}
@@ -281,8 +384,16 @@ function ReelAct2Ide() {
                 lineHeight: 1.65,
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                <span style={{ color: COLORS.mint, fontSize: 13 }}>DOCKER SANDBOX · PYTEST</span>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: 12,
+                }}
+              >
+                <span style={{ color: COLORS.mint, fontSize: 13 }}>
+                  DOCKER SANDBOX · PYTEST
+                </span>
                 <span
                   style={{
                     padding: '3px 10px',
@@ -303,11 +414,16 @@ function ReelAct2Ide() {
                           : COLORS.onPlumMuted,
                   }}
                 >
-                  {passShown > 0.2 ? '✓ 4 PASSED · 0.14s' : failShown > 0.2 ? '✕ 2 FAILED' : 'RUNNING'}
+                  {passShown > 0.2
+                    ? '✓ 4 PASSED · 0.14s'
+                    : failShown > 0.2
+                      ? '✕ 2 FAILED'
+                      : 'RUNNING'}
                 </span>
               </div>
               <div style={{ color: '#d7cbe0' }}>
-                <span style={{ color: COLORS.mint }}>$</span> pytest tests/test_webhooks.py
+                <span style={{ color: COLORS.mint }}>$</span> pytest
+                tests/test_webhooks.py
               </div>
               {passShown > 0.2 ? (
                 <div style={{ color: COLORS.passDark, marginTop: 8 }}>
@@ -318,7 +434,8 @@ function ReelAct2Ide() {
               ) : failShown > 0.2 ? (
                 <div style={{ color: COLORS.failDark, marginTop: 8 }}>
                   FAILED duplicate_delivery (10000 == 5000)
-                  <br />FAILED out_of_order_regression
+                  <br />
+                  FAILED out_of_order_regression
                 </div>
               ) : null}
             </div>
@@ -342,20 +459,48 @@ function ReelAct3ChronologyAdvisory() {
     <Curtain p={enter} from="right">
       <TactileBackdrop kind="paper" t={t} duration={7.0}>
         <div style={{ position: 'absolute', left: 68, right: 68, top: 106 }}>
-          <div className="hc-kicker" style={{ color: COLORS.mintDeep, fontSize: 15, marginBottom: 14 }}>
+          <div
+            className="hc-kicker"
+            style={{ color: COLORS.mintDeep, fontSize: 15, marginBottom: 14 }}
+          >
             02 / CHRONOLOGY &amp; WORKSPACE AI
           </div>
-          <div className="hc-headline" style={{ fontSize: 68, color: COLORS.ink, marginBottom: 34 }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 68, color: COLORS.ink, marginBottom: 34 }}
+          >
             Every step in context.
             <br />
             Synthesized cleanly.
           </div>
 
           {/* Compact Chronology Card */}
-          <div className="hc-card" style={{ padding: '24px 28px', marginBottom: 26 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 20, fontWeight: 680, color: COLORS.ink }}>Recorded Chronology</span>
-              <span className="hc-mono" style={{ fontSize: 14, color: COLORS.mintDeep, fontWeight: 650 }}>14m 22s</span>
+          <div
+            className="hc-card"
+            style={{ padding: '24px 28px', marginBottom: 26 }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{ fontSize: 20, fontWeight: 680, color: COLORS.ink }}
+              >
+                Recorded Chronology
+              </span>
+              <span
+                className="hc-mono"
+                style={{
+                  fontSize: 14,
+                  color: COLORS.mintDeep,
+                  fontWeight: 650,
+                }}
+              >
+                14m 22s
+              </span>
             </div>
             {CHRONOLOGY_EVENTS.slice(1).map((ev, i) => {
               const p = prog(t, 0.25 + i * 0.36, 0.7 + i * 0.36);
@@ -372,8 +517,22 @@ function ReelAct3ChronologyAdvisory() {
                     transform: `translateX(${(1 - p) * 20}px)`,
                   }}
                 >
-                  <div style={{ fontSize: 17, fontWeight: 600, color: COLORS.ink }}>{ev.title}</div>
-                  <span className="hc-mono" style={{ fontSize: 13.5, color: COLORS.mintDeep, background: '#edf8f2', padding: '4px 9px', borderRadius: 6, fontWeight: 650 }}>
+                  <div
+                    style={{ fontSize: 17, fontWeight: 600, color: COLORS.ink }}
+                  >
+                    {ev.title}
+                  </div>
+                  <span
+                    className="hc-mono"
+                    style={{
+                      fontSize: 13.5,
+                      color: COLORS.mintDeep,
+                      background: '#edf8f2',
+                      padding: '4px 9px',
+                      borderRadius: 6,
+                      fontWeight: 650,
+                    }}
+                  >
                     {ev.delta}
                   </span>
                 </div>
@@ -394,11 +553,27 @@ function ReelAct3ChronologyAdvisory() {
               gap: 18,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="hc-mono" style={{ fontSize: 13, color: COLORS.purple, letterSpacing: '0.12em' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span
+                className="hc-mono"
+                style={{
+                  fontSize: 13,
+                  color: COLORS.purple,
+                  letterSpacing: '0.12em',
+                }}
+              >
                 ADVISORY AI · CANDIDATE REVIEW
               </span>
-              <span className="hc-mono" style={{ fontSize: 12.5, color: COLORS.onPlumMuted }}>
+              <span
+                className="hc-mono"
+                style={{ fontSize: 12.5, color: COLORS.onPlumMuted }}
+              >
                 {KIMI_REVIEW.confidenceLabel}
               </span>
             </div>
@@ -425,16 +600,31 @@ function ReelAct3ChronologyAdvisory() {
                   letterSpacing: '0.09em',
                 }}
               >
-                <span style={{ width: 9, height: 9, borderRadius: '50%', background: COLORS.mint }} />
+                <span
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: '50%',
+                    background: COLORS.mint,
+                  }}
+                />
                 STRONG SIGNAL · ADVISORY ONLY
               </span>
             </div>
 
-            <div style={{ fontSize: 18.5, color: COLORS.onPlum, lineHeight: 1.48 }}>
+            <div
+              style={{ fontSize: 18.5, color: COLORS.onPlum, lineHeight: 1.48 }}
+            >
               {KIMI_REVIEW.rationale}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 14,
+              }}
+            >
               <div
                 style={{
                   padding: '14px 16px',
@@ -443,10 +633,20 @@ function ReelAct3ChronologyAdvisory() {
                   border: '1px solid rgba(176, 240, 206, 0.2)',
                 }}
               >
-                <div className="hc-mono" style={{ fontSize: 11.5, color: COLORS.mint, letterSpacing: '0.1em', marginBottom: 8 }}>
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 11.5,
+                    color: COLORS.mint,
+                    letterSpacing: '0.1em',
+                    marginBottom: 8,
+                  }}
+                >
                   OBSERVED STRENGTHS
                 </div>
-                <div style={{ fontSize: 15, color: '#ebe3f2', lineHeight: 1.42 }}>
+                <div
+                  style={{ fontSize: 15, color: '#ebe3f2', lineHeight: 1.42 }}
+                >
                   + {KIMI_REVIEW.strengths[0]}
                   <br />+ {KIMI_REVIEW.strengths[1]}
                 </div>
@@ -459,10 +659,20 @@ function ReelAct3ChronologyAdvisory() {
                   border: '1px solid rgba(255, 155, 136, 0.22)',
                 }}
               >
-                <div className="hc-mono" style={{ fontSize: 11.5, color: COLORS.coral, letterSpacing: '0.1em', marginBottom: 8 }}>
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 11.5,
+                    color: COLORS.coral,
+                    letterSpacing: '0.1em',
+                    marginBottom: 8,
+                  }}
+                >
                   VERIFICATION GAPS
                 </div>
-                <div style={{ fontSize: 15, color: '#ebe3f2', lineHeight: 1.42 }}>
+                <div
+                  style={{ fontSize: 15, color: '#ebe3f2', lineHeight: 1.42 }}
+                >
                   ! {KIMI_REVIEW.weaknesses[0]}
                 </div>
               </div>
@@ -486,25 +696,52 @@ function ReelAct4HumanAndHandoff() {
     <Curtain p={enter} from="left">
       <TactileBackdrop kind="lilac" t={t} duration={5.2}>
         <div style={{ position: 'absolute', left: 68, right: 68, top: 126 }}>
-          <div className="hc-kicker" style={{ color: COLORS.mintDeep, fontSize: 15, marginBottom: 14 }}>
+          <div
+            className="hc-kicker"
+            style={{ color: COLORS.mintDeep, fontSize: 15, marginBottom: 14 }}
+          >
             03 / TEAM PEER REVIEW &amp; HUMAN VERDICT
           </div>
-          <div className="hc-headline" style={{ fontSize: 72, color: COLORS.ink, marginBottom: 42 }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 72, color: COLORS.ink, marginBottom: 42 }}
+          >
             AI synthesizes.
             <br />
             People decide.
           </div>
 
           {/* Peer Review Card */}
-          <div className="hc-card" style={{ padding: '30px 32px', marginBottom: 28, opacity: prog(t, 0.22, 0.8) }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <span style={{ fontSize: 19, fontWeight: 680, color: COLORS.ink }}>
+          <div
+            className="hc-card"
+            style={{
+              padding: '30px 32px',
+              marginBottom: 28,
+              opacity: prog(t, 0.22, 0.8),
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{ fontSize: 19, fontWeight: 680, color: COLORS.ink }}
+              >
                 {SCENARIO.peerName} · {SCENARIO.peerRole}
               </span>
-              <Pill tone="pass" style={{ fontWeight: 700 }}>✓ Approved · +1</Pill>
+              <Pill tone="pass" style={{ fontWeight: 700 }}>
+                ✓ Approved · +1
+              </Pill>
             </div>
-            <div style={{ fontSize: 19, color: COLORS.inkSoft, lineHeight: 1.5 }}>
-              “Idempotency key &amp; monotonic rank guard are clean. Let&apos;s probe Postgres row locking in round 2.”
+            <div
+              style={{ fontSize: 19, color: COLORS.inkSoft, lineHeight: 1.5 }}
+            >
+              “Idempotency key &amp; monotonic rank guard are clean. Let&apos;s
+              probe Postgres row locking in round 2.”
             </div>
           </div>
 
@@ -519,14 +756,38 @@ function ReelAct4HumanAndHandoff() {
               transform: `translateY(${(1 - prog(t, 1.0, 1.6)) * 26}px)`,
             }}
           >
-            <div className="hc-mono" style={{ fontSize: 13, color: COLORS.mintDeep, fontWeight: 650, marginBottom: 12 }}>
+            <div
+              className="hc-mono"
+              style={{
+                fontSize: 13,
+                color: COLORS.mintDeep,
+                fontWeight: 650,
+                marginBottom: 12,
+              }}
+            >
               HUMAN REVIEW PACKET · HANDOFF READY
             </div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.ink, marginBottom: 10 }}>
+            <div
+              style={{
+                fontSize: 28,
+                fontWeight: 700,
+                color: COLORS.ink,
+                marginBottom: 10,
+              }}
+            >
               Advance → Managerial Interview
             </div>
-            <div style={{ fontSize: 18, color: COLORS.inkSoft, lineHeight: 1.5, marginBottom: 26 }}>
-              Transparent feedback published to {SCENARIO.candidateName}&apos;s portal ({SCENARIO.candidateCode}). Complete fit dossier &amp; round-2 probes handed to {SCENARIO.managerName}.
+            <div
+              style={{
+                fontSize: 18,
+                color: COLORS.inkSoft,
+                lineHeight: 1.5,
+                marginBottom: 26,
+              }}
+            >
+              Transparent feedback published to {SCENARIO.candidateName}&apos;s
+              portal ({SCENARIO.candidateCode}). Complete fit dossier &amp;
+              round-2 probes handed to {SCENARIO.managerName}.
             </div>
             <div
               style={{
@@ -542,7 +803,12 @@ function ReelAct4HumanAndHandoff() {
               }}
             >
               <span>● Finalized by {SCENARIO.evaluatorName}</span>
-              <span className="hc-mono" style={{ fontSize: 13, color: COLORS.mint }}>IMMUTABLE</span>
+              <span
+                className="hc-mono"
+                style={{ fontSize: 13, color: COLORS.mint }}
+              >
+                IMMUTABLE
+              </span>
             </div>
           </div>
         </div>
@@ -563,12 +829,18 @@ function ReelAct5Finale() {
 
   return (
     <Curtain p={enter} from="top">
-      <TactileBackdrop kind="vertical" t={t} duration={6.5} dim={0.10}>
+      <TactileBackdrop kind="vertical" t={t} duration={6.5} dim={0.1}>
         <div style={{ position: 'absolute', left: 76, right: 76, top: 240 }}>
-          <div className="hc-headline" style={{ fontSize: 96, color: COLORS.onPlum }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 96, color: COLORS.onPlum }}
+          >
             <RevealLine p={mani1}>Evidence informs.</RevealLine>
           </div>
-          <div className="hc-headline" style={{ fontSize: 100, color: COLORS.mint, marginTop: 6 }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 100, color: COLORS.mint, marginTop: 6 }}
+          >
             <RevealLine p={mani2}>People decide.</RevealLine>
           </div>
 
@@ -580,7 +852,14 @@ function ReelAct5Finale() {
             }}
           >
             <BrandWordmark size={62} dark />
-            <div style={{ fontSize: 34, color: COLORS.onPlumMuted, marginTop: 22, letterSpacing: '-0.03em' }}>
+            <div
+              style={{
+                fontSize: 34,
+                color: COLORS.onPlumMuted,
+                marginTop: 22,
+                letterSpacing: '-0.03em',
+              }}
+            >
               Real work. In context.
             </div>
             <div
@@ -600,7 +879,10 @@ function ReelAct5Finale() {
               <span>Request Early Access</span>
               <span>↗</span>
             </div>
-            <div className="hc-mono" style={{ fontSize: 20, color: COLORS.onPlumMuted, marginTop: 22 }}>
+            <div
+              className="hc-mono"
+              style={{ fontSize: 20, color: COLORS.onPlumMuted, marginTop: 22 }}
+            >
               hirearchy.io/products/software
             </div>
           </div>
@@ -619,16 +901,36 @@ export function SocialReel9x16() {
       <Sequence from={f(0)} durationInFrames={f(8.0)} name="Reel Hook">
         <ReelAct1Hook />
       </Sequence>
-      <Sequence from={f(7.5)} durationInFrames={f(9.6)} premountFor={fps} name="Reel IDE">
+      <Sequence
+        from={f(7.5)}
+        durationInFrames={f(9.6)}
+        premountFor={fps}
+        name="Reel IDE"
+      >
         <ReelAct2Ide />
       </Sequence>
-      <Sequence from={f(16.5)} durationInFrames={f(7.1)} premountFor={fps} name="Reel Chronology & Advisory AI">
+      <Sequence
+        from={f(16.5)}
+        durationInFrames={f(7.1)}
+        premountFor={fps}
+        name="Reel Chronology & Advisory AI"
+      >
         <ReelAct3ChronologyAdvisory />
       </Sequence>
-      <Sequence from={f(23.0)} durationInFrames={f(5.3)} premountFor={fps} name="Reel Human Verdict">
+      <Sequence
+        from={f(23.0)}
+        durationInFrames={f(5.3)}
+        premountFor={fps}
+        name="Reel Human Verdict"
+      >
         <ReelAct4HumanAndHandoff />
       </Sequence>
-      <Sequence from={f(27.7)} durationInFrames={f(6.3)} premountFor={fps} name="Reel Finale">
+      <Sequence
+        from={f(27.7)}
+        durationInFrames={f(6.3)}
+        premountFor={fps}
+        name="Reel Finale"
+      >
         <ReelAct5Finale />
       </Sequence>
       <Audio src={staticFile('audio/reel-9x16.wav')} premountFor={fps} />

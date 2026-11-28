@@ -55,7 +55,10 @@ export function Act3Ide() {
   const totalChars = dedupeText.length + guardText.length;
   const typedCount = Math.floor(prog(t, 8.75, 12.05, EASE_CAMERA) * totalChars);
 
-  const typedDedupe = dedupeText.slice(0, Math.min(typedCount, dedupeText.length));
+  const typedDedupe = dedupeText.slice(
+    0,
+    Math.min(typedCount, dedupeText.length),
+  );
   const typedGuard =
     typedCount > dedupeText.length
       ? guardText.slice(0, typedCount - dedupeText.length)
@@ -73,7 +76,12 @@ export function Act3Ide() {
   const exitThread = prog(t, 16.55, 17.5, EASE_CAMERA);
 
   // Build visible code lines dynamically
-  const editorLines: Array<{ num: number; text: string; added?: boolean; removed?: boolean }> = [];
+  const editorLines: Array<{
+    num: number;
+    text: string;
+    added?: boolean;
+    removed?: boolean;
+  }> = [];
   let ln = 108;
   for (const h of CODE_HEADER_LINES) {
     editorLines.push({ num: ln++, text: h.text });
@@ -120,10 +128,16 @@ export function Act3Ide() {
           }}
         >
           <div>
-            <div className="hc-kicker" style={{ color: COLORS.mint, fontSize: 14, marginBottom: 8 }}>
+            <div
+              className="hc-kicker"
+              style={{ color: COLORS.mint, fontSize: 14, marginBottom: 8 }}
+            >
               02 / CANDIDATE WORKSPACE · ZERO SPYWARE
             </div>
-            <div className="hc-headline" style={{ fontSize: 48, color: COLORS.onPlum }}>
+            <div
+              className="hc-headline"
+              style={{ fontSize: 48, color: COLORS.onPlum }}
+            >
               A real repository. Authentic tools.
             </div>
           </div>
@@ -263,7 +277,9 @@ export function Act3Ide() {
                     padding: '7px 10px',
                     borderRadius: 8,
                     whiteSpace: 'pre',
-                    background: item.active ? 'rgba(176, 240, 206, 0.14)' : 'transparent',
+                    background: item.active
+                      ? 'rgba(176, 240, 206, 0.14)'
+                      : 'transparent',
                     color: item.active
                       ? COLORS.mint
                       : item.folder
@@ -283,7 +299,15 @@ export function Act3Ide() {
                   borderTop: `1px solid ${COLORS.plumLine}`,
                 }}
               >
-                <div className="hc-mono" style={{ fontSize: 11, color: COLORS.onPlumFaint, letterSpacing: '0.12em', marginBottom: 10 }}>
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 11,
+                    color: COLORS.onPlumFaint,
+                    letterSpacing: '0.12em',
+                    marginBottom: 10,
+                  }}
+                >
                   ACCEPTANCE CRITERIA
                 </div>
                 {[
@@ -310,7 +334,13 @@ export function Act3Ide() {
             </div>
 
             {/* Center Editor + Bottom Docker Sandbox Terminal */}
-            <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative',
+              }}
+            >
               {/* Editor Tab Bar */}
               <div
                 style={{
@@ -324,7 +354,12 @@ export function Act3Ide() {
                 }}
               >
                 <div style={{ display: 'flex', gap: 4, height: '100%' }}>
-                  {['models.py', 'ledger.py', 'webhook_handler.py', 'test_webhooks.py'].map((tab) => {
+                  {[
+                    'models.py',
+                    'ledger.py',
+                    'webhook_handler.py',
+                    'test_webhooks.py',
+                  ].map((tab) => {
                     const active = tab === 'webhook_handler.py';
                     return (
                       <div
@@ -336,7 +371,9 @@ export function Act3Ide() {
                           display: 'flex',
                           alignItems: 'center',
                           color: active ? COLORS.onPlum : COLORS.onPlumFaint,
-                          borderBottom: active ? `2px solid ${COLORS.mint}` : '2px solid transparent',
+                          borderBottom: active
+                            ? `2px solid ${COLORS.mint}`
+                            : '2px solid transparent',
                           background: active ? '#170e20' : 'transparent',
                         }}
                       >
@@ -353,7 +390,9 @@ export function Act3Ide() {
                       color: savedV2 > 0.2 ? COLORS.mint : COLORS.onPlumFaint,
                     }}
                   >
-                    {savedV2 > 0.2 ? '● Saved v2 · 11:05' : '● Clean checkpoint v1'}
+                    {savedV2 > 0.2
+                      ? '● Saved v2 · 11:05'
+                      : '● Clean checkpoint v1'}
                   </span>
                 </div>
               </div>
@@ -375,7 +414,8 @@ export function Act3Ide() {
                     showTypedBlock &&
                     typedCount < totalChars &&
                     line.added &&
-                    (i === editorLines.length - 1 || !editorLines[i + 1]?.added);
+                    (i === editorLines.length - 1 ||
+                      !editorLines[i + 1]?.added);
                   return (
                     <div
                       key={`${line.num}-${i}`}
@@ -443,8 +483,17 @@ export function Act3Ide() {
                     marginBottom: 12,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, color: COLORS.mint, fontWeight: 600, letterSpacing: '0.1em' }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: COLORS.mint,
+                        fontWeight: 600,
+                        letterSpacing: '0.1em',
+                      }}
+                    >
                       TERMINAL · DOCKER SANDBOX
                     </span>
                     <span
@@ -487,39 +536,57 @@ export function Act3Ide() {
                   </span>
                 </div>
 
-                <div style={{ fontSize: 13.5, lineHeight: 1.65, color: '#d7cbe0' }}>
+                <div
+                  style={{ fontSize: 13.5, lineHeight: 1.65, color: '#d7cbe0' }}
+                >
                   <div>
-                    <span style={{ color: COLORS.mint }}>$</span> pytest tests/test_webhooks.py -q
+                    <span style={{ color: COLORS.mint }}>$</span> pytest
+                    tests/test_webhooks.py -q
                   </div>
                   {secondPass > 0.2 ? (
                     <>
                       <div style={{ color: COLORS.passDark }}>
-                        ✓ test_duplicate_delivery_is_idempotent ........................ PASSED
+                        ✓ test_duplicate_delivery_is_idempotent
+                        ........................ PASSED
                       </div>
                       <div style={{ color: COLORS.passDark }}>
-                        ✓ test_out_of_order_authorized_after_settled ................... PASSED
+                        ✓ test_out_of_order_authorized_after_settled
+                        ................... PASSED
                       </div>
                       <div style={{ color: COLORS.passDark }}>
-                        ✓ test_refund_after_settled_updates_balance .................... PASSED
+                        ✓ test_refund_after_settled_updates_balance
+                        .................... PASSED
                       </div>
-                      <div style={{ color: COLORS.mint, fontWeight: 650, marginTop: 4 }}>
+                      <div
+                        style={{
+                          color: COLORS.mint,
+                          fontWeight: 650,
+                          marginTop: 4,
+                        }}
+                      >
                         4 passed in 0.14s · Recorded to session chronology (#5)
                       </div>
                     </>
                   ) : firstFail > 0.2 ? (
                     <>
                       <div style={{ color: COLORS.failDark }}>
-                        FAILED tests/test_webhooks.py::test_duplicate_delivery_is_idempotent — AssertionError: 10000 == 5000
+                        FAILED
+                        tests/test_webhooks.py::test_duplicate_delivery_is_idempotent
+                        — AssertionError: 10000 == 5000
                       </div>
                       <div style={{ color: COLORS.failDark }}>
-                        FAILED tests/test_webhooks.py::test_out_of_order_authorized_after_settled — status regressed to &apos;authorized&apos;
+                        FAILED
+                        tests/test_webhooks.py::test_out_of_order_authorized_after_settled
+                        — status regressed to &apos;authorized&apos;
                       </div>
                       <div style={{ color: COLORS.onPlumFaint }}>
                         2 failed, 1 passed in 0.11s · Exit code 1
                       </div>
                     </>
                   ) : (
-                    <div style={{ color: COLORS.onPlumFaint }}>Running isolated test suite…</div>
+                    <div style={{ color: COLORS.onPlumFaint }}>
+                      Running isolated test suite…
+                    </div>
                   )}
                 </div>
               </div>
@@ -544,8 +611,20 @@ export function Act3Ide() {
                     zIndex: 15,
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: 16, fontWeight: 650, color: COLORS.onPlum }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 650,
+                        color: COLORS.onPlum,
+                      }}
+                    >
                       Workspace AI Assistant
                     </div>
                     <span
@@ -563,8 +642,15 @@ export function Act3Ide() {
                     </span>
                   </div>
 
-                  <div style={{ fontSize: 12.5, color: COLORS.onPlumFaint, lineHeight: 1.45 }}>
-                    AI prompts are recorded neutrally in chronology — never penalized, never hidden.
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: COLORS.onPlumFaint,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    AI prompts are recorded neutrally in chronology — never
+                    penalized, never hidden.
                   </div>
 
                   {/* Candidate Prompt */}
@@ -579,11 +665,20 @@ export function Act3Ide() {
                       lineHeight: 1.5,
                     }}
                   >
-                    <div className="hc-mono" style={{ fontSize: 10.5, color: COLORS.mint, marginBottom: 6 }}>
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 10.5,
+                        color: COLORS.mint,
+                        marginBottom: 6,
+                      }}
+                    >
                       ELENA VANCE · +06:48
                     </div>
-                    Should an out-of-order <span className="hc-mono">payment.authorized</span> after{' '}
-                    <span className="hc-mono">settled</span> return current status silently or raise ValueError?
+                    Should an out-of-order{' '}
+                    <span className="hc-mono">payment.authorized</span> after{' '}
+                    <span className="hc-mono">settled</span> return current
+                    status silently or raise ValueError?
                   </div>
 
                   {/* Kimi Reply */}
@@ -600,10 +695,19 @@ export function Act3Ide() {
                       transform: `translateY(${(1 - aiReply) * 10}px)`,
                     }}
                   >
-                    <div className="hc-mono" style={{ fontSize: 10.5, color: COLORS.purple, marginBottom: 6 }}>
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 10.5,
+                        color: COLORS.purple,
+                        marginBottom: 6,
+                      }}
+                    >
                       WORKSPACE AI · RECORDED TURN #1
                     </div>
-                    For idempotent webhook processors, return the current monotonic status without mutating ledger balances—raising triggers upstream retry storms. Guard with{' '}
+                    For idempotent webhook processors, return the current
+                    monotonic status without mutating ledger balances—raising
+                    triggers upstream retry storms. Guard with{' '}
                     <span className="hc-mono" style={{ color: COLORS.mint }}>
                       STATUS_RANK[target] &lt;= STATUS_RANK[payment.status]
                     </span>
@@ -630,8 +734,12 @@ export function Act3Ide() {
             }}
           >
             <div style={{ display: 'flex', gap: 20 }}>
-              <span style={{ color: COLORS.mint }}>● Docker Execution: Active</span>
-              <span style={{ color: COLORS.purple }}>● Workspace AI: Logged</span>
+              <span style={{ color: COLORS.mint }}>
+                ● Docker Execution: Active
+              </span>
+              <span style={{ color: COLORS.purple }}>
+                ● Workspace AI: Logged
+              </span>
               <span>● Chronology Recording</span>
             </div>
             <span>src/webhook_handler.py · UTF-8 · Python 3.12</span>
@@ -663,10 +771,25 @@ export function Act3Ide() {
             borderRadius: 14,
           }}
         >
-          <div className="hc-mono" style={{ fontSize: 12.5, color: COLORS.mint, marginBottom: 6, letterSpacing: '0.1em' }}>
+          <div
+            className="hc-mono"
+            style={{
+              fontSize: 12.5,
+              color: COLORS.mint,
+              marginBottom: 6,
+              letterSpacing: '0.1em',
+            }}
+          >
             src/webhook_handler.py · CHECKPOINT v2
           </div>
-          <div style={{ fontSize: 22, fontWeight: 560, color: COLORS.onPlum, lineHeight: 1.35 }}>
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 560,
+              color: COLORS.onPlum,
+              lineHeight: 1.35,
+            }}
+          >
             Deduplicate delivery IDs. Enforce forward-only state transitions.
           </div>
         </div>

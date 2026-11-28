@@ -44,15 +44,60 @@ export function Act4EvidencePeer() {
   const peerPayoff = prog(pt, 4.65, 5.5);
 
   const diffRows = [
-    { o: '112', n: '112', type: 'ctx', code: 'def handle_webhook(ledger: MerchantLedger, event: WebhookEvent) -> str:' },
-    { o: '   ', n: '113', type: 'add', code: '    delivery_id = event["delivery_id"]' },
-    { o: '   ', n: '114', type: 'add', code: '    if delivery_id in ledger.processed_deliveries:' },
-    { o: '   ', n: '115', type: 'add', code: '        existing = ledger.payments.get(event["payment_id"])' },
-    { o: '   ', n: '116', type: 'add', code: '        return existing.status if existing else "pending"' },
-    { o: '117', n: '121', type: 'ctx', code: '    target = EVENT_TO_STATUS.get(event["event_type"])' },
-    { o: '118', n: '   ', type: 'del', code: '    # BUG: does not deduplicate delivery_id or guard transitions' },
-    { o: '   ', n: '122', type: 'add', code: '    ledger.processed_deliveries.add(delivery_id)' },
-    { o: '   ', n: '123', type: 'add', code: '    if STATUS_RANK[target] <= STATUS_RANK[payment.status]:' },
+    {
+      o: '112',
+      n: '112',
+      type: 'ctx',
+      code: 'def handle_webhook(ledger: MerchantLedger, event: WebhookEvent) -> str:',
+    },
+    {
+      o: '   ',
+      n: '113',
+      type: 'add',
+      code: '    delivery_id = event["delivery_id"]',
+    },
+    {
+      o: '   ',
+      n: '114',
+      type: 'add',
+      code: '    if delivery_id in ledger.processed_deliveries:',
+    },
+    {
+      o: '   ',
+      n: '115',
+      type: 'add',
+      code: '        existing = ledger.payments.get(event["payment_id"])',
+    },
+    {
+      o: '   ',
+      n: '116',
+      type: 'add',
+      code: '        return existing.status if existing else "pending"',
+    },
+    {
+      o: '117',
+      n: '121',
+      type: 'ctx',
+      code: '    target = EVENT_TO_STATUS.get(event["event_type"])',
+    },
+    {
+      o: '118',
+      n: '   ',
+      type: 'del',
+      code: '    # BUG: does not deduplicate delivery_id or guard transitions',
+    },
+    {
+      o: '   ',
+      n: '122',
+      type: 'add',
+      code: '    ledger.processed_deliveries.add(delivery_id)',
+    },
+    {
+      o: '   ',
+      n: '123',
+      type: 'add',
+      code: '    if STATUS_RANK[target] <= STATUS_RANK[payment.status]:',
+    },
     { o: '   ', n: '124', type: 'add', code: '        return payment.status' },
   ];
 
@@ -81,7 +126,9 @@ export function Act4EvidencePeer() {
               opacity: prog(t, 0.55, 1.15),
             }}
           >
-            Every test run, neutral AI query, save checkpoint, and <strong style={{ color: COLORS.ink }}>timing delta</strong> — anchored to source diffs.
+            Every test run, neutral AI query, save checkpoint, and{' '}
+            <strong style={{ color: COLORS.ink }}>timing delta</strong> —
+            anchored to source diffs.
           </div>
 
           {/* TWO-COLUMN EVIDENCE WORKBENCH */}
@@ -117,15 +164,28 @@ export function Act4EvidencePeer() {
                   borderBottom: `1px solid ${COLORS.border}`,
                 }}
               >
-                <div style={{ fontSize: 20, fontWeight: 660, color: COLORS.ink }}>
+                <div
+                  style={{ fontSize: 20, fontWeight: 660, color: COLORS.ink }}
+                >
                   Session Chronology
                 </div>
-                <span className="hc-mono" style={{ fontSize: 12.5, color: COLORS.muted }}>
+                <span
+                  className="hc-mono"
+                  style={{ fontSize: 12.5, color: COLORS.muted }}
+                >
                   14m 22s · 6 events
                 </span>
               </div>
 
-              <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div
+                style={{
+                  position: 'relative',
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
                 {/* Vertical Spine Rail */}
                 <div
                   style={{
@@ -147,7 +207,9 @@ export function Act4EvidencePeer() {
                       ? COLORS.fail
                       : ev.kind === 'ai'
                         ? '#7e22ce'
-                        : ev.kind === 'pass' || ev.kind === 'save' || ev.kind === 'submit'
+                        : ev.kind === 'pass' ||
+                            ev.kind === 'save' ||
+                            ev.kind === 'submit'
                           ? COLORS.mintDeep
                           : COLORS.muted;
                   return (
@@ -160,7 +222,9 @@ export function Act4EvidencePeer() {
                         padding: '10px 14px 10px 6px',
                         borderRadius: 11,
                         background: isSelected ? '#edfbf3' : 'transparent',
-                        border: isSelected ? '1px solid #9fe5c2' : '1px solid transparent',
+                        border: isSelected
+                          ? '1px solid #9fe5c2'
+                          : '1px solid transparent',
                         opacity: pEv,
                         transform: `translate3d(${(1 - pEv) * 18}px, 0, 0)`,
                       }}
@@ -171,23 +235,40 @@ export function Act4EvidencePeer() {
                           height: 14,
                           borderRadius: '50%',
                           marginTop: 5,
-                          background: isSelected ? COLORS.mintDeep : COLORS.paperElevated,
+                          background: isSelected
+                            ? COLORS.mintDeep
+                            : COLORS.paperElevated,
                           border: `2.5px solid ${dotCol}`,
                           flexShrink: 0,
                           zIndex: 2,
                         }}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-                          <span style={{ fontSize: 15, fontWeight: 650, color: COLORS.ink }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'baseline',
+                            gap: 10,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 15,
+                              fontWeight: 650,
+                              color: COLORS.ink,
+                            }}
+                          >
                             {ev.title}
                           </span>
                           <span
                             className="hc-mono"
                             style={{
                               fontSize: 11.5,
-                              color: ev.seq > 1 ? COLORS.mintDeep : COLORS.muted,
-                              background: ev.seq > 1 ? '#eef8f2' : COLORS.paperSubtle,
+                              color:
+                                ev.seq > 1 ? COLORS.mintDeep : COLORS.muted,
+                              background:
+                                ev.seq > 1 ? '#eef8f2' : COLORS.paperSubtle,
                               padding: '2px 7px',
                               borderRadius: 6,
                               flexShrink: 0,
@@ -197,7 +278,13 @@ export function Act4EvidencePeer() {
                             +{ev.offset} · {ev.delta}
                           </span>
                         </div>
-                        <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 3 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: COLORS.muted,
+                            marginTop: 3,
+                          }}
+                        >
                           {ev.detail}
                         </div>
                       </div>
@@ -217,7 +304,15 @@ export function Act4EvidencePeer() {
                 transform: `translate3d(${(1 - diffIn) * 32}px, 0, 0)`,
               }}
             >
-              <div className="hc-card" style={{ overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div
+                className="hc-card"
+                style={{
+                  overflow: 'hidden',
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
                 {/* Diff Header */}
                 <div
                   style={{
@@ -230,10 +325,25 @@ export function Act4EvidencePeer() {
                   }}
                 >
                   <div>
-                    <div className="hc-mono" style={{ fontSize: 11, color: COLORS.muted, letterSpacing: '0.1em' }}>
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 11,
+                        color: COLORS.muted,
+                        letterSpacing: '0.1em',
+                      }}
+                    >
                       SUBMITTED DIFF · REVISION v2
                     </div>
-                    <div className="hc-mono" style={{ fontSize: 16, fontWeight: 650, color: COLORS.ink, marginTop: 2 }}>
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 650,
+                        color: COLORS.ink,
+                        marginTop: 2,
+                      }}
+                    >
                       {SCENARIO.primaryFile}
                     </div>
                   </div>
@@ -276,16 +386,41 @@ export function Act4EvidencePeer() {
                             : '4px solid transparent',
                         }}
                       >
-                        <span style={{ width: 42, color: '#9c8fa3', fontSize: 12.5 }}>{row.o}</span>
-                        <span style={{ width: 42, color: '#9c8fa3', fontSize: 12.5 }}>{row.n}</span>
+                        <span
+                          style={{
+                            width: 42,
+                            color: '#9c8fa3',
+                            fontSize: 12.5,
+                          }}
+                        >
+                          {row.o}
+                        </span>
+                        <span
+                          style={{
+                            width: 42,
+                            color: '#9c8fa3',
+                            fontSize: 12.5,
+                          }}
+                        >
+                          {row.n}
+                        </span>
                         <span
                           style={{
                             width: 20,
                             fontWeight: 700,
-                            color: row.type === 'add' ? COLORS.pass : row.type === 'del' ? COLORS.fail : '#9c8fa3',
+                            color:
+                              row.type === 'add'
+                                ? COLORS.pass
+                                : row.type === 'del'
+                                  ? COLORS.fail
+                                  : '#9c8fa3',
                           }}
                         >
-                          {row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' '}
+                          {row.type === 'add'
+                            ? '+'
+                            : row.type === 'del'
+                              ? '−'
+                              : ' '}
                         </span>
                         <span style={{ whiteSpace: 'pre' }}>
                           <PythonLine text={row.code} theme="light" />
@@ -308,17 +443,44 @@ export function Act4EvidencePeer() {
                   transform: `translateY(${(1 - noteIn) * 24}px)`,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}
+                >
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+                  >
                     <Pill tone="plum">Anchored Observation</Pill>
-                    <span className="hc-mono" style={{ fontSize: 12.5, color: COLORS.mintDeep, fontWeight: 600 }}>
+                    <span
+                      className="hc-mono"
+                      style={{
+                        fontSize: 12.5,
+                        color: COLORS.mintDeep,
+                        fontWeight: 600,
+                      }}
+                    >
                       src/webhook_handler.py · Lines 122–124 · sha256:8f41c2…
                     </span>
                   </div>
-                  <span style={{ fontSize: 13, color: COLORS.muted }}>{SCENARIO.evaluatorName}</span>
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>
+                    {SCENARIO.evaluatorName}
+                  </span>
                 </div>
-                <div style={{ fontSize: 18, color: COLORS.ink, fontWeight: 540, lineHeight: 1.45 }}>
-                  “Clean monotonic rank check. Let&apos;s probe in round 2 how they&apos;d enforce this atomically under concurrent Postgres workers.”
+                <div
+                  style={{
+                    fontSize: 18,
+                    color: COLORS.ink,
+                    fontWeight: 540,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  “Clean monotonic rank check. Let&apos;s probe in round 2 how
+                  they&apos;d enforce this atomically under concurrent Postgres
+                  workers.”
                 </div>
               </div>
             </div>
@@ -374,7 +536,8 @@ export function Act4EvidencePeer() {
                   opacity: prog(pt, 0.5, 1.05),
                 }}
               >
-                Request a GitHub-PR-style second opinion from a Staff Engineer, CTO, or Recruiter — anchored to the exact same evidence.
+                Request a GitHub-PR-style second opinion from a Staff Engineer,
+                CTO, or Recruiter — anchored to the exact same evidence.
               </div>
 
               {/* Luminous Thread bridging Sam Rivera -> Jordan Lee */}
@@ -399,9 +562,22 @@ export function Act4EvidencePeer() {
                   opacity: reqCard,
                 }}
               >
-                <span style={{ width: 12, height: 12, borderRadius: '50%', background: COLORS.plum }} />
-                <span style={{ fontSize: 20, fontWeight: 680, color: COLORS.ink }}>{SCENARIO.evaluatorName}</span>
-                <span style={{ fontSize: 16, color: COLORS.muted }}>{SCENARIO.evaluatorRole}</span>
+                <span
+                  style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    background: COLORS.plum,
+                  }}
+                />
+                <span
+                  style={{ fontSize: 20, fontWeight: 680, color: COLORS.ink }}
+                >
+                  {SCENARIO.evaluatorName}
+                </span>
+                <span style={{ fontSize: 16, color: COLORS.muted }}>
+                  {SCENARIO.evaluatorRole}
+                </span>
               </div>
 
               <div
@@ -415,9 +591,22 @@ export function Act4EvidencePeer() {
                   opacity: prog(pt, 1.8, 2.4),
                 }}
               >
-                <span style={{ width: 12, height: 12, borderRadius: '50%', background: COLORS.mintDeep }} />
-                <span style={{ fontSize: 20, fontWeight: 680, color: COLORS.ink }}>{SCENARIO.peerName}</span>
-                <span style={{ fontSize: 16, color: COLORS.muted }}>{SCENARIO.peerRole}</span>
+                <span
+                  style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    background: COLORS.mintDeep,
+                  }}
+                />
+                <span
+                  style={{ fontSize: 20, fontWeight: 680, color: COLORS.ink }}
+                >
+                  {SCENARIO.peerName}
+                </span>
+                <span style={{ fontSize: 16, color: COLORS.muted }}>
+                  {SCENARIO.peerRole}
+                </span>
               </div>
 
               {/* TWO SIDE-BY-SIDE PEER REVIEW CARDS */}
@@ -442,13 +631,34 @@ export function Act4EvidencePeer() {
                     transform: `translateY(${(1 - reqCard) * 28}px)`,
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-                    <span className="hc-mono" style={{ fontSize: 12, color: COLORS.muted, letterSpacing: '0.1em' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 18,
+                    }}
+                  >
+                    <span
+                      className="hc-mono"
+                      style={{
+                        fontSize: 12,
+                        color: COLORS.muted,
+                        letterSpacing: '0.1em',
+                      }}
+                    >
                       SECOND OPINION REQUESTED
                     </span>
                     <Pill tone="lilac">PR-style thread</Pill>
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 640, color: COLORS.ink, marginBottom: 14 }}>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 640,
+                      color: COLORS.ink,
+                      marginBottom: 14,
+                    }}
+                  >
                     Focus question for Jordan Lee
                   </div>
                   <div
@@ -463,7 +673,15 @@ export function Act4EvidencePeer() {
                       marginBottom: 20,
                     }}
                   >
-                    “Can you verify the out-of-order <span className="hc-mono" style={{ fontSize: 15 }}>STATUS_RANK</span> guard in <span className="hc-mono" style={{ fontSize: 15 }}>webhook_handler.py</span> and check if we should probe concurrency locking?”
+                    “Can you verify the out-of-order{' '}
+                    <span className="hc-mono" style={{ fontSize: 15 }}>
+                      STATUS_RANK
+                    </span>{' '}
+                    guard in{' '}
+                    <span className="hc-mono" style={{ fontSize: 15 }}>
+                      webhook_handler.py
+                    </span>{' '}
+                    and check if we should probe concurrency locking?”
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <Pill tone="neutral">Linked: Revision v2 (+14/-4)</Pill>
@@ -477,7 +695,8 @@ export function Act4EvidencePeer() {
                   className="hc-card"
                   style={{
                     padding: '32px 34px',
-                    borderColor: approvedBadge > 0.3 ? COLORS.mintDeep : COLORS.border,
+                    borderColor:
+                      approvedBadge > 0.3 ? COLORS.mintDeep : COLORS.border,
                     boxShadow:
                       approvedBadge > 0.3
                         ? '0 24px 64px rgba(47, 111, 84, 0.16), 0 0 0 1px rgba(47, 111, 84, 0.3)'
@@ -486,8 +705,23 @@ export function Act4EvidencePeer() {
                     transform: `translateY(${(1 - replyCard) * 28}px)`,
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-                    <span className="hc-mono" style={{ fontSize: 12, color: COLORS.mintDeep, letterSpacing: '0.1em', fontWeight: 650 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 18,
+                    }}
+                  >
+                    <span
+                      className="hc-mono"
+                      style={{
+                        fontSize: 12,
+                        color: COLORS.mintDeep,
+                        letterSpacing: '0.1em',
+                        fontWeight: 650,
+                      }}
+                    >
                       PEER RESPONSE · INTERNAL ONLY
                     </span>
                     <div
@@ -496,12 +730,26 @@ export function Act4EvidencePeer() {
                         opacity: approvedBadge,
                       }}
                     >
-                      <Pill tone="pass" style={{ fontSize: 14, padding: '7px 14px', fontWeight: 700 }}>
+                      <Pill
+                        tone="pass"
+                        style={{
+                          fontSize: 14,
+                          padding: '7px 14px',
+                          fontWeight: 700,
+                        }}
+                      >
                         ✓ Approved · +1 Advance
                       </Pill>
                     </div>
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 640, color: COLORS.ink, marginBottom: 14 }}>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 640,
+                      color: COLORS.ink,
+                      marginBottom: 14,
+                    }}
+                  >
                     Jordan Lee reviewed the diff &amp; chronology
                   </div>
                   <div
@@ -516,7 +764,9 @@ export function Act4EvidencePeer() {
                       marginBottom: 20,
                     }}
                   >
-                    “Idempotency key check and monotonic rank guard are clean and idiomatic. Asking about Postgres row-level locking in the next round is the exact right probe.”
+                    “Idempotency key check and monotonic rank guard are clean
+                    and idiomatic. Asking about Postgres row-level locking in
+                    the next round is the exact right probe.”
                   </div>
                   <div
                     style={{
@@ -529,7 +779,13 @@ export function Act4EvidencePeer() {
                     <span style={{ fontSize: 15, color: COLORS.muted }}>
                       Stays private to the hiring team
                     </span>
-                    <span style={{ fontSize: 18, fontWeight: 680, color: COLORS.plum }}>
+                    <span
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 680,
+                        color: COLORS.plum,
+                      }}
+                    >
                       Aligned before the debrief.
                     </span>
                   </div>

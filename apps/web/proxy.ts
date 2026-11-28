@@ -218,6 +218,8 @@ function isAllowedPublicPreviewRequest(
       PUBLIC_PREVIEW_GET_PATHS.has(pathname) ||
       pathname === '/api/health' ||
       pathname === '/favicon.ico' ||
+      pathname === '/icon.svg' ||
+      pathname === '/apple-icon.png' ||
       pathname.startsWith('/_next/static/') ||
       pathname.startsWith('/fonts/') ||
       pathname.startsWith('/software/icons/')

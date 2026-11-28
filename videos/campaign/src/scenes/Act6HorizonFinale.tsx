@@ -1,11 +1,5 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
-import {
-  COLORS,
-  EASE_CAMERA,
-  EASE_EDITORIAL,
-  lerp,
-  prog,
-} from '../tokens';
+import { COLORS, EASE_CAMERA, EASE_EDITORIAL, lerp, prog } from '../tokens';
 import {
   BrandWordmark,
   Curtain,
@@ -60,7 +54,9 @@ export function Act6HorizonFinale() {
               opacity: 1 - horizonOut,
             }}
           >
-            <div style={{ position: 'absolute', left: 124, top: 146, width: 880 }}>
+            <div
+              style={{ position: 'absolute', left: 124, top: 146, width: 880 }}
+            >
               <div
                 className="hc-kicker"
                 style={{
@@ -71,9 +67,14 @@ export function Act6HorizonFinale() {
               >
                 ONE PRINCIPLE · A GROWING FAMILY
               </div>
-              <div className="hc-headline" style={{ fontSize: 88, color: COLORS.onPlum }}>
+              <div
+                className="hc-headline"
+                style={{ fontSize: 88, color: COLORS.onPlum }}
+              >
                 <RevealLine p={prog(t, 0.35, 1.1)}>Different work.</RevealLine>
-                <RevealLine p={prog(t, 0.55, 1.3)}>One clear principle.</RevealLine>
+                <RevealLine p={prog(t, 0.55, 1.3)}>
+                  One clear principle.
+                </RevealLine>
               </div>
             </div>
 
@@ -135,7 +136,9 @@ export function Act6HorizonFinale() {
                       height: item.primary ? 13 : 10,
                       borderRadius: '50%',
                       background: item.color,
-                      boxShadow: item.primary ? `0 0 14px ${item.color}` : 'none',
+                      boxShadow: item.primary
+                        ? `0 0 14px ${item.color}`
+                        : 'none',
                     }}
                   />
                   <span
@@ -177,10 +180,16 @@ export function Act6HorizonFinale() {
                 opacity: 1 - maniOut,
               }}
             >
-              <div className="hc-headline" style={{ fontSize: 132, color: COLORS.onPlum }}>
+              <div
+                className="hc-headline"
+                style={{ fontSize: 132, color: COLORS.onPlum }}
+              >
                 <RevealLine p={mani1}>Evidence informs.</RevealLine>
               </div>
-              <div className="hc-headline" style={{ fontSize: 138, color: COLORS.mint, marginTop: 8 }}>
+              <div
+                className="hc-headline"
+                style={{ fontSize: 138, color: COLORS.mint, marginTop: 8 }}
+              >
                 <RevealLine p={mani2}>People decide.</RevealLine>
               </div>
             </div>
@@ -188,7 +197,12 @@ export function Act6HorizonFinale() {
 
           {/* PHASE 3: ICONIC FINAL BRAND LOCKUP (8.55s – 13.0s) */}
           {t >= 8.5 ? (
-            <TactileBackdrop kind="opening" t={t - 8.5} duration={5.0} dim={0.08}>
+            <TactileBackdrop
+              kind="opening"
+              t={t - 8.5}
+              duration={5.0}
+              dim={0.08}
+            >
               <div
                 style={{
                   position: 'absolute',

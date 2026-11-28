@@ -2,7 +2,10 @@ import { Composition, Still, registerRoot } from 'remotion';
 import { FPS } from './tokens';
 import { HERO_MASTER_SECONDS, HeroMaster16x9 } from './films/HeroMaster16x9';
 import { SOCIAL_REEL_SECONDS, SocialReel9x16 } from './films/SocialReel9x16';
-import { THESIS_TEASER_SECONDS, ThesisTeaser16x9 } from './films/ThesisTeaser16x9';
+import {
+  THESIS_TEASER_SECONDS,
+  ThesisTeaser16x9,
+} from './films/ThesisTeaser16x9';
 import {
   Still01Manifesto,
   Still02Two100s,

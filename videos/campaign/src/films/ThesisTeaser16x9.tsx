@@ -43,11 +43,18 @@ function TeaserOpening() {
       <div style={{ position: 'absolute', left: 132, top: 270, width: 1120 }}>
         <div
           className="hc-kicker"
-          style={{ color: COLORS.mint, marginBottom: 26, opacity: prog(t, 0.25, 0.9) }}
+          style={{
+            color: COLORS.mint,
+            marginBottom: 26,
+            opacity: prog(t, 0.25, 0.9),
+          }}
         >
           A NEW STANDARD FOR TECHNICAL HIRING
         </div>
-        <div className="hc-headline" style={{ fontSize: 116, color: COLORS.onPlum }}>
+        <div
+          className="hc-headline"
+          style={{ fontSize: 116, color: COLORS.onPlum }}
+        >
           <RevealLine p={prog(t, 0.45, 1.35)}>AI made final</RevealLine>
           <RevealLine p={prog(t, 0.72, 1.62)}>
             answers cheap<span style={{ color: COLORS.mint }}>.</span>
@@ -89,10 +96,15 @@ function TeaserContrast() {
             padding: '0 132px',
           }}
         >
-          <div className="hc-kicker" style={{ color: COLORS.mintDeep, marginBottom: 24 }}>
+          <div
+            className="hc-kicker"
+            style={{ color: COLORS.mintDeep, marginBottom: 24 }}
+          >
             TWO IDENTICAL 100% SUBMISSIONS
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 38 }}>
+          <div
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 38 }}
+          >
             <div
               className="hc-card"
               style={{
@@ -101,15 +113,46 @@ function TeaserContrast() {
                 borderColor: split > 0.2 ? COLORS.failBorder : COLORS.border,
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-                <span className="hc-kicker" style={{ fontSize: 14, color: COLORS.muted }}>CANDIDATE A</span>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 18,
+                }}
+              >
+                <span
+                  className="hc-kicker"
+                  style={{ fontSize: 14, color: COLORS.muted }}
+                >
+                  CANDIDATE A
+                </span>
                 <Pill tone="pass">4 / 4 passed</Pill>
               </div>
-              <div className="hc-tabular" style={{ fontSize: 112, fontWeight: 680, color: COLORS.ink, letterSpacing: '-0.06em', lineHeight: 0.92 }}>
+              <div
+                className="hc-tabular"
+                style={{
+                  fontSize: 112,
+                  fontWeight: 680,
+                  color: COLORS.ink,
+                  letterSpacing: '-0.06em',
+                  lineHeight: 0.92,
+                }}
+              >
                 100%
               </div>
-              <div style={{ marginTop: 28, paddingTop: 24, borderTop: `1px solid ${COLORS.border}`, opacity: split }}>
-                <div className="hc-mono" style={{ fontSize: 18, color: COLORS.fail, fontWeight: 650 }}>
+              <div
+                style={{
+                  marginTop: 28,
+                  paddingTop: 24,
+                  borderTop: `1px solid ${COLORS.border}`,
+                  opacity: split,
+                }}
+              >
+                <div
+                  className="hc-mono"
+                  style={{ fontSize: 18, color: COLORS.fail, fontWeight: 650 }}
+                >
                   00:41 elapsed · 1 bulk paste · 0 iterations
                 </div>
               </div>
@@ -120,18 +163,54 @@ function TeaserContrast() {
               style={{
                 padding: '44px 46px',
                 borderColor: split > 0.2 ? COLORS.mintDeep : COLORS.border,
-                boxShadow: split > 0.2 ? '0 28px 72px rgba(47,111,84,0.16)' : undefined,
+                boxShadow:
+                  split > 0.2 ? '0 28px 72px rgba(47,111,84,0.16)' : undefined,
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-                <span className="hc-kicker" style={{ fontSize: 14, color: COLORS.mintDeep }}>CANDIDATE B</span>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 18,
+                }}
+              >
+                <span
+                  className="hc-kicker"
+                  style={{ fontSize: 14, color: COLORS.mintDeep }}
+                >
+                  CANDIDATE B
+                </span>
                 <Pill tone="pass">4 / 4 passed</Pill>
               </div>
-              <div className="hc-tabular" style={{ fontSize: 112, fontWeight: 680, color: COLORS.mintDeep, letterSpacing: '-0.06em', lineHeight: 0.92 }}>
+              <div
+                className="hc-tabular"
+                style={{
+                  fontSize: 112,
+                  fontWeight: 680,
+                  color: COLORS.mintDeep,
+                  letterSpacing: '-0.06em',
+                  lineHeight: 0.92,
+                }}
+              >
                 100%
               </div>
-              <div style={{ marginTop: 28, paddingTop: 24, borderTop: `1px solid ${COLORS.border}`, opacity: split }}>
-                <div className="hc-mono" style={{ fontSize: 18, color: COLORS.mintDeep, fontWeight: 650 }}>
+              <div
+                style={{
+                  marginTop: 28,
+                  paddingTop: 24,
+                  borderTop: `1px solid ${COLORS.border}`,
+                  opacity: split,
+                }}
+              >
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 18,
+                    color: COLORS.mintDeep,
+                    fontWeight: 650,
+                  }}
+                >
                   14:22 trajectory · Failed → Logged AI → Fixed → Verified
                 </div>
               </div>
@@ -193,10 +272,16 @@ function TeaserFlashMontage() {
           transform: `translateY(${(1 - p) * 26}px)`,
         }}
       >
-        <div className="hc-kicker" style={{ color: c.accent, marginBottom: 22, fontSize: 17 }}>
+        <div
+          className="hc-kicker"
+          style={{ color: c.accent, marginBottom: 22, fontSize: 17 }}
+        >
           {c.kicker}
         </div>
-        <div className="hc-headline" style={{ fontSize: 112, color: c.dark ? COLORS.onPlum : COLORS.ink }}>
+        <div
+          className="hc-headline"
+          style={{ fontSize: 112, color: c.dark ? COLORS.onPlum : COLORS.ink }}
+        >
           {c.headline}
         </div>
         <div
@@ -237,10 +322,16 @@ function TeaserFinale() {
             opacity: 1 - maniOut,
           }}
         >
-          <div className="hc-headline" style={{ fontSize: 130, color: COLORS.onPlum }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 130, color: COLORS.onPlum }}
+          >
             <RevealLine p={mani1}>Evidence informs.</RevealLine>
           </div>
-          <div className="hc-headline" style={{ fontSize: 136, color: COLORS.mint, marginTop: 8 }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 136, color: COLORS.mint, marginTop: 8 }}
+          >
             <RevealLine p={mani2}>People decide.</RevealLine>
           </div>
         </div>
@@ -257,10 +348,21 @@ function TeaserFinale() {
           }}
         >
           <BrandWordmark size={78} dark />
-          <div className="hc-headline" style={{ fontSize: 88, color: COLORS.onPlum, marginTop: 42 }}>
+          <div
+            className="hc-headline"
+            style={{ fontSize: 88, color: COLORS.onPlum, marginTop: 42 }}
+          >
             Real work. In context<span style={{ color: COLORS.mint }}>.</span>
           </div>
-          <div className="hc-mono" style={{ fontSize: 22, color: COLORS.mint, marginTop: 40, letterSpacing: '0.04em' }}>
+          <div
+            className="hc-mono"
+            style={{
+              fontSize: 22,
+              color: COLORS.mint,
+              marginTop: 40,
+              letterSpacing: '0.04em',
+            }}
+          >
             hirearchy.io/products/software
           </div>
         </div>
@@ -278,13 +380,28 @@ export function ThesisTeaser16x9() {
       <Sequence from={f(0)} durationInFrames={f(5.5)} name="Teaser Opening">
         <TeaserOpening />
       </Sequence>
-      <Sequence from={f(5.0)} durationInFrames={f(5.8)} premountFor={fps} name="Teaser Contrast">
+      <Sequence
+        from={f(5.0)}
+        durationInFrames={f(5.8)}
+        premountFor={fps}
+        name="Teaser Contrast"
+      >
         <TeaserContrast />
       </Sequence>
-      <Sequence from={f(10.5)} durationInFrames={f(5.2)} premountFor={fps} name="Teaser Flash">
+      <Sequence
+        from={f(10.5)}
+        durationInFrames={f(5.2)}
+        premountFor={fps}
+        name="Teaser Flash"
+      >
         <TeaserFlashMontage />
       </Sequence>
-      <Sequence from={f(15.5)} durationInFrames={f(8.5)} premountFor={fps} name="Teaser Finale">
+      <Sequence
+        from={f(15.5)}
+        durationInFrames={f(8.5)}
+        premountFor={fps}
+        name="Teaser Finale"
+      >
         <TeaserFinale />
       </Sequence>
       <Audio src={staticFile('audio/teaser-16x9.wav')} premountFor={fps} />

@@ -19,7 +19,11 @@
 }
 
 .hc-root {
-  font-family: 'Hirearchy Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Hirearchy Sans',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
@@ -122,20 +126,55 @@
 }
 
 /* Code syntax colors — dark plum workbench */
-.py-dark-kw { color: #d8b4fe; font-weight: 550; }
-.py-dark-fn { color: #b0f0ce; }
-.py-dark-str { color: #f9c89b; }
-.py-dark-num { color: #93c5fd; }
-.py-dark-cm { color: #8c7b9c; font-style: italic; }
-.py-dark-type { color: #f0abfc; }
-.py-dark-op { color: #cbbbd8; }
-.py-dark-txt { color: #f2ece4; }
+.py-dark-kw {
+  color: #d8b4fe;
+  font-weight: 550;
+}
+.py-dark-fn {
+  color: #b0f0ce;
+}
+.py-dark-str {
+  color: #f9c89b;
+}
+.py-dark-num {
+  color: #93c5fd;
+}
+.py-dark-cm {
+  color: #8c7b9c;
+  font-style: italic;
+}
+.py-dark-type {
+  color: #f0abfc;
+}
+.py-dark-op {
+  color: #cbbbd8;
+}
+.py-dark-txt {
+  color: #f2ece4;
+}
 
 /* Code syntax colors — warm archival paper diff */
-.py-light-kw { color: #6b21a8; font-weight: 600; }
-.py-light-fn { color: #166534; font-weight: 560; }
-.py-light-str { color: #9a3412; }
-.py-light-num { color: #1d4ed8; }
-.py-light-cm { color: #7c6f82; font-style: italic; }
-.py-light-type { color: #7e22ce; }
-.py-light-txt { color: #24182b; }
+.py-light-kw {
+  color: #6b21a8;
+  font-weight: 600;
+}
+.py-light-fn {
+  color: #166534;
+  font-weight: 560;
+}
+.py-light-str {
+  color: #9a3412;
+}
+.py-light-num {
+  color: #1d4ed8;
+}
+.py-light-cm {
+  color: #7c6f82;
+  font-style: italic;
+}
+.py-light-type {
+  color: #7e22ce;
+}
+.py-light-txt {
+  color: #24182b;
+}

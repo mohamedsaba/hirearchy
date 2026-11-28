@@ -11,6 +11,7 @@ import { IntentPrefetch } from './home/intent-prefetch';
 import { TelemetryTracker } from './_components/telemetry-tracker';
 import { RouteProgressBar } from './_components/route-progress-bar';
 import { BrandToastViewport } from './_components/brand-toast';
+import { isPublicPreview } from '../src/runtime/profile';
 const dmSans = localFont({
   src: '../public/fonts/dm-sans-latin.woff2',
   weight: '100 1000',
@@ -79,7 +80,7 @@ export default async function RootLayout({
         {children}
         <BrandToastViewport />
         <IntentPrefetch />
-        <TelemetryTracker />
+        <TelemetryTracker enabled={!isPublicPreview()} />
       </body>
     </html>
   );

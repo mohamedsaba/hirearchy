@@ -125,7 +125,8 @@ export function TactileBackdrop({
     vertical: 'plates/vertical_thread.jpg',
   };
   const plate = plateMap[kind];
-  const isPhoto = kind === 'opening' || kind === 'horizon' || kind === 'vertical';
+  const isPhoto =
+    kind === 'opening' || kind === 'horizon' || kind === 'vertical';
 
   return (
     <AbsoluteFill style={{ background: bgMap[kind], overflow: 'hidden' }}>
@@ -429,9 +430,10 @@ export function PythonLine({
   const codePart = commentIdx >= 0 ? text.slice(0, commentIdx) : text;
   const commentPart = commentIdx >= 0 ? text.slice(commentIdx) : '';
 
-  const tokens = codePart.match(
-    /(f?"[^"]*"|f?'[^']*'|\b[A-Za-z_][A-Za-z0-9_]*\b|\b\d+\b|[^A-Za-z0-9_"']+)/g,
-  ) ?? [];
+  const tokens =
+    codePart.match(
+      /(f?"[^"]*"|f?'[^']*'|\b[A-Za-z_][A-Za-z0-9_]*\b|\b\d+\b|[^A-Za-z0-9_"']+)/g,
+    ) ?? [];
 
   return (
     <span>

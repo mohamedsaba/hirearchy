@@ -45,10 +45,30 @@ export function Act5SynthesisHandoff() {
   const reqBars = prog(ht, 2.4, 3.8, EASE_CAMERA);
 
   const reqCoverage = [
-    { label: 'Delivery ID Idempotency', status: 'Demonstrated', pct: 96, tone: 'pass' as const },
-    { label: 'Monotonic State Ordering', status: 'Demonstrated', pct: 94, tone: 'pass' as const },
-    { label: 'Test Verification Discipline', status: 'Demonstrated', pct: 88, tone: 'pass' as const },
-    { label: 'Distributed Concurrency Locks', status: 'Probe in Round 2', pct: 46, tone: 'neutral' as const },
+    {
+      label: 'Delivery ID Idempotency',
+      status: 'Demonstrated',
+      pct: 96,
+      tone: 'pass' as const,
+    },
+    {
+      label: 'Monotonic State Ordering',
+      status: 'Demonstrated',
+      pct: 94,
+      tone: 'pass' as const,
+    },
+    {
+      label: 'Test Verification Discipline',
+      status: 'Demonstrated',
+      pct: 88,
+      tone: 'pass' as const,
+    },
+    {
+      label: 'Distributed Concurrency Locks',
+      status: 'Probe in Round 2',
+      pct: 46,
+      tone: 'neutral' as const,
+    },
   ];
 
   return (
@@ -71,7 +91,8 @@ export function Act5SynthesisHandoff() {
               kicker="05 / ADVISORY AI · HUMAN SOVEREIGNTY"
               lines={[
                 <>
-                  AI synthesizes. <span style={{ color: COLORS.mint }}>People decide.</span>
+                  AI synthesizes.{' '}
+                  <span style={{ color: COLORS.mint }}>People decide.</span>
                 </>,
               ]}
               t={t}
@@ -111,12 +132,33 @@ export function Act5SynthesisHandoff() {
                 borderColor: 'rgba(187, 152, 244, 0.28)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 16,
+                }}
+              >
                 <div>
-                  <div className="hc-mono" style={{ fontSize: 11.5, color: COLORS.purple, letterSpacing: '0.14em' }}>
+                  <div
+                    className="hc-mono"
+                    style={{
+                      fontSize: 11.5,
+                      color: COLORS.purple,
+                      letterSpacing: '0.14em',
+                    }}
+                  >
                     ADVISORY AI · CANDIDATE REVIEW
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 640, color: COLORS.onPlum, marginTop: 4 }}>
+                  <div
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 640,
+                      color: COLORS.onPlum,
+                      marginTop: 4,
+                    }}
+                  >
                     {KIMI_REVIEW.headline}
                   </div>
                 </div>
@@ -161,20 +203,38 @@ export function Act5SynthesisHandoff() {
                       letterSpacing: '0.09em',
                     }}
                   >
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.mint }} />
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: COLORS.mint,
+                      }}
+                    />
                     STRONG SIGNAL · ADVISORY ONLY
                   </span>
-                  <span className="hc-mono" style={{ fontSize: 12, color: COLORS.onPlumMuted }}>
+                  <span
+                    className="hc-mono"
+                    style={{ fontSize: 12, color: COLORS.onPlumMuted }}
+                  >
                     {KIMI_REVIEW.confidenceLabel}
                   </span>
                 </div>
-                <div style={{ fontSize: 15, color: '#e5dcf0', lineHeight: 1.5 }}>
+                <div
+                  style={{ fontSize: 15, color: '#e5dcf0', lineHeight: 1.5 }}
+                >
                   {KIMI_REVIEW.rationale}
                 </div>
               </div>
 
               {/* Strengths & Verification Gaps */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 16,
+                }}
+              >
                 <div
                   style={{
                     padding: '16px 18px',
@@ -183,11 +243,29 @@ export function Act5SynthesisHandoff() {
                     border: '1px solid rgba(176, 240, 206, 0.16)',
                   }}
                 >
-                  <div className="hc-mono" style={{ fontSize: 11, color: COLORS.mint, letterSpacing: '0.1em', marginBottom: 10 }}>
+                  <div
+                    className="hc-mono"
+                    style={{
+                      fontSize: 11,
+                      color: COLORS.mint,
+                      letterSpacing: '0.1em',
+                      marginBottom: 10,
+                    }}
+                  >
                     OBSERVED STRENGTHS
                   </div>
                   {KIMI_REVIEW.strengths.map((s) => (
-                    <div key={s} style={{ fontSize: 13.8, color: '#ebe3f2', lineHeight: 1.4, marginBottom: 7, display: 'flex', gap: 8 }}>
+                    <div
+                      key={s}
+                      style={{
+                        fontSize: 13.8,
+                        color: '#ebe3f2',
+                        lineHeight: 1.4,
+                        marginBottom: 7,
+                        display: 'flex',
+                        gap: 8,
+                      }}
+                    >
                       <span style={{ color: COLORS.mint }}>+</span>
                       <span>{s}</span>
                     </div>
@@ -201,11 +279,29 @@ export function Act5SynthesisHandoff() {
                     border: '1px solid rgba(255, 155, 136, 0.18)',
                   }}
                 >
-                  <div className="hc-mono" style={{ fontSize: 11, color: COLORS.coral, letterSpacing: '0.1em', marginBottom: 10 }}>
+                  <div
+                    className="hc-mono"
+                    style={{
+                      fontSize: 11,
+                      color: COLORS.coral,
+                      letterSpacing: '0.1em',
+                      marginBottom: 10,
+                    }}
+                  >
                     VERIFICATION GAPS
                   </div>
                   {KIMI_REVIEW.weaknesses.map((w) => (
-                    <div key={w} style={{ fontSize: 13.8, color: '#ebe3f2', lineHeight: 1.4, marginBottom: 8, display: 'flex', gap: 8 }}>
+                    <div
+                      key={w}
+                      style={{
+                        fontSize: 13.8,
+                        color: '#ebe3f2',
+                        lineHeight: 1.4,
+                        marginBottom: 8,
+                        display: 'flex',
+                        gap: 8,
+                      }}
+                    >
                       <span style={{ color: COLORS.coral }}>!</span>
                       <span>{w}</span>
                     </div>
@@ -225,7 +321,14 @@ export function Act5SynthesisHandoff() {
                   gap: 9,
                 }}
               >
-                <div className="hc-mono" style={{ fontSize: 11, color: COLORS.purple, letterSpacing: '0.1em' }}>
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 11,
+                    color: COLORS.purple,
+                    letterSpacing: '0.1em',
+                  }}
+                >
                   REQUIREMENT EVIDENCE BREAKDOWN
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -254,11 +357,27 @@ export function Act5SynthesisHandoff() {
                   marginTop: 'auto',
                 }}
               >
-                <div className="hc-mono" style={{ fontSize: 11, color: COLORS.onPlumMuted, letterSpacing: '0.1em', marginBottom: 8 }}>
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 11,
+                    color: COLORS.onPlumMuted,
+                    letterSpacing: '0.1em',
+                    marginBottom: 8,
+                  }}
+                >
                   CHRONOLOGICAL TIMING &amp; WORKFLOW (Δ)
                 </div>
                 {KIMI_REVIEW.timingInsights.map((ti) => (
-                  <div key={ti} className="hc-mono" style={{ fontSize: 13.2, color: '#e4d9ee', lineHeight: 1.55 }}>
+                  <div
+                    key={ti}
+                    className="hc-mono"
+                    style={{
+                      fontSize: 13.2,
+                      color: '#e4d9ee',
+                      lineHeight: 1.55,
+                    }}
+                  >
                     → {ti}
                   </div>
                 ))}
@@ -292,12 +411,33 @@ export function Act5SynthesisHandoff() {
                     : '0 32px 90px rgba(6, 2, 12, 0.45)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
                 <div>
-                  <div className="hc-mono" style={{ fontSize: 11.5, color: COLORS.mintDeep, letterSpacing: '0.14em', fontWeight: 650 }}>
+                  <div
+                    className="hc-mono"
+                    style={{
+                      fontSize: 11.5,
+                      color: COLORS.mintDeep,
+                      letterSpacing: '0.14em',
+                      fontWeight: 650,
+                    }}
+                  >
                     HUMAN REVIEW PACKET · AUTHORITATIVE RECORD
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 680, color: COLORS.ink, marginTop: 4 }}>
+                  <div
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 680,
+                      color: COLORS.ink,
+                      marginTop: 4,
+                    }}
+                  >
                     {SCENARIO.candidateName} · {SCENARIO.role}
                   </div>
                 </div>
@@ -313,17 +453,46 @@ export function Act5SynthesisHandoff() {
                   border: `1px solid ${COLORS.border}`,
                 }}
               >
-                <div className="hc-mono" style={{ fontSize: 11, color: COLORS.muted, letterSpacing: '0.1em', marginBottom: 10 }}>
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 11,
+                    color: COLORS.muted,
+                    letterSpacing: '0.1em',
+                    marginBottom: 10,
+                  }}
+                >
                   GROUNDED EVIDENCE &amp; PEER CITATIONS
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 14.2, color: COLORS.ink }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 9,
+                    fontSize: 14.2,
+                    color: COLORS.ink,
+                  }}
+                >
                   <div>
-                    <strong style={{ color: COLORS.mintDeep }}>[Diff v2]</strong> Clean{' '}
-                    <span className="hc-mono" style={{ fontSize: 13 }}>delivery_id</span> dedupe &amp; monotonic{' '}
-                    <span className="hc-mono" style={{ fontSize: 13 }}>STATUS_RANK</span> guard; 4/4 pytest verified.
+                    <strong style={{ color: COLORS.mintDeep }}>
+                      [Diff v2]
+                    </strong>{' '}
+                    Clean{' '}
+                    <span className="hc-mono" style={{ fontSize: 13 }}>
+                      delivery_id
+                    </span>{' '}
+                    dedupe &amp; monotonic{' '}
+                    <span className="hc-mono" style={{ fontSize: 13 }}>
+                      STATUS_RANK
+                    </span>{' '}
+                    guard; 4/4 pytest verified.
                   </div>
                   <div>
-                    <strong style={{ color: COLORS.mintDeep }}>[Peer +1]</strong> Jordan Lee approved; aligned to probe distributed DB locks in Round 2.
+                    <strong style={{ color: COLORS.mintDeep }}>
+                      [Peer +1]
+                    </strong>{' '}
+                    Jordan Lee approved; aligned to probe distributed DB locks
+                    in Round 2.
                   </div>
                 </div>
               </div>
@@ -337,16 +506,39 @@ export function Act5SynthesisHandoff() {
                   border: `1px solid ${COLORS.border}`,
                 }}
               >
-                <div className="hc-mono" style={{ fontSize: 11, color: COLORS.muted, letterSpacing: '0.1em', marginBottom: 8 }}>
+                <div
+                  className="hc-mono"
+                  style={{
+                    fontSize: 11,
+                    color: COLORS.muted,
+                    letterSpacing: '0.1em',
+                    marginBottom: 8,
+                  }}
+                >
                   EVALUATOR SUMMARY · {SCENARIO.evaluatorName.toUpperCase()}
                 </div>
-                <div style={{ fontSize: 16, color: COLORS.ink, lineHeight: 1.5, fontWeight: 500 }}>
-                  “Strong engineering instincts under ambiguity. Used AI once to confirm idempotency semantics rather than outsource thinking. Advance directly to Managerial Interview.”
+                <div
+                  style={{
+                    fontSize: 16,
+                    color: COLORS.ink,
+                    lineHeight: 1.5,
+                    fontWeight: 500,
+                  }}
+                >
+                  “Strong engineering instincts under ambiguity. Used AI once to
+                  confirm idempotency semantics rather than outsource thinking.
+                  Advance directly to Managerial Interview.”
                 </div>
               </div>
 
               {/* Outcome Decision Bar */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 12,
+                }}
+              >
                 <div
                   style={{
                     padding: '14px 16px',
@@ -355,10 +547,24 @@ export function Act5SynthesisHandoff() {
                     border: '1.5px solid #2f6f54',
                   }}
                 >
-                  <div className="hc-mono" style={{ fontSize: 10.5, color: COLORS.mintDeep, fontWeight: 650 }}>
+                  <div
+                    className="hc-mono"
+                    style={{
+                      fontSize: 10.5,
+                      color: COLORS.mintDeep,
+                      fontWeight: 650,
+                    }}
+                  >
                     HUMAN DECISION
                   </div>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: COLORS.pass, marginTop: 3 }}>
+                  <div
+                    style={{
+                      fontSize: 17,
+                      fontWeight: 700,
+                      color: COLORS.pass,
+                      marginTop: 3,
+                    }}
+                  >
                     ✓ Advance Candidate
                   </div>
                 </div>
@@ -370,10 +576,20 @@ export function Act5SynthesisHandoff() {
                     border: `1px solid ${COLORS.border}`,
                   }}
                 >
-                  <div className="hc-mono" style={{ fontSize: 10.5, color: COLORS.muted }}>
+                  <div
+                    className="hc-mono"
+                    style={{ fontSize: 10.5, color: COLORS.muted }}
+                  >
                     NEXT STAGE &amp; HANDOFF
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 650, color: COLORS.ink, marginTop: 3 }}>
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 650,
+                      color: COLORS.ink,
+                      marginTop: 3,
+                    }}
+                  >
                     Managerial · {SCENARIO.managerName}
                   </div>
                 </div>
@@ -391,10 +607,22 @@ export function Act5SynthesisHandoff() {
                   alignItems: 'center',
                 }}
               >
-                <div style={{ fontSize: 13.8, color: COLORS.inkSoft, lineHeight: 1.4 }}>
-                  <strong style={{ color: COLORS.ink }}>Published to candidate:</strong> Strengths &amp; next-stage invitation.
+                <div
+                  style={{
+                    fontSize: 13.8,
+                    color: COLORS.inkSoft,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <strong style={{ color: COLORS.ink }}>
+                    Published to candidate:
+                  </strong>{' '}
+                  Strengths &amp; next-stage invitation.
                   <br />
-                  <strong style={{ color: COLORS.ink }}>Team-only private:</strong> Advisory briefs, peer notes &amp; interview probes.
+                  <strong style={{ color: COLORS.ink }}>
+                    Team-only private:
+                  </strong>{' '}
+                  Advisory briefs, peer notes &amp; interview probes.
                 </div>
                 <Pill tone="lilac">Separated</Pill>
               </div>
@@ -419,8 +647,12 @@ export function Act5SynthesisHandoff() {
                       width: 11,
                       height: 11,
                       borderRadius: '50%',
-                      background: sealLock > 0.2 ? COLORS.mint : COLORS.borderStrong,
-                      boxShadow: sealLock > 0.2 ? '0 0 12px rgba(176,240,206,0.8)' : 'none',
+                      background:
+                        sealLock > 0.2 ? COLORS.mint : COLORS.borderStrong,
+                      boxShadow:
+                        sealLock > 0.2
+                          ? '0 0 12px rgba(176,240,206,0.8)'
+                          : 'none',
                     }}
                   />
                   <span style={{ fontSize: 15.5, fontWeight: 640 }}>
@@ -429,7 +661,13 @@ export function Act5SynthesisHandoff() {
                       : 'Ready for human sign-off…'}
                   </span>
                 </div>
-                <span className="hc-mono" style={{ fontSize: 12, color: sealLock > 0.2 ? COLORS.mint : COLORS.muted }}>
+                <span
+                  className="hc-mono"
+                  style={{
+                    fontSize: 12,
+                    color: sealLock > 0.2 ? COLORS.mint : COLORS.muted,
+                  }}
+                >
                   NO AUTO-REJECT
                 </span>
               </div>
@@ -461,7 +699,8 @@ export function Act5SynthesisHandoff() {
                   opacity: prog(ht, 0.45, 1.05),
                 }}
               >
-                Candidates get transparent feedback in one portable portal. The next interviewer walks in with the complete dossier.
+                Candidates get transparent feedback in one portable portal. The
+                next interviewer walks in with the complete dossier.
               </div>
 
               <div
@@ -489,9 +728,18 @@ export function Act5SynthesisHandoff() {
                     transform: `translateY(${(1 - portalIn) * 26}px)`,
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
                     <BrandWordmark size={20} dark product="Candidate Portal" />
-                    <span className="hc-mono" style={{ fontSize: 12.5, color: COLORS.mint }}>
+                    <span
+                      className="hc-mono"
+                      style={{ fontSize: 12.5, color: COLORS.mint }}
+                    >
                       {SCENARIO.candidateCode}
                     </span>
                   </div>
@@ -504,21 +752,53 @@ export function Act5SynthesisHandoff() {
                       border: '1px solid rgba(176, 240, 206, 0.28)',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <span className="hc-mono" style={{ fontSize: 11.5, color: COLORS.onPlumMuted }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 10,
+                      }}
+                    >
+                      <span
+                        className="hc-mono"
+                        style={{ fontSize: 11.5, color: COLORS.onPlumMuted }}
+                      >
                         NORTHLINE ENGINEERING
                       </span>
-                      <Pill tone="darkMint" style={{ fontWeight: 700 }}>Accepted</Pill>
+                      <Pill tone="darkMint" style={{ fontWeight: 700 }}>
+                        Accepted
+                      </Pill>
                     </div>
-                    <div style={{ fontSize: 25, fontWeight: 660, color: COLORS.onPlum }}>
+                    <div
+                      style={{
+                        fontSize: 25,
+                        fontWeight: 660,
+                        color: COLORS.onPlum,
+                      }}
+                    >
                       {SCENARIO.title}
                     </div>
-                    <div style={{ fontSize: 16, color: COLORS.mint, marginTop: 8, fontWeight: 560 }}>
-                      Next step: Managerial Interview with {SCENARIO.managerName}
+                    <div
+                      style={{
+                        fontSize: 16,
+                        color: COLORS.mint,
+                        marginTop: 8,
+                        fontWeight: 560,
+                      }}
+                    >
+                      Next step: Managerial Interview with{' '}
+                      {SCENARIO.managerName}
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 14,
+                    }}
+                  >
                     <div
                       style={{
                         padding: '16px 18px',
@@ -527,11 +807,25 @@ export function Act5SynthesisHandoff() {
                         border: '1px solid rgba(176, 240, 206, 0.2)',
                       }}
                     >
-                      <div className="hc-mono" style={{ fontSize: 11, color: COLORS.mint, marginBottom: 8 }}>
+                      <div
+                        className="hc-mono"
+                        style={{
+                          fontSize: 11,
+                          color: COLORS.mint,
+                          marginBottom: 8,
+                        }}
+                      >
                         STRENGTHS SHARED
                       </div>
-                      <div style={{ fontSize: 14.5, color: COLORS.onPlum, lineHeight: 1.48 }}>
-                        Clean idempotency design, methodical test-first debugging, and clear state-machine invariants.
+                      <div
+                        style={{
+                          fontSize: 14.5,
+                          color: COLORS.onPlum,
+                          lineHeight: 1.48,
+                        }}
+                      >
+                        Clean idempotency design, methodical test-first
+                        debugging, and clear state-machine invariants.
                       </div>
                     </div>
                     <div
@@ -542,11 +836,25 @@ export function Act5SynthesisHandoff() {
                         border: `1px solid ${COLORS.plumLine}`,
                       }}
                     >
-                      <div className="hc-mono" style={{ fontSize: 11, color: COLORS.onPlumMuted, marginBottom: 8 }}>
+                      <div
+                        className="hc-mono"
+                        style={{
+                          fontSize: 11,
+                          color: COLORS.onPlumMuted,
+                          marginBottom: 8,
+                        }}
+                      >
                         TOPIC FOR NEXT ROUND
                       </div>
-                      <div style={{ fontSize: 14.5, color: COLORS.onPlumMuted, lineHeight: 1.48 }}>
-                        We&apos;d love to discuss distributed transaction atomicity and crash recovery at scale.
+                      <div
+                        style={{
+                          fontSize: 14.5,
+                          color: COLORS.onPlumMuted,
+                          lineHeight: 1.48,
+                        }}
+                      >
+                        We&apos;d love to discuss distributed transaction
+                        atomicity and crash recovery at scale.
                       </div>
                     </div>
                   </div>
@@ -565,8 +873,16 @@ export function Act5SynthesisHandoff() {
                       color: COLORS.onPlumMuted,
                     }}
                   >
-                    <span>Internal peer notes &amp; advisory briefs remain strictly private</span>
-                    <span className="hc-mono" style={{ color: COLORS.mint, fontSize: 11.5 }}>ISOLATED</span>
+                    <span>
+                      Internal peer notes &amp; advisory briefs remain strictly
+                      private
+                    </span>
+                    <span
+                      className="hc-mono"
+                      style={{ color: COLORS.mint, fontSize: 11.5 }}
+                    >
+                      ISOLATED
+                    </span>
                   </div>
                 </div>
 
@@ -582,16 +898,42 @@ export function Act5SynthesisHandoff() {
                     transform: `translateY(${(1 - dossierIn) * 26}px)`,
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                    }}
+                  >
                     <div>
-                      <div className="hc-mono" style={{ fontSize: 11.5, color: COLORS.mintDeep, letterSpacing: '0.12em', fontWeight: 650 }}>
+                      <div
+                        className="hc-mono"
+                        style={{
+                          fontSize: 11.5,
+                          color: COLORS.mintDeep,
+                          letterSpacing: '0.12em',
+                          fontWeight: 650,
+                        }}
+                      >
                         MANAGERIAL HANDOFF DOSSIER · ADVISORY AI BRIEF
                       </div>
-                      <div style={{ fontSize: 24, fontWeight: 680, color: COLORS.ink, marginTop: 4 }}>
+                      <div
+                        style={{
+                          fontSize: 24,
+                          fontWeight: 680,
+                          color: COLORS.ink,
+                          marginTop: 4,
+                        }}
+                      >
                         {KIMI_REVIEW.fitHeadline}
                       </div>
                     </div>
-                    <Pill tone="pass" style={{ fontWeight: 700, flexShrink: 0 }}>Strong Fit</Pill>
+                    <Pill
+                      tone="pass"
+                      style={{ fontWeight: 700, flexShrink: 0 }}
+                    >
+                      Strong Fit
+                    </Pill>
                   </div>
 
                   {/* Candidate Identity & Stack Strip */}
@@ -606,7 +948,9 @@ export function Act5SynthesisHandoff() {
                       border: `1px solid ${COLORS.border}`,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 14 }}
+                    >
                       <div
                         style={{
                           width: 40,
@@ -624,14 +968,28 @@ export function Act5SynthesisHandoff() {
                         EV
                       </div>
                       <div>
-                        <div style={{ fontSize: 16, fontWeight: 680, color: COLORS.ink }}>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 680,
+                            color: COLORS.ink,
+                          }}
+                        >
                           {SCENARIO.candidateName}{' '}
-                          <span className="hc-mono" style={{ fontSize: 12.5, color: COLORS.muted, fontWeight: 500 }}>
+                          <span
+                            className="hc-mono"
+                            style={{
+                              fontSize: 12.5,
+                              color: COLORS.muted,
+                              fontWeight: 500,
+                            }}
+                          >
                             · {SCENARIO.candidateCode}
                           </span>
                         </div>
                         <div style={{ fontSize: 13, color: COLORS.muted }}>
-                          {SCENARIO.role} · {SCENARIO.level} · Decided by {SCENARIO.evaluatorName}
+                          {SCENARIO.role} · {SCENARIO.level} · Decided by{' '}
+                          {SCENARIO.evaluatorName}
                         </div>
                       </div>
                     </div>
@@ -655,26 +1013,48 @@ export function Act5SynthesisHandoff() {
                   >
                     {reqCoverage.map((req) => (
                       <div key={req.label}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, marginBottom: 6 }}>
-                          <span style={{ fontWeight: 620, color: COLORS.ink }}>{req.label}</span>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            fontSize: 13.5,
+                            marginBottom: 6,
+                          }}
+                        >
+                          <span style={{ fontWeight: 620, color: COLORS.ink }}>
+                            {req.label}
+                          </span>
                           <span
                             className="hc-mono"
                             style={{
                               fontSize: 11.5,
-                              color: req.tone === 'pass' ? COLORS.pass : COLORS.muted,
+                              color:
+                                req.tone === 'pass'
+                                  ? COLORS.pass
+                                  : COLORS.muted,
                               fontWeight: 600,
                             }}
                           >
                             {req.status}
                           </span>
                         </div>
-                        <div style={{ height: 6, borderRadius: 999, background: '#e5ddd3', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: 6,
+                            borderRadius: 999,
+                            background: '#e5ddd3',
+                            overflow: 'hidden',
+                          }}
+                        >
                           <div
                             style={{
                               height: '100%',
                               width: `${req.pct * reqBars}%`,
                               borderRadius: 999,
-                              background: req.tone === 'pass' ? COLORS.mintDeep : COLORS.purple,
+                              background:
+                                req.tone === 'pass'
+                                  ? COLORS.mintDeep
+                                  : COLORS.purple,
                             }}
                           />
                         </div>
@@ -692,8 +1072,18 @@ export function Act5SynthesisHandoff() {
                       flex: 1,
                     }}
                   >
-                    <div className="hc-mono" style={{ fontSize: 11, color: COLORS.plum, letterSpacing: '0.1em', fontWeight: 650, marginBottom: 10 }}>
-                      TAILORED ROUND-2 INTERVIEW PROBES FOR {SCENARIO.managerName.toUpperCase()}
+                    <div
+                      className="hc-mono"
+                      style={{
+                        fontSize: 11,
+                        color: COLORS.plum,
+                        letterSpacing: '0.1em',
+                        fontWeight: 650,
+                        marginBottom: 10,
+                      }}
+                    >
+                      TAILORED ROUND-2 INTERVIEW PROBES FOR{' '}
+                      {SCENARIO.managerName.toUpperCase()}
                     </div>
                     {KIMI_REVIEW.nextInterviewQuestions.map((q, idx) => (
                       <div
@@ -708,7 +1098,10 @@ export function Act5SynthesisHandoff() {
                           fontWeight: 520,
                         }}
                       >
-                        <span className="hc-mono" style={{ color: COLORS.mintDeep, fontWeight: 700 }}>
+                        <span
+                          className="hc-mono"
+                          style={{ color: COLORS.mintDeep, fontWeight: 700 }}
+                        >
                           0{idx + 1}
                         </span>
                         <span>“{q}”</span>
@@ -717,7 +1110,13 @@ export function Act5SynthesisHandoff() {
                   </div>
 
                   {/* Direct 1-click link back to immutable evidence */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
                     <span style={{ fontSize: 14, color: COLORS.muted }}>
                       Zero context lost between assessment and final round.
                     </span>

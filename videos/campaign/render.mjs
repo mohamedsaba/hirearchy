@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const project = fileURLToPath(new URL('.', import.meta.url));
-const outDir = fileURLToPath(new URL('../../launch-renders/campaign/', import.meta.url));
+const outDir = fileURLToPath(
+  new URL('../../launch-renders/campaign/', import.meta.url),
+);
 const stillsDir = join(outDir, 'stills');
 mkdirSync(stillsDir, { recursive: true });
 
@@ -47,7 +49,13 @@ if (only === 'all' || only === 'stills') {
   }
 }
 
-if (only === 'all' || only === 'films' || only === 'teaser' || only === 'reel' || only === 'master') {
+if (
+  only === 'all' ||
+  only === 'films' ||
+  only === 'teaser' ||
+  only === 'reel' ||
+  only === 'master'
+) {
   for (const [id, filename] of films) {
     if (only === 'teaser' && !id.includes('Teaser')) continue;
     if (only === 'reel' && !id.includes('Reel')) continue;

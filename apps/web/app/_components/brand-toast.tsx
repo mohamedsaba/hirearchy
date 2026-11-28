@@ -192,7 +192,7 @@ export function BrandToastViewport() {
   }, []);
 
   return (
-    <div
+    <section
       className="ct-toast-viewport"
       aria-label="Notifications"
       data-testid="brand-toast-viewport"
@@ -200,6 +200,6 @@ export function BrandToastViewport() {
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} />
       ))}
-    </div>
+    </section>
   );
 }

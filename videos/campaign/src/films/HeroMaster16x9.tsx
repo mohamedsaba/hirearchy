@@ -26,7 +26,11 @@ export function HeroMaster16x9() {
 
   return (
     <AbsoluteFill className="hc-root">
-      <Sequence name="Act I — The Illusion" from={f(0)} durationInFrames={f(12.2)}>
+      <Sequence
+        name="Act I — The Illusion"
+        from={f(0)}
+        durationInFrames={f(12.2)}
+      >
         <Act1Illusion />
       </Sequence>
 

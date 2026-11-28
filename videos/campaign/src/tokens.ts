@@ -159,7 +159,10 @@ export const CODE_HEADER_LINES = [
   { num: 111, text: '    "payment.refunded": "refunded",' },
   { num: 112, text: '}' },
   { num: 113, text: '' },
-  { num: 114, text: 'def handle_webhook(ledger: MerchantLedger, event: WebhookEvent) -> str:' },
+  {
+    num: 114,
+    text: 'def handle_webhook(ledger: MerchantLedger, event: WebhookEvent) -> str:',
+  },
 ];
 
 export const CODE_ADDED_DEDUPE = [
