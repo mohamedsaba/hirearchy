@@ -1993,19 +1993,12 @@ export function HiringAssessmentBuilderClient({
                         ? 'Generating tailored assessment'
                         : 'Assessment ready — opening preview'
                     }
-                    sublabel="Building starter repository, brief, and rubric — you can navigate elsewhere and return without losing progress."
+                    sublabel={
+                      generating
+                        ? 'Generating the starter repository, task brief, tests, and rubric. You can leave this page and return while generation runs.'
+                        : undefined
+                    }
                     startedAt={activeGenJob?.startedAt}
-                    steps={[
-                      { id: 'rubric', label: 'Analyzing role & constraints…' },
-                      {
-                        id: 'repo',
-                        label: 'Designing repository files & tests…',
-                      },
-                      {
-                        id: 'validate',
-                        label: 'Validating rubric & test harness…',
-                      },
-                    ]}
                   />
                 ) : null}
               </div>

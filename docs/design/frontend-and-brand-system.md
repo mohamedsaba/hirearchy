@@ -44,7 +44,7 @@ Loaded globally via `apps/web/app/layout.tsx` under `.software-product` (and `ht
 ### 1.4 AI Thinking & Streaming Primitives (`apps/web/app/_components/ai/`)
 
 - `CommonThreadSpark`: Geometric three-node weave starburst (`compact` 16px or 28px) with calm completion settle (`active` → `completing` mint check → `idle`).
-- `HirearchyAiThinking`: Stepped thinking indicator supporting `studio` (assessment generation), `inline` (assistant chat), and `advisory` (evaluator synthesis with explicit `Advisory only` badge per `ADR 0006`) variants, optional elapsed timer, and `active` / `completing` / `error` states.
+- `HirearchyAiThinking`: Indeterminate thinking indicator supporting `studio` (assessment generation), `inline` (assistant chat), and `advisory` (evaluator synthesis with explicit `Advisory only` badge per `ADR 0006`) variants, optional visual elapsed timer, and `active` / `completing` / `error` states.
 - `AiStreamingBubble`: Assistant chat bubble combining `thinking`, capped `<= 900ms` word-snapped progressive reveal (`animateReveal`, instant when `prefers-reduced-motion` matches), optional context disclosure, and neutral error reporting.
 - `AiReasoningDisclosure`: CSS grid `0fr -> 1fr` collapsible trace disclosure for recorded candidate AI context (`Recorded`) or advisory synthesis traces (`Advisory synthesis`), with optional settled duration pill.
 

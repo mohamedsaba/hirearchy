@@ -869,16 +869,7 @@ export function HandoffDossierClient({
                   status="active"
                   badge="Advisory only"
                   headline="Synthesizing Managerial Fit Report…"
-                  steps={[
-                    {
-                      id: 'evidence',
-                      label: 'Correlating submission & rubric evidence…',
-                    },
-                    {
-                      id: 'questions',
-                      label: 'Drafting live verification probes…',
-                    },
-                  ]}
+                  sublabel="Preparing an evidence summary and suggested follow-up questions."
                 />
               </div>
             ) : !report ? (

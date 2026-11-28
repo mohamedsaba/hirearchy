@@ -1094,6 +1094,22 @@ html[data-theme='dark']
   gap: 0.6rem;
 }
 
+.demo-dossier-dialog {
+  width: min(580px, calc(100% - 2rem));
+  max-width: none;
+  max-height: calc(100% - 2rem);
+  box-sizing: border-box;
+  margin: auto;
+}
+
+.demo-dossier-dialog::backdrop {
+  background: rgba(22, 15, 29, 0.72);
+}
+
+.demo-dossier-dialog:not([open]) {
+  display: none;
+}
+
 .demo-walkthrough-banner {
   display: flex;
   flex-wrap: wrap;

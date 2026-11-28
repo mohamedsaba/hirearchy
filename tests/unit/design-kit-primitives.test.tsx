@@ -398,6 +398,24 @@ describe('Common Thread 2.0 design kit primitives', () => {
   });
 
   describe('RouteProgressBar', () => {
+    it('ignores fragment history and still shows progress for a different route', async () => {
+      await act(async () => root.render(<RouteProgressBar />));
+
+      await act(async () => {
+        window.history.replaceState(null, '', '#details');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        vi.advanceTimersByTime(200);
+      });
+      expect(container.querySelector('.ct-route-progress')).toBeNull();
+
+      await act(async () => {
+        window.history.replaceState(null, '', '?status=submitted');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        vi.advanceTimersByTime(200);
+      });
+      expect(container.querySelector('.ct-route-progress')).not.toBeNull();
+    });
+
     it('does not flash under 140ms, shows after 140ms on internal link click, and completes on route change', async () => {
       await act(async () =>
         root.render(

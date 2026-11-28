@@ -9,7 +9,6 @@ export {
   type HirearchyAiThinkingProps,
   type HirearchyAiThinkingVariant,
   type HirearchyAiThinkingStatus,
-  type AiThinkingStep,
 } from './hirearchy-ai-thinking';
 
 export {

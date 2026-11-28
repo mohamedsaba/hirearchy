@@ -11,6 +11,7 @@ import {
   operationalLogger,
   sanitizeError,
 } from '../../../src/observability/logger.mjs';
+import { isPublicPreview } from '../../../src/runtime/profile';
 import { DossierClient } from './dossier-client';
 
 export const dynamic = 'force-dynamic';
@@ -69,6 +70,7 @@ export default async function PublicDossierPage({
 }) {
   const { shareToken } = await params;
   const selfServiceEnabled =
+    !isPublicPreview() &&
     process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
   const demoCtaHref = selfServiceEnabled ? '/r23/signup' : '/early-access';
 

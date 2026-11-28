@@ -9,11 +9,29 @@ import {
   type TelemetryEventInput,
 } from './catalog';
 
-const ANON_KEY = 'hirearchy:anon:v1';
-const ATTR_KEY = 'hirearchy:attr:v1';
+const ANON_COOKIE = 'hirearchy-anon';
+const ATTR_COOKIE = 'hirearchy-attr';
 
+let memoryAnonId: string | null = null;
+let memoryAttribution: TelemetryAttribution | null = null;
 let eventQueue: SanitizedTelemetryEvent[] = [];
 let flushTimer: number | null = null;
+
+function getCookieValue(name: string): string | null {
+  if (typeof document === 'undefined' || !document.cookie) return null;
+  try {
+    const prefix = `${name}=`;
+    for (const part of document.cookie.split(';')) {
+      const trimmed = part.trim();
+      if (trimmed.startsWith(prefix)) {
+        return decodeURIComponent(trimmed.slice(prefix.length));
+      }
+    }
+  } catch {
+    // Ignore cookie decode errors in restricted contexts
+  }
+  return null;
+}
 
 function setCookieValue(name: string, value: string, maxAgeSeconds: number) {
   if (typeof document === 'undefined') return;
@@ -27,16 +45,17 @@ function setCookieValue(name: string, value: string, maxAgeSeconds: number) {
 export function getOrCreateAnonymousId(): string {
   if (typeof window === 'undefined') return '';
   try {
-    const existing = window.localStorage.getItem(ANON_KEY);
+    const existing = getCookieValue(ANON_COOKIE) ?? memoryAnonId;
     if (existing && existing.length >= 8 && existing.length <= 80) {
+      memoryAnonId = existing;
       return existing;
     }
     const generated =
       typeof window.crypto?.randomUUID === 'function'
         ? `anon_${window.crypto.randomUUID().replace(/-/g, '')}`
         : `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
-    window.localStorage.setItem(ANON_KEY, generated);
-    setCookieValue('hirearchy-anon', generated, 31536000);
+    memoryAnonId = generated;
+    setCookieValue(ANON_COOKIE, generated, 31536000);
     return generated;
   } catch {
     return '';
@@ -70,13 +89,13 @@ export function captureClientAttribution(): TelemetryAttribution | null {
     }
 
     const landingPath = normalizeRoutePath(url.pathname);
-    const existingRaw = window.localStorage.getItem(ATTR_KEY);
-    let stored: TelemetryAttribution | null = null;
+    const existingRaw = getCookieValue(ATTR_COOKIE);
+    let stored: TelemetryAttribution | null = memoryAttribution;
     if (existingRaw) {
       try {
         stored = JSON.parse(existingRaw) as TelemetryAttribution;
       } catch {
-        stored = null;
+        stored = memoryAttribution;
       }
     }
 
@@ -102,8 +121,8 @@ export function captureClientAttribution(): TelemetryAttribution | null {
           landingPath,
         };
 
-    window.localStorage.setItem(ATTR_KEY, JSON.stringify(next));
-    setCookieValue('hirearchy-attr', JSON.stringify(next), 2592000);
+    memoryAttribution = next;
+    setCookieValue(ATTR_COOKIE, JSON.stringify(next), 2592000);
     return next;
   } catch {
     return { anonymousId };

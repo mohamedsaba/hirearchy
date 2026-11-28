@@ -85,14 +85,6 @@ export function ThemeToggle({
 
   function handleToggle() {
     applyThemeToDocument(nextTheme);
-    void fetch('/api/theme', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({ theme: nextTheme }),
-    }).catch(() => undefined);
   }
 
   return (

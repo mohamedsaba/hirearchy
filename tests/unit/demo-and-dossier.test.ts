@@ -153,6 +153,7 @@ describe('Interactive Demo, Sample Session & Executive Dossier', () => {
       createElement(DemoClient, {
         ctaHref: '/r23/signup',
         ctaLabel: 'Create free org workspace',
+        telemetryEnabled: true,
       }),
     );
     expect(demoHtml).toContain('Interactive Sandbox · No Sign-up Required');

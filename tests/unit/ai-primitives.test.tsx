@@ -9,7 +9,6 @@ import {
   CommonThreadSpark,
   HirearchyAiThinking,
   type AiReasoningTraceItem,
-  type AiThinkingStep,
 } from '../../apps/web/app/_components/ai';
 
 describe('Common Thread 2.0 AI primitives', () => {
@@ -69,16 +68,6 @@ describe('Common Thread 2.0 AI primitives', () => {
   });
 
   describe('<HirearchyAiThinking />', () => {
-    const sampleSteps: readonly AiThinkingStep[] = [
-      {
-        id: 'rubric',
-        label: 'Analyzing role & constraints…',
-        detail: 'Senior backend rubric',
-      },
-      { id: 'repo', label: 'Designing repository files & tests…' },
-      { id: 'validate', label: 'Validating rubric & test harness…' },
-    ];
-
     it('renders studio, inline, and advisory variants with appropriate badges', async () => {
       await renderNode(
         <HirearchyAiThinking
@@ -86,8 +75,6 @@ describe('Common Thread 2.0 AI primitives', () => {
           status="active"
           headline="Drafting scenario workspace"
           sublabel="You can navigate elsewhere while this finishes."
-          steps={sampleSteps}
-          activeStepIndex={1}
           testId="studio-thinking"
         />,
       );
@@ -103,13 +90,6 @@ describe('Common Thread 2.0 AI primitives', () => {
       expect(container.textContent).toContain(
         'You can navigate elsewhere while this finishes.',
       );
-
-      const stepEls = Array.from(container.querySelectorAll('.ct-ai-step'));
-      expect(stepEls.map((el) => el.getAttribute('data-step-status'))).toEqual([
-        'completed',
-        'active',
-        'pending',
-      ]);
 
       await renderNode(
         <HirearchyAiThinking
@@ -148,7 +128,7 @@ describe('Common Thread 2.0 AI primitives', () => {
       ).toBe('AI advisory');
     });
 
-    it('tracks elapsed seconds from startedAt and auto-advances steps', async () => {
+    it('updates visual elapsed time without changing the announced status', async () => {
       vi.useFakeTimers();
       const baseNow = new Date('2026-11-27T18:00:00Z').getTime();
       vi.setSystemTime(baseNow);
@@ -159,19 +139,12 @@ describe('Common Thread 2.0 AI primitives', () => {
           status="active"
           headline="Generating assessment"
           startedAt={baseNow - 12_000}
-          steps={sampleSteps}
-          stepIntervalMs={2000}
         />,
       );
 
       expect(
         container.querySelector('[data-testid="ct-ai-timer"]')?.textContent,
       ).toBe('12s');
-      expect(
-        container
-          .querySelectorAll('.ct-ai-step')[0]
-          ?.getAttribute('data-step-status'),
-      ).toBe('active');
 
       await act(async () => {
         vi.advanceTimersByTime(2000);
@@ -181,19 +154,21 @@ describe('Common Thread 2.0 AI primitives', () => {
         container.querySelector('[data-testid="ct-ai-timer"]')?.textContent,
       ).toBe('14s');
       expect(
-        Array.from(container.querySelectorAll('.ct-ai-step')).map((el) =>
-          el.getAttribute('data-step-status'),
-        ),
-      ).toEqual(['completed', 'active', 'pending']);
+        container
+          .querySelector('[data-testid="ct-ai-timer"]')
+          ?.closest('[aria-hidden="true"]'),
+      ).not.toBeNull();
+      expect(container.querySelector('[role="status"]')?.textContent).toContain(
+        'Generating assessment',
+      );
     });
 
-    it('settles all steps and spark on completing and handles error state', async () => {
+    it('settles the spark on completion and announces the error state', async () => {
       await renderNode(
         <HirearchyAiThinking
           variant="studio"
           status="completing"
           headline="Scenario ready"
-          steps={sampleSteps}
           showTimer={false}
         />,
       );
@@ -203,29 +178,17 @@ describe('Common Thread 2.0 AI primitives', () => {
       ).toBe('completing');
       expect(container.querySelector('.ct-ai-shimmer--active')).toBeNull();
       expect(container.querySelector('[data-testid="ct-ai-timer"]')).toBeNull();
-      expect(
-        Array.from(container.querySelectorAll('.ct-ai-step')).map((el) =>
-          el.getAttribute('data-step-status'),
-        ),
-      ).toEqual(['completed', 'completed', 'completed']);
 
       await renderNode(
         <HirearchyAiThinking
           variant="advisory"
           status="error"
           headline="Unable to draft synthesis"
-          steps={sampleSteps}
-          activeStepIndex={1}
         />,
       );
       expect(
         container.querySelector('.ct-ai-thinking')?.getAttribute('role'),
       ).toBe('alert');
-      expect(
-        Array.from(container.querySelectorAll('.ct-ai-step')).map((el) =>
-          el.getAttribute('data-step-status'),
-        ),
-      ).toEqual(['completed', 'error', 'pending']);
     });
   });
 

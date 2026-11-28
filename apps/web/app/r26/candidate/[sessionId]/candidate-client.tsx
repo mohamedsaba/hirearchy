@@ -3147,6 +3147,8 @@ export function R26CandidateClient({
                   <span className="sr-only">Workspace file</span>
                   <select
                     className="r26-file-switcher"
+                    aria-label="Workspace file"
+                    aria-describedby="candidate-file-save-hint"
                     value={selectedPath}
                     disabled={!canSwitchFile}
                     onChange={(event) =>
@@ -3519,6 +3521,7 @@ export function R26CandidateClient({
                     ...current,
                     [selectedPath]: nextDraft,
                   }));
+                  setMobileTab('code');
                   setMessage('');
                 }}
               />

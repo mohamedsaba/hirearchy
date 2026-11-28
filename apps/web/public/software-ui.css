@@ -3626,27 +3626,6 @@ html[data-theme='dark'] .ct-copy-btn[data-copied='true'] {
   padding: 0 0.95rem 0.9rem;
 }
 
-@supports selector(details::details-content) {
-  .software-product details {
-    interpolate-size: allow-keywords;
-  }
-
-  .software-product details::details-content {
-    block-size: 0;
-    opacity: 0;
-    overflow: clip;
-    transition:
-      block-size 220ms var(--motion-snappy, cubic-bezier(0.22, 1, 0.36, 1)),
-      opacity 180ms ease,
-      content-visibility 220ms allow-discrete;
-  }
-
-  .software-product details[open]::details-content {
-    block-size: auto;
-    opacity: 1;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ct-route-progress-bar {
     box-shadow: none;

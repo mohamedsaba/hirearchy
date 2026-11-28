@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -1340,6 +1341,7 @@ const EvidenceView = ({
   loadingMoreR27,
   r27PageError,
   hasHiringContext = false,
+  isolated = false,
   hiringDraft,
   onHiringDraftChange,
   onBackToTimeline,
@@ -1359,6 +1361,7 @@ const EvidenceView = ({
   loadingMoreR27?: boolean;
   r27PageError?: string | null;
   hasHiringContext?: boolean;
+  isolated?: boolean;
   hiringDraft?: HiringDecisionDraft | null;
   onHiringDraftChange?: (patch: Partial<HiringDecisionDraft>) => void;
   onBackToTimeline?: () => void;
@@ -1606,6 +1609,7 @@ const EvidenceView = ({
               key={selectedSource?.key ?? 'evidence-empty'}
               source={selectedSource}
               r27Evidence={r27Evidence}
+              isolated={isolated}
               fileEvidencePanel={
                 usesReviewDesk
                   ? {
@@ -1723,7 +1727,7 @@ type R27EvaluatorReviewWorkspaceProps = Readonly<{
   demoMode?: boolean;
   isSample?: boolean;
   controlledTab?: WorkbenchMode;
-  onTabChange?: (tab: WorkbenchMode) => void;
+  onTabChange?: (tab: WorkbenchMode, source?: 'restore') => void;
   controlledFilter?: EvidenceFilter;
   onFilterChange?: (filter: EvidenceFilter) => void;
   onSimulatedPublish?: (
@@ -1909,6 +1913,7 @@ export const EvaluatorReviewWorkspace = (
     }
   };
   const [internalFilter, setInternalFilter] = useState<EvidenceFilter>(() =>
+    initialHiringReviewContext &&
     initialR27Evidence &&
     (initialR27Evidence.revisions.length > 0 ||
       Boolean(initialR27Evidence.submission))
@@ -1938,6 +1943,13 @@ export const EvaluatorReviewWorkspace = (
     sourcesRef.current = sources;
   }, [sources]);
 
+  const restoreControlledMode = useEffectEvent((restored: WorkbenchMode) => {
+    if (controlledTab !== undefined) onTabChange?.(restored, 'restore');
+  });
+  const restoreControlledFilter = useEffectEvent((restored: EvidenceFilter) => {
+    if (controlledFilter !== undefined) onFilterChange?.(restored);
+  });
+
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
@@ -1959,6 +1971,7 @@ export const EvaluatorReviewWorkspace = (
         ) {
           const restoredMode = savedView.mode as WorkbenchMode;
           setModeState(restoredMode);
+          restoreControlledMode(restoredMode);
           setVisitedModes((current) => {
             if (current.has(restoredMode)) return current;
             const next = new Set(current);
@@ -1970,7 +1983,9 @@ export const EvaluatorReviewWorkspace = (
           savedView.filter &&
           (evidenceFilters as readonly string[]).includes(savedView.filter)
         ) {
-          setInternalFilter(savedView.filter as EvidenceFilter);
+          const restoredFilter = savedView.filter as EvidenceFilter;
+          setInternalFilter(restoredFilter);
+          restoreControlledFilter(restoredFilter);
         }
         if (
           typeof savedView.selectedSourceKey === 'string' &&
@@ -2039,6 +2054,7 @@ export const EvaluatorReviewWorkspace = (
     const current = r27Evidence;
     const afterSequence = current?.pagination.nextAfterSequence;
     if (
+      isolated ||
       !current ||
       afterSequence === null ||
       afterSequence === undefined ||
@@ -2599,6 +2615,7 @@ export const EvaluatorReviewWorkspace = (
                   loadingMoreR27={loadingMoreR27}
                   r27PageError={r27PageError}
                   hasHiringContext={Boolean(hiringReviewContext)}
+                  isolated={isolated}
                   hiringDraft={hiringDecisionDraft}
                   onHiringDraftChange={updateHiringDecisionDraft}
                   onBackToTimeline={() => {
@@ -2661,7 +2678,7 @@ export const EvaluatorReviewWorkspace = (
                           }}
                         />
                       ) : null}
-                      {r210IsEnabled() ? (
+                      {!isolated && r210IsEnabled() ? (
                         hiringReviewContext ? (
                           <details className="evaluator-source-details">
                             <summary>Formal audit packet (optional)</summary>
@@ -2770,6 +2787,7 @@ export const EvaluatorReviewWorkspace = (
                 source={focusedSource}
                 r27Evidence={r27Evidence}
                 headingRef={inspectorHeading}
+                isolated={isolated}
               />
             ) : evidence && review && projection ? (
               <EvidenceSourceInspector

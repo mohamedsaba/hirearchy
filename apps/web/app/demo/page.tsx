@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { isPublicPreview } from '../../src/runtime/profile';
 import { DemoClient } from './demo-client';
 
 export const dynamic = 'force-dynamic';
@@ -10,12 +11,20 @@ export const metadata: Metadata = {
 };
 
 export default function PublicDemoPage() {
+  const preview = isPublicPreview();
   const selfServiceEnabled =
+    !preview &&
     process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
   const ctaHref = selfServiceEnabled ? '/r23/signup' : '/early-access';
   const ctaLabel = selfServiceEnabled
     ? 'Create free org workspace'
     : 'Request early access';
 
-  return <DemoClient ctaHref={ctaHref} ctaLabel={ctaLabel} />;
+  return (
+    <DemoClient
+      ctaHref={ctaHref}
+      ctaLabel={ctaLabel}
+      telemetryEnabled={!preview}
+    />
+  );
 }

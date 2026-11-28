@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import {
   IconCheck,
   IconCopy,
@@ -674,7 +682,10 @@ type R27InspectorProps = Readonly<{
   r27Evidence: R27Evidence;
   headingRef?: RefObject<HTMLHeadingElement | null>;
   fileEvidencePanel?: FileEvidencePanel;
+  isolated?: boolean;
 }>;
+
+const IsolatedEvidenceContext = createContext(false);
 
 const R29ObservationPanel = ({
   organizationId,
@@ -693,6 +704,8 @@ const R29ObservationPanel = ({
   fileVersion?: string | null;
   evidenceDigest: string;
 }>) => {
+  const isolated = useContext(IsolatedEvidenceContext);
+  const enabled = !isolated && r29IsEnabled();
   const [observations, setObservations] = useState<
     readonly R29EvaluatorObservation[]
   >([]);
@@ -721,6 +734,7 @@ const R29ObservationPanel = ({
   };
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     const controller = new AbortController();
 
@@ -768,7 +782,7 @@ const R29ObservationPanel = ({
       active = false;
       controller.abort();
     };
-  }, [organizationId, sessionId]);
+  }, [enabled, organizationId, sessionId]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -908,7 +922,7 @@ const R29ObservationPanel = ({
     fileVersion,
   });
 
-  if (!r29IsEnabled()) return null;
+  if (!enabled) return null;
 
   return (
     <section
@@ -3095,13 +3109,15 @@ export const EvidenceSourceInspector = (
   } | null>(null);
   if ('r27Evidence' in props)
     return (
-      <R27EvidenceSourceInspector
-        source={props.source}
-        r27Evidence={props.r27Evidence}
-        headingId={headingId}
-        headingRef={props.headingRef}
-        fileEvidencePanel={props.fileEvidencePanel}
-      />
+      <IsolatedEvidenceContext value={props.isolated ?? false}>
+        <R27EvidenceSourceInspector
+          source={props.source}
+          r27Evidence={props.r27Evidence}
+          headingId={headingId}
+          headingRef={props.headingRef}
+          fileEvidencePanel={props.fileEvidencePanel}
+        />
+      </IsolatedEvidenceContext>
     );
 
   const { source, evidence, review, projection, headingRef } = props;

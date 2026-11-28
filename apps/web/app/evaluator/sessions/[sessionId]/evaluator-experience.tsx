@@ -39,7 +39,10 @@ type R27EvaluatorExperienceProps = Readonly<{
   demoMode?: boolean;
   isSample?: boolean;
   controlledTab?: 'Summary' | 'Evidence' | 'Review';
-  onTabChange?: (tab: 'Summary' | 'Evidence' | 'Review') => void;
+  onTabChange?: (
+    tab: 'Summary' | 'Evidence' | 'Review',
+    source?: 'restore',
+  ) => void;
   controlledFilter?: EvidenceFilter;
   onFilterChange?: (filter: EvidenceFilter) => void;
   onSimulatedPublish?: (

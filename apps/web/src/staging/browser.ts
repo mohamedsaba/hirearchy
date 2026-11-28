@@ -1504,10 +1504,20 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
             {},
           )) as { memberships?: StagingMembershipItem[] } | null;
           const memberships = membershipRes?.memberships ?? [];
-          const lastOrgCookie = cookieValue(
-            request,
-            'hirearchy-last-org',
-          )?.toLowerCase();
+          const rawLastOrgCookie = cookieValue(request, 'hirearchy-last-org');
+          const lastOrgCookie = (() => {
+            if (!rawLastOrgCookie) return undefined;
+            if (rawLastOrgCookie.startsWith('v1.')) {
+              try {
+                return Buffer.from(rawLastOrgCookie.slice(3), 'base64url')
+                  .toString('utf8')
+                  .toLowerCase();
+              } catch {
+                return undefined;
+              }
+            }
+            return rawLastOrgCookie.toLowerCase();
+          })();
           const preferredOrg =
             (lastOrgCookie &&
               UUID.test(lastOrgCookie) &&
@@ -1553,9 +1563,9 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
         true,
       ),
       clearCookieHeader(R23_CALLBACK_COOKIE, true),
-      ...(selectedOrganizationId
+      ...(isHiringPlatformEnabled() && selectedOrganizationId
         ? [
-            `hirearchy-last-org=${encodeURIComponent(selectedOrganizationId)}; Path=/; Max-Age=2592000; SameSite=Lax`,
+            `hirearchy-last-org=v1.${Buffer.from(selectedOrganizationId, 'utf8').toString('base64url')}; Path=/; Max-Age=2592000; SameSite=Lax`,
           ]
         : []),
     ]);
@@ -1732,7 +1742,11 @@ export async function stagingOrganizationPost(
             encryptSessionPayload(updatedSession, sessionKey),
             true,
           ),
-          `hirearchy-last-org=${encodeURIComponent(organizationId)}; Path=/; Max-Age=2592000; SameSite=Lax`,
+          ...(isHiringPlatformEnabled()
+            ? [
+                `hirearchy-last-org=v1.${Buffer.from(organizationId, 'utf8').toString('base64url')}; Path=/; Max-Age=2592000; SameSite=Lax`,
+              ]
+            : []),
         ]);
       },
     );
@@ -2477,7 +2491,7 @@ export async function stagingOrganizationSessionPageGet(
                           : 'Evaluator';
                     return `
                 <li>
-                  <span>${safeHtml(reviewerRole)} (<code title="${safeHtml(a.reviewerPrincipalId)}">${safeHtml(a.reviewerPrincipalId.slice(0, 8))}</code>)</span>
+                  <span>${safeHtml(reviewerRole)} (<code>${safeHtml(a.reviewerPrincipalId)}</code>)</span>
                   <span class="software-reviewer-status ${a.revokedAt ? 'is-revoked' : 'is-active'}">${a.revokedAt ? 'Revoked' : 'Active'}</span>
                 </li>`;
                   })
@@ -6164,7 +6178,11 @@ export async function stagingOrganizationBootstrapPost(
             encryptSessionPayload(updatedSession, sessionKey),
             true,
           ),
-          `hirearchy-last-org=${encodeURIComponent(organizationId)}; Path=/; Max-Age=2592000; SameSite=Lax`,
+          ...(isHiringPlatformEnabled()
+            ? [
+                `hirearchy-last-org=v1.${Buffer.from(organizationId, 'utf8').toString('base64url')}; Path=/; Max-Age=2592000; SameSite=Lax`,
+              ]
+            : []),
         ]);
       },
     );

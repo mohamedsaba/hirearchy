@@ -190,13 +190,8 @@ export const R27AiReviewPanel = ({
             status="active"
             badge="Advisory only"
             headline="Analyzing candidate evidence…"
-            sublabel="Synthesizing diffs, recorded runs, and workflow signals — human evaluators own final verdicts."
+            sublabel="Preparing an advisory summary from the recorded diffs, test runs, and workflow evidence."
             startedAt={loadingStartedAt}
-            steps={[
-              { id: 'diffs', label: 'Reading workspace diffs…' },
-              { id: 'runs', label: 'Cross-referencing test runs…' },
-              { id: 'summary', label: 'Drafting advisory summary…' },
-            ]}
             testId="r27-ai-thinking"
           />
         </div>

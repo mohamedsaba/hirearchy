@@ -871,11 +871,14 @@ export function HiringDecisionPanel({
           ? `Sandbox preview: Advancement to ${nextStageLabel.trim() || 'next stage'} simulated. Zero credits used.`
           : 'Sandbox preview: Rejection feedback simulated. Zero credits used.',
       );
-      emitToast({
-        message: 'Simulated decision preview ready.',
-        tone: 'success',
-      });
-      onSimulatedPublish?.(activeDraft, nextReport);
+      if (onSimulatedPublish) {
+        onSimulatedPublish(activeDraft, nextReport);
+      } else {
+        emitToast({
+          message: 'Simulated decision preview ready.',
+          tone: 'success',
+        });
+      }
       return;
     }
     setBusyAction('publish');
@@ -1280,23 +1283,8 @@ export function HiringDecisionPanel({
                             status="active"
                             badge="Advisory only"
                             headline="Synthesizing Managerial Fit Report…"
-                            sublabel="Summarizing observable evidence and requirement coverage — non-binding advisory."
+                            sublabel="Preparing an advisory summary of the submitted work and requirement coverage."
                             startedAt={reportStartedAt}
-                            steps={[
-                              {
-                                id: 'evidence',
-                                label: 'Reviewing submitted files & test runs…',
-                              },
-                              {
-                                id: 'notes',
-                                label:
-                                  'Incorporating evaluator feedback notes…',
-                              },
-                              {
-                                id: 'fit',
-                                label: 'Formatting managerial fit brief…',
-                              },
-                            ]}
                             testId="fit-report-thinking"
                           />
                         ) : null}
@@ -1481,9 +1469,11 @@ export function HiringDecisionPanel({
                   </>
                 ) : ctx.decision?.decision === decision && !isDirtyDraft ? (
                   <>
-                    <IconCircleCheck size={16} aria-hidden="true" /> Outcome
-                    published
+                    <IconCircleCheck size={16} aria-hidden="true" />{' '}
+                    {isolated ? 'Outcome simulated' : 'Outcome published'}
                   </>
+                ) : isolated ? (
+                  'Ready to simulate'
                 ) : (
                   'Ready to publish'
                 )}
@@ -1529,7 +1519,9 @@ export function HiringDecisionPanel({
                 >
                   {busyAction === 'publish'
                     ? 'Publishing decision…'
-                    : 'Publish decision'}
+                    : isolated
+                      ? 'Simulate decision'
+                      : 'Publish decision'}
                 </button>
               </div>
             </div>

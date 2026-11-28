@@ -123,7 +123,12 @@ export function RouteProgressBar() {
     };
 
     const handlePopState = () => {
-      startNavigation();
+      const { pathname, search } = window.location;
+      if (
+        `${pathname}::${new URLSearchParams(search)}` !== lastRouteRef.current
+      ) {
+        startNavigation();
+      }
     };
 
     const handlePageHide = () => {

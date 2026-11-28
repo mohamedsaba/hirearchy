@@ -4,12 +4,6 @@ import { useEffect, useState } from 'react';
 import './ai-primitives.css';
 import { CommonThreadSpark } from './common-thread-spark';
 
-export interface AiThinkingStep {
-  readonly id: string;
-  readonly label: string;
-  readonly detail?: string;
-}
-
 export type HirearchyAiThinkingVariant = 'studio' | 'inline' | 'advisory';
 export type HirearchyAiThinkingStatus = 'active' | 'completing' | 'error';
 
@@ -18,9 +12,6 @@ export interface HirearchyAiThinkingProps {
   readonly status: HirearchyAiThinkingStatus;
   readonly headline: string;
   readonly sublabel?: string;
-  readonly steps?: readonly AiThinkingStep[];
-  readonly activeStepIndex?: number;
-  readonly stepIntervalMs?: number;
   readonly startedAt?: number;
   readonly showTimer?: boolean;
   readonly badge?: string;
@@ -33,47 +24,17 @@ function computeElapsedSeconds(startedAt?: number): number {
   return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
 }
 
-function resolveStepStatus(
-  index: number,
-  activeIndex: number,
-  overallStatus: HirearchyAiThinkingStatus,
-): 'completed' | 'active' | 'pending' | 'error' {
-  if (overallStatus === 'completing') return 'completed';
-  if (overallStatus === 'error') {
-    if (index < activeIndex) return 'completed';
-    if (index === activeIndex) return 'error';
-    return 'pending';
-  }
-  if (index < activeIndex) return 'completed';
-  if (index === activeIndex) return 'active';
-  return 'pending';
-}
-
-/**
- * Stepped AI thinking indicator supporting Studio generation, inline chat,
- * and clearly labeled Advisory synthesis surfaces.
- */
 export function HirearchyAiThinking({
   variant = 'inline',
   status,
   headline,
   sublabel,
-  steps,
-  activeStepIndex,
-  stepIntervalMs = 2400,
   startedAt,
   showTimer = true,
   badge,
   testId,
   className = '',
 }: HirearchyAiThinkingProps) {
-  const [autoStepState, setAutoStepState] = useState<{
-    key: string;
-    index: number;
-  }>({
-    key: `${steps?.map((s) => s.id).join('|') ?? ''}:${status}`,
-    index: 0,
-  });
   const [elapsedState, setElapsedState] = useState<{
     startedAt: number | undefined;
     seconds: number;
@@ -81,10 +42,6 @@ export function HirearchyAiThinking({
     startedAt,
     seconds: computeElapsedSeconds(startedAt),
   }));
-
-  const stepKey = `${steps?.map((s) => s.id).join('|') ?? ''}:${status}`;
-  const currentAutoIndex =
-    autoStepState.key === stepKey ? autoStepState.index : 0;
 
   useEffect(() => {
     if (status !== 'active' || !showTimer) return;
@@ -102,43 +59,10 @@ export function HirearchyAiThinking({
     return () => window.clearInterval(secTimer);
   }, [status, showTimer, startedAt]);
 
-  useEffect(() => {
-    if (
-      status !== 'active' ||
-      activeStepIndex !== undefined ||
-      !steps ||
-      steps.length <= 1
-    ) {
-      return;
-    }
-    const maxIndex = steps.length - 1;
-    const stepTimer = window.setInterval(() => {
-      setAutoStepState((prev) => {
-        const base = prev.key === stepKey ? prev.index : 0;
-        return {
-          key: stepKey,
-          index: Math.min(maxIndex, base + 1),
-        };
-      });
-    }, stepIntervalMs);
-    return () => window.clearInterval(stepTimer);
-  }, [status, activeStepIndex, steps, stepIntervalMs, stepKey]);
-
   const elapsedSeconds =
     elapsedState.startedAt === startedAt
       ? elapsedState.seconds
       : computeElapsedSeconds(startedAt);
-
-  const resolvedStepIndex =
-    steps && steps.length > 0
-      ? Math.max(
-          0,
-          Math.min(
-            steps.length - 1,
-            activeStepIndex !== undefined ? activeStepIndex : currentAutoIndex,
-          ),
-        )
-      : 0;
 
   const resolvedBadge =
     badge !== undefined
@@ -215,83 +139,13 @@ export function HirearchyAiThinking({
         </div>
 
         {showElapsed ? (
-          <div className="ct-ai-thinking-meta">
+          <div className="ct-ai-thinking-meta" aria-hidden="true">
             <span className="ct-ai-timer" data-testid="ct-ai-timer">
               {elapsedSeconds}s
             </span>
           </div>
         ) : null}
       </div>
-
-      {steps && steps.length > 0 ? (
-        <ol className="ct-ai-steps">
-          {steps.map((step, index) => {
-            const stepStatus = resolveStepStatus(
-              index,
-              resolvedStepIndex,
-              status,
-            );
-            return (
-              <li
-                key={step.id}
-                className={`ct-ai-step ct-ai-step--${stepStatus}`}
-                data-step-status={stepStatus}
-              >
-                <span className="ct-ai-step-marker" aria-hidden="true">
-                  {stepStatus === 'completed' ? (
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M2.5 6.2L5 8.7L9.5 3.6"
-                        stroke="currentColor"
-                        strokeWidth="1.75"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  ) : stepStatus === 'error' ? (
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M3.2 3.2L8.8 8.8M8.8 3.2L3.2 8.8"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  ) : (
-                    <span className="ct-ai-step-dot" />
-                  )}
-                </span>
-                <span className="ct-ai-step-copy">
-                  <span
-                    className={`ct-ai-step-label ${
-                      stepStatus === 'active'
-                        ? 'ct-ai-shimmer ct-ai-shimmer--active'
-                        : ''
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                  {step.detail ? (
-                    <span className="ct-ai-step-detail">{step.detail}</span>
-                  ) : null}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      ) : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   IconArrowRight,
@@ -18,7 +18,7 @@ import {
   DEMO_R27_EVIDENCE,
   DEMO_SESSION_ID,
 } from '../../src/demo/sample-session';
-import type { PerformanceFitReport } from '../../src/hiring/types';
+import type { TelemetryEventInput } from '../../src/telemetry/catalog';
 import {
   flushClientTelemetry,
   trackClientEvent,
@@ -31,6 +31,7 @@ import type { HiringDecisionDraft } from '../evaluator/sessions/[sessionId]/hiri
 export interface DemoClientProps {
   readonly ctaHref: string;
   readonly ctaLabel: string;
+  readonly telemetryEnabled: boolean;
 }
 
 type WorkbenchTab = 'Summary' | 'Evidence' | 'Review';
@@ -40,8 +41,6 @@ interface SimulatedPublishState {
   readonly nextStageLabel: string;
   readonly feedbackNote: string;
   readonly strengths: readonly string[];
-  readonly weaknesses: readonly string[];
-  readonly report: PerformanceFitReport | null;
 }
 
 function splitLines(raw: string): string[] {
@@ -51,38 +50,42 @@ function splitLines(raw: string): string[] {
     .filter(Boolean);
 }
 
-export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
+export function DemoClient({
+  ctaHref,
+  ctaLabel,
+  telemetryEnabled,
+}: DemoClientProps) {
   const [activeTab, setActiveTab] = useState<WorkbenchTab>('Summary');
   const [evidenceFilter, setEvidenceFilter] =
     useState<EvidenceFilter>('Code changes');
   const [simulatedModal, setSimulatedModal] =
     useState<SimulatedPublishState | null>(null);
 
-  useEffect(() => {
-    const params =
-      typeof window !== 'undefined'
-        ? new URLSearchParams(window.location.search)
-        : null;
-    const src = params?.get('src')?.slice(0, 64) ?? 'direct';
-    trackClientEvent({
-      eventName: 'demo.opened',
-      category: 'acquisition',
-      actorType: 'visitor',
-      route: '/demo',
-      properties: { src },
-    });
-  }, []);
+  const trackDemoEvent = useCallback(
+    (
+      event: Pick<TelemetryEventInput, 'eventName' | 'properties'>,
+      flush = false,
+    ) => {
+      if (!telemetryEnabled) return;
+      trackClientEvent({
+        ...event,
+        category: 'acquisition',
+        actorType: 'visitor',
+        route: '/demo',
+      });
+      if (flush) flushClientTelemetry();
+    },
+    [telemetryEnabled],
+  );
 
   useEffect(() => {
-    if (!simulatedModal) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setSimulatedModal(null);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [simulatedModal]);
+    const params = new URLSearchParams(window.location.search);
+    const src = params.get('src')?.slice(0, 64) ?? 'direct';
+    trackDemoEvent({
+      eventName: 'demo.opened',
+      properties: { src },
+    });
+  }, [trackDemoEvent]);
 
   const jumpTo = (
     tab: WorkbenchTab,
@@ -93,11 +96,8 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
     if (nextFilter) {
       setEvidenceFilter(nextFilter);
     }
-    trackClientEvent({
+    trackDemoEvent({
       eventName: 'demo.tab.viewed',
-      category: 'acquisition',
-      actorType: 'visitor',
-      route: '/demo',
       properties: {
         tab: tab.toLowerCase(),
         milestone,
@@ -106,39 +106,32 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
   };
 
   const handleCtaClick = (source: string) => {
-    trackClientEvent({
-      eventName: 'demo.cta.clicked',
-      category: 'acquisition',
-      actorType: 'visitor',
-      route: '/demo',
-      properties: { target: ctaHref, source },
-    });
-    flushClientTelemetry();
+    trackDemoEvent(
+      {
+        eventName: 'demo.cta.clicked',
+        properties: { target: ctaHref, source },
+      },
+      true,
+    );
   };
 
-  const handleSimulatedPublish = (
-    draft: HiringDecisionDraft,
-    report: PerformanceFitReport | null,
-  ) => {
+  const handleSimulatedPublish = (draft: HiringDecisionDraft) => {
     if (draft.decision !== 'accepted' && draft.decision !== 'rejected') return;
-    trackClientEvent({
-      eventName: 'demo.decision.simulated',
-      category: 'acquisition',
-      actorType: 'visitor',
-      route: '/demo',
-      properties: {
-        decision: draft.decision,
-        nextStage: draft.nextStageLabel.slice(0, 64),
+    trackDemoEvent(
+      {
+        eventName: 'demo.decision.simulated',
+        properties: {
+          decision: draft.decision,
+          nextStage: draft.nextStageLabel.slice(0, 64),
+        },
       },
-    });
-    flushClientTelemetry();
+      true,
+    );
     setSimulatedModal({
       decision: draft.decision,
       nextStageLabel: draft.nextStageLabel,
       feedbackNote: draft.feedbackNote,
       strengths: splitLines(draft.strengthsText),
-      weaknesses: splitLines(draft.weaknessesText),
-      report,
     });
   };
 
@@ -281,13 +274,11 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
           r27Evidence={DEMO_R27_EVIDENCE}
           hiringReviewContext={DEMO_HIRING_REVIEW_CONTEXT}
           controlledTab={activeTab}
-          onTabChange={(next) => {
+          onTabChange={(next, source) => {
             setActiveTab(next);
-            trackClientEvent({
+            if (source === 'restore') return;
+            trackDemoEvent({
               eventName: 'demo.tab.viewed',
-              category: 'acquisition',
-              actorType: 'visitor',
-              route: '/demo',
               properties: { tab: next.toLowerCase(), milestone: 'tab_bar' },
             });
           }}
@@ -298,86 +289,84 @@ export function DemoClient({ ctaHref, ctaLabel }: DemoClientProps) {
       </main>
 
       {simulatedModal ? (
-        <div
-          className="r210-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
+        <dialog
+          className="r210-modal-dialog demo-dossier-dialog hiring-stack-sm"
           aria-labelledby="demo-simulated-modal-title"
           data-testid="demo-simulated-decision-modal"
+          ref={(dialog) => {
+            if (dialog && !dialog.open) dialog.showModal();
+          }}
+          onClose={() => setSimulatedModal(null)}
         >
-          <div
-            className="r210-modal-dialog hiring-stack-sm"
-            style={{ maxWidth: '580px' }}
-          >
-            <div className="hiring-preview-header">
-              <div className="hiring-chip-group">
-                <span
-                  className={`hiring-pill ${simulatedModal.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
-                  style={{ marginBlockStart: 0 }}
-                >
-                  <IconCheck size={14} aria-hidden="true" />
-                  {simulatedModal.decision === 'accepted'
-                    ? `Simulated Advance · ${simulatedModal.nextStageLabel || 'Next Stage'}`
-                    : 'Simulated Hold / Do Not Advance'}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="hiring-btn hiring-btn-sm"
-                aria-label="Close simulated handoff preview"
-                onClick={() => setSimulatedModal(null)}
+          <div className="hiring-preview-header">
+            <div className="hiring-chip-group">
+              <span
+                className={`hiring-pill ${simulatedModal.decision === 'accepted' ? 'hiring-pill-success' : 'hiring-pill-danger'}`}
+                style={{ marginBlockStart: 0 }}
               >
-                <IconX size={15} aria-hidden="true" /> Close
-              </button>
+                <IconCheck size={14} aria-hidden="true" />
+                {simulatedModal.decision === 'accepted'
+                  ? `Simulated Advance · ${simulatedModal.nextStageLabel || 'Next Stage'}`
+                  : 'Simulated Hold / Do Not Advance'}
+              </span>
             </div>
-
-            <h2 id="demo-simulated-modal-title" style={{ margin: 0 }}>
-              Executive Dossier Preview Ready
-            </h2>
-            <p className="hiring-muted-copy">
-              In a live organization workspace, publishing a human verdict
-              generates a shareable, redacted executive dossier for your CTO or
-              hiring panel—with zero leaked PII or private scratchpad notes.
-            </p>
-
-            {simulatedModal.strengths.length > 0 ||
-            simulatedModal.feedbackNote ? (
-              <div className="hiring-card-subtle hiring-stack-xs">
-                <strong>What the executive brief captures</strong>
-                {simulatedModal.strengths.length > 0 ? (
-                  <ul className="hiring-bullet-list">
-                    {simulatedModal.strengths.slice(0, 3).map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                {simulatedModal.feedbackNote ? (
-                  <p className="hiring-muted-copy">
-                    {simulatedModal.feedbackNote}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="hiring-header-actions">
-              <Link
-                href="/dossier/demo"
-                className="hiring-btn"
-                onClick={() => handleCtaClick('simulated_modal_dossier')}
-              >
-                <IconExternalLink size={15} aria-hidden="true" />
-                Preview /dossier/demo
-              </Link>
-              <Link
-                href={ctaHref}
-                className="hiring-btn hiring-btn-primary"
-                onClick={() => handleCtaClick('simulated_modal_cta')}
-              >
-                {ctaLabel} <IconArrowRight size={15} aria-hidden="true" />
-              </Link>
-            </div>
+            <button
+              type="button"
+              className="hiring-btn hiring-btn-sm"
+              aria-label="Close simulated handoff preview"
+              onClick={(event) =>
+                event.currentTarget.closest('dialog')?.close()
+              }
+            >
+              <IconX size={15} aria-hidden="true" /> Close
+            </button>
           </div>
-        </div>
+
+          <h2 id="demo-simulated-modal-title" style={{ margin: 0 }}>
+            Executive Dossier Preview Ready
+          </h2>
+          <p className="hiring-muted-copy">
+            In your workspace, you can share a redacted dossier with your hiring
+            panel after publishing a decision.
+          </p>
+
+          {simulatedModal.strengths.length > 0 ||
+          simulatedModal.feedbackNote ? (
+            <div className="hiring-card-subtle hiring-stack-xs">
+              <strong>What the executive brief captures</strong>
+              {simulatedModal.strengths.length > 0 ? (
+                <ul className="hiring-bullet-list">
+                  {simulatedModal.strengths.slice(0, 3).map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {simulatedModal.feedbackNote ? (
+                <p className="hiring-muted-copy">
+                  {simulatedModal.feedbackNote}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="hiring-header-actions">
+            <Link
+              href="/dossier/demo"
+              className="hiring-btn hiring-btn-primary"
+              onClick={() => handleCtaClick('simulated_modal_dossier')}
+            >
+              <IconExternalLink size={15} aria-hidden="true" />
+              Open sample dossier
+            </Link>
+            <Link
+              href={ctaHref}
+              className="hiring-btn"
+              onClick={() => handleCtaClick('simulated_modal_cta')}
+            >
+              {ctaLabel} <IconArrowRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
+        </dialog>
       ) : null}
     </div>
   );
