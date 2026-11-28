@@ -1,11 +1,13 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
 import type { HandoffDossierItem } from '../../../../../src/hiring/types';
 import { isHiringPlatformEnabled } from '../../../../../src/runtime/profile';
 import { loadHiringOrganizationWorkspaceFromCookie } from '../../../../../src/staging/browser';
 import { OrganizationWorkspaceShell } from '../../../_components/workspace-shell';
+import { WorkspaceContentLoading } from '../../../_components/workspace-loading';
 import { HandoffsHubClient } from './handoffs-client';
 
 export const dynamic = 'force-dynamic';
@@ -27,12 +29,10 @@ export default async function OrganizationHandoffsPage({
     organizationId,
   );
   if (!workspace) {
-    redirect('/r23/login');
+    redirect(
+      `/r23/login?next=${encodeURIComponent(`/r23/organizations/${organizationId.toLowerCase()}/handoffs`)}`,
+    );
   }
-
-  const res = (await workspace.dispatch('hiring.handoffs.list', {
-    organizationId: workspace.organizationId,
-  })) as { handoffs?: HandoffDossierItem[] };
 
   return (
     <OrganizationWorkspaceShell
@@ -46,29 +46,40 @@ export default async function OrganizationHandoffsPage({
     >
       <div className="hiring-page-shell">
         <header className="hiring-page-header">
-          <div>
-            <span className="hiring-eyebrow">{workspace.organizationName}</span>
-            <h1>Managerial Handoffs</h1>
-            <p>
-              Structured transition packets for accepted candidates moving to
-              managerial or follow-up technical interviews.
-            </p>
-          </div>
+          <h1>Interview handoffs</h1>
           <div className="hiring-header-actions">
             <Link
               className="hiring-btn"
               href={`/r23/organizations/${encodeURIComponent(workspace.organizationId)}/candidates`}
             >
-              View All Candidates
+              View candidates
             </Link>
           </div>
         </header>
 
-        <HandoffsHubClient
-          organizationId={workspace.organizationId}
-          initialHandoffs={res?.handoffs ?? []}
-        />
+        <Suspense fallback={<WorkspaceContentLoading section="handoffs" />}>
+          <HandoffsContent workspace={workspace} />
+        </Suspense>
       </div>
     </OrganizationWorkspaceShell>
+  );
+}
+
+async function HandoffsContent({
+  workspace,
+}: {
+  workspace: NonNullable<
+    Awaited<ReturnType<typeof loadHiringOrganizationWorkspaceFromCookie>>
+  >;
+}) {
+  const res = (await workspace.dispatch('hiring.handoffs.list', {
+    organizationId: workspace.organizationId,
+  })) as { handoffs?: HandoffDossierItem[] };
+
+  return (
+    <HandoffsHubClient
+      organizationId={workspace.organizationId}
+      initialHandoffs={res?.handoffs ?? []}
+    />
   );
 }

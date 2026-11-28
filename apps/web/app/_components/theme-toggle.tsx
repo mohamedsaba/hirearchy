@@ -85,14 +85,6 @@ export function ThemeToggle({
 
   function handleToggle() {
     applyThemeToDocument(nextTheme);
-    void fetch('/api/theme', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({ theme: nextTheme }),
-    }).catch(() => undefined);
   }
 
   return (
@@ -103,7 +95,7 @@ export function ThemeToggle({
       aria-label={`Switch to ${nextTheme} theme`}
       aria-pressed={isDark}
       data-theme-state={theme}
-      title={`Switch to ${nextTheme === 'dark' ? 'Obsidian Plum Dark' : 'Warm Ivory Light'} theme`}
+      title={`Switch to ${nextTheme} theme`}
     >
       <span className="hiring-theme-toggle-icon" aria-hidden="true">
         {isDark ? (

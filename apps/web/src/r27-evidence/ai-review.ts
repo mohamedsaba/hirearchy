@@ -178,6 +178,7 @@ function buildReviewPromptPayload(
     '- "timingInsights": array of 1-3 concrete observations about the candidate\'s chronological workflow & time intervals between edits/saves/AI prompts',
     '- "requirementBreakdown": array of { "requirement": string, "status": "met" | "partial" | "not_observed", "evidence": string } checking each acceptance criterion & key role skill',
     '- "evidenceHighlights": array of { "label": string, "detail": string } (up to 4 items)',
+    '- "verificationQuestions": array of 3-4 objects { "question": string, "focus": string } — pointed, neutral 10-minute live follow-up questions anchored to exact modified files, code choices, edge cases, or notable edit intervals (Δ) to confirm candidate understanding without accusing them of misconduct',
   ].join('\n');
 
   const roleHeader = hiringContext
@@ -262,7 +263,6 @@ export async function generateR27AiCandidateReview(
       ({ content } = await callNvidiaKimiChat({
         systemPrompt,
         userPrompt,
-        modelId: resolved.modelId,
         maxTokens: 2800,
         timeoutMs: 65_000,
         fetchImpl,
@@ -382,6 +382,23 @@ export async function generateR27AiCandidateReview(
           .slice(0, 10)
       : undefined;
 
+    const verificationQuestions = Array.isArray(parsed.verificationQuestions)
+      ? parsed.verificationQuestions
+          .filter(
+            (item): item is { question: string; focus: string } =>
+              Boolean(item) &&
+              typeof item === 'object' &&
+              typeof (item as { question?: unknown }).question === 'string' &&
+              typeof (item as { focus?: unknown }).focus === 'string',
+          )
+          .map((item) => ({
+            question: item.question.trim().slice(0, 400),
+            focus: item.focus.trim().slice(0, 220),
+          }))
+          .filter((item) => item.question.length > 0 && item.focus.length > 0)
+          .slice(0, 4)
+      : undefined;
+
     return {
       ...baselineReport,
       score,
@@ -409,6 +426,10 @@ export async function generateR27AiCandidateReview(
           : baselineReport.evidenceHighlights,
       ...(timingInsights?.length ? { timingInsights } : {}),
       ...(requirementBreakdown?.length ? { requirementBreakdown } : {}),
+      verificationQuestions:
+        verificationQuestions && verificationQuestions.length > 0
+          ? verificationQuestions
+          : baselineReport.verificationQuestions,
       provider: {
         providerId: resolved.providerId === 'nvidia' ? 'nvidia' : 'openrouter',
         modelId: resolved.modelId,

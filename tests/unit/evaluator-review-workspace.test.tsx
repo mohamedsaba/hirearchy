@@ -2,8 +2,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../apps/web/src/telemetry/client', () => ({
+  trackClientEvent: vi.fn(),
+  flushClientTelemetry: vi.fn(),
+}));
 import type { R27Evidence } from '../../database/postgres/r27/contract.mjs';
 import { EvaluatorReviewWorkspace } from '../../apps/web/app/evaluator/sessions/[sessionId]/evaluator-review-workspace';
+import { DEMO_R27_EVIDENCE } from '../../apps/web/src/demo/sample-session';
 import type { AiInteraction } from '../../apps/web/src/ai/ai-interaction';
 import { buildEvaluatorBriefing } from '../../apps/web/src/evaluator/build-evaluator-briefing';
 import { buildEvaluatorAiConversations } from '../../apps/web/src/evaluator/evaluator-ai-conversations';
@@ -153,17 +159,60 @@ describe('evaluator evidence workbench', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     sessionStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    localStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    sessionStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
+    localStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
   });
 
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
     sessionStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    localStorage.removeItem(`hirearchy-review-draft:${sessionId}`);
+    sessionStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
+    localStorage.removeItem(`hirearchy:eval:workbench-view:v1:${sessionId}`);
     vi.unstubAllGlobals();
   });
 
   const flush = () =>
     act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  it('restores demo tabs and evidence filters through their controlled state', async () => {
+    const key = `hirearchy:demo:workbench-view:v1:${sessionId}`;
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({ mode: 'Evidence', filter: 'Execution runs' }),
+    );
+    const onTabChange = vi.fn();
+    const onFilterChange = vi.fn();
+
+    try {
+      await act(async () =>
+        root.render(
+          <EvaluatorReviewWorkspace
+            sessionId={sessionId}
+            readOnly
+            demoMode
+            r27Evidence={DEMO_R27_EVIDENCE}
+            controlledTab="Summary"
+            controlledFilter="Code changes"
+            onTabChange={onTabChange}
+            onFilterChange={onFilterChange}
+          />,
+        ),
+      );
+
+      expect(onTabChange).toHaveBeenCalledWith('Evidence', 'restore');
+      expect(onFilterChange).toHaveBeenCalledWith('Execution runs');
+      expect(fetchMock.mock.calls).not.toContainEqual([
+        expect.stringMatching(/\/r27\/api\/.*\/observations$/),
+        expect.anything(),
+      ]);
+    } finally {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    }
+  });
 
   const renderWorkspace = async (
     profile: (typeof briefingDepthProfiles)[number] = 'GENERALIST_RECRUITER',

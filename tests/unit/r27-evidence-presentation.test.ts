@@ -514,4 +514,111 @@ describe('R2.7 evidence presentation', () => {
       ),
     ).toBe(false);
   });
+
+  it('derives neutral workflow signals and code-grounded live verification questions', () => {
+    const bulkLines = Array.from(
+      { length: 48 },
+      (_, idx) => `    line_${idx} = ${idx}`,
+    ).join('\n');
+    const submittedCode = `def bulk_update():\n${bulkLines}\n    return True\n`;
+    const base = evidence();
+    const result = buildR27Presentation(
+      evidence({
+        scenario: {
+          ...base.scenario,
+          starterFiles: {
+            'bookings/service.py': 'def bulk_update():\n    return False\n',
+          },
+        },
+        submission: {
+          ...base.submission,
+          files: [
+            {
+              path: 'bookings/service.py',
+              version: '2',
+              digest: 'submitted-bulk-digest',
+              content: submittedCode,
+            },
+          ],
+        },
+        revisions: [
+          {
+            path: 'bookings/service.py',
+            version: '1',
+            digest: 'starter-bulk-digest',
+            content: 'def bulk_update():\n    return False\n',
+            source: 'starter',
+          },
+          {
+            path: 'bookings/service.py',
+            version: '2',
+            digest: 'submitted-bulk-digest',
+            content: submittedCode,
+            source: 'submitted',
+          },
+        ],
+        events: [
+          {
+            sequence: '1',
+            type: 'SESSION_ACTIVATED',
+            timestamp: '2026-10-26T10:00:00.000Z',
+            payload: {},
+            provenance: 'hirearchy.candidate_session_events',
+          },
+          {
+            sequence: '2',
+            type: 'WORKSPACE_CHANGED',
+            timestamp: '2026-10-26T10:15:00.000Z',
+            payload: { path: 'bookings/service.py', version: '2' },
+            provenance: 'hirearchy.candidate_session_events',
+          },
+        ],
+        aiInteractions: [
+          {
+            interactionId: 'ai-1',
+            requestId: 'req-1',
+            sequenceStart: '2',
+            sequenceCompleted: '3',
+            candidatePrompt: 'Explain edge cases for bulk updates.',
+            assistantResponse: 'Consider idempotency keys.',
+            status: 'COMPLETED',
+            failureReason: null,
+            errorMessage: null,
+            providerId: 'nvidia',
+            modelId: 'moonshotai/kimi-k3.1-pro',
+            createdAt: '2026-10-26T10:12:00.000Z',
+            completedAt: '2026-10-26T10:12:05.000Z',
+          },
+        ],
+        executions: [],
+      }),
+    );
+
+    const signalIds = result.workflowSignals.map((signal) => signal.id);
+    expect(signalIds).toContain('concentrated-save-footprint');
+    expect(signalIds).toContain('extended-pause-before-checkpoint');
+    expect(signalIds).toContain('no-sandboxed-test-run');
+    expect(signalIds).toContain('recorded-workspace-ai');
+
+    expect(
+      result.workflowSignals.every(
+        (signal) => !/cheat|plagiar|dishonest/i.test(signal.detail),
+      ),
+    ).toBe(true);
+
+    expect(result.liveVerificationQuestions.length).toBeGreaterThanOrEqual(3);
+    expect(result.liveVerificationQuestions[0]?.question).toContain(
+      'bookings/service.py',
+    );
+    expect(
+      result.liveVerificationQuestions.some((q) =>
+        /regression test|verified/i.test(q.question),
+      ),
+    ).toBe(true);
+    expect(
+      result.liveVerificationQuestions.some((q) =>
+        /evolved|alternative/i.test(q.question),
+      ),
+    ).toBe(true);
+  });
 });

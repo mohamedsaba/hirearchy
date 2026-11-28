@@ -2,12 +2,17 @@
 
 import {
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
 } from 'react';
 import {
+  IconArrowRight,
+  IconChevronLeft,
+  IconChevronRight,
   IconCode,
   IconFile,
   IconListDetails,
@@ -31,11 +36,31 @@ import {
   type R27Presentation,
 } from '../../../../src/r27-evidence/presentation';
 import type { R27AiReviewReport } from '../../../../src/r27-evidence/ai-review-contract';
-import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
+import { experienceLevelLabel } from '../../../../src/hiring/catalogs';
+import type {
+  PerformanceFitReport,
+  SessionHiringReviewContext,
+} from '../../../../src/hiring/types';
 import { hasPlanFeature } from '../../../../src/plans/entitlements';
+import {
+  readPersistedJson,
+  removePersistedKey,
+  writePersistedJson,
+} from '../../../../src/ui/browser-state';
+import { trackClientEvent } from '../../../../src/telemetry/client';
 import { ScenarioBrief } from '../../../../src/ui/scenario-brief';
+import { useSlidingIndicator } from '../../../../src/ui/use-sliding-indicator';
+import { CommonThreadSpark } from '../../../_components/ai';
+import { CopyActionButton } from '../../../_components/copy-action-button';
+import { KbdHint } from '../../../_components/kbd-hint';
 import { R27AiReviewPanel } from './ai-review-panel';
-import { HiringDecisionPanel } from './hiring-decision-panel';
+import {
+  HiringDecisionPanel,
+  hiringDecisionDraftKey,
+  initialHiringDecisionDraft,
+  restoreHiringDecisionDraft,
+  type HiringDecisionDraft,
+} from './hiring-decision-panel';
 import { computeDiffStats } from './code-diff-viewer';
 import { ArtifactAvailabilityCard } from './artifact-availability-card';
 import { CompactAiSummary } from './compact-ai-summary';
@@ -60,10 +85,19 @@ import { ReviewWorkflowPanel } from './review-workflow-panel';
 import { TaskAssessmentReport } from './task-assessment-report';
 import { TaskBrief } from './task-brief';
 import './task-review.css';
+import './desktop-review.css';
 
 const modes = ['Summary', 'Evidence', 'Review'] as const;
 type WorkbenchMode = (typeof modes)[number];
 const emptyAiConversations: readonly EvaluatorAiConversation[] = [];
+
+const reviewDeskDesktopQuery = '(min-width: 64rem)';
+
+function subscribeReviewDeskDesktop(onChange: () => void) {
+  const query = window.matchMedia(reviewDeskDesktopQuery);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
 
 const modeId = (mode: WorkbenchMode) => `workbench-mode-${mode.toLowerCase()}`;
 const modePanelId = 'evidence-workbench-panel';
@@ -121,6 +155,7 @@ const SourceRow = ({
     <button
       ref={(element) => register(source.key, element)}
       className="evaluator-source-row"
+      data-file={source.r27?.kind === 'file' || undefined}
       type="button"
       data-source-ref={source.evidenceRef ?? source.key}
       aria-pressed={selected}
@@ -131,14 +166,15 @@ const SourceRow = ({
         <strong>
           {source.r27?.kind === 'file' ? source.r27.file.path : source.title}
         </strong>
-        <span>{source.summary}</span>
-        <small>
-          {sourceLabel(source)} · {sourceTime(source, activatedAt)}
-        </small>
+        {source.r27?.kind === 'file' ? null : (
+          <>
+            <span>{source.summary}</span>
+            <small>
+              {sourceLabel(source)} · {sourceTime(source, activatedAt)}
+            </small>
+          </>
+        )}
       </span>
-      {selected ? (
-        <span className="evaluator-source-row-current">Current</span>
-      ) : null}
     </button>
   </li>
 );
@@ -255,20 +291,37 @@ const R27SummaryView = ({
   evidence,
   presentation,
   sources,
+  hiring = false,
   onOpenEvidence,
   onLoadMore,
   loadingMore,
   pageError,
+  workflowSignalsOpen = false,
+  onWorkflowSignalsToggle,
+  verificationQuestionsOpen = false,
+  onVerificationQuestionsToggle,
 }: Readonly<{
   evidence: R27Evidence;
   presentation: R27Presentation;
   sources: readonly EvidenceSource[];
+  hiring?: boolean;
   onOpenEvidence: (filter?: EvidenceFilter, source?: EvidenceSource) => void;
   onLoadMore: () => void;
   loadingMore: boolean;
   pageError: string | null;
+  workflowSignalsOpen?: boolean;
+  onWorkflowSignalsToggle?: (open: boolean) => void;
+  verificationQuestionsOpen?: boolean;
+  onVerificationQuestionsToggle?: (open: boolean) => void;
 }>) => {
-  const { termsPatternObservation } = presentation;
+  const {
+    termsPatternObservation,
+    workflowSignals,
+    liveVerificationQuestions,
+  } = presentation;
+  const verificationQuestionsText = liveVerificationQuestions
+    .map((item, idx) => `${idx + 1}. ${item.question} (${item.focus})`)
+    .join('\n');
   const fileSources = [...sources]
     .filter((source) => source.r27?.kind === 'file')
     .sort((left, right) => {
@@ -295,362 +348,587 @@ const R27SummaryView = ({
     formatElapsed(evidence.activatedAt, evidence.submittedAt)?.slice(1) ??
     'Unavailable';
 
+  const brief = presentation.scenarioContext.brief;
+  const briefLead = brief
+    ?.split(/\r?\n[ \t]*\r?\n/)
+    .find((part) => part.trim() && !/^\s*(?:#|`{3}|[-*]\s|\d+\.\s)/.test(part));
+  const ReferenceGroup = hiring ? 'details' : 'div';
+
+  const scenarioSnapshot = (
+    <details
+      className="evaluator-source-details"
+      style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
+    >
+      <summary>Open immutable scenario snapshot</summary>
+      <p style={{ overflowWrap: 'anywhere' }}>Scenario snapshot digest:</p>
+      <code className="evaluator-integrity-digest">
+        {evidence.scenario.snapshotDigest}
+      </code>
+      <pre
+        tabIndex={0}
+        aria-label="Immutable versioned scenario snapshot"
+        style={{
+          minWidth: 0,
+          width: '100%',
+          maxWidth: '100%',
+          overflowX: 'auto',
+          whiteSpace: 'pre',
+        }}
+      >
+        {evidence.scenario.snapshotText}
+      </pre>
+    </details>
+  );
+
+  const timeline = (
+    <section
+      className="evaluator-review-card workbench-session-timeline review-desk-activity"
+      aria-labelledby="r27-timeline-title"
+    >
+      <header className="evaluator-review-section-heading">
+        <h2 id="r27-timeline-title">{hiring ? 'Activity' : 'Timeline'}</h2>
+        <div className="evaluator-timeline-head-actions">
+          {hiring ? null : <span>{eventSources.length} events</span>}
+          {hiring && eventSources.length > 0 ? (
+            <button
+              type="button"
+              className="evaluator-text-link"
+              onClick={() => onOpenEvidence('Chronology', eventSources[0])}
+            >
+              Open event log <IconArrowRight size={15} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      </header>
+      {eventSources.length ? (
+        <ol className="workbench-progression-list">
+          {eventSources.map((source) => {
+            const event =
+              source.r27?.kind === 'event' ? source.r27.event : null;
+            if (!event) return null;
+            return (
+              <li key={source.key}>
+                <time dateTime={event.timestamp} title={event.timestamp}>
+                  {formatEvidenceTime(source, evidence.activatedAt)}
+                </time>
+                {hiring ? (
+                  <button
+                    type="button"
+                    className="review-desk-event"
+                    onClick={() => onOpenEvidence('Chronology', source)}
+                  >
+                    <span>{source.title}</span>
+                    <IconArrowRight size={16} aria-hidden="true" />
+                  </button>
+                ) : (
+                  <div>
+                    <p className="workbench-timeline-title">
+                      <code>#{event.sequence}</code> {source.title}
+                    </p>
+                    <small className="workbench-timeline-subtitle">
+                      {source.summary}
+                    </small>
+                    <button
+                      type="button"
+                      className="evaluator-text-link"
+                      onClick={() => onOpenEvidence('Chronology', source)}
+                    >
+                      View event →
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="evaluator-muted-copy">No recorded events.</p>
+      )}
+      {pageError ? <p role="alert">{pageError}</p> : null}
+      {evidence.pagination.nextAfterSequence !== null ? (
+        <button type="button" onClick={onLoadMore} disabled={loadingMore}>
+          {loadingMore ? 'Loading events…' : 'Load more recorded events'}
+        </button>
+      ) : null}
+    </section>
+  );
+
+  const totalDiff = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    let modified = 0;
+    for (const file of presentation.files) {
+      const stats = computeDiffStats(file.diff);
+      additions += stats.additions;
+      deletions += stats.deletions;
+      if (
+        file.starterContent !== file.submittedContent ||
+        stats.additions > 0 ||
+        stats.deletions > 0
+      ) {
+        modified += 1;
+      }
+    }
+    return { additions, deletions, modified };
+  }, [presentation.files]);
+
+  const saveCheckpointsCount = useMemo(
+    () =>
+      evidence.events.filter((event) => event.type === 'WORKSPACE_CHANGED')
+        .length,
+    [evidence.events],
+  );
+
   return (
     <div className="workbench-summary-grid">
       <div className="workbench-summary-content">
-        <section
-          className="evaluator-review-card workbench-session-timeline"
-          aria-labelledby="r27-timeline-title"
-        >
-          <header className="evaluator-review-section-heading">
-            <h2 id="r27-timeline-title">Recorded timeline</h2>
-            <span>{eventSources.length} events available</span>
-          </header>
-          {eventSources.length ? (
-            <ol className="workbench-progression-list">
-              {eventSources.map((source) => {
-                const event =
-                  source.r27?.kind === 'event' ? source.r27.event : null;
-                if (!event) return null;
-                return (
-                  <li key={source.key}>
-                    <time dateTime={event.timestamp} title={event.timestamp}>
-                      {formatEvidenceTime(source, evidence.activatedAt)}
-                    </time>
-                    <div>
-                      <p className="workbench-timeline-title">
-                        <code>#{event.sequence}</code> {source.title}
-                      </p>
-                      <small className="workbench-timeline-subtitle">
-                        {source.summary}
-                      </small>
-                      <button
-                        type="button"
-                        className="evaluator-text-link"
-                        onClick={() => onOpenEvidence('Chronology', source)}
-                      >
-                        Inspect event metadata →
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            <p className="evaluator-muted-copy">
-              No candidate event is present on this evidence page.
-            </p>
-          )}
-          {pageError ? <p role="alert">{pageError}</p> : null}
-          {evidence.pagination.nextAfterSequence !== null ? (
-            <button type="button" onClick={onLoadMore} disabled={loadingMore}>
-              {loadingMore ? 'Loading events…' : 'Load more recorded events'}
-            </button>
-          ) : null}
-        </section>
+        {hiring ? (
+          <section
+            className="review-desk-metrics-strip"
+            aria-label="Session overview"
+          >
+            <div>
+              <span>Duration</span>
+              <strong>{duration}</strong>
+            </div>
+            <div>
+              <span>Files changed</span>
+              <strong>
+                {totalDiff.modified} / {presentation.files.length}
+                {totalDiff.additions > 0 || totalDiff.deletions > 0 ? (
+                  <small>
+                    +{totalDiff.additions} / -{totalDiff.deletions}
+                  </small>
+                ) : null}
+              </strong>
+            </div>
+            <div>
+              <span>Checkpoints</span>
+              <strong>{saveCheckpointsCount}</strong>
+            </div>
+            <div>
+              <span>Tests &amp; AI</span>
+              <strong>
+                {executionSources.length} runs · {conversationSources.length} AI
+              </strong>
+            </div>
+          </section>
+        ) : (
+          timeline
+        )}
 
         <section
-          className="evaluator-review-card"
+          className="evaluator-review-card review-desk-brief"
           aria-labelledby="r27-snapshot-title"
         >
           <header className="evaluator-review-section-heading">
-            <span className="evaluator-review-title-icon" aria-hidden="true">
-              <IconFile size={21} stroke={1.8} />
-            </span>
-            <div>
-              <p className="section-kicker">Versioned scenario snapshot</p>
-              <h2 id="r27-snapshot-title">Task context</h2>
-            </div>
+            {!hiring ? (
+              <span className="evaluator-review-title-icon" aria-hidden="true">
+                <IconFile size={21} stroke={1.8} />
+              </span>
+            ) : null}
+            <h2 id="r27-snapshot-title">
+              {hiring ? 'Task brief' : 'Task context'}
+            </h2>
           </header>
+          {hiring && briefLead ? (
+            <div className="review-desk-brief-lead">
+              <ScenarioBrief markdown={briefLead} />
+            </div>
+          ) : null}
+          {hiring ? (
+            <details className="evaluator-source-details review-desk-criteria">
+              <summary>Acceptance criteria</summary>
+              {presentation.scenarioContext.acceptanceCriteria.length ? (
+                <ul>
+                  {presentation.scenarioContext.acceptanceCriteria.map(
+                    (criterion, index) => (
+                      <li key={index}>{criterion}</li>
+                    ),
+                  )}
+                </ul>
+              ) : (
+                <p className="evaluator-muted-copy">
+                  Criteria are unavailable in this snapshot.
+                </p>
+              )}
+            </details>
+          ) : null}
           {termsPatternObservation ? (
-            <section
+            hiring ? (
+              <details className="evaluator-source-details">
+                <summary>Automated Python pattern notes</summary>
+                <ul>
+                  <li>
+                    <code>snake_case</code> identifier{' '}
+                    {termsPatternObservation.snakeCaseIdentifierFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                  <li>
+                    Nested object return{' '}
+                    {termsPatternObservation.nestedObjectReturnFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                </ul>
+              </details>
+            ) : (
+              <section
+                className="evaluator-source-details"
+                aria-labelledby="r27-terms-pattern-title"
+              >
+                <h3 id="r27-terms-pattern-title">
+                  Coding patterns in added Python lines
+                </h3>
+                <ul>
+                  <li>
+                    <code>snake_case</code> identifier{' '}
+                    {termsPatternObservation.snakeCaseIdentifierFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                  <li>
+                    Nested object return{' '}
+                    {termsPatternObservation.nestedObjectReturnFound
+                      ? 'was observed'
+                      : 'was not observed'}
+                    .
+                  </li>
+                </ul>
+                <p className="evaluator-muted-copy">
+                  These observations cannot establish external AI use,
+                  authorship, intent, or competence.
+                </p>
+              </section>
+            )
+          ) : null}
+          {workflowSignals.length > 0 ? (
+            <details
               className="evaluator-source-details"
-              aria-labelledby="r27-terms-pattern-title"
+              data-testid="r27-workflow-signals"
+              open={workflowSignalsOpen}
+              onToggle={(event) => {
+                onWorkflowSignalsToggle?.(event.currentTarget.open);
+              }}
             >
-              <h3 id="r27-terms-pattern-title">
-                Coding patterns in added Python lines
-              </h3>
+              <summary>
+                Recorded workflow signals ({workflowSignals.length})
+              </summary>
               <ul>
-                <li>
-                  <code>snake_case</code> identifier{' '}
-                  {termsPatternObservation.snakeCaseIdentifierFound
-                    ? 'was observed'
-                    : 'was not observed'}
-                  .
-                </li>
-                <li>
-                  Nested object return{' '}
-                  {termsPatternObservation.nestedObjectReturnFound
-                    ? 'was observed'
-                    : 'was not observed'}
-                  .
-                </li>
+                {workflowSignals.map((signal) => (
+                  <li key={signal.id}>
+                    <strong>{signal.label}:</strong> {signal.detail}
+                  </li>
+                ))}
               </ul>
               <p className="evaluator-muted-copy">
-                These observations cannot establish external AI use, authorship,
-                intent, or competence.
+                Observable session facts only — they do not establish external
+                AI use, authorship, or competence.
               </p>
-            </section>
+            </details>
+          ) : null}
+          {liveVerificationQuestions.length > 0 ? (
+            <details
+              className="evaluator-source-details"
+              data-testid="r27-verification-questions"
+              open={verificationQuestionsOpen}
+              onToggle={(event) => {
+                onVerificationQuestionsToggle?.(event.currentTarget.open);
+              }}
+            >
+              <summary>
+                Live verification questions ({liveVerificationQuestions.length})
+              </summary>
+              <ol className="hiring-ol-list">
+                {liveVerificationQuestions.map((item, index) => (
+                  <li key={`${index}:${item.question}`}>
+                    <span>{item.question}</span>{' '}
+                    <span className="evaluator-muted-copy">({item.focus})</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="hiring-header-actions hiring-mt-xs">
+                <CopyActionButton
+                  value={verificationQuestionsText}
+                  label="Copy questions"
+                  copiedLabel="Copied"
+                  toastMessage="Verification questions copied."
+                  size="sm"
+                  variant="secondary"
+                />
+              </div>
+            </details>
           ) : null}
           <details className="evaluator-source-details">
-            <summary>Read task brief and acceptance criteria</summary>
+            <summary>
+              {hiring
+                ? 'Full task brief'
+                : 'Read task brief and acceptance criteria'}
+            </summary>
             <ScenarioBrief
               markdown={
                 presentation.scenarioContext.brief ??
                 'Scenario brief unavailable in this snapshot.'
               }
             />
-            <h3>Acceptance criteria</h3>
-            {presentation.scenarioContext.acceptanceCriteria.length ? (
-              <ul>
-                {presentation.scenarioContext.acceptanceCriteria.map(
-                  (criterion, index) => (
-                    <li key={`${index}:${criterion}`}>{criterion}</li>
-                  ),
+            {hiring ? null : (
+              <>
+                <h3>Acceptance criteria</h3>
+                {presentation.scenarioContext.acceptanceCriteria.length ? (
+                  <ul>
+                    {presentation.scenarioContext.acceptanceCriteria.map(
+                      (criterion, index) => (
+                        <li key={`${index}:${criterion}`}>{criterion}</li>
+                      ),
+                    )}
+                  </ul>
+                ) : (
+                  <p className="evaluator-muted-copy">
+                    Acceptance criteria unavailable in this snapshot.
+                  </p>
                 )}
+              </>
+            )}
+          </details>
+          {hiring ? null : scenarioSnapshot}
+        </section>
+
+        {hiring ? timeline : null}
+
+        <ReferenceGroup
+          className={
+            hiring
+              ? 'evaluator-source-details review-desk-reference-group'
+              : 'review-desk-legacy-sections'
+          }
+        >
+          {hiring ? <summary>Source records and digests</summary> : null}
+          {hiring ? scenarioSnapshot : null}
+          <section
+            className="evaluator-review-card"
+            aria-labelledby="r27-files-title"
+          >
+            <header className="evaluator-review-section-heading">
+              <span className="evaluator-review-title-icon" aria-hidden="true">
+                <IconCode size={21} stroke={1.8} />
+              </span>
+              <div>
+                <p className="section-kicker">Starter and frozen submission</p>
+                <h2 id="r27-files-title">File contents and derived diffs</h2>
+              </div>
+              <span>{presentation.files.length} file paths</span>
+            </header>
+            {fileSources.length ? (
+              <ul className="evaluator-submitted-file-list">
+                {fileSources.map((source) => {
+                  const file =
+                    source.r27?.kind === 'file' ? source.r27.file : null;
+                  const stats = file
+                    ? computeDiffStats(file.diff)
+                    : { additions: 0, deletions: 0 };
+                  const changed =
+                    file !== null &&
+                    (file.starterContent !== file.submittedContent ||
+                      stats.additions > 0 ||
+                      stats.deletions > 0);
+                  return (
+                    <li key={source.key}>
+                      <div className="evaluator-submitted-file-meta">
+                        <code>{file ? file.path : source.key}</code>
+                        {file ? (
+                          changed ? (
+                            <span className="evaluator-file-diff-stats">
+                              {stats.additions > 0 ? (
+                                <span className="code-diff-stat-add">
+                                  +{stats.additions}
+                                </span>
+                              ) : null}
+                              {stats.deletions > 0 ? (
+                                <span className="code-diff-stat-del">
+                                  -{stats.deletions}
+                                </span>
+                              ) : null}
+                              {stats.additions === 0 &&
+                              stats.deletions === 0 ? (
+                                <span className="code-diff-stat-neutral">
+                                  Modified
+                                </span>
+                              ) : null}
+                            </span>
+                          ) : (
+                            <span className="code-diff-stat-neutral">
+                              Unchanged
+                            </span>
+                          )
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="evaluator-text-link"
+                        onClick={() => onOpenEvidence('Code changes', source)}
+                      >
+                        Open contents and derived diff →
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="evaluator-muted-copy">
-                Acceptance criteria unavailable in this snapshot.
+                No file paths are present in the authorized starter or submitted
+                state.
               </p>
             )}
-          </details>
-          <details
-            className="evaluator-source-details"
-            style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
-          >
-            <summary>Open immutable scenario snapshot</summary>
-            <p style={{ overflowWrap: 'anywhere' }}>
-              Scenario snapshot digest:
-            </p>
-            <code className="evaluator-integrity-digest">
-              {evidence.scenario.snapshotDigest}
-            </code>
-            <pre
-              tabIndex={0}
-              aria-label="Immutable versioned scenario snapshot"
-              style={{
-                minWidth: 0,
-                width: '100%',
-                maxWidth: '100%',
-                overflowX: 'auto',
-                whiteSpace: 'pre',
-              }}
-            >
-              {evidence.scenario.snapshotText}
-            </pre>
-          </details>
-        </section>
+            {presentation.revisionMetadata.length ? (
+              <details className="evaluator-source-details">
+                <summary>Intermediate revision metadata only</summary>
+                <p>
+                  Save history includes version and digest metadata.
+                  Intermediate file contents are unavailable.
+                </p>
+                <ul>
+                  {presentation.revisionMetadata.map((revision, index) => (
+                    <li key={`${revision.path}:${revision.version}:${index}`}>
+                      <span style={{ overflowWrap: 'anywhere' }}>
+                        <code>{revision.path}</code> · version{' '}
+                        <code>{revision.version}</code> · digest{' '}
+                        <code>{revision.digest}</code>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </section>
 
-        <section
-          className="evaluator-review-card"
-          aria-labelledby="r27-files-title"
-        >
-          <header className="evaluator-review-section-heading">
-            <span className="evaluator-review-title-icon" aria-hidden="true">
-              <IconCode size={21} stroke={1.8} />
-            </span>
-            <div>
-              <p className="section-kicker">Starter and frozen submission</p>
-              <h2 id="r27-files-title">File contents and derived diffs</h2>
-            </div>
-            <span>{presentation.files.length} file paths</span>
-          </header>
-          {fileSources.length ? (
-            <ul className="evaluator-submitted-file-list">
-              {fileSources.map((source) => {
-                const file =
-                  source.r27?.kind === 'file' ? source.r27.file : null;
-                const stats = file
-                  ? computeDiffStats(file.diff)
-                  : { additions: 0, deletions: 0 };
-                const changed =
-                  file !== null &&
-                  (file.starterContent !== file.submittedContent ||
-                    stats.additions > 0 ||
-                    stats.deletions > 0);
-                return (
+          {conversationSources.length ? (
+            <section
+              className="evaluator-review-card"
+              aria-labelledby="r27-ai-conversations-title"
+            >
+              <header className="evaluator-review-section-heading">
+                <span
+                  className="evaluator-review-title-icon"
+                  aria-hidden="true"
+                >
+                  <IconMessages size={21} stroke={1.8} />
+                </span>
+                <div>
+                  <p className="section-kicker">Candidate AI assistance</p>
+                  <h2 id="r27-ai-conversations-title">
+                    Recorded AI conversations
+                  </h2>
+                </div>
+                <span>{conversationSources.length} recorded</span>
+              </header>
+              <ol className="workbench-progression-list">
+                {conversationSources.map((source) => (
                   <li key={source.key}>
-                    <div className="evaluator-submitted-file-meta">
-                      <code>{file ? file.path : source.key}</code>
-                      {file ? (
-                        changed ? (
-                          <span className="evaluator-file-diff-stats">
-                            {stats.additions > 0 ? (
-                              <span className="code-diff-stat-add">
-                                +{stats.additions}
-                              </span>
-                            ) : null}
-                            {stats.deletions > 0 ? (
-                              <span className="code-diff-stat-del">
-                                -{stats.deletions}
-                              </span>
-                            ) : null}
-                            {stats.additions === 0 && stats.deletions === 0 ? (
-                              <span className="code-diff-stat-neutral">
-                                Modified
-                              </span>
-                            ) : null}
-                          </span>
-                        ) : (
-                          <span className="code-diff-stat-neutral">
-                            Unchanged
-                          </span>
-                        )
-                      ) : null}
+                    <time dateTime={source.timestamp ?? undefined}>
+                      {source.timestamp ?? 'Recorded'}
+                    </time>
+                    <div>
+                      <p>
+                        {source.title} · {source.summary}
+                      </p>
+                      <button
+                        type="button"
+                        className="evaluator-text-link"
+                        onClick={() =>
+                          onOpenEvidence('AI conversations', source)
+                        }
+                      >
+                        Inspect AI conversation →
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="evaluator-text-link"
-                      onClick={() => onOpenEvidence('Code changes', source)}
-                    >
-                      Open contents and derived diff →
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="evaluator-muted-copy">
-              No file paths are present in the authorized starter or submitted
-              state.
-            </p>
-          )}
-          {presentation.revisionMetadata.length ? (
-            <details className="evaluator-source-details">
-              <summary>Intermediate revision metadata only</summary>
-              <p>
-                Save history includes version and digest metadata. Intermediate
-                file contents are unavailable.
-              </p>
-              <ul>
-                {presentation.revisionMetadata.map((revision, index) => (
-                  <li key={`${revision.path}:${revision.version}:${index}`}>
-                    <span style={{ overflowWrap: 'anywhere' }}>
-                      <code>{revision.path}</code> · version{' '}
-                      <code>{revision.version}</code> · digest{' '}
-                      <code>{revision.digest}</code>
-                    </span>
                   </li>
                 ))}
-              </ul>
-            </details>
+              </ol>
+            </section>
           ) : null}
-        </section>
 
-        {conversationSources.length ? (
+          {executionSources.length ? (
+            <section
+              className="evaluator-review-card"
+              aria-labelledby="r213-execution-runs-title"
+              data-testid="summary-execution-runs-card"
+            >
+              <header className="evaluator-review-section-heading">
+                <span
+                  className="evaluator-review-title-icon"
+                  aria-hidden="true"
+                >
+                  <IconTerminal2 size={21} stroke={1.8} />
+                </span>
+                <div>
+                  <p className="section-kicker">Automated Verification</p>
+                  <h2 id="r213-execution-runs-title">
+                    Recorded execution runs
+                  </h2>
+                </div>
+                <span data-testid="summary-execution-runs-count">
+                  {executionSources.length} recorded
+                </span>
+              </header>
+              <ol className="workbench-progression-list">
+                {executionSources.map((source) => (
+                  <li key={source.key}>
+                    <time dateTime={source.timestamp ?? undefined}>
+                      {source.timestamp ?? 'Recorded'}
+                    </time>
+                    <div>
+                      <p>
+                        {source.title} · {source.summary}
+                      </p>
+                      <button
+                        type="button"
+                        className="evaluator-text-link"
+                        onClick={() => onOpenEvidence('Execution runs', source)}
+                      >
+                        Inspect execution receipt →
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
+
           <section
             className="evaluator-review-card"
-            aria-labelledby="r27-ai-conversations-title"
+            aria-labelledby="r27-digests-title"
           >
-            <header className="evaluator-review-section-heading">
-              <span className="evaluator-review-title-icon" aria-hidden="true">
-                <IconMessages size={21} stroke={1.8} />
-              </span>
-              <div>
-                <p className="section-kicker">Candidate AI assistance</p>
-                <h2 id="r27-ai-conversations-title">
-                  Recorded AI conversations
-                </h2>
-              </div>
-              <span>{conversationSources.length} recorded</span>
-            </header>
-            <ol className="workbench-progression-list">
-              {conversationSources.map((source) => (
-                <li key={source.key}>
-                  <time dateTime={source.timestamp ?? undefined}>
-                    {source.timestamp ?? 'Recorded'}
-                  </time>
-                  <div>
-                    <p>
-                      {source.title} · {source.summary}
-                    </p>
-                    <button
-                      type="button"
-                      className="evaluator-text-link"
-                      onClick={() => onOpenEvidence('AI conversations', source)}
-                    >
-                      Inspect AI conversation →
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            <p className="section-kicker">
+              Submitted workspace integrity metadata
+            </p>
+            <h2 id="r27-digests-title">Submission digests</h2>
+            <details className="evaluator-source-details">
+              <summary>Show workspace and manifest digests</summary>
+              <dl className="evaluator-source-metadata">
+                <div>
+                  <dt>Workspace digest</dt>
+                  <dd>
+                    <code className="evaluator-integrity-digest">
+                      {evidence.submission.workspaceDigest}
+                    </code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Manifest digest</dt>
+                  <dd>
+                    <code className="evaluator-integrity-digest">
+                      {evidence.submission.manifestDigest}
+                    </code>
+                  </dd>
+                </div>
+              </dl>
+            </details>
           </section>
-        ) : null}
-
-        {executionSources.length ? (
-          <section
-            className="evaluator-review-card"
-            aria-labelledby="r213-execution-runs-title"
-            data-testid="summary-execution-runs-card"
-          >
-            <header className="evaluator-review-section-heading">
-              <span className="evaluator-review-title-icon" aria-hidden="true">
-                <IconTerminal2 size={21} stroke={1.8} />
-              </span>
-              <div>
-                <p className="section-kicker">Automated Verification</p>
-                <h2 id="r213-execution-runs-title">Recorded execution runs</h2>
-              </div>
-              <span data-testid="summary-execution-runs-count">
-                {executionSources.length} recorded
-              </span>
-            </header>
-            <ol className="workbench-progression-list">
-              {executionSources.map((source) => (
-                <li key={source.key}>
-                  <time dateTime={source.timestamp ?? undefined}>
-                    {source.timestamp ?? 'Recorded'}
-                  </time>
-                  <div>
-                    <p>
-                      {source.title} · {source.summary}
-                    </p>
-                    <button
-                      type="button"
-                      className="evaluator-text-link"
-                      onClick={() => onOpenEvidence('Execution runs', source)}
-                    >
-                      Inspect execution receipt →
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-        ) : null}
-
-        <section
-          className="evaluator-review-card"
-          aria-labelledby="r27-digests-title"
-        >
-          <p className="section-kicker">
-            Submitted workspace integrity metadata
-          </p>
-          <h2 id="r27-digests-title">Submission digests</h2>
-          <details className="evaluator-source-details">
-            <summary>Show workspace and manifest digests</summary>
-            <dl className="evaluator-source-metadata">
-              <div>
-                <dt>Workspace digest</dt>
-                <dd>
-                  <code className="evaluator-integrity-digest">
-                    {evidence.submission.workspaceDigest}
-                  </code>
-                </dd>
-              </div>
-              <div>
-                <dt>Manifest digest</dt>
-                <dd>
-                  <code className="evaluator-integrity-digest">
-                    {evidence.submission.manifestDigest}
-                  </code>
-                </dd>
-              </div>
-            </dl>
-          </details>
-        </section>
+        </ReferenceGroup>
       </div>
 
       <aside
@@ -661,30 +939,41 @@ const R27SummaryView = ({
           className="evaluator-review-card"
           aria-labelledby="r27-summary-title"
         >
-          <h2 id="r27-summary-title">Submitted evidence</h2>
+          <h2 id="r27-summary-title">
+            {hiring ? 'Submission' : 'Submitted evidence'}
+          </h2>
           <dl className="evaluator-source-metadata">
+            {hiring ? (
+              <div>
+                <dt>Files</dt>
+                <dd>{evidence.submission.files.length}</dd>
+              </div>
+            ) : (
+              <div>
+                <dt>Scenario</dt>
+                <dd>
+                  {evidence.scenario.title} · v
+                  {evidence.scenario.version.replace(/^v/i, '')}
+                </dd>
+              </div>
+            )}
             <div>
-              <dt>Scenario</dt>
-              <dd>
-                {evidence.scenario.title} · v
-                {evidence.scenario.version.replace(/^v/i, '')}
-              </dd>
-            </div>
-            <div>
-              <dt>Elapsed time</dt>
+              <dt>{hiring ? 'Time used' : 'Elapsed time'}</dt>
               <dd>{duration}</dd>
             </div>
-            <div>
-              <dt>Closure</dt>
-              <dd>
-                {evidence.closureReason === 'candidate_submission'
-                  ? 'Candidate submission'
-                  : 'Timeout'}
-              </dd>
-            </div>
+            {!hiring || evidence.closureReason !== 'candidate_submission' ? (
+              <div>
+                <dt>Closure</dt>
+                <dd>
+                  {evidence.closureReason === 'candidate_submission'
+                    ? 'Candidate submission'
+                    : 'Timeout'}
+                </dd>
+              </div>
+            ) : null}
           </dl>
           <details className="evaluator-source-details">
-            <summary>Session details</summary>
+            <summary>{hiring ? 'Session metadata' : 'Session details'}</summary>
             <dl className="evaluator-source-metadata">
               <div>
                 <dt>Session</dt>
@@ -728,41 +1017,72 @@ const R27SummaryView = ({
         </section>
 
         <section className="evaluator-review-card">
-          <h2>Evidence limits</h2>
-          <dl className="evaluator-source-metadata">
-            <div>
-              <dt>Terminal</dt>
-              <dd>{evidence.availability.terminal}</dd>
-            </div>
-            <div>
-              <dt>AI interactions</dt>
-              <dd>{evidence.availability.ai}</dd>
-            </div>
-            <div>
-              <dt>Verification</dt>
-              <dd>{evidence.availability.verification}</dd>
-            </div>
-            <div>
-              <dt>Save history</dt>
-              <dd>
-                {evidence.availability.history === 'metadata_only'
-                  ? 'Version and digest metadata only'
-                  : evidence.availability.history}
-              </dd>
-            </div>
-          </dl>
-          {evidence.availability.limitations.length ? (
-            <ul>
-              {evidence.availability.limitations.map((limitation, index) => (
-                <li key={`${index}:${limitation}`}>{limitation}</li>
-              ))}
-            </ul>
+          <h2>{hiring ? 'Evidence availability' : 'Evidence limits'}</h2>
+          {hiring ? (
+            <>
+              <p className="evaluator-muted-copy">
+                {executionSources.length || conversationSources.length
+                  ? `${executionSources.length} test or terminal runs · ${conversationSources.length} AI conversations`
+                  : 'No test, terminal or AI activity was recorded.'}
+              </p>
+              <button
+                type="button"
+                className="evaluator-text-link"
+                onClick={() => onOpenEvidence('Code changes')}
+              >
+                Inspect evidence <IconArrowRight size={15} aria-hidden="true" />
+              </button>
+            </>
           ) : null}
+          {hiring ? (
+            <details className="evaluator-source-details">
+              <summary>Capture limits</summary>
+              <EvidenceAvailability evidence={evidence} />
+            </details>
+          ) : (
+            <EvidenceAvailability evidence={evidence} />
+          )}
         </section>
       </aside>
     </div>
   );
 };
+
+const EvidenceAvailability = ({
+  evidence,
+}: Readonly<{ evidence: R27Evidence }>) => (
+  <>
+    <dl className="evaluator-source-metadata">
+      <div>
+        <dt>Terminal</dt>
+        <dd>{evidence.availability.terminal}</dd>
+      </div>
+      <div>
+        <dt>AI interactions</dt>
+        <dd>{evidence.availability.ai}</dd>
+      </div>
+      <div>
+        <dt>Verification</dt>
+        <dd>{evidence.availability.verification}</dd>
+      </div>
+      <div>
+        <dt>Save history</dt>
+        <dd>
+          {evidence.availability.history === 'metadata_only'
+            ? 'Version and digest metadata only'
+            : evidence.availability.history}
+        </dd>
+      </div>
+    </dl>
+    {evidence.availability.limitations.length ? (
+      <ul>
+        {evidence.availability.limitations.map((limitation, index) => (
+          <li key={`${index}:${limitation}`}>{limitation}</li>
+        ))}
+      </ul>
+    ) : null}
+  </>
+);
 
 const SummaryView = ({
   sessionId,
@@ -1020,6 +1340,11 @@ const EvidenceView = ({
   onLoadMoreR27,
   loadingMoreR27,
   r27PageError,
+  hasHiringContext = false,
+  isolated = false,
+  hiringDraft,
+  onHiringDraftChange,
+  onBackToTimeline,
 }: Readonly<{
   evidence?: EvaluatorReviewEvidence;
   review?: EvaluatorReviewPresentation;
@@ -1035,7 +1360,36 @@ const EvidenceView = ({
   onLoadMoreR27?: () => void;
   loadingMoreR27?: boolean;
   r27PageError?: string | null;
+  hasHiringContext?: boolean;
+  isolated?: boolean;
+  hiringDraft?: HiringDecisionDraft | null;
+  onHiringDraftChange?: (patch: Partial<HiringDecisionDraft>) => void;
+  onBackToTimeline?: () => void;
 }>) => {
+  const [fileEvidenceOpen, setFileEvidenceOpen] = useState(false);
+  const usesReviewDesk = Boolean(r27Evidence && hasHiringContext);
+  const desktopLayout = useSyncExternalStore(
+    subscribeReviewDeskDesktop,
+    () => window.matchMedia(reviewDeskDesktopQuery).matches,
+    () => false,
+  );
+  const verticalNavigation = usesReviewDesk && desktopLayout;
+  const filters =
+    r27Evidence && hasHiringContext
+      ? ([
+          'Code changes',
+          'Execution runs',
+          'AI conversations',
+          'Chronology',
+        ] as const)
+      : evidenceFilters;
+  const filterLabel = (item: EvidenceFilter) => {
+    if (!hasHiringContext) return item;
+    if (item === 'Code changes') return 'Files';
+    if (item === 'Execution runs') return 'Tests';
+    if (item === 'Chronology') return 'Event log';
+    return item;
+  };
   const visibleSources = sourcesForFilter(
     sources,
     filter,
@@ -1044,6 +1398,64 @@ const EvidenceView = ({
   const activatedAt = evidence?.activatedAt ?? r27Evidence?.activatedAt ?? null;
   const selectedIsVisible = visibleSources.some(
     (source) => source.key === selectedSourceKey,
+  );
+  const suppressStaleSourceInEmptyR27View = Boolean(
+    r27Evidence &&
+    hasHiringContext &&
+    visibleSources.length === 0 &&
+    (filter === 'Execution runs' || filter === 'AI conversations'),
+  );
+  const noCodeChanges =
+    filter === 'Code changes' &&
+    visibleSources.length > 0 &&
+    visibleSources.every(
+      (source) =>
+        source.r27?.kind === 'file' &&
+        source.r27.file.starterContent === source.r27.file.submittedContent,
+    );
+
+  const hasRecordedRuns =
+    sourcesForFilter(sources, 'Execution runs', []).length > 0;
+
+  const evidenceNavigation = (
+    <div
+      className="evaluator-evidence-filter-bar"
+      role="tablist"
+      aria-label="Evidence filters"
+      aria-orientation={verticalNavigation ? 'vertical' : 'horizontal'}
+    >
+      {filters.map((item, index) => (
+        <button
+          key={item}
+          id={filterId(item)}
+          type="button"
+          role="tab"
+          aria-selected={filter === item}
+          aria-controls="evidence-filter-panel"
+          tabIndex={filter === item ? 0 : -1}
+          onClick={() => onFilterChange(item)}
+          onKeyDown={(event) => {
+            const next =
+              event.key === (verticalNavigation ? 'ArrowDown' : 'ArrowRight')
+                ? (index + 1) % filters.length
+                : event.key === (verticalNavigation ? 'ArrowUp' : 'ArrowLeft')
+                  ? (index + filters.length - 1) % filters.length
+                  : event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? filters.length - 1
+                      : -1;
+            if (next < 0) return;
+            event.preventDefault();
+            onFilterChange(filters[next]);
+            document.getElementById(filterId(filters[next]))?.focus();
+          }}
+        >
+          {iconForFilter(item)}
+          <span>{filterLabel(item)}</span>
+        </button>
+      ))}
+    </div>
   );
 
   return (
@@ -1055,64 +1467,50 @@ const EvidenceView = ({
           showInterleaving={projection.defaultDepth.technicalRecord}
         />
       ) : null}
-      <div
-        className="evaluator-evidence-filter-bar"
-        role="tablist"
-        aria-label="Evidence filters"
-      >
-        {evidenceFilters.map((item, index) => (
-          <button
-            key={item}
-            id={filterId(item)}
-            type="button"
-            role="tab"
-            aria-selected={filter === item}
-            aria-controls="evidence-filter-panel"
-            tabIndex={filter === item ? 0 : -1}
-            onClick={() => onFilterChange(item)}
-            onKeyDown={(event) => {
-              const next =
-                event.key === 'ArrowRight'
-                  ? (index + 1) % evidenceFilters.length
-                  : event.key === 'ArrowLeft'
-                    ? (index + evidenceFilters.length - 1) %
-                      evidenceFilters.length
-                    : event.key === 'Home'
-                      ? 0
-                      : event.key === 'End'
-                        ? evidenceFilters.length - 1
-                        : -1;
-              if (next < 0) return;
-              event.preventDefault();
-              onFilterChange(evidenceFilters[next]);
-              document.getElementById(filterId(evidenceFilters[next]))?.focus();
-            }}
-          >
-            {iconForFilter(item)}
-            <span>{item}</span>
-          </button>
-        ))}
-      </div>
+      {usesReviewDesk ? null : evidenceNavigation}
 
       <div
         className="evaluator-evidence-browser"
-        id="evidence-filter-panel"
-        role="tabpanel"
-        aria-labelledby={filterId(filter)}
-        tabIndex={0}
+        id={usesReviewDesk ? undefined : 'evidence-filter-panel'}
+        role={usesReviewDesk ? undefined : 'tabpanel'}
+        aria-labelledby={usesReviewDesk ? undefined : filterId(filter)}
+        tabIndex={usesReviewDesk ? undefined : 0}
       >
         <section
           className="evaluator-evidence-list-panel"
           aria-label={`${filter} source list`}
         >
           <header>
-            <h2>{filter}</h2>
+            <h2>{filterLabel(filter)}</h2>
             <span>
-              {visibleSources.length} source
+              {visibleSources.length}{' '}
+              {filter === 'Code changes' && hasHiringContext
+                ? 'file'
+                : 'record'}
               {visibleSources.length === 1 ? '' : 's'}
             </span>
           </header>
-          {!selectedIsVisible && selectedSource ? (
+          {noCodeChanges ? (
+            <p className="evaluator-empty-sources">
+              Matches the starter repository.
+            </p>
+          ) : null}
+          {hasHiringContext && filter === 'Chronology' && onBackToTimeline ? (
+            <p className="evaluator-empty-sources">
+              Chronological events matching the{' '}
+              <button
+                type="button"
+                className="evaluator-text-link"
+                onClick={onBackToTimeline}
+              >
+                Timeline
+              </button>{' '}
+              overview.
+            </p>
+          ) : null}
+          {!selectedIsVisible &&
+          selectedSource &&
+          !suppressStaleSourceInEmptyR27View ? (
             <div className="evaluator-pinned-source">
               <p className="section-kicker">Selected outside this filter</p>
               <ol
@@ -1149,12 +1547,10 @@ const EvidenceView = ({
             <p className="evaluator-empty-sources">
               {r27Evidence && filter === 'AI conversations'
                 ? r27Evidence.availability.ai === 'available'
-                  ? 'No AI conversations were recorded for this session.'
-                  : 'AI interaction evidence is unavailable in this read-only source.'
+                  ? 'Candidate AI assistance was enabled; 0 conversations were recorded.'
+                  : 'Candidate AI assistance was disabled or unavailable for this assessment.'
                 : r27Evidence && filter === 'Execution runs'
-                  ? r27Evidence.availability.terminal === 'available'
-                    ? 'No execution runs were recorded for this session.'
-                    : 'Execution evidence is unavailable in this read-only source.'
+                  ? 'No test runs were recorded for this assessment.'
                   : r27Evidence && filter === 'Terminal'
                     ? 'Terminal evidence is unavailable in this read-only source.'
                     : r27Evidence && filter === 'Tests'
@@ -1166,35 +1562,105 @@ const EvidenceView = ({
                           : `No ${filter.toLowerCase()} records are available in this session.`}
             </p>
           )}
+          {usesReviewDesk ? evidenceNavigation : null}
         </section>
-
-        {r27Evidence ? (
-          <EvidenceSourceInspector
-            key={selectedSource?.key ?? 'evidence-empty'}
-            source={selectedSource}
-            r27Evidence={r27Evidence}
-          />
-        ) : evidence && review && projection ? (
-          <EvidenceSourceInspector
-            key={
-              selectedSource?.evidenceRef ??
-              selectedSource?.key ??
-              'evidence-empty'
-            }
-            source={selectedSource}
-            evidence={evidence}
-            review={review}
-            projection={projection}
-          />
-        ) : null}
+        <div
+          className={
+            usesReviewDesk
+              ? 'review-desk-evidence-content'
+              : 'review-desk-legacy-sections'
+          }
+          id={usesReviewDesk ? 'evidence-filter-panel' : undefined}
+          role={usesReviewDesk ? 'tabpanel' : undefined}
+          aria-labelledby={usesReviewDesk ? filterId(filter) : undefined}
+          tabIndex={usesReviewDesk ? 0 : undefined}
+        >
+          {suppressStaleSourceInEmptyR27View ? (
+            <section
+              className="evaluator-source-inspector evaluator-empty-inspector-card"
+              aria-live="polite"
+              aria-label={`${filterLabel(filter)} empty details`}
+            >
+              <p className="section-kicker">{filterLabel(filter)}</p>
+              <h3>
+                {filter === 'Execution runs'
+                  ? 'No test runs recorded'
+                  : 'No AI conversations recorded'}
+              </h3>
+              <p className="evaluator-muted-copy">
+                {filter === 'Execution runs'
+                  ? 'The assessment record does not establish whether the test runner was available.'
+                  : r27Evidence?.availability.ai === 'available'
+                    ? 'The AI assistant was available in the workspace, and 0 prompts were sent.'
+                    : 'The candidate AI assistant was disabled or unavailable in this assessment workspace.'}
+              </p>
+              <div>
+                <button
+                  type="button"
+                  className="hiring-btn"
+                  onClick={() => onFilterChange('Code changes')}
+                >
+                  ← Return to Files
+                </button>
+              </div>
+            </section>
+          ) : r27Evidence ? (
+            <EvidenceSourceInspector
+              key={selectedSource?.key ?? 'evidence-empty'}
+              source={selectedSource}
+              r27Evidence={r27Evidence}
+              isolated={isolated}
+              fileEvidencePanel={
+                usesReviewDesk
+                  ? {
+                      open: fileEvidenceOpen,
+                      onOpenChange: setFileEvidenceOpen,
+                    }
+                  : undefined
+              }
+            />
+          ) : evidence && review && projection ? (
+            <EvidenceSourceInspector
+              key={
+                selectedSource?.evidenceRef ??
+                selectedSource?.key ??
+                'evidence-empty'
+              }
+              source={selectedSource}
+              evidence={evidence}
+              review={review}
+              projection={projection}
+            />
+          ) : null}
+        </div>
       </div>
+      {hasHiringContext &&
+      filter === 'Code changes' &&
+      hiringDraft &&
+      onHiringDraftChange ? (
+        <details
+          className="evaluator-scratchpad-card evaluator-source-details"
+          aria-label="Private review notes"
+        >
+          <summary>Private review notes</summary>
+          <textarea
+            rows={2}
+            aria-label="Private review scratchpad notes"
+            placeholder="Notes for your hiring team"
+            value={hiringDraft.internalNotes}
+            onChange={(event) =>
+              onHiringDraftChange({ internalNotes: event.target.value })
+            }
+          />
+        </details>
+      ) : null}
       {r27Evidence?.pagination.nextAfterSequence !== null && r27Evidence ? (
         <button type="button" onClick={onLoadMoreR27} disabled={loadingMoreR27}>
           {loadingMoreR27 ? 'Loading events…' : 'Load more recorded events'}
         </button>
       ) : null}
       {r27Evidence && r27PageError ? <p role="alert">{r27PageError}</p> : null}
-      {review?.notices.map((notice) => (
+      {(review?.notices ?? []).map((notice) => (
         <p className="evaluator-evidence-notice" key={notice.title}>
           {notice.message}
         </p>
@@ -1258,12 +1724,34 @@ type R27EvaluatorReviewWorkspaceProps = Readonly<{
   hiringReviewContext?: SessionHiringReviewContext | null;
   initialTab?: WorkbenchMode;
   initialPeerReviewId?: string | null;
+  demoMode?: boolean;
+  isSample?: boolean;
+  controlledTab?: WorkbenchMode;
+  onTabChange?: (tab: WorkbenchMode, source?: 'restore') => void;
+  controlledFilter?: EvidenceFilter;
+  onFilterChange?: (filter: EvidenceFilter) => void;
+  onSimulatedPublish?: (
+    draft: HiringDecisionDraft,
+    report: PerformanceFitReport | null,
+  ) => void;
 }>;
 
 export const EvaluatorReviewWorkspace = (
   props: LegacyEvaluatorReviewWorkspaceProps | R27EvaluatorReviewWorkspaceProps,
 ) => {
   const { sessionId } = props;
+  const demoMode = 'demoMode' in props ? Boolean(props.demoMode) : false;
+  const isSample = 'isSample' in props ? Boolean(props.isSample) : false;
+  const isolated = demoMode || isSample;
+  const controlledTab =
+    'controlledTab' in props ? props.controlledTab : undefined;
+  const onTabChange = 'onTabChange' in props ? props.onTabChange : undefined;
+  const controlledFilter =
+    'controlledFilter' in props ? props.controlledFilter : undefined;
+  const onFilterChange =
+    'onFilterChange' in props ? props.onFilterChange : undefined;
+  const onSimulatedPublish =
+    'onSimulatedPublish' in props ? props.onSimulatedPublish : undefined;
   const initialHiringReviewContext =
     'hiringReviewContext' in props ? (props.hiringReviewContext ?? null) : null;
   const [hiringReviewContext, setHiringReviewContext] =
@@ -1292,8 +1780,77 @@ export const EvaluatorReviewWorkspace = (
   );
   const [loadingMoreR27, setLoadingMoreR27] = useState(false);
   const [r27PageError, setR27PageError] = useState<string | null>(null);
-  const [aiReviewReport, setAiReviewReport] =
-    useState<R27AiReviewReport | null>(null);
+  const [aiReviewReport, setAiReviewReportState] =
+    useState<R27AiReviewReport | null>(
+      () => initialHiringReviewContext?.initialAiReview ?? null,
+    );
+  const [aiReviewLoading, setAiReviewLoading] = useState(false);
+  const aiReportStorageKey = isolated
+    ? `hirearchy:demo:ai-report:v1:${sessionId}`
+    : `hirearchy:eval:ai-report:v1:${sessionId}`;
+  const setAiReviewReport = (next: R27AiReviewReport | null) => {
+    setAiReviewReportState(next);
+    if (next) {
+      writePersistedJson(aiReportStorageKey, next, 'durable');
+    } else {
+      removePersistedKey(aiReportStorageKey);
+    }
+  };
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const parsed = readPersistedJson<R27AiReviewReport>(
+        aiReportStorageKey,
+        'durable',
+      );
+      if (parsed && typeof parsed === 'object' && parsed.headline) {
+        setAiReviewReportState(parsed);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [aiReportStorageKey]);
+
+  const decisionDraftStorageKey = hiringDecisionDraftKey(sessionId, isolated);
+  const [hiringDecisionDraft, setHiringDecisionDraft] =
+    useState<HiringDecisionDraft | null>(() =>
+      initialHiringReviewContext
+        ? initialHiringDecisionDraft(initialHiringReviewContext)
+        : null,
+    );
+
+  useEffect(() => {
+    if (!initialHiringReviewContext) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const restored = restoreHiringDecisionDraft(
+          sessionId,
+          initialHiringDecisionDraft(initialHiringReviewContext),
+          isolated,
+        );
+        setHiringDecisionDraft(restored);
+      } catch {
+        // Ignore malformed local drafts.
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [sessionId, initialHiringReviewContext, isolated]);
+
+  const updateHiringDecisionDraft = (patch: Partial<HiringDecisionDraft>) => {
+    setHiringDecisionDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      writePersistedJson(decisionDraftStorageKey, next, 'durable');
+      return next;
+    });
+  };
+
   const evidence = 'evidence' in props ? props.evidence : null;
   const review = 'review' in props ? props.review : null;
   const projection = 'projection' in props ? props.projection : null;
@@ -1312,15 +1869,172 @@ export const EvaluatorReviewWorkspace = (
         : buildEvidenceSources(review!, projection!, aiConversations),
     [aiConversations, projection, r27Evidence, r27Presentation, review],
   );
-  const [mode, setMode] = useState<WorkbenchMode>(initialTab);
-  const [filter, setFilter] = useState<EvidenceFilter>('Chronology');
-  const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(
-    () => preferredEvidenceSource(sources)?.key ?? null,
+  const [internalMode, setModeState] = useState<WorkbenchMode>(initialTab);
+  const mode = controlledTab ?? internalMode;
+  const [visitedModes, setVisitedModes] = useState<ReadonlySet<WorkbenchMode>>(
+    () => new Set([initialTab]),
   );
+  const effectiveVisitedModes = useMemo(() => {
+    if (visitedModes.has(mode)) return visitedModes;
+    const next = new Set(visitedModes);
+    next.add(mode);
+    return next;
+  }, [mode, visitedModes]);
+  const setMode = (nextMode: WorkbenchMode) => {
+    setModeState(nextMode);
+    onTabChange?.(nextMode);
+    if (!demoMode) {
+      trackClientEvent({
+        eventName: 'evaluator.tab.viewed',
+        category: 'team_funnel',
+        actorType: 'team_member',
+        organizationId: hiringReviewContext?.organizationId,
+        sessionId,
+        properties: {
+          tab: nextMode.toLowerCase(),
+          hasHiringContext: Boolean(hiringReviewContext),
+        },
+      });
+    }
+    setVisitedModes((current) => {
+      if (current.has(nextMode)) return current;
+      const next = new Set(current);
+      next.add(nextMode);
+      return next;
+    });
+    if (!demoMode && typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', nextMode.toLowerCase());
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${url.pathname}${url.search}`,
+      );
+    }
+  };
+  const [internalFilter, setInternalFilter] = useState<EvidenceFilter>(() =>
+    initialHiringReviewContext &&
+    initialR27Evidence &&
+    (initialR27Evidence.revisions.length > 0 ||
+      Boolean(initialR27Evidence.submission))
+      ? 'Code changes'
+      : 'Chronology',
+  );
+  const filter = controlledFilter ?? internalFilter;
+  const setFilter = (next: EvidenceFilter) => {
+    setInternalFilter(next);
+    onFilterChange?.(next);
+  };
+  const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(
+    () =>
+      (initialHiringReviewContext
+        ? sourcesForFilter(sources, filter, [])[0]?.key
+        : preferredEvidenceSource(sources)?.key) ?? null,
+  );
+  const [workflowSignalsOpen, setWorkflowSignalsOpen] = useState(false);
+  const [verificationQuestionsOpen, setVerificationQuestionsOpen] =
+    useState(false);
+  const viewStateStorageKey = isolated
+    ? `hirearchy:demo:workbench-view:v1:${sessionId}`
+    : `hirearchy:eval:workbench-view:v1:${sessionId}`;
+  const [viewStateHydrated, setViewStateHydrated] = useState(false);
+  const sourcesRef = useRef(sources);
+  useEffect(() => {
+    sourcesRef.current = sources;
+  }, [sources]);
+
+  const restoreControlledMode = useEffectEvent((restored: WorkbenchMode) => {
+    if (controlledTab !== undefined) onTabChange?.(restored, 'restore');
+  });
+  const restoreControlledFilter = useEffectEvent((restored: EvidenceFilter) => {
+    if (controlledFilter !== undefined) onFilterChange?.(restored);
+  });
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const params = new URLSearchParams(window.location.search);
+      const hasUrlTab = params.has('tab') || params.has('peerReview');
+      const savedView = readPersistedJson<{
+        mode?: string;
+        filter?: string;
+        selectedSourceKey?: string | null;
+        workflowSignalsOpen?: boolean;
+        verificationQuestionsOpen?: boolean;
+      }>(viewStateStorageKey, 'durable');
+      if (savedView && typeof savedView === 'object') {
+        if (
+          !hasUrlTab &&
+          savedView.mode &&
+          (modes as readonly string[]).includes(savedView.mode)
+        ) {
+          const restoredMode = savedView.mode as WorkbenchMode;
+          setModeState(restoredMode);
+          restoreControlledMode(restoredMode);
+          setVisitedModes((current) => {
+            if (current.has(restoredMode)) return current;
+            const next = new Set(current);
+            next.add(restoredMode);
+            return next;
+          });
+        }
+        if (
+          savedView.filter &&
+          (evidenceFilters as readonly string[]).includes(savedView.filter)
+        ) {
+          const restoredFilter = savedView.filter as EvidenceFilter;
+          setInternalFilter(restoredFilter);
+          restoreControlledFilter(restoredFilter);
+        }
+        if (
+          typeof savedView.selectedSourceKey === 'string' &&
+          sourcesRef.current.some((s) => s.key === savedView.selectedSourceKey)
+        ) {
+          setSelectedSourceKey(savedView.selectedSourceKey);
+        }
+        if (typeof savedView.workflowSignalsOpen === 'boolean') {
+          setWorkflowSignalsOpen(savedView.workflowSignalsOpen);
+        }
+        if (typeof savedView.verificationQuestionsOpen === 'boolean') {
+          setVerificationQuestionsOpen(savedView.verificationQuestionsOpen);
+        }
+      }
+      setViewStateHydrated(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [viewStateStorageKey]);
+
+  useEffect(() => {
+    if (!viewStateHydrated) return;
+    writePersistedJson(
+      viewStateStorageKey,
+      {
+        mode,
+        filter,
+        selectedSourceKey,
+        workflowSignalsOpen,
+        verificationQuestionsOpen,
+      },
+      'durable',
+    );
+  }, [
+    filter,
+    mode,
+    selectedSourceKey,
+    verificationQuestionsOpen,
+    viewStateHydrated,
+    viewStateStorageKey,
+    workflowSignalsOpen,
+  ]);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [quickNoteOpen, setQuickNoteOpen] = useState(false);
   const pendingQuickNoteFocus = useRef(false);
+  const modesNavRef = useRef<HTMLElement>(null);
   const modeRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const indicatorReady = useSlidingIndicator(modesNavRef, mode);
   const sourceRows = useRef(new Map<string, HTMLButtonElement>());
   const inspectorHeading = useRef<HTMLHeadingElement | null>(null);
   const inspectorDialog = useRef<HTMLDivElement | null>(null);
@@ -1340,6 +2054,7 @@ export const EvaluatorReviewWorkspace = (
     const current = r27Evidence;
     const afterSequence = current?.pagination.nextAfterSequence;
     if (
+      isolated ||
       !current ||
       afterSequence === null ||
       afterSequence === undefined ||
@@ -1541,7 +2256,10 @@ export const EvaluatorReviewWorkspace = (
     nextFilter?: EvidenceFilter,
     source?: EvidenceSource,
   ) => {
-    if (nextFilter) setFilter(nextFilter);
+    if (nextFilter) {
+      if (source) setFilter(nextFilter);
+      else handleFilterChange(nextFilter);
+    }
     if (source) setSelectedSourceKey(source.key);
     setMode('Evidence');
     setQuickNoteOpen(false);
@@ -1585,6 +2303,44 @@ export const EvaluatorReviewWorkspace = (
     setQuickNoteOpen(false);
   };
 
+  const setModeRef = useRef(setMode);
+  useEffect(() => {
+    setModeRef.current = setMode;
+  });
+
+  useEffect(() => {
+    if (mobileInspectorOpen) return;
+    const handleShortcut = (event: globalThis.KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const nextMode: WorkbenchMode | null =
+        event.key === '1'
+          ? 'Summary'
+          : event.key === '2'
+            ? 'Evidence'
+            : event.key === '3'
+              ? 'Review'
+              : null;
+      if (!nextMode) return;
+      event.preventDefault();
+      setModeRef.current(nextMode);
+      setQuickNoteOpen(false);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [mobileInspectorOpen]);
+
   const showQuickNote = () => {
     if (readOnly) return;
     if (window.matchMedia('(max-width: 1199px)').matches) {
@@ -1604,9 +2360,81 @@ export const EvaluatorReviewWorkspace = (
   const canNext =
     currentIndex >= 0 && currentIndex < activeFilterSources.length - 1;
 
+  const headerStats = useMemo(() => {
+    if (!r27Presentation) {
+      return { testSummary: null, diffSummary: null };
+    }
+    const execSources = sources.filter(
+      (s) => s.r27?.kind === 'execution' && s.execution,
+    );
+    let testSummary: string | null = null;
+    if (execSources.length > 0) {
+      const latestExec = execSources[execSources.length - 1].execution;
+      if (latestExec) {
+        testSummary =
+          latestExec.exitCode === 0
+            ? `Tests passed (${execSources.length} run${execSources.length === 1 ? '' : 's'})`
+            : `Tests exit ${latestExec.exitCode ?? '—'} (${execSources.length} run${execSources.length === 1 ? '' : 's'})`;
+      }
+    }
+    let totalAdd = 0;
+    let totalDel = 0;
+    for (const file of r27Presentation.files) {
+      const stats = computeDiffStats(file.diff);
+      totalAdd += stats.additions;
+      totalDel += stats.deletions;
+    }
+    const diffSummary =
+      totalAdd > 0 || totalDel > 0 ? `+${totalAdd} / -${totalDel} lines` : null;
+    return { testSummary, diffSummary };
+  }, [r27Presentation, sources]);
+
+  const tabDisplayLabel = (item: WorkbenchMode) => {
+    if (!hiringReviewContext) return item;
+    if (item === 'Summary') return 'Overview';
+    if (item === 'Evidence') return 'Code & Tests';
+    return 'Decision';
+  };
+
+  const reviewNextMode = mode === 'Summary' ? 'Evidence' : 'Review';
+
+  const reviewNextAction =
+    hiringReviewContext && mode !== 'Review' ? (
+      <button
+        type="button"
+        className="evaluator-review-next"
+        onClick={() => {
+          setMode(reviewNextMode);
+          modeRefs.current[modes.indexOf(reviewNextMode)]?.focus();
+        }}
+      >
+        {mode === 'Summary' ? 'Review code & tests' : 'Go to decision'}
+        <IconArrowRight size={17} aria-hidden="true" />
+      </button>
+    ) : null;
+
+  const advisoryPanel = r27Evidence ? (
+    <R27AiReviewPanel
+      organizationId={isolated ? undefined : r27Evidence.organizationId}
+      sessionId={r27Evidence.sessionId}
+      evidence={r27Evidence}
+      report={aiReviewReport}
+      onReportChange={setAiReviewReport}
+      onLoadingChange={setAiReviewLoading}
+      planLocked={aiReviewPlanLocked}
+      hiring={Boolean(hiringReviewContext)}
+      planSettingsHref={
+        isolated
+          ? undefined
+          : `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/plan`
+      }
+    />
+  ) : null;
+
   return (
     <div
       className="evaluator-review-layout evaluator-workbench"
+      data-hiring-review={Boolean(hiringReviewContext)}
       data-role-lens={activeRole}
       data-workbench-mode={mode.toLowerCase()}
     >
@@ -1617,6 +2445,9 @@ export const EvaluatorReviewWorkspace = (
       >
         <EvaluatorHeader
           sessionId={sessionId}
+          desktopReview={Boolean(hiringReviewContext)}
+          showTheme={!demoMode}
+          action={reviewNextAction}
           scenarioTitle={
             r27Evidence?.scenario.title ?? evidence!.scenario.title
           }
@@ -1625,19 +2456,46 @@ export const EvaluatorReviewWorkspace = (
           closureReason={
             review?.session.closureReason ?? r27Evidence!.closureReason
           }
-          backHref={
-            r27Evidence
-              ? `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId.toLowerCase())}/sessions/${encodeURIComponent(r27Evidence.sessionId)}`
-              : undefined
+          candidateName={hiringReviewContext?.candidateName ?? null}
+          candidateEmail={hiringReviewContext?.candidateEmail ?? null}
+          candidateCode={hiringReviewContext?.candidateCode ?? null}
+          targetRole={hiringReviewContext?.targetRole ?? null}
+          experienceLevel={
+            hiringReviewContext
+              ? experienceLevelLabel(hiringReviewContext.experienceLevel)
+              : null
           }
-          backLabel={r27Evidence ? '← Back to session summary' : undefined}
+          skills={hiringReviewContext?.skills}
+          testSummary={headerStats.testSummary}
+          diffSummary={headerStats.diffSummary}
+          backHref={
+            demoMode
+              ? '/products/software'
+              : hiringReviewContext
+                ? `/r23/organizations/${encodeURIComponent(hiringReviewContext.organizationId.toLowerCase())}/candidates`
+                : r27Evidence
+                  ? `/r23/organizations/${encodeURIComponent(r27Evidence.organizationId.toLowerCase())}/sessions/${encodeURIComponent(r27Evidence.sessionId)}`
+                  : undefined
+          }
+          backLabel={
+            demoMode
+              ? '← Back to Software'
+              : hiringReviewContext
+                ? '← Back to Candidates'
+                : r27Evidence
+                  ? '← Back to session summary'
+                  : undefined
+          }
         />
         <div className="evaluator-workbench-topline">
           <nav
-            className="evaluator-workbench-modes"
+            ref={modesNavRef}
+            className="ct-tabs-root evaluator-workbench-modes"
             role="tablist"
             aria-label="Review workspace"
+            data-indicator-ready={indicatorReady ? 'true' : undefined}
           >
+            <span className="ct-tab-indicator" aria-hidden="true" />
             {modes.map((item, index) => (
               <button
                 key={item}
@@ -1657,7 +2515,18 @@ export const EvaluatorReviewWorkspace = (
                 }}
                 onKeyDown={(event) => onModeKeyDown(event, index)}
               >
-                <span>{item}</span>
+                <KbdHint
+                  keys={String(index + 1)}
+                  className="evaluator-tab-kbd"
+                />
+                <span>{tabDisplayLabel(item)}</span>
+                {item === 'Review' && aiReviewLoading ? (
+                  <CommonThreadSpark
+                    compact
+                    status="active"
+                    label="AI review running"
+                  />
+                ) : null}
                 {item === 'Review' && pendingPeerReviewsForMeCount > 0 ? (
                   <span
                     className="evaluator-tab-badge"
@@ -1693,50 +2562,68 @@ export const EvaluatorReviewWorkspace = (
           tabIndex={0}
         >
           <section className="evaluator-workbench-main">
-            {mode === 'Summary' ? (
-              r27Evidence ? (
-                <R27SummaryView
-                  evidence={r27Evidence}
-                  presentation={r27Presentation!}
+            {effectiveVisitedModes.has('Summary') ? (
+              <div hidden={mode !== 'Summary'}>
+                {r27Evidence ? (
+                  <R27SummaryView
+                    evidence={r27Evidence}
+                    presentation={r27Presentation!}
+                    sources={sources}
+                    hiring={Boolean(hiringReviewContext)}
+                    onOpenEvidence={openEvidence}
+                    onLoadMore={loadMoreR27Events}
+                    loadingMore={loadingMoreR27}
+                    pageError={r27PageError}
+                    workflowSignalsOpen={workflowSignalsOpen}
+                    onWorkflowSignalsToggle={setWorkflowSignalsOpen}
+                    verificationQuestionsOpen={verificationQuestionsOpen}
+                    onVerificationQuestionsToggle={setVerificationQuestionsOpen}
+                  />
+                ) : evidence && review && projection ? (
+                  <SummaryView
+                    sessionId={sessionId}
+                    evidence={evidence}
+                    review={review}
+                    projection={projection}
+                    conversations={aiConversations}
+                    sources={sources}
+                    selectedSource={selectedSource}
+                    onSelectSource={selectSource}
+                    onOpenEvidence={openEvidence}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {effectiveVisitedModes.has('Evidence') ? (
+              <div hidden={mode !== 'Evidence'}>
+                <EvidenceView
+                  evidence={evidence ?? undefined}
+                  review={review ?? undefined}
+                  projection={projection ?? undefined}
+                  r27Evidence={r27Evidence ?? undefined}
                   sources={sources}
-                  onOpenEvidence={openEvidence}
-                  onLoadMore={loadMoreR27Events}
-                  loadingMore={loadingMoreR27}
-                  pageError={r27PageError}
-                />
-              ) : evidence && review && projection ? (
-                <SummaryView
-                  sessionId={sessionId}
-                  evidence={evidence}
-                  review={review}
-                  projection={projection}
-                  conversations={aiConversations}
-                  sources={sources}
+                  filter={filter}
                   selectedSource={selectedSource}
+                  selectedSourceKey={effectiveSelectedSourceKey}
+                  onFilterChange={handleFilterChange}
                   onSelectSource={selectSource}
-                  onOpenEvidence={openEvidence}
+                  registerRow={(key, element) => {
+                    if (element) sourceRows.current.set(key, element);
+                    else sourceRows.current.delete(key);
+                  }}
+                  onLoadMoreR27={loadMoreR27Events}
+                  loadingMoreR27={loadingMoreR27}
+                  r27PageError={r27PageError}
+                  hasHiringContext={Boolean(hiringReviewContext)}
+                  isolated={isolated}
+                  hiringDraft={hiringDecisionDraft}
+                  onHiringDraftChange={updateHiringDecisionDraft}
+                  onBackToTimeline={() => {
+                    setMode('Summary');
+                    modeRefs.current[modes.indexOf('Summary')]?.focus();
+                  }}
                 />
-              ) : null
-            ) : mode === 'Evidence' ? (
-              <EvidenceView
-                evidence={evidence ?? undefined}
-                review={review ?? undefined}
-                projection={projection ?? undefined}
-                r27Evidence={r27Evidence ?? undefined}
-                sources={sources}
-                filter={filter}
-                selectedSource={selectedSource}
-                selectedSourceKey={effectiveSelectedSourceKey}
-                onFilterChange={handleFilterChange}
-                onSelectSource={selectSource}
-                registerRow={(key, element) => {
-                  if (element) sourceRows.current.set(key, element);
-                  else sourceRows.current.delete(key);
-                }}
-                onLoadMoreR27={loadMoreR27Events}
-                loadingMoreR27={loadingMoreR27}
-                r27PageError={r27PageError}
-              />
+              </div>
             ) : null}
           </section>
 
@@ -1765,42 +2652,61 @@ export const EvaluatorReviewWorkspace = (
                 identity.
               </p>
             ) : null}
-            {mode === 'Review' && readOnly ? (
+            {readOnly ? (
               r27Evidence ? (
-                <div className="r27-review-stack">
-                  <div className="r27-human-review">
-                    {hiringReviewContext ? (
-                      <HiringDecisionPanel
-                        initialContext={hiringReviewContext}
-                        aiReviewReport={aiReviewReport}
-                        initialPeerReviewId={initialPeerReviewId}
-                        onOpenEvidence={openEvidence}
-                        onContextChange={setHiringReviewContext}
-                      />
-                    ) : null}
-                    {r210IsEnabled() ? (
-                      <R210ReviewPacketPanel
-                        organizationId={r27Evidence.organizationId}
-                        sessionId={r27Evidence.sessionId}
-                        reviewer={r27Evidence.reviewer}
-                        r27Evidence={r27Evidence}
-                        sources={sources}
-                        onOpenEvidence={openEvidence}
-                      />
-                    ) : null}
+                effectiveVisitedModes.has('Review') ? (
+                  <div className="r27-review-stack" hidden={mode !== 'Review'}>
+                    <div className="r27-human-review">
+                      {hiringReviewContext ? (
+                        <HiringDecisionPanel
+                          initialContext={hiringReviewContext}
+                          aiReviewReport={aiReviewReport}
+                          initialPeerReviewId={initialPeerReviewId}
+                          draft={hiringDecisionDraft}
+                          onDraftChange={setHiringDecisionDraft}
+                          onOpenEvidence={openEvidence}
+                          onContextChange={setHiringReviewContext}
+                          advisory={advisoryPanel}
+                          demoMode={demoMode}
+                          isSample={isSample}
+                          onSimulatedPublish={onSimulatedPublish}
+                          onBackToEvidence={() => {
+                            setMode('Evidence');
+                            modeRefs.current[
+                              modes.indexOf('Evidence')
+                            ]?.focus();
+                          }}
+                        />
+                      ) : null}
+                      {!isolated && r210IsEnabled() ? (
+                        hiringReviewContext ? (
+                          <details className="evaluator-source-details">
+                            <summary>Formal audit packet (optional)</summary>
+                            <R210ReviewPacketPanel
+                              organizationId={r27Evidence.organizationId}
+                              sessionId={r27Evidence.sessionId}
+                              reviewer={r27Evidence.reviewer}
+                              r27Evidence={r27Evidence}
+                              sources={sources}
+                              onOpenEvidence={openEvidence}
+                            />
+                          </details>
+                        ) : (
+                          <R210ReviewPacketPanel
+                            organizationId={r27Evidence.organizationId}
+                            sessionId={r27Evidence.sessionId}
+                            reviewer={r27Evidence.reviewer}
+                            r27Evidence={r27Evidence}
+                            sources={sources}
+                            onOpenEvidence={openEvidence}
+                          />
+                        )
+                      ) : null}
+                    </div>
+                    {hiringReviewContext ? null : advisoryPanel}
                   </div>
-                  <R27AiReviewPanel
-                    organizationId={r27Evidence.organizationId}
-                    sessionId={r27Evidence.sessionId}
-                    evidence={r27Evidence}
-                    report={aiReviewReport}
-                    onReportChange={setAiReviewReport}
-                    planLocked={aiReviewPlanLocked}
-                    hiring={Boolean(hiringReviewContext)}
-                    planSettingsHref={`/r23/organizations/${encodeURIComponent(r27Evidence.organizationId)}/settings`}
-                  />
-                </div>
-              ) : (
+                ) : null
+              ) : mode === 'Review' ? (
                 <section
                   className="evaluator-review-card"
                   aria-label="Read-only review boundary"
@@ -1812,7 +2718,7 @@ export const EvaluatorReviewWorkspace = (
                     reconstructed claims.
                   </p>
                 </section>
-              )
+              ) : null
             ) : null}
             {!readOnly ? (
               <ReviewWorkflowPanel
@@ -1824,7 +2730,7 @@ export const EvaluatorReviewWorkspace = (
         </div>
 
         <span className="visually-hidden" aria-live="polite">
-          Showing {mode} workspace.
+          Showing {tabDisplayLabel(mode)} workspace.
         </span>
       </div>
 
@@ -1842,7 +2748,7 @@ export const EvaluatorReviewWorkspace = (
               id="mobile-inspector-back"
               onClick={() => setMobileInspectorOpen(false)}
             >
-              ← Back to evidence
+              {hiringReviewContext ? '← Evidence' : '← Back to evidence'}
             </button>
             <div className="evaluator-mobile-inspector-navigation">
               <button
@@ -1852,9 +2758,13 @@ export const EvaluatorReviewWorkspace = (
                 disabled={!canPrevious}
                 onClick={() => navigateFilteredSource(-1)}
               >
-                Previous
+                {hiringReviewContext ? (
+                  <IconChevronLeft size={17} aria-hidden="true" />
+                ) : (
+                  'Previous'
+                )}
               </button>
-              <span>{filter}</span>
+              {hiringReviewContext ? null : <span>{filter}</span>}
               <button
                 type="button"
                 id="mobile-inspector-next"
@@ -1862,7 +2772,11 @@ export const EvaluatorReviewWorkspace = (
                 disabled={!canNext}
                 onClick={() => navigateFilteredSource(1)}
               >
-                Next
+                {hiringReviewContext ? (
+                  <IconChevronRight size={17} aria-hidden="true" />
+                ) : (
+                  'Next'
+                )}
               </button>
             </div>
           </header>
@@ -1873,6 +2787,7 @@ export const EvaluatorReviewWorkspace = (
                 source={focusedSource}
                 r27Evidence={r27Evidence}
                 headingRef={inspectorHeading}
+                isolated={isolated}
               />
             ) : evidence && review && projection ? (
               <EvidenceSourceInspector

@@ -1,3 +1,19 @@
+.software-product-header .software-review-related-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding-inline: 0.5rem;
+  color: var(--software-muted);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+
+.software-product-header .software-review-related-link:hover {
+  color: var(--software-ink);
+  text-decoration: underline;
+}
+
 .software-product-header nav {
   min-width: 0;
   display: flex;
@@ -15,7 +31,7 @@
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;
-  color: var(--software-on-plum-muted);
+  color: var(--software-muted);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
@@ -24,12 +40,12 @@
 }
 
 .software-product-header .software-nav-link:hover {
-  color: var(--software-on-plum);
+  color: var(--software-ink);
 }
 
 .software-product-header .software-nav-link[aria-current='page'] {
-  border-bottom-color: var(--software-mint);
-  color: var(--software-on-plum);
+  border-bottom-color: var(--software-focus);
+  color: var(--software-ink);
 }
 
 @media (max-width: 34rem) {
@@ -40,5 +56,14 @@
   .software-product-header nav {
     flex-basis: 100%;
     margin-inline-start: -0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .software-product-header *,
+  .software-product-header *::before,
+  .software-product-header *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

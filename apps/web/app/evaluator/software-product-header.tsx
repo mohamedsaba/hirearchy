@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { SoundToggle } from '../_components/sound-toggle';
 import { ThemeToggle } from '../_components/theme-toggle';
 import './software-product-header.css';
 
@@ -16,6 +15,7 @@ export interface SoftwareProductHeaderTenantScope {
 export interface SoftwareProductHeaderStagingReview {
   readonly organizationId: string;
   readonly sessionId: string;
+  readonly compact?: boolean;
 }
 
 export const SoftwareProductHeader = ({
@@ -30,22 +30,34 @@ export const SoftwareProductHeader = ({
   readOnlyMode?: boolean;
 }>) => {
   const allowIssuance = !readOnlyMode && !tenantScope;
-  const sessionSummaryHref = stagingReview
-    ? `/r23/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
+  const organizationHref = stagingReview
+    ? `/r23/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}`
     : null;
+  const sessionSummaryHref =
+    stagingReview && organizationHref
+      ? `${organizationHref}/sessions/${encodeURIComponent(stagingReview.sessionId)}`
+      : null;
+  const workspaceHref =
+    organizationHref && stagingReview?.compact
+      ? `${organizationHref}/candidates`
+      : (sessionSummaryHref ??
+        tenantScope?.switchOrganizationHref ??
+        '/evaluator');
 
   return (
-    <header className="software-product-header">
+    <header
+      className="software-product-header"
+      data-compact-review={stagingReview?.compact || undefined}
+    >
       <Link
         className="software-wordmark"
-        href={
-          sessionSummaryHref ??
-          (tenantScope ? tenantScope.switchOrganizationHref : '/evaluator')
-        }
+        href={workspaceHref}
         aria-label="Hirearchy Software home"
       >
         <span>Hirearchy</span>
-        <span className="software-product-capsule">Software</span>
+        <span className="software-product-capsule">
+          {stagingReview?.compact ? 'Evaluator' : 'Software'}
+        </span>
       </Link>
       {tenantScope ? (
         <div
@@ -65,19 +77,34 @@ export const SoftwareProductHeader = ({
           <span className="software-tenant-email">{tenantScope.userEmail}</span>
         </div>
       ) : null}
-      <nav aria-label="Evaluator workspace">
+      <nav
+        aria-label={
+          stagingReview?.compact
+            ? 'Related review pages'
+            : 'Evaluator workspace'
+        }
+      >
         {stagingReview && sessionSummaryHref ? (
           <>
-            <Link className="software-nav-link" href={sessionSummaryHref}>
-              Session summary
-            </Link>
             <Link
-              className="software-nav-link"
-              href={`/r27/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`}
-              aria-current={active === 'reviews' ? 'page' : undefined}
+              className={
+                stagingReview.compact
+                  ? 'software-review-related-link'
+                  : 'software-nav-link'
+              }
+              href={sessionSummaryHref}
             >
-              Evidence review
+              {stagingReview.compact ? 'Session details' : 'Session summary'}
             </Link>
+            {stagingReview.compact ? null : (
+              <Link
+                className="software-nav-link"
+                href={`/r27/organizations/${encodeURIComponent(stagingReview.organizationId.toLowerCase())}/sessions/${encodeURIComponent(stagingReview.sessionId)}`}
+                aria-current={active === 'reviews' ? 'page' : undefined}
+              >
+                Evidence review
+              </Link>
+            )}
           </>
         ) : (
           <>
@@ -129,7 +156,6 @@ export const SoftwareProductHeader = ({
         {allowIssuance ? null : null}
       </nav>
       <div className="software-header-controls">
-        <SoundToggle variant="header" />
         <ThemeToggle variant="header" />
       </div>
     </header>

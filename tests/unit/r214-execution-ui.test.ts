@@ -4,6 +4,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+}));
+
+vi.mock('../../apps/web/src/telemetry/client', () => ({
+  trackClientEvent: vi.fn(),
+  flushClientTelemetry: vi.fn(),
+}));
+
 import { R26CandidateClient } from '../../apps/web/app/r26/candidate/[sessionId]/candidate-client';
 import {
   EvidenceSourceInspector,

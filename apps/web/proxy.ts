@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { CANDIDATE_SUBMISSION_PATH } from './src/hiring/candidate-entry';
+
 import {
   isAuthenticatedStaging,
   isFounderUatEnabled,
@@ -12,12 +14,16 @@ const PUBLIC_PREVIEW_GET_PATHS = new Set([
   '/',
   '/about',
   '/contact',
+  '/demo',
+  '/dossier/demo',
   '/early-access',
   '/privacy',
   '/products',
   '/products/software',
   '/terms',
   '/thinking',
+  '/trust',
+  '/api/marketing-proof',
 ]);
 
 const STAGING_BROWSER_GET_PATTERNS: readonly RegExp[] = [
@@ -101,9 +107,18 @@ const STAGING_BROWSER_DELETE_PATTERNS: readonly RegExp[] = [
 
 const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
   /^\/hiring-platform\.css$/,
+  /^\/demo$/,
+  /^\/trust$/,
+  /^\/dossier\/[^/]+$/,
+  /^\/api\/marketing-proof$/,
+  /^\/r23\/account$/,
+  /^\/r23\/organizations\/[^/]+\/(?:plan|upgrade)$/,
+  /^\/r23\/organizations\/[^/]+\/sample-review$/,
+  /^\/r23\/organizations\/[^/]+\/builder\/candidate-preview$/,
   /^\/candidate$/,
   /^\/candidate\/login$/,
   /^\/candidate\/signup$/,
+  CANDIDATE_SUBMISSION_PATH,
   /^\/api\/candidate-portal$/,
   /^\/r26\/api\/candidate\/[^/]+\/ai$/,
   /^\/r23\/organizations\/[^/]+\/candidates$/,
@@ -113,11 +128,17 @@ const HIRING_PLATFORM_GET_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/candidates$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/library$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/handoffs$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/builder\/generate$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/sessions\/[^/]+\/review$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/(?:webhooks|dossiers|health|nudges)$/,
 ];
 
 const HIRING_PLATFORM_POST_PATTERNS: readonly RegExp[] = [
   /^\/api\/theme$/,
+  /^\/api\/telemetry$/,
+  /^\/api\/feedback$/,
+  /^\/r23\/account$/,
+  /^\/r23\/organizations\/[^/]+\/plan$/,
   /^\/api\/candidate-portal$/,
   /^\/r26\/api\/candidate\/[^/]+\/ai$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/plan$/,
@@ -126,6 +147,11 @@ const HIRING_PLATFORM_POST_PATTERNS: readonly RegExp[] = [
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/issue$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/handoffs$/,
   /^\/r23\/api\/organizations\/[^/]+\/hiring\/sessions\/[^/]+\/review$/,
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/(?:webhooks|dossiers|nudges)$/,
+];
+
+const HIRING_PLATFORM_DELETE_PATTERNS: readonly RegExp[] = [
+  /^\/r23\/api\/organizations\/[^/]+\/hiring\/builder\/generate$/,
 ];
 
 function isAllowedAuthenticatedStagingRequest(
@@ -139,6 +165,8 @@ function isAllowedAuthenticatedStagingRequest(
       pathname === '/software-ui.css' ||
       (hiring && pathname === '/hiring-platform.css') ||
       pathname === '/fonts/dm-sans-latin.woff2' ||
+      pathname === '/fonts/newsreader-latin.woff2' ||
+      pathname === '/fonts/jetbrains-mono-latin.woff2' ||
       pathname === '/favicon.ico')
   ) {
     return true;
@@ -168,8 +196,14 @@ function isAllowedAuthenticatedStagingRequest(
     );
   }
   if (method === 'DELETE') {
-    return STAGING_BROWSER_DELETE_PATTERNS.some((pattern) =>
-      pattern.test(pathname),
+    return (
+      STAGING_BROWSER_DELETE_PATTERNS.some((pattern) =>
+        pattern.test(pathname),
+      ) ||
+      (hiring &&
+        HIRING_PLATFORM_DELETE_PATTERNS.some((pattern) =>
+          pattern.test(pathname),
+        ))
     );
   }
   return false;
@@ -184,6 +218,8 @@ function isAllowedPublicPreviewRequest(
       PUBLIC_PREVIEW_GET_PATHS.has(pathname) ||
       pathname === '/api/health' ||
       pathname === '/favicon.ico' ||
+      pathname === '/icon.svg' ||
+      pathname === '/apple-icon.png' ||
       pathname.startsWith('/_next/static/') ||
       pathname.startsWith('/fonts/') ||
       pathname.startsWith('/software/icons/')
@@ -202,14 +238,22 @@ function isFounderUatRoute(method: string, pathname: string): boolean {
       pathname === '/api/founder-uat/mail' ||
       /^\/api\/founder-uat\/mail\/template\/(confirmation|recovery)$/.test(
         pathname,
-      )
+      ) ||
+      (isFounderUatEnabled() &&
+        (pathname === '/r23/intelligence' ||
+          pathname === '/api/intelligence' ||
+          pathname === '/demo' ||
+          pathname === '/trust' ||
+          pathname === '/api/marketing-proof' ||
+          /^\/dossier\/[^/]+$/.test(pathname)))
     );
   }
   return (
     method === 'POST' &&
-    /^\/api\/founder-uat\/(mail\/consume|invitations\/context|auth\/reset-password)$/.test(
+    (/^\/api\/founder-uat\/(mail\/consume|invitations\/context|auth\/reset-password)$/.test(
       pathname,
-    )
+    ) ||
+      (isFounderUatEnabled() && pathname === '/api/intelligence/action'))
   );
 }
 

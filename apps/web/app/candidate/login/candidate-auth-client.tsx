@@ -3,23 +3,40 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconLoader2,
+} from '@tabler/icons-react';
+import {
   candidateConfirmationParams,
+  candidateRecoveryPath,
   candidateSignInPath,
 } from '../../../src/hiring/candidate-entry';
 import { useRouter } from 'next/navigation';
+import { AuthCanvasBackdrop } from '../../_components/auth-canvas-backdrop';
 import { ThemeToggle } from '../../_components/theme-toggle';
 import { PasswordToggleInput } from '../../_components/password-field';
+import { SwitchSignInAccount } from '../../_components/switch-sign-in-account';
 
 export interface CandidateAuthClientProps {
   readonly mode: 'login' | 'signup';
   readonly nextPath: string;
   readonly verified?: boolean;
+  readonly reset?: boolean;
+  readonly activeAccount?: {
+    email: string;
+    csrfToken: string;
+    hasCandidateContext?: boolean;
+    hasTeamWorkspace?: boolean;
+  } | null;
 }
 
 export function CandidateAuthClient({
   mode,
   nextPath,
   verified = false,
+  reset = false,
+  activeAccount,
 }: CandidateAuthClientProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -104,6 +121,7 @@ export function CandidateAuthClient({
 
   return (
     <div className="software-product software-document-access software-candidate-access">
+      <AuthCanvasBackdrop />
       <a className="software-skip-link" href="#main-content">
         Skip to sign in
       </a>
@@ -121,16 +139,23 @@ export function CandidateAuthClient({
 
       <main className="software-document-shell" id="main-content" tabIndex={-1}>
         <div className="software-candidate-intro">
+          <p className="software-access-kicker">Candidate portal</p>
           <p className="software-access-principle">
             Work worth
             <br />
             <span>seeing.</span>
           </p>
+          <p className="software-access-lead">
+            Complete a realistic engineering task in a real workspace and share
+            your work in full context.
+          </p>
           <ol
             className="software-candidate-steps"
             aria-label="Assessment journey"
           >
-            <li>Invitation</li>
+            <li data-active={!signupSuccess ? 'true' : undefined}>
+              Invitation
+            </li>
             <li>Workspace</li>
             <li>Feedback</li>
           </ol>
@@ -140,6 +165,35 @@ export function CandidateAuthClient({
           className="software-document-panel"
           aria-labelledby="candidate-auth-title"
         >
+          <ol
+            className="software-candidate-steps-pill"
+            aria-label="Assessment journey"
+          >
+            <li data-active={!signupSuccess ? 'true' : undefined}>
+              <span className="software-step-num" aria-hidden="true">
+                1
+              </span>
+              <span>Invitation</span>
+            </li>
+            <li className="software-step-sep" aria-hidden="true">
+              →
+            </li>
+            <li>
+              <span className="software-step-num" aria-hidden="true">
+                2
+              </span>
+              <span>Workspace</span>
+            </li>
+            <li className="software-step-sep" aria-hidden="true">
+              →
+            </li>
+            <li>
+              <span className="software-step-num" aria-hidden="true">
+                3
+              </span>
+              <span>Feedback</span>
+            </li>
+          </ol>
           <h1 id="candidate-auth-title">
             {signupSuccess
               ? 'Confirm your email'
@@ -148,20 +202,85 @@ export function CandidateAuthClient({
                 : 'Create a candidate account'}
           </h1>
           {verified ? (
-            <p role="status">Email confirmed. Sign in to continue.</p>
+            <div
+              className="software-auth-banner software-auth-banner--success"
+              role="status"
+            >
+              <IconCircleCheck
+                size={18}
+                stroke={2}
+                className="software-auth-banner-icon"
+                aria-hidden="true"
+              />
+              <span>Email confirmed. Sign in to continue.</span>
+            </div>
+          ) : null}
+          {reset ? (
+            <div
+              className="software-auth-banner software-auth-banner--success"
+              role="status"
+            >
+              <IconCircleCheck
+                size={18}
+                stroke={2}
+                className="software-auth-banner-icon"
+                aria-hidden="true"
+              />
+              <span>Password updated. Sign in to continue.</span>
+            </div>
           ) : null}
           {errorMsg ? (
-            <p role="alert">
-              {errorMsg}
-              {verifyUrl ? (
-                <>
-                  {' '}
-                  <Link href={verifyUrl}>Confirm your email</Link>
-                </>
-              ) : null}
-            </p>
+            <div
+              className="software-auth-banner software-auth-banner--error"
+              role="alert"
+            >
+              <IconAlertTriangle
+                size={18}
+                stroke={2}
+                className="software-auth-banner-icon"
+                aria-hidden="true"
+              />
+              <span>
+                {errorMsg}
+                {verifyUrl ? (
+                  <>
+                    {' '}
+                    <Link href={verifyUrl}>Confirm your email</Link>
+                  </>
+                ) : null}
+              </span>
+            </div>
           ) : null}
-          {signupSuccess ? (
+          {activeAccount ? (
+            <SwitchSignInAccount
+              email={activeAccount.email}
+              csrfToken={activeAccount.csrfToken}
+              signInPath={loginPath}
+              continuePath={
+                nextPath === '/candidate' && activeAccount.hasCandidateContext
+                  ? '/candidate'
+                  : undefined
+              }
+              switchLabel="Switch to your invited email"
+              notice={
+                activeAccount.hasCandidateContext
+                  ? undefined
+                  : nextPath === '/candidate'
+                    ? `No candidate invitation or profile is linked to ${activeAccount.email}.`
+                    : `This account does not match the invitation. Switch to the email address that received your assessment link.`
+              }
+              secondaryHref={
+                activeAccount.hasTeamWorkspace
+                  ? '/r23/organizations'
+                  : undefined
+              }
+              secondaryLabel={
+                activeAccount.hasTeamWorkspace
+                  ? 'Back to team workspace'
+                  : undefined
+              }
+            />
+          ) : signupSuccess ? (
             <>
               <p>
                 Confirm <strong>{signupSuccess.email}</strong> to open your
@@ -193,7 +312,19 @@ export function CandidateAuthClient({
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
-                <label htmlFor="cand-password">Password</label>
+                {signIn ? (
+                  <div className="software-field-heading">
+                    <label htmlFor="cand-password">Password</label>
+                    <Link
+                      href={candidateRecoveryPath(nextPath)}
+                      prefetch={false}
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                ) : (
+                  <label htmlFor="cand-password">Password</label>
+                )}
                 <PasswordToggleInput
                   id="cand-password"
                   name="password"
@@ -203,26 +334,50 @@ export function CandidateAuthClient({
                   value={password}
                   onChange={setPassword}
                 />
-                <button type="submit" disabled={busy}>
-                  {busy
-                    ? signIn
-                      ? 'Signing in…'
-                      : 'Creating account…'
-                    : signIn
-                      ? 'Sign in'
-                      : 'Create account'}
+                {!signIn ? (
+                  <p className="hiring-field-hint">At least 6 characters.</p>
+                ) : null}
+                <button
+                  type="submit"
+                  className="software-submit-btn"
+                  disabled={busy}
+                  aria-busy={busy || undefined}
+                  data-pending={busy ? 'true' : undefined}
+                >
+                  {busy ? (
+                    <>
+                      <IconLoader2
+                        size={16}
+                        stroke={2.1}
+                        className="software-btn-spinner"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {signIn ? 'Signing in…' : 'Creating account…'}
+                      </span>
+                    </>
+                  ) : signIn ? (
+                    'Sign in'
+                  ) : (
+                    'Create account'
+                  )}
                 </button>
               </form>
               <nav aria-label="Account help">
-                {signIn ? (
-                  <Link
-                    href={`/candidate/signup?next=${encodeURIComponent(nextPath)}`}
-                  >
-                    Create a candidate account
-                  </Link>
-                ) : (
-                  <Link href={loginPath}>Already registered? Sign in</Link>
-                )}
+                <div className="software-access-switch">
+                  {signIn ? (
+                    <Link
+                      href={`/candidate/signup?next=${encodeURIComponent(nextPath)}`}
+                    >
+                      Create a candidate account
+                    </Link>
+                  ) : (
+                    <Link href={loginPath}>Already registered? Sign in</Link>
+                  )}
+                  <p>
+                    Hiring team? <Link href="/r23/login">Team sign in</Link>
+                  </p>
+                </div>
               </nav>
             </>
           )}

@@ -5,6 +5,7 @@ import {
   resolveKimiModelId,
 } from '../ai/kimi-client';
 import { computeEvidenceMetricsAndDiffSummary } from '../r27-evidence/ai-review-contract';
+import { buildR27Presentation } from '../r27-evidence/presentation';
 import type { PerformanceFitReport } from './types';
 
 export interface GeneratePerformanceReportInput {
@@ -25,6 +26,7 @@ export function buildDeterministicPerformanceFitReport(
   input: GeneratePerformanceReportInput,
   fallbackReason?: string,
 ): PerformanceFitReport {
+  const presentation = buildR27Presentation(input.evidence);
   const summary = computeEvidenceMetricsAndDiffSummary(input.evidence);
   const changedFiles = summary.files.filter((f) => f.changed);
   const clearlyDemonstrated = [
@@ -78,11 +80,23 @@ export function buildDeterministicPerformanceFitReport(
           ],
     clearlyDemonstrated,
     unclearOrNotAssessed,
-    suggestedNextInterviewQuestions: [
-      `Walk through the trade-offs in ${changedFiles[0]?.path ?? 'your submitted solution'} and how you would test failure modes in production.`,
-      'Which edge case gave you the most pause while working on this task, and what would you refactor with more time?',
-      `How does your solution scale under concurrent traffic or retries for a ${input.targetRole || 'production'} system?`,
-    ],
+    suggestedNextInterviewQuestions:
+      presentation.liveVerificationQuestions.length > 0
+        ? [
+            ...presentation.liveVerificationQuestions.map(
+              (item) => item.question,
+            ),
+            ...(input.targetRole
+              ? [
+                  `How would your solution in ${changedFiles[0]?.path ?? 'this module'} scale under concurrent traffic or retries for a ${input.targetRole} system?`,
+                ]
+              : []),
+          ].slice(0, 4)
+        : [
+            `Walk through the trade-offs in ${changedFiles[0]?.path ?? 'your submitted solution'} and how you would test failure modes in production.`,
+            'Which edge case gave you the most pause while working on this task, and what would you refactor with more time?',
+            `How does your solution scale under concurrent traffic or retries for a ${input.targetRole || 'production'} system?`,
+          ],
     provider: {
       modelId: resolveKimiModelId(),
       mode: 'evidence_summary',
@@ -152,7 +166,7 @@ export async function generateAcceptancePerformanceReport(
     if (!parsed) {
       return buildDeterministicPerformanceFitReport(
         input,
-        'Kimi K3.1 Pro response could not be parsed as JSON; showing structured summary.',
+        'AI assistant response could not be parsed as JSON; showing structured summary.',
       );
     }
 

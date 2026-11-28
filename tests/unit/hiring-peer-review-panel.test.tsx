@@ -76,6 +76,113 @@ describe('HiringDecisionPanel team peer review UX', () => {
     vi.unstubAllGlobals();
   });
 
+  it('requires a human choice and restores notes from an older draft', async () => {
+    const context = makeContext({ sessionId: 'sess_decision_choice' });
+    const legacyKey = `hirearchy:eval:decision-draft:v1:${context.sessionId}`;
+    const draftKey = `hirearchy:eval:decision-draft:v2:${context.sessionId}`;
+    window.sessionStorage.setItem(
+      legacyKey,
+      JSON.stringify({
+        decision: 'accepted',
+        internalNotes: 'Review edge cases',
+      }),
+    );
+    try {
+      await act(async () =>
+        root.render(<HiringDecisionPanel initialContext={context} />),
+      );
+      const choose = (label: string) =>
+        Array.from(
+          container.querySelectorAll<HTMLButtonElement>('button'),
+        ).find((button) => button.textContent?.trim() === label)!;
+      expect(choose('Advance candidate').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+      expect(choose('Reject candidate').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+      expect(choose('Publish decision').disabled).toBe(true);
+      expect(
+        container.querySelector<HTMLTextAreaElement>('#decision-internal-notes')
+          ?.value,
+      ).toBe('Review edge cases');
+      await act(async () => choose('Advance candidate').click());
+      expect(choose('Publish decision').disabled).toBe(false);
+      expect(
+        JSON.parse(window.sessionStorage.getItem(draftKey)!).decision,
+      ).toBe('accepted');
+
+      const preview = container.querySelector(
+        '[data-testid="decision-publish-preview"]',
+      );
+      expect(preview?.textContent).toContain('Managerial Interview');
+      expect(preview?.textContent).not.toContain('Review edge cases');
+      expect(choose('Advance candidate').getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+
+      const stageSelect = container.querySelector('#decision-next-stage')!;
+      const strengthsField = container.querySelector('#decision-strengths')!;
+      const internalField = container.querySelector(
+        '#decision-internal-notes',
+      )!;
+      expect(
+        stageSelect.compareDocumentPosition(strengthsField) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        strengthsField.compareDocumentPosition(internalField) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    } finally {
+      window.sessionStorage.removeItem(legacyKey);
+      window.sessionStorage.removeItem(draftKey);
+    }
+  });
+
+  it('shows all candidate feedback in the publish preview and prompts a sole owner to invite a teammate', async () => {
+    const context = makeContext();
+    const owner = context.teamMembers[0];
+    await act(async () =>
+      root.render(
+        <HiringDecisionPanel
+          initialContext={{
+            ...context,
+            sessionId: 'candidate-outcome-preview',
+            currentRole: 'recruiter',
+            currentPrincipalId: owner.principalId,
+            isOwner: true,
+            teamMembers: [owner],
+          }}
+          draft={{
+            decision: 'accepted',
+            nextStageLabel: 'Final interview',
+            strengthsText: 'Handles concurrent requests',
+            weaknessesText: 'Add a rollback test',
+            feedbackNote: 'Thanks for your work!',
+            internalNotes: 'Private hiring note',
+            handoffRecipientId: owner.principalId,
+          }}
+        />,
+      ),
+    );
+    const preview = container.querySelector(
+      '[data-testid="decision-publish-preview"] .hiring-outcome-box',
+    );
+    expect(preview?.textContent).toContain('Next step · Final interview');
+    expect(preview?.textContent).toContain('Handles concurrent requests');
+    expect(preview?.textContent).toContain('Add a rollback test');
+    expect(preview?.textContent).toContain('Thanks for your work!');
+    expect(preview?.textContent).not.toContain('Private hiring note');
+    const peerPanel = container.querySelector(
+      '[data-testid="team-peer-review-panel"]',
+    );
+    expect(peerPanel?.querySelector('form')).toBeNull();
+    expect(peerPanel?.querySelector('a')?.getAttribute('href')).toContain(
+      '/settings#team-invitations',
+    );
+  });
+
   it('surfaces an assigned peer review spotlight card with shared context and submits verdict without requiring final decision', async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const payload = JSON.parse(String(init?.body ?? '{}')) as Record<

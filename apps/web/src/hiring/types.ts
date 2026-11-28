@@ -203,6 +203,7 @@ export interface OrgCandidateSessionItem {
   readonly submittedAt: string | null;
   readonly invitationActive: boolean;
   readonly invitationExpiresAt: string | null;
+  readonly candidateLink?: string | null;
   readonly decision: HiringDecisionRecord | null;
   readonly secondOpinions: readonly SecondOpinionRecord[];
 }

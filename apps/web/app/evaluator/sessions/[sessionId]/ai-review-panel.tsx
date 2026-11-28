@@ -10,7 +10,13 @@ import {
   type AiReviewPresetId,
   type R27AiReviewReport,
 } from '../../../../src/r27-evidence/ai-review-contract';
-import { playHirearchySound } from '../../../../src/ui/sound';
+import {
+  AiReasoningDisclosure,
+  CommonThreadSpark,
+  HirearchyAiThinking,
+} from '../../../_components/ai';
+import { emitToast } from '../../../_components/brand-toast';
+import { CopyActionButton } from '../../../_components/copy-action-button';
 
 export type R27AiReviewPanelProps = Readonly<{
   organizationId?: string;
@@ -18,6 +24,7 @@ export type R27AiReviewPanelProps = Readonly<{
   evidence: R27Evidence;
   report?: R27AiReviewReport | null;
   onReportChange?: (report: R27AiReviewReport | null) => void;
+  onLoadingChange?: (loading: boolean) => void;
   defaultPreset?: AiReviewPresetId;
   planLocked?: boolean;
   hiring?: boolean;
@@ -36,6 +43,7 @@ export const R27AiReviewPanel = ({
   evidence,
   report: controlledReport,
   onReportChange,
+  onLoadingChange,
   defaultPreset = 'nvidia:kimi-k2',
   planLocked = false,
   hiring = false,
@@ -65,7 +73,15 @@ export const R27AiReviewPanel = ({
   const [selectedPreset, setSelectedPreset] =
     useState<AiReviewPresetId>(defaultPreset);
   const [customModelId, setCustomModelId] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoadingState] = useState<boolean>(false);
+  const [loadingStartedAt, setLoadingStartedAt] = useState<number | undefined>(
+    undefined,
+  );
+  const setLoading = (next: boolean) => {
+    setLoadingState(next);
+    setLoadingStartedAt(next ? Date.now() : undefined);
+    onLoadingChange?.(next);
+  };
   const [error, setError] = useState<string | null>(null);
 
   const selectedOption =
@@ -83,6 +99,7 @@ export const R27AiReviewPanel = ({
           label: 'Evidence-Grounded Preview (Offline Ready)',
         }),
       );
+      emitToast({ message: 'Evidence summary ready.', tone: 'success' });
       return;
     }
 
@@ -130,9 +147,8 @@ export const R27AiReviewPanel = ({
         throw new Error('AI review endpoint returned no report payload.');
       }
       setReport(data.report);
-      playHirearchySound('complete');
+      emitToast({ message: 'Advisory AI review ready.', tone: 'success' });
     } catch (err: unknown) {
-      playHirearchySound('error');
       setError(
         err instanceof Error ? err.message : 'Unable to generate AI review.',
       );
@@ -141,23 +157,54 @@ export const R27AiReviewPanel = ({
     }
   };
 
+  if (hiring && planLocked && !report) {
+    return (
+      <p className="review-desk-advisory-note">
+        AI advisory ·{' '}
+        {planSettingsHref ? (
+          <a href={planSettingsHref}>Available on Ultra</a>
+        ) : (
+          'Available on Ultra'
+        )}
+      </p>
+    );
+  }
+
   return (
     <details
       className="r27-ai-review-card"
       data-testid="r27-ai-review-panel"
       open={Boolean(report)}
     >
-      <summary>AI Candidate Review</summary>
-      {!report ? (
+      <summary>
+        <span>{hiring ? 'AI advisory' : 'AI Candidate Review'}</span>
+        <span className="ct-ai-badge ct-ai-badge--advisory">Advisory only</span>
+        {loading ? (
+          <CommonThreadSpark compact status="active" label="Analyzing" />
+        ) : null}
+      </summary>
+      {loading && !report ? (
+        <div className="r27-ai-thinking-wrap">
+          <HirearchyAiThinking
+            variant="advisory"
+            status="active"
+            badge="Advisory only"
+            headline="Analyzing candidate evidence…"
+            sublabel="Preparing an advisory summary from the recorded diffs, test runs, and workflow evidence."
+            startedAt={loadingStartedAt}
+            testId="r27-ai-thinking"
+          />
+        </div>
+      ) : null}
+      {!report && !loading ? (
         <div className="r27-ai-review-launcher">
           <p className="evaluator-muted-copy">
-            Generate an advisory report from the submitted work and recorded
-            evidence. The evaluator owns the final review.
+            {hiring
+              ? 'Advisory summary from diffs and test runs — final decisions belong to you.'
+              : 'Generate an advisory report from the submitted work and recorded evidence. The evaluator owns the final review.'}
           </p>
 
-          {hiring ? (
-            <p className="r27-ai-review-context">Kimi K3.1 Pro · NVIDIA</p>
-          ) : (
+          {hiring ? null : (
             <div className="r27-ai-review-controls">
               <label className="r27-ai-review-field">
                 <span>AI model preset</span>
@@ -225,7 +272,7 @@ export const R27AiReviewPanel = ({
             </button>
           </div>
         </div>
-      ) : (
+      ) : report ? (
         <div
           className="r27-ai-review-report"
           data-testid="r27-ai-review-report"
@@ -237,7 +284,11 @@ export const R27AiReviewPanel = ({
           >
             {evidenceSummary ? 'Recorded evidence summary' : report.headline}
           </h3>
-          <p className="r27-ai-review-context">{report.provider.label}</p>
+          <p className="r27-ai-review-context">
+            {hiring && report.provider.mode === 'live_ai'
+              ? 'AI advisory'
+              : report.provider.label}
+          </p>
           {evidenceSummary ? null : (
             <>
               <div className="r27-ai-review-result">
@@ -309,38 +360,85 @@ export const R27AiReviewPanel = ({
             </div>
           )}
 
-          {report.timingInsights && report.timingInsights.length > 0 ? (
-            <div className="hiring-card-subtle">
-              <h4>Chronological Timing &amp; Workflow Analysis</h4>
-              <ul className="hiring-timing-list">
-                {report.timingInsights.map((insight, index) => (
-                  <li
-                    key={`${index}:${insight}`}
-                    className="hiring-timing-item"
-                  >
-                    {insight}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {(report.timingInsights && report.timingInsights.length > 0) ||
+          (report.requirementBreakdown &&
+            report.requirementBreakdown.length > 0) ? (
+            <AiReasoningDisclosure
+              title="Evidence & requirement trace"
+              status="settled"
+              badge="Advisory synthesis"
+              testId="r27-ai-reasoning-disclosure"
+            >
+              {report.timingInsights && report.timingInsights.length > 0 ? (
+                <div className="hiring-card-subtle">
+                  <h4>Chronological Timing &amp; Workflow Analysis</h4>
+                  <ul className="hiring-timing-list">
+                    {report.timingInsights.map((insight, index) => (
+                      <li
+                        key={`${index}:${insight}`}
+                        className="hiring-timing-item"
+                      >
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {report.requirementBreakdown &&
+              report.requirementBreakdown.length > 0 ? (
+                <div className="hiring-card-subtle">
+                  <h4>Requirement Evidence Breakdown</h4>
+                  <ul className="hiring-timing-list">
+                    {report.requirementBreakdown.map((item, index) => (
+                      <li
+                        key={`${index}:${item.requirement}`}
+                        className="hiring-timing-item"
+                      >
+                        <strong>{item.requirement}</strong> ·{' '}
+                        <span className="hiring-pill">{item.status}</span> —{' '}
+                        {item.evidence}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </AiReasoningDisclosure>
           ) : null}
 
-          {report.requirementBreakdown &&
-          report.requirementBreakdown.length > 0 ? (
-            <div className="hiring-card-subtle">
-              <h4>Requirement Evidence Breakdown</h4>
-              <ul className="hiring-timing-list">
-                {report.requirementBreakdown.map((item, index) => (
-                  <li
-                    key={`${index}:${item.requirement}`}
-                    className="hiring-timing-item"
-                  >
-                    <strong>{item.requirement}</strong> ·{' '}
-                    <span className="hiring-pill">{item.status}</span> —{' '}
-                    {item.evidence}
+          {report.verificationQuestions &&
+          report.verificationQuestions.length > 0 ? (
+            <div
+              className="hiring-card-subtle"
+              data-testid="r27-ai-verification-questions"
+            >
+              <div className="hiring-preview-header">
+                <h4>Live verification questions (10-min defense)</h4>
+                <CopyActionButton
+                  value={report.verificationQuestions
+                    .map(
+                      (item, idx) =>
+                        `${idx + 1}. ${item.question} (${item.focus})`,
+                    )
+                    .join('\n')}
+                  label="Copy questions"
+                  copiedLabel="Copied"
+                  toastMessage="Verification questions copied."
+                  size="sm"
+                  variant="secondary"
+                  onCopyError={() =>
+                    setError('Copy failed — copy manually from this browser.')
+                  }
+                />
+              </div>
+              <ol className="hiring-ol-list">
+                {report.verificationQuestions.map((item, index) => (
+                  <li key={`${index}:${item.question}`}>
+                    <span>{item.question}</span>{' '}
+                    <span className="evaluator-muted-copy">({item.focus})</span>
                   </li>
                 ))}
-              </ul>
+              </ol>
             </div>
           ) : null}
 
@@ -373,12 +471,11 @@ export const R27AiReviewPanel = ({
               </button>
             </div>
             <p className="r27-ai-review-disclaimer">
-              Advisory summary only. Human evaluators remain authoritative over
-              final review packets.
+              Advisory only — hiring decisions belong to you.
             </p>
           </div>
         </div>
-      )}
+      ) : null}
 
       {error ? (
         <p className="r27-ai-review-error" role="alert">

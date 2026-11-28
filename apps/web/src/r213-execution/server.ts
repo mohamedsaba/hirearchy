@@ -14,6 +14,7 @@ import type {
 } from '../../../../database/postgres/r213/contract.d.mts';
 import { createR26CandidateAdapter } from '../../../../database/postgres/r26/adapter.mjs';
 import { readR26Config, r26IsEnabled } from '../r26-candidate/config';
+import { isHiringPlatformEnabled } from '../runtime/profile';
 import {
   DEFAULT_PYTHON_CHECK_RECIPE,
   R213_DEFAULT_RECIPE_DIGEST,
@@ -83,6 +84,15 @@ export async function readCandidateExecutionCapability(
   tokenHash: string,
   sessionId: string,
 ): Promise<boolean> {
+  if (isHiringPlatformEnabled()) {
+    const { rows } = await getClientPool(databaseUrl).query<{
+      result: { terminalEnabled?: boolean } | null;
+    }>('SELECT staging.hiring_r213_get_view($1, $2) AS result', [
+      tokenHash,
+      sessionId,
+    ]);
+    return rows[0]?.result?.terminalEnabled === true;
+  }
   const view = await getCandidateExecutionsView(getClientPool(databaseUrl), {
     tokenHash,
     sessionId,

@@ -1,6 +1,20 @@
 'use client';
 
-import { useEffect, useId, useState, type RefObject } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
+import {
+  IconCheck,
+  IconCopy,
+  IconFileDescription,
+  IconX,
+} from '@tabler/icons-react';
 import type { EvaluatorAiConversation } from '../../../../src/evaluator/evaluator-ai-conversations';
 import type {
   EvaluatorReviewEvidence,
@@ -57,6 +71,7 @@ import {
   computeDiffStats,
 } from './code-diff-viewer';
 import { EvidenceItemCard } from './evidence-item-card';
+import { formatLocalDateTime } from '../../../../src/ui/relative-time';
 import { SubmittedWork } from './submitted-work';
 import { TechnicalRecord } from './technical-record';
 
@@ -561,11 +576,7 @@ export const formatEvidenceTime = (
   const timestamp = source.timestamp;
   if (!timestamp) return 'Time unavailable';
   return (
-    formatElapsedValue(activatedAt, timestamp) ??
-    new Date(timestamp).toLocaleString(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })
+    formatElapsedValue(activatedAt, timestamp) ?? formatLocalDateTime(timestamp)
   );
 };
 
@@ -670,7 +681,11 @@ type R27InspectorProps = Readonly<{
   source: EvidenceSource | null;
   r27Evidence: R27Evidence;
   headingRef?: RefObject<HTMLHeadingElement | null>;
+  fileEvidencePanel?: FileEvidencePanel;
+  isolated?: boolean;
 }>;
+
+const IsolatedEvidenceContext = createContext(false);
 
 const R29ObservationPanel = ({
   organizationId,
@@ -689,6 +704,8 @@ const R29ObservationPanel = ({
   fileVersion?: string | null;
   evidenceDigest: string;
 }>) => {
+  const isolated = useContext(IsolatedEvidenceContext);
+  const enabled = !isolated && r29IsEnabled();
   const [observations, setObservations] = useState<
     readonly R29EvaluatorObservation[]
   >([]);
@@ -717,6 +734,7 @@ const R29ObservationPanel = ({
   };
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     const controller = new AbortController();
 
@@ -745,7 +763,7 @@ const R29ObservationPanel = ({
               setWritesEnabled(false);
               setWritesUnavailableReason(
                 data.writesUnavailableReason ??
-                  'Private observation creation and editing are disabled in the R2.15 internal staging slice (read-only access).',
+                  'Adding or editing private notes is disabled for this session.',
               );
             }
             setLoading(false);
@@ -764,7 +782,7 @@ const R29ObservationPanel = ({
       active = false;
       controller.abort();
     };
-  }, [organizationId, sessionId]);
+  }, [enabled, organizationId, sessionId]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -904,7 +922,7 @@ const R29ObservationPanel = ({
     fileVersion,
   });
 
-  if (!r29IsEnabled()) return null;
+  if (!enabled) return null;
 
   return (
     <section
@@ -1461,9 +1479,9 @@ const R29ObservationPanel = ({
             color: 'var(--software-status-warning)',
           }}
         >
-          <strong>Read-Only Staging Slice:</strong>{' '}
+          <strong>Read-only view:</strong>{' '}
           {writesUnavailableReason ??
-            'Private observation creation and editing are disabled in the R2.15 internal staging slice.'}
+            'Adding or editing private notes is disabled for this session.'}
         </div>
       )}
     </section>
@@ -1640,40 +1658,44 @@ const R28WorkspaceRevisionView = ({
           >
             <button
               type="button"
+              aria-label="View file content at this revision"
               aria-pressed={mode === 'content'}
               onClick={() => setMode('content')}
               className={`evaluator-mode-button${mode === 'content' ? ' is-active' : ''}`}
             >
-              View file content at this revision
+              Snapshot
             </button>
             {presentation.hasPrevious ? (
               <button
                 type="button"
+                aria-label="Diff with previous revision"
                 aria-pressed={mode === 'previous'}
                 onClick={() => setMode('previous')}
                 className={`evaluator-mode-button${mode === 'previous' ? ' is-active' : ''}`}
               >
-                Diff with previous revision
+                vs. Previous
               </button>
             ) : null}
             {presentation.hasStarter ? (
               <button
                 type="button"
+                aria-label="Diff with starter baseline"
                 aria-pressed={mode === 'starter'}
                 onClick={() => setMode('starter')}
                 className={`evaluator-mode-button${mode === 'starter' ? ' is-active' : ''}`}
               >
-                Diff with starter baseline
+                vs. Starter
               </button>
             ) : null}
             {presentation.hasSubmitted ? (
               <button
                 type="button"
+                aria-label="Diff with submitted code"
                 aria-pressed={mode === 'submitted'}
                 onClick={() => setMode('submitted')}
                 className={`evaluator-mode-button${mode === 'submitted' ? ' is-active' : ''}`}
               >
-                Diff with submitted code
+                vs. Submitted
               </button>
             ) : null}
           </div>
@@ -1883,6 +1905,11 @@ const R28WorkspaceRevisionView = ({
   );
 };
 
+type FileEvidencePanel = Readonly<{
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}>;
+
 const R27FileInspector = ({
   file,
   source,
@@ -1892,6 +1919,7 @@ const R27FileInspector = ({
   sourceReference,
   copySourceReference,
   copyStatus,
+  fileEvidencePanel,
 }: Readonly<{
   file: Extract<R27PresentationSource, { kind: 'file' }>['file'];
   source: EvidenceSource;
@@ -1901,6 +1929,7 @@ const R27FileInspector = ({
   sourceReference: string | null | undefined;
   copySourceReference: (reference: string) => Promise<void>;
   copyStatus: string | null;
+  fileEvidencePanel?: FileEvidencePanel;
 }>) => {
   const diffStats = computeDiffStats(file.diff);
   const hasNetChanges =
@@ -1908,8 +1937,31 @@ const R27FileInspector = ({
     diffStats.deletions > 0 ||
     file.starterContent !== file.submittedContent;
   const [viewMode, setViewMode] = useState<'diff' | 'submitted' | 'starter'>(
-    () => (file.diff !== null ? 'diff' : 'submitted'),
+    () => (file.diff !== null && hasNetChanges ? 'diff' : 'submitted'),
   );
+
+  const drawerId = useId();
+  const referenceCopied = copyStatus === 'Stable source reference copied.';
+  const drawerTrigger = useRef<HTMLButtonElement>(null);
+  const drawerClose = useRef<HTMLButtonElement>(null);
+  const closeDetails = () => {
+    fileEvidencePanel?.onOpenChange(false);
+    drawerTrigger.current?.focus({ preventScroll: true });
+  };
+  const toggleDetails = () => {
+    if (!fileEvidencePanel) return;
+    if (fileEvidencePanel.open) closeDetails();
+    else {
+      fileEvidencePanel.onOpenChange(true);
+      requestAnimationFrame(() =>
+        drawerClose.current?.focus({ preventScroll: true }),
+      );
+    }
+  };
+  const matchesStarter =
+    !hasNetChanges &&
+    file.starterContent !== null &&
+    file.submittedContent !== null;
 
   const matchingEvent = [...r27Evidence.events]
     .reverse()
@@ -1940,122 +1992,13 @@ const R27FileInspector = ({
     r27Evidence.submission.workspaceDigest;
   const evidenceDigest = rawDigest.replace(/^sha256:/i, '').toLowerCase();
 
-  return (
-    <section
-      className="evaluator-source-inspector"
-      aria-labelledby={headingId}
-      data-source-inspector="true"
-      data-source-ref={source.key}
-      style={{ minWidth: 0, maxWidth: '100%' }}
-    >
-      <header className="evaluator-source-inspector-heading">
-        <div>
-          <p className="section-kicker">Submitted file · Selected source</p>
-          <h2 id={headingId} ref={headingRef} tabIndex={-1}>
-            {file.path}
-          </h2>
-          <p className="evaluator-source-summary">{source.summary}</p>
-        </div>
-        <div className="evaluator-source-status-group">
-          {hasNetChanges ? (
-            <>
-              {diffStats.additions > 0 ? (
-                <span className="code-diff-stat-add">
-                  +{diffStats.additions}
-                </span>
-              ) : null}
-              {diffStats.deletions > 0 ? (
-                <span className="code-diff-stat-del">
-                  -{diffStats.deletions}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            <span className="code-diff-stat-neutral">Unchanged</span>
-          )}
-          <span className="evaluator-source-status">
-            {captureStatus(source)}
-          </span>
-        </div>
-      </header>
-
-      <div
-        className="evaluator-revision-mode-selector"
-        role="group"
-        aria-label="File view mode"
-      >
-        <button
-          type="button"
-          aria-pressed={viewMode === 'diff'}
-          onClick={() => setViewMode('diff')}
-          className={`evaluator-mode-button${viewMode === 'diff' ? ' is-active' : ''}`}
-        >
-          Diff
-        </button>
-        <button
-          type="button"
-          aria-pressed={viewMode === 'submitted'}
-          onClick={() => setViewMode('submitted')}
-          className={`evaluator-mode-button${viewMode === 'submitted' ? ' is-active' : ''}`}
-        >
-          Submitted
-        </button>
-        <button
-          type="button"
-          aria-pressed={viewMode === 'starter'}
-          onClick={() => setViewMode('starter')}
-          className={`evaluator-mode-button${viewMode === 'starter' ? ' is-active' : ''}`}
-        >
-          Starter
-        </button>
-      </div>
-
-      <div
-        className="evaluator-source-inspector-output"
-        style={{ minWidth: 0, maxWidth: '100%' }}
-      >
-        {viewMode === 'diff' ? (
-          <>
-            <h3>Derived starter-to-submission diff</h3>
-            {file.diff === null ? (
-              <p className="evaluator-muted-copy">
-                The starter baseline is unavailable, so a diff is not derived.
-              </p>
-            ) : (
-              <CodeDiffViewer
-                diff={file.diff}
-                filePath={file.path}
-                ariaLabel={`Derived diff for ${file.path}`}
-                emptyMessage="No net content change compared to starter baseline."
-              />
-            )}
-          </>
-        ) : viewMode === 'submitted' ? (
-          <>
-            <h3>Submitted content</h3>
-            <CodeFileViewer
-              content={file.submittedContent}
-              ariaLabel={`Submitted content for ${file.path}`}
-              emptyMessage="This path is absent from the frozen submitted workspace."
-            />
-          </>
-        ) : (
-          <>
-            <h3>Starter content</h3>
-            <CodeFileViewer
-              content={file.starterContent}
-              ariaLabel={`Starter content for ${file.path}`}
-              emptyMessage="Starter content was not available in the authorized snapshot."
-            />
-          </>
-        )}
-      </div>
-
+  const fileMetadata = (
+    <>
       <details
         className="evaluator-source-details"
         style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
       >
-        <summary>File version and digest metadata</summary>
+        <summary>File version and digests</summary>
         <dl className="evaluator-source-metadata">
           <div>
             <dt>Starter version</dt>
@@ -2143,7 +2086,7 @@ const R27FileInspector = ({
         </p>
       </details>
 
-      {sourceReference ? (
+      {sourceReference && !fileEvidencePanel ? (
         <details
           className="evaluator-source-details"
           style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
@@ -2162,6 +2105,7 @@ const R27FileInspector = ({
             </code>
           </p>
           <button
+            className="hiring-btn hiring-btn-sm"
             type="button"
             onClick={() => void copySourceReference(sourceReference)}
           >
@@ -2170,6 +2114,231 @@ const R27FileInspector = ({
           {copyStatus ? <span role="status">{copyStatus}</span> : null}
         </details>
       ) : null}
+    </>
+  );
+
+  return (
+    <section
+      className="evaluator-source-inspector"
+      aria-labelledby={headingId}
+      data-source-inspector="true"
+      data-source-ref={source.key}
+      data-file-inspector="true"
+      style={{ minWidth: 0, maxWidth: '100%' }}
+    >
+      <header className="evaluator-source-inspector-heading review-desk-file-heading">
+        <div>
+          <h2 id={headingId} ref={headingRef} tabIndex={-1}>
+            {file.path}
+          </h2>
+          {fileEvidencePanel && matchesStarter ? (
+            <p className="review-desk-file-match">Matches starter code.</p>
+          ) : null}
+        </div>
+        <div className="evaluator-source-status-group">
+          {hasNetChanges ? (
+            <>
+              {diffStats.additions > 0 ? (
+                <span className="code-diff-stat-add">
+                  +{diffStats.additions}
+                </span>
+              ) : null}
+              {diffStats.deletions > 0 ? (
+                <span className="code-diff-stat-del">
+                  -{diffStats.deletions}
+                </span>
+              ) : null}
+            </>
+          ) : fileEvidencePanel ? null : (
+            <span className="code-diff-stat-neutral">Unchanged</span>
+          )}
+          {file.starterContent === null || file.submittedContent === null ? (
+            <span className="evaluator-source-status">
+              {captureStatus(source)}
+            </span>
+          ) : null}
+          {fileEvidencePanel ? (
+            <button
+              type="button"
+              ref={drawerTrigger}
+              className="review-desk-file-trigger"
+              onClick={toggleDetails}
+              aria-controls={drawerId}
+              aria-expanded={fileEvidencePanel.open}
+            >
+              <IconFileDescription size={17} aria-hidden="true" /> File evidence
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      <div
+        className="review-desk-file-layout"
+        data-evidence-open={fileEvidencePanel?.open}
+      >
+        <div className="review-desk-code-pane">
+          <div
+            className="evaluator-revision-mode-selector"
+            role="group"
+            aria-label="File view mode"
+          >
+            {!fileEvidencePanel || (file.diff !== null && hasNetChanges) ? (
+              <button
+                type="button"
+                aria-pressed={viewMode === 'diff'}
+                onClick={() => setViewMode('diff')}
+                className={`evaluator-mode-button${viewMode === 'diff' ? ' is-active' : ''}`}
+              >
+                Diff
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-pressed={viewMode === 'submitted'}
+              onClick={() => setViewMode('submitted')}
+              className={`evaluator-mode-button${viewMode === 'submitted' ? ' is-active' : ''}`}
+            >
+              Submitted
+            </button>
+            <button
+              type="button"
+              aria-pressed={viewMode === 'starter'}
+              onClick={() => setViewMode('starter')}
+              className={`evaluator-mode-button${viewMode === 'starter' ? ' is-active' : ''}`}
+            >
+              Starter
+            </button>
+          </div>
+
+          <div
+            className="evaluator-source-inspector-output"
+            style={{ minWidth: 0, maxWidth: '100%' }}
+          >
+            {viewMode === 'diff' ? (
+              <>
+                <h3 className="visually-hidden">Changes from starter</h3>
+                {file.diff === null ? (
+                  <p className="evaluator-muted-copy">
+                    The starter baseline is unavailable, so a diff is not
+                    derived.
+                  </p>
+                ) : (
+                  <CodeDiffViewer
+                    diff={file.diff}
+                    filePath={file.path}
+                    ariaLabel={`Derived diff for ${file.path}`}
+                    emptyMessage="No net content change compared to starter baseline."
+                  />
+                )}
+              </>
+            ) : viewMode === 'submitted' ? (
+              <>
+                <h3 className="visually-hidden">Submitted code</h3>
+                <CodeFileViewer
+                  content={file.submittedContent}
+                  filePath={fileEvidencePanel ? file.path : undefined}
+                  ariaLabel={`Submitted content for ${file.path}`}
+                  emptyMessage="This path is absent from the frozen submitted workspace."
+                />
+              </>
+            ) : (
+              <>
+                <h3>Starter content</h3>
+                <CodeFileViewer
+                  content={file.starterContent}
+                  filePath={fileEvidencePanel ? file.path : undefined}
+                  ariaLabel={`Starter content for ${file.path}`}
+                  emptyMessage="Starter content was not available in the authorized snapshot."
+                />
+              </>
+            )}
+          </div>
+        </div>
+        {fileEvidencePanel ? (
+          <aside
+            id={drawerId}
+            className="review-desk-file-evidence"
+            aria-label="File evidence"
+            aria-hidden={!fileEvidencePanel.open}
+            inert={!fileEvidencePanel.open}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && fileEvidencePanel.open) {
+                event.stopPropagation();
+                closeDetails();
+              }
+            }}
+          >
+            <div className="review-desk-file-evidence-inner">
+              <header>
+                <h3>File evidence</h3>
+                <button
+                  type="button"
+                  ref={drawerClose}
+                  aria-label="Close file evidence"
+                  onClick={closeDetails}
+                >
+                  <IconX size={19} aria-hidden="true" />
+                </button>
+              </header>
+              <code>{file.path}</code>
+              <details className="evaluator-source-details review-desk-file-source">
+                <summary>Source details</summary>
+                <dl className="evaluator-source-metadata">
+                  <div>
+                    <dt>Source</dt>
+                    <dd>
+                      {file.submittedContent === null
+                        ? 'Starter snapshot'
+                        : 'Submitted snapshot'}
+                    </dd>
+                  </div>
+                  {sourceReference ? (
+                    <div>
+                      <dt>Reference</dt>
+                      <dd>
+                        <code title={sourceReference}>
+                          …{sourceReference.slice(-16)}
+                        </code>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+                {sourceReference ? (
+                  <div className="review-desk-reference">
+                    <button
+                      type="button"
+                      className="hiring-btn hiring-btn-sm"
+                      onClick={() => void copySourceReference(sourceReference)}
+                    >
+                      {referenceCopied ? (
+                        <IconCheck size={15} aria-hidden="true" />
+                      ) : (
+                        <IconCopy size={15} aria-hidden="true" />
+                      )}
+                      {referenceCopied ? 'Copied' : 'Copy reference'}
+                    </button>
+                    {copyStatus ? (
+                      <p
+                        role="status"
+                        className={
+                          referenceCopied ? 'visually-hidden' : undefined
+                        }
+                      >
+                        {copyStatus}
+                      </p>
+                    ) : null}
+                    {copyStatus && !referenceCopied ? (
+                      <code>{sourceReference}</code>
+                    ) : null}
+                  </div>
+                ) : null}
+              </details>
+              {fileMetadata}
+            </div>
+          </aside>
+        ) : null}
+      </div>
+      {fileEvidencePanel ? null : fileMetadata}
 
       <R29ObservationPanel
         organizationId={r27Evidence.organizationId}
@@ -2189,11 +2358,13 @@ const R27EvidenceSourceInspector = ({
   r27Evidence,
   headingId,
   headingRef,
+  fileEvidencePanel,
 }: Readonly<{
   source: EvidenceSource | null;
   r27Evidence: R27Evidence;
   headingId: string;
   headingRef?: RefObject<HTMLHeadingElement | null>;
+  fileEvidencePanel?: FileEvidencePanel;
 }>) => {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const copySourceReference = async (reference: string) => {
@@ -2923,6 +3094,7 @@ const R27EvidenceSourceInspector = ({
       sourceReference={sourceReference}
       copySourceReference={copySourceReference}
       copyStatus={copyStatus}
+      fileEvidencePanel={fileEvidencePanel}
     />
   );
 };
@@ -2937,12 +3109,15 @@ export const EvidenceSourceInspector = (
   } | null>(null);
   if ('r27Evidence' in props)
     return (
-      <R27EvidenceSourceInspector
-        source={props.source}
-        r27Evidence={props.r27Evidence}
-        headingId={headingId}
-        headingRef={props.headingRef}
-      />
+      <IsolatedEvidenceContext value={props.isolated ?? false}>
+        <R27EvidenceSourceInspector
+          source={props.source}
+          r27Evidence={props.r27Evidence}
+          headingId={headingId}
+          headingRef={props.headingRef}
+          fileEvidencePanel={props.fileEvidencePanel}
+        />
+      </IsolatedEvidenceContext>
     );
 
   const { source, evidence, review, projection, headingRef } = props;
@@ -3262,7 +3437,7 @@ export const R210ReviewPacketPanel = ({
               setWritesEnabled(false);
               setWritesUnavailableReason(
                 data.writesUnavailableReason ??
-                  'Review packet draft saving and finalization are disabled in the R2.15 internal staging slice (read-only access).',
+                  'Editing and finalizing the review packet is disabled for this session.',
               );
             }
           }
@@ -3682,67 +3857,22 @@ export const R210ReviewPacketPanel = ({
 
   return (
     <div
-      className="evaluator-review-card evaluator-review-packet"
+      className="evaluator-review-card evaluator-review-packet r210-packet-card"
       data-testid="evaluator-review-packet"
-      style={{
-        padding: 'clamp(16px, 2.5vw, 28px)',
-        border: '1px solid var(--software-border)',
-        borderRadius: '12px',
-        backgroundColor: 'var(--software-surface, #ffffff)',
-        minWidth: 0,
-        maxWidth: '100%',
-        boxSizing: 'border-box',
-        overflowWrap: 'anywhere',
-      }}
     >
       {/* Top Header */}
-      <header
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: '12px',
-          marginBottom: '20px',
-          borderBottom: '1px solid var(--software-border)',
-          paddingBottom: '16px',
-        }}
-      >
+      <header className="r210-packet-header">
         <div>
           <p
-            className="section-kicker"
+            className="section-kicker r210-packet-kicker"
             title={`Reviewer: ${reviewer.principalId}`}
-            style={{
-              margin: '0 0 4px 0',
-              fontSize: '11px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: 'var(--software-muted)',
-            }}
           >
             Assigned evaluator
           </p>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 'clamp(18px, 2vw, 22px)',
-              fontWeight: 700,
-              color: 'var(--software-ink)',
-            }}
-          >
-            Structured Human Review Packet
-          </h2>
+          <h2 className="r210-packet-title">Structured Human Review Packet</h2>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="r210-packet-badges">
           <span
             data-testid="review-packet-status"
             style={{
@@ -3898,9 +4028,9 @@ export const R210ReviewPacketPanel = ({
             fontWeight: 500,
           }}
         >
-          <strong>Read-Only Staging Slice:</strong>{' '}
+          <strong>Read-only view:</strong>{' '}
           {writesUnavailableReason ??
-            'Review packet draft saving and finalization are disabled in the R2.15 internal staging slice (read-only access).'}
+            'Editing and finalizing the review packet is disabled for this session.'}
         </div>
       ) : null}
 
@@ -4273,20 +4403,11 @@ export const R210ReviewPacketPanel = ({
             e.preventDefault();
             void handleSaveDraft();
           }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+          className="r210-form"
         >
           {/* Summary Input */}
           <div>
-            <label
-              htmlFor="review-packet-summary"
-              style={{
-                display: 'block',
-                fontWeight: 700,
-                fontSize: '14px',
-                marginBottom: '6px',
-                color: 'var(--software-ink)',
-              }}
-            >
+            <label htmlFor="review-packet-summary" className="r210-field-label">
               Review summary{' '}
               <span
                 style={{
@@ -4305,19 +4426,7 @@ export const R210ReviewPacketPanel = ({
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Summarize your assessment and cite the recorded work."
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid var(--software-border)',
-                background: 'var(--software-surface)',
-                color: 'var(--software-ink)',
-                fontSize: '14px',
-                lineHeight: 1.5,
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
+              className="r210-textarea"
             />
           </div>
 
@@ -4815,29 +4924,9 @@ export const R210ReviewPacketPanel = ({
           role="dialog"
           aria-modal="true"
           aria-label="Confirm Review Packet Finalization"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(10, 5, 16, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '16px',
-          }}
+          className="r210-modal-backdrop"
         >
-          <div
-            style={{
-              backgroundColor: 'var(--software-surface)',
-              border: '1px solid var(--software-border)',
-              color: 'var(--software-ink)',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '480px',
-              width: '100%',
-              boxShadow: 'var(--software-shadow-elevated)',
-            }}
-          >
+          <div className="r210-modal-dialog">
             <h3
               style={{
                 margin: '0 0 12px 0',

@@ -255,6 +255,10 @@ describe('R27 AI Candidate Review', () => {
     expect(report.metrics.modifiedFilesCount).toBe(2);
     expect(report.strengths.join(' ')).toContain('src/service.py');
     expect(report.rationale).toContain('Should Accept');
+    expect(report.verificationQuestions?.length).toBeGreaterThan(0);
+    expect(report.verificationQuestions?.[0]?.question).toContain(
+      'src/service.py',
+    );
   });
 
   it('produces Should Reject preview report when no starter files were changed', () => {
@@ -310,6 +314,13 @@ describe('R27 AI Candidate Review', () => {
                   weaknesses: [
                     'Assumes job objects always expose an "id" key.',
                   ],
+                  verificationQuestions: [
+                    {
+                      question:
+                        'How would retry_failed in src/service.py behave if a job lacks an "id" key?',
+                      focus: 'Defensive input validation in src/service.py',
+                    },
+                  ],
                 }),
               },
             },
@@ -348,6 +359,9 @@ describe('R27 AI Candidate Review', () => {
     expect(report.verdictLabel).toBe('Should Accept');
     expect(report.strengths).toContain(
       'Clean O(1) lookup set added in src/service.py.',
+    );
+    expect(report.verificationQuestions?.[0]?.question).toContain(
+      'src/service.py',
     );
   });
 
@@ -479,5 +493,9 @@ describe('R27 AI Candidate Review', () => {
     ).toBe('Should Accept');
     expect(container.textContent).toContain('Observed Strengths');
     expect(container.textContent).toContain('Weaknesses & Verification Risks');
+    expect(
+      container.querySelector('[data-testid="r27-ai-verification-questions"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain('Copy questions');
   });
 });

@@ -14,7 +14,9 @@ import type {
 } from '../../../../database/postgres/r213/contract.d.mts';
 import { createR26CandidateAdapter } from '../../../../database/postgres/r26/adapter.mjs';
 import { readR26Config, r26IsEnabled } from '../r26-candidate/config';
-import { isStagingLockdown } from '../runtime/profile';
+import { isFounderUatEnabled } from '../runtime/founder-uat';
+import { isHiringPlatformEnabled, isStagingLockdown } from '../runtime/profile';
+import { runHiringWorkspaceChecks } from './hiring-runner';
 import {
   DEFAULT_PYTHON_CHECK_RECIPE,
   RESTRICTED_EXECUTOR_PROVENANCE,
@@ -126,7 +128,7 @@ function requireBearer(request: Request): string {
 }
 
 function requireEnabledConfig() {
-  if (!r26IsEnabled()) {
+  if (!isHiringPlatformEnabled() && !r26IsEnabled()) {
     throw new R214RequestError(
       404,
       'ASSESSMENT_NOT_FOUND',
@@ -142,6 +144,102 @@ function requireEnabledConfig() {
     );
   }
   return config;
+}
+
+async function hiringGetExecutionsView(
+  pool: Pool,
+  params: { tokenHash: string; sessionId: string },
+): Promise<R214CandidateExecutionView> {
+  const { rows } = await pool.query<{ result: R214CandidateExecutionView }>(
+    'SELECT staging.hiring_r213_get_view($1, $2) AS result',
+    [params.tokenHash, params.sessionId],
+  );
+  return rows[0]?.result;
+}
+
+async function hiringAdmitExecution(
+  pool: Pool,
+  params: R213AdmissionParams,
+): Promise<R213ExecutionAdmissionResult> {
+  try {
+    const { rows } = await pool.query<{ result: R213ExecutionAdmissionResult }>(
+      'SELECT staging.hiring_r213_admit($1, $2, $3, $4, $5, $6, $7, $8) AS result',
+      [
+        params.tokenHash,
+        params.sessionId,
+        params.requestId,
+        params.expectedWorkspaceDigest,
+        params.recipeId ?? 'recipe-python-check-v1',
+        params.recipeVersion ?? '1.0.0',
+        params.recipeDigest ??
+          '0760fc4197b0b1654be37456fc70f7c1a9159520ca78cd5b3115e7a5affd6fd2',
+        params.provenance ?? 'hiring-workspace-runner',
+      ],
+    );
+    return rows[0]?.result;
+  } catch (error) {
+    const pgErr = error as { code?: string; message?: string };
+    if (
+      pgErr?.code === '23514' &&
+      pgErr?.message?.includes('different intent')
+    ) {
+      return { status: 'CONFLICT', reason: pgErr.message };
+    }
+    throw error;
+  }
+}
+
+async function hiringCompleteExecution(
+  pool: Pool,
+  params: Parameters<typeof completeCandidateExecution>[1],
+): Promise<R213RecordedOperation> {
+  const { rows } = await pool.query<{ result: R213RecordedOperation }>(
+    'SELECT staging.hiring_r213_complete($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) AS result',
+    [
+      params.tokenHash,
+      params.sessionId,
+      params.operationId,
+      params.fence,
+      params.generation ?? 1,
+      params.exitCode ?? 0,
+      params.stdout ?? '',
+      params.stderr ?? '',
+      params.stdoutDigest ?? null,
+      params.stderrDigest ?? null,
+      params.truncatedStdout ?? false,
+      params.truncatedStderr ?? false,
+      params.durationMs ?? null,
+      params.cleanupStatus ?? 'CLEAN',
+      params.provenance ?? null,
+    ],
+  );
+  return rows[0]?.result;
+}
+
+async function hiringFailExecution(
+  pool: Pool,
+  params: Parameters<typeof failCandidateExecution>[1],
+): Promise<R213RecordedOperation> {
+  const { rows } = await pool.query<{ result: R213RecordedOperation }>(
+    'SELECT staging.hiring_r213_fail($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) AS result',
+    [
+      params.tokenHash,
+      params.sessionId,
+      params.operationId,
+      params.fence,
+      params.generation ?? 1,
+      params.status ?? 'FAILED',
+      params.failureReason ?? 'RUNNER_FAILURE',
+      params.errorMessage ?? 'Execution failed',
+      params.stdout ?? '',
+      params.stderr ?? '',
+      params.durationMs ?? null,
+      params.cleanupStatus ?? 'CLEAN',
+      params.isUnknown ?? false,
+      params.provenance ?? null,
+    ],
+  );
+  return rows[0]?.result;
 }
 
 function requireSameOrigin(request: Request, expectedOrigin: string): void {
@@ -293,13 +391,12 @@ export async function r214CandidateExecutionRead(
     const tokenHash = createHash('sha256').update(token, 'utf8').digest('hex');
     const pool = getClientPool(config.databaseUrl);
 
-    const view: R214CandidateExecutionView = (await getCandidateExecutionsView(
-      pool,
-      {
-        tokenHash,
-        sessionId,
-      },
-    )) as unknown as R214CandidateExecutionView;
+    const view: R214CandidateExecutionView = isHiringPlatformEnabled()
+      ? await hiringGetExecutionsView(pool, { tokenHash, sessionId })
+      : ((await getCandidateExecutionsView(pool, {
+          tokenHash,
+          sessionId,
+        })) as unknown as R214CandidateExecutionView);
 
     return Response.json(view, { status: 200, headers: responseHeaders });
   } catch (error) {
@@ -337,7 +434,8 @@ export async function r214CandidateExecutionAction(
   sessionId: string,
   adapterOverride?: ExecutionAdapter,
 ): Promise<Response> {
-  if (isStagingLockdown()) {
+  const hiringActive = isHiringPlatformEnabled();
+  if (!hiringActive && isStagingLockdown()) {
     return errorResponse(
       503,
       'EXECUTION_DISABLED',
@@ -353,9 +451,13 @@ export async function r214CandidateExecutionAction(
     const payload = parseExecutionActionPayload(await readBoundedJson(request));
 
     let backend: ExecutionBackend = 'deterministic-synthetic';
-    if (process.env.HIREARCHY_EXECUTION_BACKEND === 'restricted-executor') {
+    if (
+      !hiringActive &&
+      process.env.HIREARCHY_EXECUTION_BACKEND === 'restricted-executor'
+    ) {
       const candidateAdapter = createR26CandidateAdapter({
         connectionString: config.databaseUrl,
+        requireLifecycleMarker: config.profile === 'durable-staging',
       });
       try {
         const view = await candidateAdapter.command({
@@ -415,7 +517,9 @@ export async function r214CandidateExecutionAction(
     let recipeId: string = payload.recipeId ?? DEFAULT_PYTHON_CHECK_RECIPE.id;
     let recipeVersion: string = DEFAULT_PYTHON_CHECK_RECIPE.version;
     let recipeDigest: string = SYNTHETIC_RECIPE_DIGEST;
-    let provenance: string = SYNTHETIC_PROVENANCE;
+    let provenance: string = hiringActive
+      ? 'hiring-workspace-runner'
+      : SYNTHETIC_PROVENANCE;
 
     if (backend === 'restricted-executor') {
       recipeId = RESTRICTED_RECIPE_ID;
@@ -436,8 +540,9 @@ export async function r214CandidateExecutionAction(
     };
 
     // 1. Admission reservation in PostgreSQL
-    const admission: R213ExecutionAdmissionResult =
-      await admitCandidateExecution(pool, admissionParams);
+    const admission: R213ExecutionAdmissionResult = hiringActive
+      ? await hiringAdmitExecution(pool, admissionParams)
+      : await admitCandidateExecution(pool, admissionParams);
 
     if (admission.status === 'CONFLICT') {
       return errorResponse(
@@ -533,6 +638,7 @@ export async function r214CandidateExecutionAction(
     // 2. Fetch the authenticated workspace and verify it is still the admitted version.
     const candidateAdapter = createR26CandidateAdapter({
       connectionString: config.databaseUrl,
+      requireLifecycleMarker: config.profile === 'durable-staging',
     });
     const workspaceFiles: Record<string, string> = {};
     try {
@@ -545,17 +651,22 @@ export async function r214CandidateExecutionAction(
         candidateView?.workspaceDigest !==
         intent.canonicalWorkspaceSnapshotDigest
       ) {
-        await failCandidateExecution(pool, {
+        const failParams = {
           tokenHash,
           sessionId,
           operationId: intent.operationId,
           fence: intent.fence,
           generation: intent.generation,
-          status: 'FAILED',
+          status: 'FAILED' as const,
           failureReason: 'STALE_WORKSPACE',
           errorMessage: 'Workspace changed before execution; reload and retry.',
           provenance,
-        });
+        };
+        if (hiringActive) {
+          await hiringFailExecution(pool, failParams);
+        } else {
+          await failCandidateExecution(pool, failParams);
+        }
         return errorResponse(
           409,
           'STALE_WORKSPACE',
@@ -573,25 +684,34 @@ export async function r214CandidateExecutionAction(
       await candidateAdapter.close();
     }
 
-    // 3. Run execution through selected adapter
+    // 3. Run execution through real workspace test runner in UAT Hiring mode or selected adapter
     const adapter = adapterOverride ?? getExecutionAdapter(backend);
     let outcome;
     try {
-      outcome = await adapter.execute(intent, workspaceFiles);
+      outcome =
+        hiringActive &&
+        !adapterOverride &&
+        backend !== 'restricted-executor' &&
+        isFounderUatEnabled()
+          ? await runHiringWorkspaceChecks(intent, workspaceFiles)
+          : await adapter.execute(intent, workspaceFiles);
     } catch {
-      const operation = await failCandidateExecution(pool, {
+      const unknownFailParams = {
         tokenHash,
         sessionId,
         operationId: intent.operationId,
         fence: intent.fence,
         generation: intent.generation,
-        status: 'UNKNOWN',
+        status: 'UNKNOWN' as const,
         failureReason: 'EXECUTION_UNKNOWN',
         errorMessage: 'Execution outcome could not be verified.',
-        cleanupStatus: 'UNKNOWN',
+        cleanupStatus: 'UNKNOWN' as const,
         isUnknown: true,
         provenance,
-      });
+      };
+      const operation = hiringActive
+        ? await hiringFailExecution(pool, unknownFailParams)
+        : await failCandidateExecution(pool, unknownFailParams);
       return Response.json(
         buildFactualExecutionResponse(
           operation,
@@ -605,7 +725,7 @@ export async function r214CandidateExecutionAction(
     // 4. Record outcome in PostgreSQL
     let recordedOperation: R213RecordedOperation;
     if (outcome.status === 'COMPLETED') {
-      recordedOperation = await completeCandidateExecution(pool, {
+      const completeParams = {
         tokenHash,
         sessionId,
         operationId: outcome.operationId,
@@ -621,9 +741,12 @@ export async function r214CandidateExecutionAction(
         durationMs: outcome.resourceUsage.durationMs,
         cleanupStatus: outcome.cleanupStatus,
         provenance: outcome.provenance,
-      });
+      };
+      recordedOperation = hiringActive
+        ? await hiringCompleteExecution(pool, completeParams)
+        : await completeCandidateExecution(pool, completeParams);
     } else {
-      recordedOperation = await failCandidateExecution(pool, {
+      const failOutcomeParams = {
         tokenHash,
         sessionId,
         operationId: outcome.operationId,
@@ -639,7 +762,10 @@ export async function r214CandidateExecutionAction(
         cleanupStatus: outcome.cleanupStatus,
         isUnknown: outcome.isUnknown,
         provenance: outcome.provenance,
-      });
+      };
+      recordedOperation = hiringActive
+        ? await hiringFailExecution(pool, failOutcomeParams)
+        : await failCandidateExecution(pool, failOutcomeParams);
     }
 
     const remaining = admission.remainingExecutions as number | undefined;

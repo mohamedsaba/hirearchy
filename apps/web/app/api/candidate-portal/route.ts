@@ -1,5 +1,5 @@
 import {
-  candidateAssessmentPath,
+  candidateEntryPath,
   candidateConfirmationParams,
 } from '../../../src/hiring/candidate-entry';
 import { NextResponse } from 'next/server';
@@ -135,8 +135,11 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const body = await hiringParseJsonBody(request, 32768);
+    const { readAttributionCookie, recordServerTelemetryEvent } =
+      await import('../../../src/telemetry/server');
+    const cookieAttr = readAttributionCookie(request);
     const action = String(body.action ?? '').trim();
-    const nextPath = candidateAssessmentPath(body.next);
+    const nextPath = candidateEntryPath(body.next);
     if (action === 'login' || action === 'signup') {
       const limited = enforceRateLimit(request, 'auth');
       if (limited) return limited;
@@ -290,6 +293,19 @@ export async function POST(request: Request): Promise<Response> {
                 .slice(0, 2000),
             },
           })) as { email: string; profile: CandidateProfile | null };
+
+          recordServerTelemetryEvent({
+            eventName: 'acquisition.candidate_profile_completed',
+            category: 'candidate_funnel',
+            actorType: 'candidate',
+            anonymousId: cookieAttr?.anonymousId,
+            attribution: cookieAttr,
+            route: '/candidate',
+            properties: {
+              experienceLevel: String(body.experienceLevel ?? 'mid').trim(),
+              skillCount: skills.length,
+            },
+          });
 
           return NextResponse.json(
             { profile: res.profile },

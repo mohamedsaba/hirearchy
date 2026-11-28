@@ -183,15 +183,16 @@ export async function generateHiringAssessmentWithKimi(
     systemPrompt,
     userPrompt,
     temperature: 0.35,
-    maxTokens: input.problemStructure === 'multi_file' ? 4800 : 3200,
+    maxTokens: input.problemStructure === 'multi_file' ? 6000 : 4000,
     timeoutMs: 90_000,
+    responseFormat: 'json_object',
     fetchImpl: options?.fetchImpl,
   });
 
   const parsed = extractJsonFromLlmText(content);
   if (!parsed) {
     throw new Error(
-      'Kimi K3.1 Pro returned an unstructured response while generating the assessment. Please try again.',
+      'AI generator returned an unstructured response while building the assessment. Please try again.',
     );
   }
 

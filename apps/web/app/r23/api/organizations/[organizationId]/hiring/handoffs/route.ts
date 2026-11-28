@@ -12,10 +12,13 @@ import {
 import {
   hiringFailureJsonResponse,
   hiringParseJsonBody,
+  resolveStagingPublicOrigin,
   StagingBadRequest,
   stagingLoadR27Evidence,
   withHiringOrganizationSession,
 } from '../../../../../../../src/staging/browser';
+import { triggerSessionWebhookEvent } from '../../../../../../../src/hiring/webhooks';
+import { recordServerTelemetryEvent } from '../../../../../../../src/telemetry/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -67,7 +70,7 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ dispatch, organizationId: orgId, plan }) => {
+      async ({ dispatch, organizationId: orgId, orgContext, plan }) => {
         const sessionId = String(body.sessionId ?? '').trim();
         if (!sessionId) throw new StagingBadRequest();
 
@@ -80,7 +83,7 @@ export async function POST(
                   requiredPlan: 'ultra',
                   currentPlan: plan.planTier,
                   message:
-                    'Regenerating Managerial Performance & Fit Reports with Kimi K3.1 Pro requires the Ultra plan.',
+                    'Regenerating Managerial Fit Reports requires the Ultra plan.',
                 },
               },
               {
@@ -163,6 +166,25 @@ export async function POST(
           sessionId,
           input: { handoffStatus },
         })) as { handoffs?: HandoffDossierItem[] };
+
+        recordServerTelemetryEvent({
+          eventName: 'hiring.handoff.updated',
+          category: 'team_funnel',
+          actorType: 'team_member',
+          organizationId: orgId,
+          principalId: orgContext.principalId,
+          sessionId,
+          planTier: plan.planTier,
+          route: '/r23/organizations/:id/handoffs',
+          properties: { handoffStatus },
+        });
+
+        triggerSessionWebhookEvent(
+          sessionId,
+          'handoff.updated',
+          { handoffStatus },
+          resolveStagingPublicOrigin(request),
+        );
 
         return NextResponse.json(
           { handoffs: updated?.handoffs ?? [] },

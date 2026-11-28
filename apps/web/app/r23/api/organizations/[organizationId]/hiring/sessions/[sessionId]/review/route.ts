@@ -6,6 +6,7 @@ import {
   buildPeerReviewResponseEmail,
   deliverHiringNotificationEmail,
 } from '../../../../../../../../../src/hiring/mail';
+import { triggerSessionWebhookEvent } from '../../../../../../../../../src/hiring/webhooks';
 import type {
   HandoffDossierItem,
   PeerReviewRequestContext,
@@ -22,6 +23,7 @@ import {
   stagingLoadR27Evidence,
   withHiringOrganizationSession,
 } from '../../../../../../../../../src/staging/browser';
+import { recordServerTelemetryEvent } from '../../../../../../../../../src/telemetry/server';
 
 function sanitizeStringList(
   value: unknown,
@@ -160,8 +162,20 @@ export async function POST(
         request,
         organizationId,
         { requireOriginCsrf: true, body },
-        async ({ dispatch, organizationId: orgId, plan }) => {
+        async ({ dispatch, organizationId: orgId, orgContext, plan }) => {
           if (!hasPlanFeature(plan.planTier, 'aiPerformanceReport')) {
+            recordServerTelemetryEvent({
+              eventName: 'monetization.plan_gate_hit',
+              category: 'monetization',
+              actorType: 'team_member',
+              organizationId: orgId,
+              principalId: orgContext.principalId,
+              sessionId,
+              planTier: plan.planTier,
+              status: 'blocked',
+              route: '/r27/organizations/:id/sessions/:sessionId',
+              properties: { feature: 'aiPerformanceReport' },
+            });
             return NextResponse.json(
               {
                 error: {
@@ -169,7 +183,7 @@ export async function POST(
                   requiredPlan: 'ultra',
                   currentPlan: plan.planTier,
                   message:
-                    'Automated Managerial Performance & Fit Reports with Kimi K3.1 Pro require the Ultra plan.',
+                    'Automated Managerial Fit Reports require the Ultra plan.',
                 },
               },
               {
@@ -240,7 +254,7 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ dispatch, organizationId: orgId, plan }) => {
+      async ({ dispatch, organizationId: orgId, orgContext, plan }) => {
         if (action === 'request_second_opinion') {
           const reviewerPrincipalId = String(
             body.reviewerPrincipalId ?? '',
@@ -324,6 +338,17 @@ export async function POST(
             }),
           );
 
+          recordServerTelemetryEvent({
+            eventName: 'hiring.second_opinion.requested',
+            category: 'team_funnel',
+            actorType: 'team_member',
+            organizationId: orgId,
+            principalId: orgContext.principalId,
+            sessionId,
+            planTier: plan.planTier,
+            route: '/r27/organizations/:id/sessions/:sessionId',
+          });
+
           return NextResponse.json(
             { reviewContext, emailDelivery },
             { headers: { 'Cache-Control': 'private, no-store' } },
@@ -399,6 +424,18 @@ export async function POST(
               reviewUrl,
             }),
           );
+
+          recordServerTelemetryEvent({
+            eventName: 'hiring.second_opinion.responded',
+            category: 'team_funnel',
+            actorType: 'team_member',
+            organizationId: orgId,
+            principalId: orgContext.principalId,
+            sessionId,
+            planTier: plan.planTier,
+            route: '/r27/organizations/:id/sessions/:sessionId',
+            properties: { verdict },
+          });
 
           return NextResponse.json(
             { reviewContext, emailDelivery },
@@ -504,6 +541,31 @@ export async function POST(
                 'The acceptance is published. Open the handoff to retry the report.';
             }
           }
+
+          recordServerTelemetryEvent({
+            eventName: 'hiring.decision.published',
+            category: 'team_funnel',
+            actorType: 'team_member',
+            organizationId: orgId,
+            principalId: orgContext.principalId,
+            sessionId,
+            planTier: plan.planTier,
+            route: '/r27/organizations/:id/sessions/:sessionId',
+            properties: {
+              decision,
+              hasFitReport: Boolean(reviewContext.decision?.performanceReport),
+            },
+          });
+
+          triggerSessionWebhookEvent(
+            sessionId,
+            'verdict.published',
+            {
+              decision,
+              hasFitReport: Boolean(reviewContext.decision?.performanceReport),
+            },
+            resolveStagingPublicOrigin(request),
+          );
 
           return NextResponse.json(
             { reviewContext, reportError },

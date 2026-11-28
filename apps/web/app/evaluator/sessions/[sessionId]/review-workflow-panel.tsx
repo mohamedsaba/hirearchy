@@ -6,6 +6,11 @@ import type {
   ReviewNextStep,
   ReviewWorkflow,
 } from '../../../../src/review-workflow/reviewer-workflow-store';
+import {
+  readPersistedJson,
+  removePersistedKey,
+  writePersistedJson,
+} from '../../../../src/ui/browser-state';
 import './task-review.css';
 
 const endpoint = (sessionId: string) =>
@@ -30,43 +35,37 @@ type ReviewDraft = Readonly<{
 const draftKey = (sessionId: string) => `hirearchy-review-draft:${sessionId}`;
 
 const readDraft = (sessionId: string): ReviewDraft | null => {
-  try {
-    const raw = sessionStorage.getItem(draftKey(sessionId));
-    if (!raw) return null;
-    const value: unknown = JSON.parse(raw);
-    if (!value || typeof value !== 'object') return null;
-    const draft = value as Partial<ReviewDraft>;
-    const validVersion = (version: unknown) =>
-      typeof version === 'number' &&
-      Number.isSafeInteger(version) &&
-      version >= 0;
-    if (
-      draft.note &&
-      (typeof draft.note.body !== 'string' ||
-        draft.note.body.length > 4000 ||
-        !validVersion(draft.note.version))
-    )
-      return null;
-    if (
-      draft.prompt &&
-      (typeof draft.prompt.body !== 'string' ||
-        draft.prompt.body.length > 1600 ||
-        typeof draft.prompt.requestKey !== 'string' ||
-        draft.prompt.requestKey.length > 128)
-    )
-      return null;
-    if (
-      draft.nextStep &&
-      (!Object.hasOwn(nextStepLabels, draft.nextStep.action) ||
-        typeof draft.nextStep.note !== 'string' ||
-        draft.nextStep.note.length > 2000 ||
-        !validVersion(draft.nextStep.version))
-    )
-      return null;
-    return draft;
-  } catch {
+  const value = readPersistedJson<unknown>(draftKey(sessionId), 'durable');
+  if (!value || typeof value !== 'object') return null;
+  const draft = value as Partial<ReviewDraft>;
+  const validVersion = (version: unknown) =>
+    typeof version === 'number' &&
+    Number.isSafeInteger(version) &&
+    version >= 0;
+  if (
+    draft.note &&
+    (typeof draft.note.body !== 'string' ||
+      draft.note.body.length > 4000 ||
+      !validVersion(draft.note.version))
+  )
     return null;
-  }
+  if (
+    draft.prompt &&
+    (typeof draft.prompt.body !== 'string' ||
+      draft.prompt.body.length > 1600 ||
+      typeof draft.prompt.requestKey !== 'string' ||
+      draft.prompt.requestKey.length > 128)
+  )
+    return null;
+  if (
+    draft.nextStep &&
+    (!Object.hasOwn(nextStepLabels, draft.nextStep.action) ||
+      typeof draft.nextStep.note !== 'string' ||
+      draft.nextStep.note.length > 2000 ||
+      !validVersion(draft.nextStep.version))
+  )
+    return null;
+  return draft;
 };
 
 type ReadState = 'loading' | 'error' | 'ready';
@@ -332,12 +331,10 @@ export const ReviewWorkflowPanel = ({
         ? { nextStep: { action: step, note: stepNote, version: stepVersion } }
         : {}),
     };
-    try {
-      if (Object.keys(draft).length)
-        sessionStorage.setItem(draftKey(sessionId), JSON.stringify(draft));
-      else sessionStorage.removeItem(draftKey(sessionId));
-    } catch {
-      // Draft persistence is best-effort when browser storage is unavailable.
+    if (Object.keys(draft).length) {
+      writePersistedJson(draftKey(sessionId), draft, 'durable');
+    } else {
+      removePersistedKey(draftKey(sessionId));
     }
   }, [
     activeSessionId,

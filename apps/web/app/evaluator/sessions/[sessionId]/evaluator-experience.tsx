@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type {
   BriefingDepthProfile,
   ProjectedBriefing,
@@ -8,7 +9,12 @@ import type {
 } from '../../../../src/evaluator/evaluator-review-presentation';
 import type { EvaluatorAiConversation } from '../../../../src/evaluator/evaluator-ai-conversations';
 import type { R27Evidence } from '../../../../../../database/postgres/r27/contract.mjs';
-import type { SessionHiringReviewContext } from '../../../../src/hiring/types';
+import type {
+  PerformanceFitReport,
+  SessionHiringReviewContext,
+} from '../../../../src/hiring/types';
+import type { EvidenceFilter } from './evidence-workbench';
+import type { HiringDecisionDraft } from './hiring-decision-panel';
 import { EvaluatorReviewWorkspace } from './evaluator-review-workspace';
 import { SoftwareProductHeader } from '../../software-product-header';
 import '../../evaluator-product.css';
@@ -30,6 +36,19 @@ type R27EvaluatorExperienceProps = Readonly<{
   hiringReviewContext?: SessionHiringReviewContext | null;
   initialTab?: 'Summary' | 'Evidence' | 'Review';
   initialPeerReviewId?: string | null;
+  demoMode?: boolean;
+  isSample?: boolean;
+  controlledTab?: 'Summary' | 'Evidence' | 'Review';
+  onTabChange?: (
+    tab: 'Summary' | 'Evidence' | 'Review',
+    source?: 'restore',
+  ) => void;
+  controlledFilter?: EvidenceFilter;
+  onFilterChange?: (filter: EvidenceFilter) => void;
+  onSimulatedPublish?: (
+    draft: HiringDecisionDraft,
+    report: PerformanceFitReport | null,
+  ) => void;
 }>;
 
 type EvaluatorExperienceProps =
@@ -37,6 +56,7 @@ type EvaluatorExperienceProps =
 
 export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
   if (props.readOnly) {
+    const sampleOrgId = props.hiringReviewContext?.organizationId;
     return (
       <div
         className="evaluator-v2-container evaluator-evidence-product"
@@ -45,13 +65,51 @@ export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
         <a className="software-skip-link" href="#evidence-workbench-panel">
           Skip to review workspace
         </a>
-        <SoftwareProductHeader
-          active="reviews"
-          stagingReview={{
-            organizationId: props.r27Evidence.organizationId,
-            sessionId: props.sessionId,
-          }}
-        />
+        {props.demoMode ? null : (
+          <SoftwareProductHeader
+            active="reviews"
+            stagingReview={{
+              organizationId: props.r27Evidence.organizationId,
+              sessionId: props.sessionId,
+              compact: Boolean(props.hiringReviewContext),
+            }}
+          />
+        )}
+        {props.isSample ? (
+          <div
+            className="hiring-banner hiring-banner-warning"
+            role="status"
+            data-testid="sample-review-banner"
+            style={{
+              margin: '0.75rem clamp(1rem, 3vw, 2rem) 0',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+            }}
+          >
+            <div>
+              <strong>
+                Sample Evaluated Candidate (Maya Lin · HRC-DEMO01)
+              </strong>
+              <span>
+                {' '}
+                — Interactive walkthrough using pre-seeded evidence. Zero
+                candidate credits used.
+              </span>
+            </div>
+            {sampleOrgId ? (
+              <div className="hiring-header-actions">
+                <Link
+                  className="hiring-btn hiring-btn-sm hiring-btn-primary"
+                  href={`/r23/organizations/${encodeURIComponent(sampleOrgId)}/builder?mode=new`}
+                >
+                  Create your first assessment →
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="evaluator-review-page-content">
           <EvaluatorReviewWorkspace
             key={props.sessionId}
@@ -61,6 +119,13 @@ export const EvaluatorExperience = (props: EvaluatorExperienceProps) => {
             hiringReviewContext={props.hiringReviewContext}
             initialTab={props.initialTab}
             initialPeerReviewId={props.initialPeerReviewId}
+            demoMode={props.demoMode}
+            isSample={props.isSample}
+            controlledTab={props.controlledTab}
+            onTabChange={props.onTabChange}
+            controlledFilter={props.controlledFilter}
+            onFilterChange={props.onFilterChange}
+            onSimulatedPublish={props.onSimulatedPublish}
           />
         </div>
       </div>

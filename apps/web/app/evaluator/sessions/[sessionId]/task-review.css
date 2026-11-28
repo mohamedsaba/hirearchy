@@ -115,7 +115,7 @@
   gap: 14px;
   width: 100%;
   padding: 12px 18px;
-  border: 1px solid #e1d8ec;
+  border: 1px solid var(--software-border);
   border-radius: 10px;
   background: var(--software-lilac);
   text-align: left;
@@ -504,16 +504,17 @@
 .reviewer-workflow-panel .review-workflow-card button {
   min-height: 44px;
   padding: 8px 14px;
-  border: 1px solid var(--software-plum);
+  border: 1px solid var(--software-btn-primary-bg);
   border-radius: 8px;
-  background: var(--software-plum);
-  color: #fff;
+  background: var(--software-btn-primary-bg);
+  color: var(--software-btn-primary-fg);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
   transition:
     color 140ms ease,
     background-color 140ms ease,
-    border-color 140ms ease;
+    border-color 140ms ease,
+    transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .reviewer-workflow-panel .review-workflow-card button:disabled {
@@ -936,7 +937,7 @@
 .evaluator-evidence-stats small {
   display: block;
   color: var(--software-muted);
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -966,7 +967,7 @@
   background: var(--software-lilac);
   color: var(--software-plum);
   content: counter(observation);
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -1145,7 +1146,7 @@
   border-radius: 99px;
   background: var(--software-lilac);
   color: var(--software-plum);
-  font-size: 11px;
+  font-size: 0.75rem;
   text-transform: capitalize;
 }
 
@@ -2001,6 +2002,10 @@
   color: var(--software-muted);
   font: 650 14px / 1.2 var(--software-sans);
   cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .evaluator-tab-badge {
@@ -2022,6 +2027,15 @@
 .evaluator-workbench-modes button[aria-selected='true'] {
   border-bottom-color: var(--software-plum);
   color: var(--software-plum);
+}
+
+.evaluator-workbench-modes[data-indicator-ready='true']
+  button[aria-selected='true'] {
+  border-bottom-color: transparent;
+}
+
+.evaluator-tab-kbd {
+  font-size: 0.65rem;
 }
 
 .evaluator-workbench-modes button:focus-visible,
@@ -2323,7 +2337,7 @@
 .workbench-coverage-grid dt {
   min-height: 30px;
   color: var(--software-muted);
-  font-size: 11px;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
 
@@ -2473,7 +2487,7 @@
 
 .evaluator-source-row[aria-pressed='true'] {
   border-left-color: var(--software-plum) !important;
-  background: #e8f4ed !important;
+  background: #e8f4ed;
 }
 
 .evaluator-source-row-mark {
@@ -2510,14 +2524,14 @@
 
 .evaluator-source-row-copy small {
   color: var(--software-muted);
-  font-size: 10px;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
 .evaluator-source-row-current {
   margin: 0 !important;
   color: var(--software-plum);
-  font-size: 10px !important;
+  font-size: 0.75rem !important;
   font-weight: 700;
   text-decoration: none !important;
 }
@@ -2582,7 +2596,7 @@
   border-radius: 999px;
   background: var(--software-canvas);
   color: var(--software-muted);
-  font-size: 10px;
+  font-size: 0.75rem;
   font-weight: 650;
 }
 
@@ -2743,7 +2757,7 @@
   display: block;
   margin-top: 4px;
   color: var(--software-muted);
-  font-size: 11px;
+  font-size: 0.75rem;
 }
 
 .review-note-state {
@@ -2754,7 +2768,7 @@
   border: 1px solid var(--software-border);
   border-radius: 999px;
   color: var(--software-muted);
-  font-size: 11px;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
 
@@ -2766,8 +2780,9 @@
 
 .review-note-state[data-note-state='error'],
 .review-note-state[data-note-state='conflict'] {
-  border-color: #9d3c3c;
-  color: #8b2c2c;
+  border-color: var(--software-status-danger-border);
+  background: var(--software-status-danger-surface);
+  color: var(--software-status-danger);
 }
 
 .evaluator-mobile-inspector {
@@ -2806,7 +2821,7 @@
 
 .evaluator-mobile-inspector-navigation > span {
   color: var(--software-muted);
-  font-size: 11px;
+  font-size: 0.75rem;
   text-align: center;
 }
 
@@ -3119,7 +3134,7 @@
 .evaluator-workbench .submitted-changes-embedded .submitted-summary-provenance {
   margin: 0;
   color: var(--software-muted);
-  font-size: 11px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -3130,7 +3145,7 @@
 
 .evaluator-workbench .submitted-changes-embedded .stat-pill {
   padding: 3px 6px;
-  font-size: 11px;
+  font-size: 0.75rem;
 }
 
 .evaluator-workbench .submitted-changes-embedded .changed-paths-list {
@@ -3147,7 +3162,7 @@
 .evaluator-workbench .submitted-changes-embedded .changed-path-code {
   min-width: 0;
   max-width: 100%;
-  font-size: 11px;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 
@@ -3400,7 +3415,7 @@
   border-radius: 4px;
   background: var(--software-canvas);
   color: var(--software-muted);
-  font-size: 11px;
+  font-size: 0.75rem;
 }
 
 .workbench-timeline-subtitle {
@@ -3465,7 +3480,7 @@
   padding: 2px 7px;
   border-radius: 999px;
   font:
-    650 11px / 1.35 ui-monospace,
+    650 0.75rem / 1.35 ui-monospace,
     monospace;
 }
 
@@ -3540,7 +3555,7 @@
   color: var(--software-muted);
   background: #f5f1ea;
   text-align: right;
-  font-size: 11px;
+  font-size: 0.75rem;
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
@@ -3710,13 +3725,14 @@
 }
 
 .r27-ai-review-card .r27-ai-review-primary-btn {
-  border-color: var(--software-plum);
-  background: var(--software-plum);
-  color: var(--software-on-plum);
+  border-color: var(--software-btn-primary-bg);
+  background: var(--software-btn-primary-bg);
+  color: var(--software-btn-primary-fg);
 }
 
 .r27-ai-review-primary-btn:hover:not(:disabled) {
-  background: var(--software-plum-line);
+  background: var(--software-btn-primary-bg-hover);
+  border-color: var(--software-btn-primary-bg-hover);
 }
 
 .r27-ai-review-secondary-btn:hover:not(:disabled) {
@@ -3777,6 +3793,12 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   font-size: 0.9375rem;
+}
+
+@media (min-width: 70rem) {
+  .r27-review-stack:has(> .r27-human-review) .r27-ai-review-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .r27-ai-review-list-card ul {
@@ -3867,6 +3889,17 @@ html[data-theme='dark'] .evaluator-review-tabs button[aria-selected='true'] {
   color: var(--software-ink);
 }
 
+html[data-theme='dark']
+  .evaluator-workbench-modes[data-indicator-ready='true']
+  button[aria-selected='true'] {
+  border-bottom-color: transparent;
+  color: var(--software-ink);
+}
+
+html[data-theme='dark'] .evaluator-workbench-modes .ct-tab-indicator {
+  background: var(--software-mint);
+}
+
 html[data-theme='dark'] .evaluator-workbench-modes button:hover,
 html[data-theme='dark'] .evaluator-evidence-filter-bar button:hover,
 html[data-theme='dark'] .evaluator-review-tabs button:hover {
@@ -3898,9 +3931,11 @@ html[data-theme='dark'] .task-assessment-report .task-evidence-link:hover,
 html[data-theme='dark']
   .task-assessment-report
   .task-evidence-link[aria-pressed='true'],
-html[data-theme='dark'] .evaluator-source-list button[aria-pressed='true'] {
-  background: var(--software-surface-note);
-  border-color: var(--software-mint);
+html[data-theme='dark']
+  .evaluator-source-list
+  button.evaluator-source-row[aria-pressed='true'] {
+  background: rgba(142, 227, 184, 0.16);
+  border-left-color: var(--software-mint) !important;
   color: var(--software-ink);
 }
 
@@ -4007,4 +4042,472 @@ html[data-theme='dark'] .code-diff-stat-neutral {
 html[data-theme='dark'] .r27-ai-review-card {
   background: var(--software-surface);
   border-color: var(--software-border);
+}
+
+html[data-theme='dark'] .task-assessment-report .task-total {
+  border-color: var(--software-border);
+  background: var(--software-lilac);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .evaluator-workbench-modes button:active:not(:disabled),
+  .evaluator-evidence-filter-bar button:active:not(:disabled),
+  .evaluator-source-row:active:not(:disabled),
+  .r27-ai-review-primary-btn:active:not(:disabled),
+  .r27-ai-review-secondary-btn:active:not(:disabled) {
+    transform: scale(0.985) translateY(0.5px);
+    transition-duration: 90ms;
+  }
+}
+
+/* Evaluator Candidate Identity Hero, Scratchpad, Weaving Indicator & R210 Classes */
+.evaluator-candidate-hero {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 0.45rem;
+}
+
+.evaluator-avatar-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 999px;
+  background: var(--software-plum);
+  color: var(--software-mint);
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+  border: 1px solid var(--software-border);
+}
+
+.evaluator-candidate-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.evaluator-candidate-hero-top h1 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.2vw, 1.65rem);
+  letter-spacing: -0.02em;
+}
+
+.evaluator-candidate-code {
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--software-lilac);
+  color: var(--software-plum);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.evaluator-candidate-role {
+  font-size: 0.82rem;
+  color: var(--software-muted);
+  font-weight: 600;
+}
+
+.evaluator-candidate-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--software-muted);
+}
+
+.evaluator-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface-subtle);
+  color: var(--software-ink);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.evaluator-meta-pill--mono {
+  font-family: var(--software-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.evaluator-meta-pill--success {
+  border-color: var(--software-status-success-border);
+  background: var(--software-status-success-surface);
+  color: var(--software-status-success);
+}
+
+.evaluator-meta-pill--warning {
+  border-color: var(--software-status-warning-border);
+  background: var(--software-status-warning-surface);
+  color: var(--software-status-warning);
+}
+
+.evaluator-tab-weaving-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: var(--software-mint);
+  animation: ct-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes ct-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.evaluator-workbench-main [hidden] {
+  display: none !important;
+}
+
+.evaluator-scratchpad-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-surface, 0.75rem);
+  background: var(--software-surface);
+}
+
+.evaluator-scratchpad-card h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--software-plum);
+}
+
+.evaluator-scratchpad-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--software-border);
+  border-radius: 8px;
+  background: var(--software-canvas);
+  color: var(--software-ink);
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.r210-packet-card {
+  padding: clamp(16px, 2.5vw, 28px);
+  border: 1px solid var(--software-border);
+  border-radius: 12px;
+  background: var(--software-surface);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.r210-packet-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--software-border);
+  padding-bottom: 14px;
+}
+
+.r210-packet-kicker {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--software-muted);
+}
+
+.r210-packet-title {
+  margin: 0;
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 700;
+  color: var(--software-ink);
+}
+
+.r210-packet-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.r210-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.r210-field-label {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--software-ink);
+}
+
+.r210-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--software-border);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  box-sizing: border-box;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.r210-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 15, 29, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.r210-modal-dialog {
+  background: var(--software-surface);
+  border: 1px solid var(--software-border);
+  color: var(--software-ink);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: var(--software-shadow-elevated);
+}
+
+[data-hiring-review='true']
+  .evaluator-workbench-shell
+  > .evaluator-report-heading {
+  padding: 6px 0 0;
+}
+
+[data-hiring-review='true'] .evaluator-report-toolbar {
+  margin-block-end: 2px;
+}
+
+[data-hiring-review='true'] .evaluator-candidate-hero {
+  margin-block-start: 0;
+}
+
+[data-hiring-review='true']
+  .evaluator-workbench-shell
+  .evaluator-candidate-hero-top
+  h1 {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  overflow-wrap: anywhere;
+}
+
+[data-hiring-review='true'] .evaluator-report-metadata {
+  margin-block-start: 4px;
+}
+
+[data-hiring-review='true'] .evaluator-workbench-topline {
+  margin-block: 6px 8px;
+  column-gap: 6px;
+}
+
+[data-hiring-review='true'] .evaluator-workbench-modes button {
+  min-height: 44px;
+}
+
+.evaluator-review-next {
+  flex: none;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--software-border);
+  border-radius: var(--software-radius-control);
+  background: var(--software-surface);
+  color: var(--software-ink);
+  font: 650 0.82rem / 1.2 var(--software-sans);
+  cursor: pointer;
+}
+
+.evaluator-review-next:hover {
+  background: var(--software-surface-note);
+}
+
+[data-hiring-review='true'] .evaluator-evidence-filter-bar {
+  margin-block-end: 6px;
+}
+
+[data-hiring-review='true'] .evaluator-evidence-list-panel {
+  padding: 12px;
+}
+
+[data-hiring-review='true'] .evaluator-evidence-list-panel > header {
+  margin-block-end: 8px;
+}
+
+[data-hiring-review='true'] button.evaluator-source-row[data-file='true'] {
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 10px !important;
+}
+
+[data-hiring-review='true'] .evaluator-source-row[data-file='true'] strong {
+  overflow-wrap: anywhere;
+  font: 550 0.78rem / 1.45 var(--software-mono);
+}
+
+[data-hiring-review='true']
+  .evaluator-source-row[aria-pressed='true']
+  .evaluator-source-row-mark {
+  background: var(--software-status-success);
+}
+
+[data-hiring-review='true']
+  .evaluator-source-inspector[data-file-inspector='true'] {
+  padding: clamp(12px, 1.4vw, 20px);
+}
+
+[data-hiring-review='true']
+  [data-file-inspector='true']
+  .evaluator-source-inspector-heading
+  h2 {
+  margin: 0;
+  font: 650 clamp(0.9rem, 1.8vw, 1.05rem) / 1.4 var(--software-mono);
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  [data-hiring-review='true'] .evaluator-evidence-filter-bar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  [data-hiring-review='true'] .evaluator-evidence-browser {
+    grid-template-columns: clamp(10rem, 21vw, 17rem) minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  [data-hiring-review='true']
+    .evaluator-workbench-columns[data-workbench-mode='review']
+    .is-dedicated {
+    max-width: none;
+  }
+}
+
+@media (width < 768px) {
+  [data-hiring-review='true'] .evaluator-evidence-filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 38rem) {
+  [data-hiring-review='true'] .evaluator-workbench-modes button {
+    padding-inline: 0.55rem;
+    font-size: 0.8rem;
+  }
+
+  .evaluator-tab-kbd {
+    display: none;
+  }
+
+  [data-hiring-review='true'] .evaluator-review-next {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-hiring-review='true'] .evaluator-workbench-main > div:not([hidden]),
+  [data-hiring-review='true'] .evaluator-workflow-slot.is-dedicated,
+  [data-hiring-review='true']
+    .evaluator-evidence-browser
+    > .evaluator-source-inspector {
+    animation: evaluator-panel-enter 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .evaluator-review-next {
+    transition:
+      background-color 150ms ease,
+      transform 130ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .evaluator-review-next:active {
+    transform: scale(0.98);
+  }
+
+  @keyframes evaluator-panel-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+[data-hiring-review='true'] .evaluator-mobile-inspector-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding-block-end: 8px;
+}
+
+[data-hiring-review='true'] .evaluator-mobile-inspector-navigation {
+  display: flex;
+}
+
+[data-hiring-review='true'] .evaluator-mobile-inspector-navigation button {
+  min-width: 44px;
+  padding-inline: 0;
+}
+
+[data-hiring-review='true']
+  .evaluator-mobile-inspector
+  .evaluator-mode-button[aria-pressed='true'] {
+  border-color: var(--software-border-strong);
+  background: var(--software-surface-note);
+}
+
+.evaluator-timeline-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.evaluator-empty-inspector-card {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  padding: 1.35rem;
+  border: 1px dashed var(--software-border-strong, var(--software-border));
+  border-radius: 10px;
+  background: var(--software-surface-note, var(--software-surface));
+}
+
+.evaluator-empty-inspector-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--software-ink);
+}
+
+.evaluator-empty-inspector-card .hiring-btn {
+  min-block-size: var(--software-touch-target, 44px);
 }

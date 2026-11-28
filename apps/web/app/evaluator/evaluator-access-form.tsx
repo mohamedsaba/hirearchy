@@ -87,12 +87,12 @@ export const EvaluatorAccessForm = ({
       )}
       <button className="button button-primary" disabled={isBusy} type="submit">
         {isBusy
-          ? 'Checking access…'
+          ? 'Signing in…'
           : authenticated
             ? 'Open known session'
             : sessionId.trim()
               ? 'Open known session'
-              : 'Continue to review queue'}
+              : 'Continue to reviews'}
       </button>
       {error ? (
         <p

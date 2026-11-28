@@ -1,0 +1,128 @@
+.hc-surface {
+  overflow: hidden;
+  color: #291e36;
+}
+.hc-paper {
+  background: radial-gradient(
+    ellipse at 27% 23%,
+    #fffbf1,
+    #f5efe6 58%,
+    #e7dce9 113%
+  );
+}
+.hc-lilac {
+  background: radial-gradient(
+    ellipse at 76% 61%,
+    #f9f2fd,
+    #e8dfee 64%,
+    #e3d0e9 106%
+  );
+}
+.hc-mint {
+  background: radial-gradient(
+    ellipse at 74% 39%,
+    #f8fbf0,
+    #e9f0e4 61%,
+    #d4e8da
+  );
+}
+.hc-plum {
+  color: #f5efe6;
+  background: radial-gradient(ellipse at 75% 36%, #3a2b49, #211426 74%);
+}
+.hc-title .fl-label {
+  color: #396552;
+  font-size: 23px;
+  margin-bottom: 23px;
+}
+.hc-plum .hc-title .fl-label {
+  color: #b0f0ce;
+}
+.hc-small {
+  position: absolute;
+  color: #503f58;
+  font-size: 35px;
+  line-height: 1.23;
+  font-weight: 475;
+  letter-spacing: -0.038em;
+}
+.hc-plum .hc-small {
+  color: #e3d4e8;
+}
+.hc-proof {
+  position: absolute;
+  overflow: hidden;
+  border-radius: 11px;
+  border: 1px solid #ad9cb5;
+  box-shadow:
+    0 20px 60px #38253b24,
+    0 5px 16px #38253b21;
+  transform-origin: 0 32%;
+  box-sizing: content-box;
+}
+.hc-plum .hc-proof {
+  border-color: #80698d;
+  box-shadow: 0 21px 58px #0e071955;
+}
+.hc-capture {
+  position: absolute;
+  width: 1440px;
+  height: 900px;
+  display: block;
+}
+.hc-peer-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 34px;
+  letter-spacing: -0.045em;
+  font-weight: 740;
+}
+.hc-peer-label span {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #46816b;
+  box-shadow: 0 0 0 7px #8bc6ab3d;
+}
+.hc-peer-label i {
+  font-size: 25px;
+  letter-spacing: -0.03em;
+  font-style: normal;
+  font-weight: 490;
+  color: #6c5973;
+}
+.hc-peer-payoff {
+  position: absolute;
+  left: 1195px;
+  top: 545px;
+  font-size: 75px;
+  line-height: 0.94;
+  letter-spacing: -0.075em;
+  font-weight: 570;
+}
+.hc-peer-payoff em {
+  color: #3e715b;
+  font-style: normal;
+}
+.hc-disclosure,
+.hc-receipt {
+  position: absolute;
+  color: #b0f0ce;
+  background: #211426;
+  border-radius: 9px;
+  padding: 12px 16px;
+  border: 1px solid #b0f0ce6b;
+  font-family: 'First Look Mono', monospace;
+  font-size: 22px;
+}
+.hc-disclosure {
+  left: 940px;
+  top: 892px;
+}
+.hc-receipt {
+  left: 129px;
+  top: 936px;
+}

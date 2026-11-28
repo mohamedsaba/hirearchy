@@ -1,14 +1,20 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { Suspense } from 'react';
+import { IconPlus } from '@tabler/icons-react';
 
 import {
   groupCandidateSessions,
   type RawHiringCandidateSessionRow,
 } from '../../../../../src/hiring/candidates-view';
 import { isHiringPlatformEnabled } from '../../../../../src/runtime/profile';
-import { loadHiringOrganizationWorkspaceFromCookie } from '../../../../../src/staging/browser';
+import {
+  decryptCandidateLinkToken,
+  loadHiringOrganizationWorkspaceFromCookie,
+} from '../../../../../src/staging/browser';
 import { OrganizationWorkspaceShell } from '../../../_components/workspace-shell';
+import { WorkspaceContentLoading } from '../../../_components/workspace-loading';
 import { CandidatesPipelineClient } from './candidates-client';
 
 export const dynamic = 'force-dynamic';
@@ -30,14 +36,10 @@ export default async function OrganizationCandidatesPage({
     organizationId,
   );
   if (!workspace) {
-    redirect('/r23/login');
+    redirect(
+      `/r23/login?next=${encodeURIComponent(`/r23/organizations/${organizationId.toLowerCase()}/candidates`)}`,
+    );
   }
-
-  const raw = (await workspace.dispatch('hiring.candidates.list', {
-    organizationId: workspace.organizationId,
-  })) as { rows?: RawHiringCandidateSessionRow[] };
-
-  const initialCandidates = groupCandidateSessions(raw?.rows ?? []);
 
   return (
     <OrganizationWorkspaceShell
@@ -49,34 +51,65 @@ export default async function OrganizationCandidatesPage({
       active="candidates"
       plan={workspace.plan}
     >
-      <div className="hiring-page-shell">
-        <header className="hiring-page-header">
-          <div>
-            <span className="hiring-eyebrow">{workspace.organizationName}</span>
-            <h1>Candidates</h1>
-            <p>
-              Track every candidate across assessments, inspect profiles and
-              status, and filter by role, skills, seniority, or location.
-            </p>
-          </div>
-          <div className="hiring-header-actions">
-            <Link
-              className="hiring-btn hiring-btn-primary"
-              href={`/r23/organizations/${encodeURIComponent(workspace.organizationId)}/builder`}
-            >
-              Build &amp; Issue Assessment
-            </Link>
-          </div>
+      <div className="hiring-page-shell team-candidates-page ct-enter-crossfade">
+        <header className="hiring-page-header team-candidates-header">
+          <h1>Candidates</h1>
+          <Link
+            className="hiring-btn hiring-btn-primary"
+            href={`/r23/organizations/${encodeURIComponent(workspace.organizationId)}/builder?mode=new`}
+          >
+            <IconPlus size={17} aria-hidden="true" />
+            New assessment
+          </Link>
         </header>
-
-        <CandidatesPipelineClient
-          organizationId={workspace.organizationId}
-          initialCandidates={initialCandidates}
-          plan={workspace.plan}
-          currentRole={workspace.role}
-          currentPrincipalId={workspace.orgContext.principalId}
-        />
+        <Suspense fallback={<WorkspaceContentLoading section="candidates" />}>
+          <CandidatePipeline workspace={workspace} />
+        </Suspense>
       </div>
     </OrganizationWorkspaceShell>
+  );
+}
+
+async function CandidatePipeline({
+  workspace,
+}: {
+  workspace: NonNullable<
+    Awaited<ReturnType<typeof loadHiringOrganizationWorkspaceFromCookie>>
+  >;
+}) {
+  const raw = (await workspace.dispatch('hiring.candidates.list', {
+    organizationId: workspace.organizationId,
+  })) as { rows?: RawHiringCandidateSessionRow[] };
+
+  const hydratedRows = (raw?.rows ?? []).map((row) => {
+    if (
+      row.lifecycleStatus !== 'CREATED' ||
+      !row.invitationActive ||
+      !row.candidateTokenCiphertext
+    ) {
+      return row;
+    }
+    try {
+      const token = decryptCandidateLinkToken(
+        row.candidateTokenCiphertext,
+        row.sessionId,
+      );
+      return {
+        ...row,
+        candidateLink: `/r26/candidate/${encodeURIComponent(row.sessionId)}#${encodeURIComponent(token)}`,
+      };
+    } catch {
+      return row;
+    }
+  });
+
+  return (
+    <CandidatesPipelineClient
+      organizationId={workspace.organizationId}
+      initialCandidates={groupCandidateSessions(hydratedRows)}
+      plan={workspace.plan}
+      currentRole={workspace.role}
+      currentPrincipalId={workspace.orgContext.principalId}
+    />
   );
 }

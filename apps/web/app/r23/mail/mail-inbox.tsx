@@ -95,7 +95,10 @@ export function FounderUatMailInbox({
   }, []);
 
   const visibleMessages = candidate
-    ? messages.filter((message) => message.kind === 'confirmation')
+    ? messages.filter(
+        (message) =>
+          message.kind === 'confirmation' || message.kind === 'recovery',
+      )
     : messages;
 
   const refresh = useCallback(async () => {

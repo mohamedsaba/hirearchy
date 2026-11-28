@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 
 type ListMarker = Readonly<{
   kind: 'ordered' | 'unordered';
@@ -65,8 +65,108 @@ function heading(line: string, key: string): ReactNode | null {
   return <h4 key={key}>{content}</h4>;
 }
 
-export function ScenarioBrief({ markdown }: Readonly<{ markdown: string }>) {
+export type ScenarioBriefWorkspaceContext = Readonly<{
+  filePaths?: readonly string[];
+  testsRunnable?: boolean;
+  integratedAiEnabled?: boolean;
+}>;
+
+export function reconcileScenarioBriefForWorkspace(
+  markdown: string,
+  context?: ScenarioBriefWorkspaceContext,
+): string {
+  if (!context) return markdown;
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+  const hasReadme =
+    !context.filePaths ||
+    context.filePaths.some((filePath) =>
+      /(?:^|\/)README(?:\.[^/]+)?$/i.test(filePath.trim()),
+    );
+  const testsDisabled = context.testsRunnable === false;
+
+  const adjustedLines: string[] = [];
+  let inFence = false;
+  let fenceBuffer: string[] = [];
+
+  for (const line of lines) {
+    if (isFence(line)) {
+      if (!inFence) {
+        inFence = true;
+        fenceBuffer = [line];
+      } else {
+        inFence = false;
+        const body = fenceBuffer.slice(1).join('\n');
+        if (
+          testsDisabled &&
+          /^\s*(?:python3?\s+-m\s+pytest|pytest|npm\s+test|pnpm\s+test|npx\s+vitest|yarn\s+test)\b/im.test(
+            body,
+          )
+        ) {
+          adjustedLines.push(
+            '_In-workspace test execution is disabled for this assessment. Verify your changes directly against the acceptance criteria._',
+          );
+        } else {
+          adjustedLines.push(...fenceBuffer, line);
+        }
+        fenceBuffer = [];
+      }
+      continue;
+    }
+
+    if (inFence) {
+      fenceBuffer.push(line);
+      continue;
+    }
+
+    let nextLine = line;
+    if (!hasReadme) {
+      nextLine = nextLine
+        .replace(
+          /\b(?:document|note|explain|add)\b[^.?!\n]*`?README(?:\.md)?`?[^.?!\n]*(?:\.|(?=\n|$))/gi,
+          'Note key design trade-offs in a brief code comment.',
+        )
+        .replace(/\bin\s+`?README(?:\.md)?`?/gi, 'in a brief code comment')
+        .replace(/`?README\.md`?/g, 'code comments');
+    }
+
+    if (testsDisabled) {
+      nextLine = nextLine
+        .replace(
+          /\bRun\s+`(?:python3?\s+-m\s+)?pytest[^`]*`/gi,
+          'Review your changes against the acceptance criteria (in-workspace test execution is disabled)',
+        )
+        .replace(
+          /\b(?:run|execute)\s+`?(?:python3?\s+-m\s+pytest|pytest|npm\s+test|vitest)`?/gi,
+          'verify behavior against the acceptance criteria (test runner disabled)',
+        );
+    }
+
+    adjustedLines.push(nextLine);
+  }
+
+  if (inFence && fenceBuffer.length > 0) {
+    adjustedLines.push(...fenceBuffer);
+  }
+
+  return adjustedLines.join('\n');
+}
+
+export function ScenarioBrief({
+  markdown,
+  workspaceContext,
+  afterIntro,
+  collapseAfterIntro = false,
+}: Readonly<{
+  markdown: string;
+  workspaceContext?: ScenarioBriefWorkspaceContext;
+  afterIntro?: ReactNode;
+  collapseAfterIntro?: boolean;
+}>) {
+  const reconciled = reconcileScenarioBriefForWorkspace(
+    markdown,
+    workspaceContext,
+  );
+  const lines = reconciled.replace(/\r\n?/g, '\n').split('\n');
   const blocks: ReactNode[] = [];
   let index = 0;
 
@@ -159,5 +259,31 @@ export function ScenarioBrief({ markdown }: Readonly<{ markdown: string }>) {
     );
   }
 
-  return <div className="software-scenario-brief">{blocks}</div>;
+  if (!afterIntro && !collapseAfterIntro) {
+    return <div className="software-scenario-brief">{blocks}</div>;
+  }
+
+  const introHeading =
+    isValidElement(blocks[0]) && blocks[0].type === 'h2' ? 1 : 0;
+  let introEnd = introHeading;
+  for (const block of blocks.slice(introHeading, introHeading + 2)) {
+    if (!isValidElement(block) || block.type !== 'p') break;
+    introEnd += 1;
+  }
+  return (
+    <>
+      <div className="software-scenario-brief">{blocks.slice(0, introEnd)}</div>
+      {afterIntro}
+      {collapseAfterIntro && introEnd > 0 && introEnd < blocks.length ? (
+        <details className="software-scenario-brief-disclosure">
+          <summary>Read full brief</summary>
+          <div className="software-scenario-brief">
+            {blocks.slice(introEnd)}
+          </div>
+        </details>
+      ) : (
+        <div className="software-scenario-brief">{blocks.slice(introEnd)}</div>
+      )}
+    </>
+  );
 }

@@ -168,13 +168,13 @@ export const DOMAIN_OPTIONS = [
 export const PROBLEM_STRUCTURE_OPTIONS = [
   {
     id: 'multi_file',
-    label: 'Multi-file Repository Investigation',
+    label: 'Multi-file repository',
     description:
       'Candidate navigates realistic interconnected modules, state models, and tests.',
   },
   {
     id: 'single_module',
-    label: 'Focused Single-Module Problem',
+    label: 'Single-module problem',
     description:
       'Compact module and dedicated test suite focused on core algorithmic or API correctness.',
   },

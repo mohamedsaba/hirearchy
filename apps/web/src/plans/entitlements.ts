@@ -7,7 +7,8 @@ export type PlanFeatureKey =
   | 'candidateWorkspaceAi'
   | 'savedProblemLibrary'
   | 'multiStageHandoff'
-  | 'secondOpinionReview';
+  | 'secondOpinionReview'
+  | 'webhooksAndSlack';
 
 export interface PlanDefinition {
   readonly id: PlanTier;
@@ -47,6 +48,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: false,
       multiStageHandoff: false,
       secondOpinionReview: false,
+      webhooksAndSlack: false,
     },
   },
   per_candidate: {
@@ -59,10 +61,10 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     priceLabel: 'Pay per candidate slot',
     canIssueAssessments: true,
     highlights: [
-      '1 credit per distinct candidate email (re-issuing to the same candidate reuses their slot)',
-      'Platform templates & Kimi K3.1 Pro AI Assessment Builder',
-      'Reusable saved problem library & Candidate Workspace AI assistant',
-      'Peer second-opinion reviews & managerial handoff dossiers',
+      'Ideal for focused hiring (<15 candidates/yr)',
+      '1 slot per distinct candidate email (re-assessments reuse slot)',
+      'Includes AI Assessment Builder, Saved Library & Peer Second Opinions',
+      'Outbound Webhooks & Slack notifications included',
     ],
     features: {
       aiCandidateReview: false,
@@ -72,6 +74,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: true,
       multiStageHandoff: true,
       secondOpinionReview: true,
+      webhooksAndSlack: true,
     },
   },
   pro: {
@@ -84,10 +87,9 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     priceLabel: 'Pro Subscription',
     canIssueAssessments: true,
     highlights: [
-      'Unlimited candidate invitations across your hiring pipeline',
-      'Platform templates & Kimi K3.1 Pro AI Assessment Builder',
-      'Reusable saved problem library & Candidate Workspace AI assistant',
-      'Peer second-opinion reviews & structured managerial handoffs',
+      'Ideal for growing teams running continuous loops',
+      'Unlimited candidate assessments — zero per-invite surprises',
+      'Full repo evidence timeline, diff viewer, peer verdicts & handoffs',
     ],
     features: {
       aiCandidateReview: false,
@@ -97,6 +99,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: true,
       multiStageHandoff: true,
       secondOpinionReview: true,
+      webhooksAndSlack: true,
     },
   },
   ultra: {
@@ -104,15 +107,15 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
     name: 'Ultra',
     badgeLabel: 'Ultra',
     tagline:
-      'Full Hirearchy intelligence: everything in Pro plus deep Kimi K3.1 Pro AI Candidate Reviews and Managerial Fit Reports.',
+      'Everything in Pro, plus advisory AI Candidate Reviews and Managerial Fit Reports.',
     billingModel: 'subscription',
     priceLabel: 'Ultra Subscription',
     canIssueAssessments: true,
     highlights: [
-      'Everything in Pro with unlimited candidate assessments',
-      'Deep Kimi K3.1 Pro AI Candidate Review (chronology, timing deltas & diff synthesis)',
-      'Automated Kimi K3.1 Pro Managerial Performance & Fit Report on acceptance',
-      'Priority team handoffs & full evidence reconstruction',
+      'Ideal for engineering leaders & multi-reviewer debriefs',
+      'Everything in Pro',
+      'Advisory AI Candidate Review (timeline Δ deltas + evidence citations)',
+      'Automated Managerial Performance & Fit Report upon acceptance',
     ],
     features: {
       aiCandidateReview: true,
@@ -122,6 +125,7 @@ export const PLAN_CATALOG: Readonly<Record<PlanTier, PlanDefinition>> = {
       savedProblemLibrary: true,
       multiStageHandoff: true,
       secondOpinionReview: true,
+      webhooksAndSlack: true,
     },
   },
 };

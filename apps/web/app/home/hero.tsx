@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Arrow, Icon, Path, ProductCaption } from './site';
+import { Arrow, Button, Icon, Path, ProductCaption } from './site';
 export function Hero() {
   return (
     <section
@@ -14,7 +14,26 @@ export function Hero() {
           <br />
           One clear principle.
         </h1>
-        <p>A family of tools for seeing work clearly.</p>
+        <p>
+          See real engineering work in context—with zero algorithmic puzzles,
+          zero webcam surveillance, and human-owned hiring decisions.
+        </p>
+        <div className="ct-hero-actions">
+          <Button href="/demo" light>
+            Try live demo
+          </Button>
+          <Link
+            className="ct-button-secondary ct-button-secondary--dark"
+            href="/early-access"
+            prefetch={false}
+          >
+            Request early access
+          </Link>
+        </div>
+        <Link className="ct-hero-trust-link" href="/trust" prefetch={false}>
+          Read our Candidate Respect Standard
+          <Arrow />
+        </Link>
       </div>
       <svg
         className="ct-paths"
@@ -52,7 +71,7 @@ export function Hero() {
         <span>
           <strong>Hirearchy Software</strong>
           <ProductCaption action="Explore Software">
-            Internal demo
+            Interactive workbench
           </ProductCaption>
         </span>
         <Arrow />

@@ -23,9 +23,24 @@ type TermsPatternObservation = {
   nestedObjectReturnFound: boolean;
 };
 
+export type R27WorkflowSignal = Readonly<{
+  id: string;
+  label: string;
+  detail: string;
+  eventSequence?: string;
+}>;
+
+export type R27VerificationQuestion = Readonly<{
+  question: string;
+  focus: string;
+  sourcePath?: string;
+}>;
+
 export type R27Presentation = Readonly<{
   files: readonly R27FileComparison[];
   termsPatternObservation: Readonly<TermsPatternObservation> | null;
+  workflowSignals: readonly R27WorkflowSignal[];
+  liveVerificationQuestions: readonly R27VerificationQuestion[];
   scenarioContext: Readonly<{
     brief: string | null;
     acceptanceCriteria: readonly string[];
@@ -265,6 +280,216 @@ function observeAddedPythonPatterns(
   }
 }
 
+function countPatchLines(diff: string | null): {
+  additions: number;
+  deletions: number;
+} {
+  if (!diff) return { additions: 0, deletions: 0 };
+  let additions = 0;
+  let deletions = 0;
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue;
+    if (line.startsWith('+')) additions += 1;
+    else if (line.startsWith('-')) deletions += 1;
+  }
+  return { additions, deletions };
+}
+
+function isTestPath(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return (
+    lower.includes('test') ||
+    lower.endsWith('_test.py') ||
+    lower.startsWith('tests/')
+  );
+}
+
+function extractEventFilePath(
+  payload: Record<string, unknown> | undefined,
+): string | null {
+  if (!payload) return null;
+  if (typeof payload.path === 'string' && payload.path.trim()) {
+    return payload.path.trim();
+  }
+  if (typeof payload.filePath === 'string' && payload.filePath.trim()) {
+    return payload.filePath.trim();
+  }
+  return null;
+}
+
+const TEN_MINUTES_MS = 10 * 60 * 1000;
+
+export function buildWorkflowSignals(
+  evidence: R27Evidence,
+  files: readonly R27FileComparison[],
+): readonly R27WorkflowSignal[] {
+  const signals: R27WorkflowSignal[] = [];
+  const changedFiles = files.filter(
+    (file) => file.starterContent !== file.submittedContent,
+  );
+  let totalAdded = 0;
+  let totalRemoved = 0;
+  for (const file of changedFiles) {
+    const counts = countPatchLines(file.diff);
+    totalAdded += counts.additions;
+    totalRemoved += counts.deletions;
+  }
+
+  const saveEvents = evidence.events.filter(
+    (event) => event.type === 'WORKSPACE_CHANGED',
+  );
+  const saveCount = saveEvents.length;
+
+  if (
+    changedFiles.length > 0 &&
+    ((totalAdded >= 40 && saveCount <= 1) ||
+      (saveCount > 0 && totalAdded / saveCount >= 45))
+  ) {
+    signals.push({
+      id: 'concentrated-save-footprint',
+      label: 'Concentrated save footprint',
+      detail: `+${totalAdded} / -${totalRemoved} lines recorded across ${saveCount} save checkpoint${saveCount === 1 ? '' : 's'}.`,
+    });
+  }
+
+  const sortedEvents = [...evidence.events].sort(
+    (a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp),
+  );
+  let longestGapMs = 0;
+  let longestGapEvent: R27Evidence['events'][number] | null = null;
+  for (let i = 1; i < sortedEvents.length; i += 1) {
+    const prevMs = Date.parse(sortedEvents[i - 1].timestamp);
+    const curr = sortedEvents[i];
+    const currMs = Date.parse(curr.timestamp);
+    if (!Number.isFinite(prevMs) || !Number.isFinite(currMs)) continue;
+    const gap = currMs - prevMs;
+    if (
+      gap >= TEN_MINUTES_MS &&
+      (curr.type === 'WORKSPACE_CHANGED' ||
+        curr.type === 'SESSION_SUBMITTED') &&
+      gap > longestGapMs
+    ) {
+      longestGapMs = gap;
+      longestGapEvent = curr;
+    }
+  }
+  if (longestGapEvent) {
+    const minutes = Math.round(longestGapMs / 60_000);
+    const filePath = extractEventFilePath(
+      longestGapEvent.payload as Record<string, unknown> | undefined,
+    );
+    signals.push({
+      id: 'extended-pause-before-checkpoint',
+      label: 'Extended pause before checkpoint',
+      detail: `${minutes}m interval recorded before event #${longestGapEvent.sequence}${filePath ? ` (${filePath})` : ''}.`,
+      eventSequence: longestGapEvent.sequence,
+    });
+  }
+
+  if (changedFiles.length > 0 && (evidence.executions ?? []).length === 0) {
+    signals.push({
+      id: 'no-sandboxed-test-run',
+      label: 'No sandboxed test run recorded',
+      detail:
+        'Changes were submitted without a recorded restricted-executor test run.',
+    });
+  }
+
+  const aiCount = (evidence.aiInteractions ?? []).length;
+  if (aiCount > 0) {
+    signals.push({
+      id: 'recorded-workspace-ai',
+      label: 'Recorded workspace AI usage',
+      detail: `${aiCount} workspace AI assistant exchange${aiCount === 1 ? '' : 's'} captured in the session log.`,
+    });
+  }
+
+  return signals;
+}
+
+export function buildDeterministicVerificationQuestions(
+  evidence: R27Evidence,
+  files: readonly R27FileComparison[],
+  workflowSignals: readonly R27WorkflowSignal[],
+): readonly R27VerificationQuestion[] {
+  const changedWithStats = files
+    .filter((file) => file.starterContent !== file.submittedContent)
+    .map((file) => {
+      const counts = countPatchLines(file.diff);
+      return {
+        file,
+        additions: counts.additions,
+        deletions: counts.deletions,
+        churn: counts.additions + counts.deletions,
+        isTest: isTestPath(file.path),
+      };
+    })
+    .sort(
+      (a, b) => b.churn - a.churn || a.file.path.localeCompare(b.file.path),
+    );
+
+  if (changedWithStats.length === 0) {
+    return [
+      {
+        question:
+          'Walk through how you diagnosed the starter repository and what blocked committing a fix within the session window.',
+        focus: 'Starter diagnosis and blocker assessment',
+      },
+    ];
+  }
+
+  const questions: R27VerificationQuestion[] = [];
+  const sourceChanges = changedWithStats.filter((item) => !item.isTest);
+  const testChanges = changedWithStats.filter((item) => item.isTest);
+  const primary = sourceChanges[0] ?? changedWithStats[0];
+
+  questions.push({
+    question: `Walk through your changes in ${primary.file.path} (+${primary.additions}/-${primary.deletions}) — why did you choose this approach and what edge case or failure mode does it guard against?`,
+    focus: `Implementation trade-offs and edge-case reasoning in ${primary.file.path}`,
+    sourcePath: primary.file.path,
+  });
+
+  const secondary = sourceChanges[1];
+  if (secondary) {
+    questions.push({
+      question: `How do the changes in ${primary.file.path} and ${secondary.file.path} interact, and what contract between them would break if one changed?`,
+      focus: `Cross-file contract between ${primary.file.path} and ${secondary.file.path}`,
+      sourcePath: secondary.file.path,
+    });
+  }
+
+  const hasExecution = (evidence.executions ?? []).length > 0;
+  if (testChanges.length === 0 || !hasExecution) {
+    questions.push({
+      question: `What specific regression test would you add first for ${primary.file.path}, and how did you verify boundary inputs without a recorded test run?`,
+      focus: 'Verification strategy and missing regression coverage',
+      sourcePath: primary.file.path,
+    });
+  } else {
+    const primaryTest = testChanges[0];
+    questions.push({
+      question: `In ${primaryTest.file.path}, which failure scenario is still unverified if inputs arrive out of order or concurrently?`,
+      focus: `Test depth and concurrency edge cases in ${primaryTest.file.path}`,
+      sourcePath: primaryTest.file.path,
+    });
+  }
+
+  const hasBurstOrPause = workflowSignals.some(
+    (signal) =>
+      signal.id === 'concentrated-save-footprint' ||
+      signal.id === 'extended-pause-before-checkpoint',
+  );
+  if (hasBurstOrPause) {
+    questions.push({
+      question: `Explain how your solution in ${primary.file.path} evolved before the final checkpoint — what alternative designs did you rule out?`,
+      focus: 'Design iteration and independent authorship verification',
+      sourcePath: primary.file.path,
+    });
+  }
+
+  return questions.slice(0, 4);
+}
+
 export function buildR27Presentation(evidence: R27Evidence): R27Presentation {
   const scenarioContext = scenarioContextFromSnapshot(
     evidence.scenario.snapshotText,
@@ -342,10 +567,19 @@ export function buildR27Presentation(evidence: R27Evidence): R27Presentation {
     };
   });
 
+  const workflowSignals = buildWorkflowSignals(evidence, files);
+  const liveVerificationQuestions = buildDeterministicVerificationQuestions(
+    evidence,
+    files,
+    workflowSignals,
+  );
+
   return {
     files,
     scenarioContext,
     termsPatternObservation,
+    workflowSignals,
+    liveVerificationQuestions,
     revisionMetadata: evidence.revisions
       .filter((revision) => revision.source === 'event_metadata')
       .map(({ path, version, digest }) => ({ path, version, digest })),

@@ -1,7 +1,13 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { IconCode, IconFileCode, IconFolder, IconX } from '@tabler/icons-react';
+import {
+  IconCode,
+  IconFileCode,
+  IconFolder,
+  IconLock,
+  IconX,
+} from '@tabler/icons-react';
 import {
   detectSyntaxLanguage,
   formatSyntaxLanguageLabel,
@@ -79,18 +85,26 @@ export function RepositoryInspector({
   workspaceName,
   activePath,
   onSelectPath,
+  label = 'Repository preview',
+  submitted = false,
 }: {
   files: readonly PreviewFile[];
-  workspaceName: string;
-  activePath: string;
-  onSelectPath: (path: string) => void;
+  workspaceName?: string;
+  activePath?: string;
+  onSelectPath?: (path: string) => void;
+  label?: string;
+  submitted?: boolean;
 }) {
   const inputId = useId();
+  const [selectedPath, setSelectedPath] = useState('');
+  const changePath = onSelectPath ?? setSelectedPath;
   const [filter, setFilter] = useState('');
   const [wrap, setWrap] = useState(false);
   const [opened, setOpened] = useState<string[]>([]);
   const [copyMessage, setCopyMessage] = useState('');
-  const selected = files.find((file) => file.path === activePath) ?? files[0];
+  const selected =
+    files.find((file) => file.path === (activePath ?? selectedPath)) ??
+    files[0];
   const language = detectSyntaxLanguage(selected?.path ?? '');
   const lines = useMemo(
     () => tokenizeCodeLines(selected?.content ?? '', language),
@@ -115,7 +129,7 @@ export function RepositoryInspector({
 
   function select(path: string) {
     if (!availablePaths.has(path)) return;
-    onSelectPath(path);
+    changePath(path);
     setOpened([...new Set([...tabs, path])]);
     setCopyMessage('');
   }
@@ -125,7 +139,7 @@ export function RepositoryInspector({
     if (remaining.length === 0) return;
     setOpened(remaining);
     if (path === selected?.path) {
-      onSelectPath(remaining[Math.max(0, tabs.indexOf(path) - 1)]);
+      changePath(remaining[Math.max(0, tabs.indexOf(path) - 1)]);
       setCopyMessage('');
     }
   }
@@ -140,12 +154,21 @@ export function RepositoryInspector({
   }
 
   return (
-    <section className="software-repository" aria-label="Repository preview">
+    <section className="software-repository" aria-label={label}>
       <header className="software-repo-bar">
-        <div className="software-repo-name">
-          <IconCode size={18} aria-hidden="true" />
-          <strong>{workspaceName}</strong>
-        </div>
+        {submitted ? (
+          <div className="software-repo-name candidate-submitted-repo-title">
+            <h2>{label}</h2>
+            <span>
+              <IconLock size={16} aria-hidden="true" /> Read-only
+            </span>
+          </div>
+        ) : workspaceName ? (
+          <div className="software-repo-name">
+            <IconCode size={18} aria-hidden="true" />
+            <strong>{workspaceName}</strong>
+          </div>
+        ) : null}
         <div className="software-repo-actions">
           <button
             type="button"
@@ -177,17 +200,25 @@ export function RepositoryInspector({
       <div className="software-repo-body">
         <aside className="software-repo-files" aria-label="Repository files">
           <h3>
-            Files <span>{files.length}</span>
+            Files{' '}
+            <span>
+              {filter.trim()
+                ? `${visibleFiles.length} of ${files.length}`
+                : files.length}
+            </span>
           </h3>
-          <input
-            type="search"
-            aria-label="Filter repository files"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder="Find a file"
-          />
+          {!submitted || files.length > 12 ? (
+            <input
+              type="search"
+              aria-label="Filter repository files"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Find a file"
+            />
+          ) : null}
           {visibleFiles.length ? (
             <FilesTree
+              key={filter.trim() ? 'search' : 'all'}
               files={visibleFiles}
               activePath={selected.path}
               select={select}
@@ -197,26 +228,26 @@ export function RepositoryInspector({
           )}
         </aside>
         <div className="software-repo-editor">
-          <div
-            className="software-repo-tabs"
-            role="group"
-            aria-label="Open files"
-          >
-            {tabs.map((path) => (
-              <div
-                className="software-repo-tab"
-                data-selected={path === selected.path}
-                key={path}
-              >
-                <button
-                  type="button"
-                  title={path}
-                  aria-current={path === selected.path ? 'true' : undefined}
-                  onClick={() => select(path)}
+          {tabs.length > 1 ? (
+            <div
+              className="software-repo-tabs"
+              role="group"
+              aria-label="Open files"
+            >
+              {tabs.map((path) => (
+                <div
+                  className="software-repo-tab"
+                  data-selected={path === selected.path}
+                  key={path}
                 >
-                  {path.split('/').at(-1)}
-                </button>
-                {tabs.length > 1 ? (
+                  <button
+                    type="button"
+                    title={path}
+                    aria-current={path === selected.path ? 'true' : undefined}
+                    onClick={() => select(path)}
+                  >
+                    {path.split('/').at(-1)}
+                  </button>
                   <button
                     type="button"
                     className="software-repo-close"
@@ -225,10 +256,10 @@ export function RepositoryInspector({
                   >
                     <IconX size={14} aria-hidden="true" />
                   </button>
-                ) : null}
-              </div>
-            ))}
-          </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="software-repo-path">{selected.path}</div>
           <div
             className="software-repo-code"
@@ -253,7 +284,7 @@ export function RepositoryInspector({
             ))}
           </div>
           <footer className="software-repo-status">
-            <span>Read only</span>
+            <span>{submitted ? 'Read-only' : 'Read only'}</span>
             <span>
               {formatSyntaxLanguageLabel(language)} · {lines.length}{' '}
               {lines.length === 1 ? 'line' : 'lines'}

@@ -11,9 +11,13 @@ import { isIP } from 'node:net';
 import { NVIDIA_MODEL_ID } from '../ai/server-ai-configuration';
 import {
   candidateConfirmationParams,
+  candidateEntryPath,
+  candidateRecoveryPath,
+  candidateResetPasswordPath,
   candidateSignInPath,
 } from '../hiring/candidate-entry';
 import { enforceRateLimit } from '../security/rate-limit';
+import { encodeAccountAvatar, MAX_AVATAR_BYTES } from './account-avatar';
 
 import {
   invitationTokenHash,
@@ -72,6 +76,7 @@ import {
   passwordGrant,
   readR23Claims,
   refreshGrant,
+  requestR23EmailChange,
   revokeAuthSession,
   R23AuthenticationDenied,
   R23EmailConfirmationRequired,
@@ -85,6 +90,7 @@ import {
 import {
   clearFounderUatPendingInvitation,
   readFounderUatPendingInvitation,
+  readFounderUatRecovery,
 } from '../r23-auth/founder-uat-state';
 import {
   resolveOrgDisplay,
@@ -123,6 +129,7 @@ import type {
   SessionHiringReviewContext,
   WorkspaceRoleKind,
 } from '../hiring/types';
+import { formatUtcDateTime } from '../ui/relative-time';
 import { validateAssessmentDraft } from '../r211-builder/validation';
 import type {
   R29EvidenceSourceType,
@@ -154,9 +161,14 @@ import {
 import { operationalLogger, sanitizeError } from '../observability/logger.mjs';
 import {
   renderSoftwareDocument,
+  resolveWorkspaceRoleLabel,
   type SoftwareDocumentTheme,
   type SoftwareWorkspace,
 } from '../ui/software-document';
+import {
+  readAttributionCookie,
+  recordServerTelemetryEvent,
+} from '../telemetry/server';
 
 const ENVELOPE_VERSION = 1;
 const NONCE_LENGTH = 12;
@@ -580,8 +592,14 @@ function requiredEnvelopeCookie(request: Request, name: string): string {
   return value;
 }
 
+const R23_PERSISTENT_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+
 function cookieHeader(name: string, value: string, httpOnly: boolean): string {
-  return `${name}=${value}; Path=/; Secure; SameSite=Strict${httpOnly ? '; HttpOnly' : ''}`;
+  const maxAge =
+    name === R23_SESSION_COOKIE || name === R23_CSRF_COOKIE
+      ? `; Max-Age=${R23_PERSISTENT_COOKIE_MAX_AGE_SECONDS}`
+      : '';
+  return `${name}=${value}; Path=/; Secure; SameSite=Strict${httpOnly ? '; HttpOnly' : ''}${maxAge}`;
 }
 
 function clearCookieHeader(name: string, httpOnly: boolean): string {
@@ -605,15 +623,25 @@ function safeHtml(value: string): string {
   });
 }
 
-function securityHeaders(): Headers {
+function securityHeaders(extraDirectives?: string): Headers {
+  const base =
+    "default-src 'none'; style-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
   return new Headers({
     'Cache-Control': 'private, no-store',
-    'Content-Security-Policy':
-      "default-src 'none'; style-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    'Content-Security-Policy': extraDirectives
+      ? `${base}; ${extraDirectives}`
+      : base,
     'Content-Type': 'text/html; charset=utf-8',
     'Referrer-Policy': 'same-origin',
     'X-Content-Type-Options': 'nosniff',
   });
+}
+
+function scriptCspDirectives(scriptBody: string, allowFetch = false): string {
+  const hash = createHash('sha256').update(scriptBody, 'utf8').digest('base64');
+  return allowFetch
+    ? `script-src 'sha256-${hash}'; connect-src 'self'`
+    : `script-src 'sha256-${hash}'`;
 }
 
 function readRequestTheme(request?: Request): SoftwareDocumentTheme {
@@ -633,9 +661,17 @@ function htmlResponse(
   workspace?: SoftwareWorkspace,
   theme?: SoftwareDocumentTheme,
   currentPath?: string,
+  homeHref?: string,
 ): Response {
   return new Response(
-    renderSoftwareDocument(title, content, workspace, theme, currentPath),
+    renderSoftwareDocument(
+      title,
+      content,
+      workspace,
+      theme,
+      currentPath,
+      homeHref,
+    ),
     {
       status,
       headers,
@@ -901,7 +937,14 @@ function failureResponse(request: Request, error: unknown): Response {
     details.status === 401
       ? `<p role="alert">${safeHtml(details.message)}</p><p><a href="/r23/login">Sign in</a></p>`
       : `<p role="alert">${safeHtml(details.message)}</p>`;
-  return htmlResponse('Request denied', content, details.status);
+  return htmlResponse(
+    'Request denied',
+    content,
+    details.status,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+  );
 }
 
 export function stagingCapabilityDisabledJsonResponse(
@@ -928,6 +971,7 @@ async function parseBody(
   request: Request,
   optional: boolean,
   maxBytes: number = MAX_BODY_BYTES,
+  allowMultipart = false,
 ): Promise<Record<string, unknown>> {
   const lengthHeader = request.headers.get('content-length');
   if (lengthHeader !== null && !/^\d+$/.test(lengthHeader)) {
@@ -974,6 +1018,22 @@ async function parseBody(
   }
 
   const contentType = request.headers.get('content-type')?.split(';')[0].trim();
+  if (allowMultipart && contentType === 'multipart/form-data') {
+    let form: FormData;
+    try {
+      form = await new Response(new Uint8Array(Buffer.concat(chunks)), {
+        headers: { 'Content-Type': request.headers.get('content-type')! },
+      }).formData();
+    } catch {
+      throw new StagingBadRequest();
+    }
+    const parsed: Record<string, unknown> = Object.create(null);
+    for (const [name, value] of form) {
+      if (Object.hasOwn(parsed, name)) throw new StagingBadRequest();
+      parsed[name] = value;
+    }
+    return parsed;
+  }
   if (
     contentType !== 'application/json' &&
     contentType !== 'application/x-www-form-urlencoded'
@@ -1261,18 +1321,30 @@ function toR23SessionShim(
   };
 }
 
-export function stagingLoginGet(): Response {
+export function stagingLoginGet(request?: Request): Response {
   if (!isAuthenticatedStaging()) {
     return htmlResponse('Not found', '<p>Not found.</p>', 404);
   }
   try {
     loadStagingConfiguration();
-    return htmlResponse('Sign in to Hirearchy', loginForm());
+    return htmlResponse(
+      'Sign in to Hirearchy',
+      loginForm(),
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/login',
+    );
   } catch {
     return htmlResponse(
       'Sign in unavailable',
       '<p role="alert">The sign-in service is temporarily unavailable.</p>',
       503,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/login',
     );
   }
 }
@@ -1347,12 +1419,16 @@ export async function stagingLoginPost(request: Request): Promise<Response> {
         );
       }
       return htmlResponse(
-        'Evaluator sign in',
+        'Team sign in',
         loginForm(
           'Invalid email or password. Check credentials and try again.',
           requestedNextPath,
         ),
         401,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        '/r23/login',
       );
     }
     return failureResponse(request, error);
@@ -1412,6 +1488,59 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
           destination = '/r23/organizations';
         }
       }
+    } else if (isHiringPlatformEnabled()) {
+      try {
+        const statusResult = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'onboarding.status',
+          {},
+        )) as OnboardingStatusResponse | null;
+        if (statusResult?.status === 'has_active_membership') {
+          const membershipRes = (await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'membership.list',
+            {},
+          )) as { memberships?: StagingMembershipItem[] } | null;
+          const memberships = membershipRes?.memberships ?? [];
+          const rawLastOrgCookie = cookieValue(request, 'hirearchy-last-org');
+          const lastOrgCookie = (() => {
+            if (!rawLastOrgCookie) return undefined;
+            if (rawLastOrgCookie.startsWith('v1.')) {
+              try {
+                return Buffer.from(rawLastOrgCookie.slice(3), 'base64url')
+                  .toString('utf8')
+                  .toLowerCase();
+              } catch {
+                return undefined;
+              }
+            }
+            return rawLastOrgCookie.toLowerCase();
+          })();
+          const preferredOrg =
+            (lastOrgCookie &&
+              UUID.test(lastOrgCookie) &&
+              memberships
+                .find((m) => m.organizationId.toLowerCase() === lastOrgCookie)
+                ?.organizationId.toLowerCase()) ||
+            (memberships.length === 1
+              ? memberships[0].organizationId.toLowerCase()
+              : null);
+          if (preferredOrg) {
+            await dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              'session.open',
+              { organizationId: preferredOrg },
+            );
+            selectedOrganizationId = preferredOrg;
+            destination = `/r23/organizations/${preferredOrg}/candidates`;
+          }
+        }
+      } catch {
+        // Fall back safely to workspace picker if membership lookup fails
+      }
     }
 
     const updatedSession: StagingBrowserSessionPayload = Object.freeze({
@@ -1434,6 +1563,11 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
         true,
       ),
       clearCookieHeader(R23_CALLBACK_COOKIE, true),
+      ...(isHiringPlatformEnabled() && selectedOrganizationId
+        ? [
+            `hirearchy-last-org=v1.${Buffer.from(selectedOrganizationId, 'utf8').toString('base64url')}; Path=/; Max-Age=2592000; SameSite=Lax`,
+          ]
+        : []),
     ]);
   } catch (error) {
     const response = failureResponse(request, error);
@@ -1445,6 +1579,14 @@ export async function stagingCallbackGet(request: Request): Promise<Response> {
     }
     return response;
   }
+}
+
+function workspaceMonogram(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return `${words[0].charAt(0)}${words[1].charAt(0)}`.toUpperCase();
+  }
+  return (words[0]?.slice(0, 2) || 'WS').toUpperCase();
 }
 
 export async function stagingOrganizationsGet(
@@ -1495,33 +1637,40 @@ export async function stagingOrganizationsGet(
             }
             const id = safeHtml(membership.organizationId.toLowerCase());
             const roleLabel = safeHtml(membership.role);
-            const displayName = safeHtml(
+            const rawDisplayName =
               membership.displayName?.trim() ||
-                `Organization ${membership.organizationId.slice(0, 8)}`,
-            );
+              `Organization ${membership.organizationId.slice(0, 8)}`;
+            const displayName = safeHtml(rawDisplayName);
+            const monogram = safeHtml(workspaceMonogram(rawDisplayName));
             const roleLabelDisplay =
               membership.role === 'cto'
                 ? 'CTO / Owner'
                 : membership.role === 'reviewer'
                   ? 'Evaluator'
                   : 'Recruiter';
-            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span>${displayName}</span><span class="software-role-badge">${roleLabelDisplay}</span></button></form></li>`;
+            return `<li><form action="/r23/organization" method="post"><input type="hidden" name="csrf" value="${safeHtml(csrfToken)}"><input type="hidden" name="organizationId" value="${id}"><button type="submit" aria-label="Select ${displayName} (${roleLabel})"><span class="software-org-picker-main"><span class="software-org-avatar" aria-hidden="true">${monogram}</span><span class="software-org-picker-copy"><span class="software-org-picker-name">${displayName}</span><span class="software-org-picker-meta">Workspace · ${id.slice(0, 8)}</span></span></span><span class="software-org-picker-trail"><span class="software-role-badge">${roleLabelDisplay}</span><span class="software-org-picker-arrow" aria-hidden="true">→</span></span></button></form></li>`;
           })
           .join('');
         let content = '';
         if (memberships.length > 0) {
-          content = `<h1>Choose a workspace</h1><ul class="software-organization-picker">${items}</ul>`;
+          content = `<h1>Choose a workspace</h1><p class="software-picker-subtitle">Select an engineering workspace to review submissions and manage assessments.</p><ul class="software-organization-picker">${items}</ul>`;
         } else {
           if (
             statusResult.status === 'needs_team' &&
             statusResult.capabilities.selfServiceOnboardingEnabled
           ) {
             content = `
-              <section aria-labelledby="create-org-title">
+              <section class="software-bootstrap-card" aria-labelledby="create-org-title">
+                <ol class="software-bootstrap-steps" aria-label="Workspace setup progress">
+                  <li data-step-state="done"><span class="software-bootstrap-step-badge" aria-hidden="true">✓</span><span>1. Account</span></li>
+                  <li data-step-state="active" aria-current="step"><span class="software-bootstrap-step-badge" aria-hidden="true">2</span><span>2. Workspace</span></li>
+                  <li data-step-state="upcoming"><span class="software-bootstrap-step-badge" aria-hidden="true">3</span><span>3. First Assessment</span></li>
+                </ol>
                 <h1 id="create-org-title">Create your workspace</h1>
                 <p>Create your first organization, then prepare an assessment and invite your team.</p>
-                <div role="note" aria-label="Governance notice">
-                  <p>You will be the workspace owner and recruiter. Ownership cannot be transferred in this version.</p>
+                <div class="software-owner-note" role="note" aria-label="Workspace owner note">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 9h.01"></path><path d="M11 12h1v4h1"></path></svg>
+                  <p>You&apos;ll be set up as the workspace owner. Owner transfer isn&apos;t available in this version.</p>
                 </div>
                 <form action="/r23/organization/bootstrap" method="post">
                   <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
@@ -1584,12 +1733,20 @@ export async function stagingOrganizationPost(
           ...session,
           selectedOrganizationId: organizationId,
         });
-        return redirect(origin, `/r23/organizations/${organizationId}`, [
+        const landingPath = isHiringPlatformEnabled()
+          ? `/r23/organizations/${organizationId}/candidates`
+          : `/r23/organizations/${organizationId}`;
+        return redirect(origin, landingPath, [
           cookieHeader(
             R23_SESSION_COOKIE,
             encryptSessionPayload(updatedSession, sessionKey),
             true,
           ),
+          ...(isHiringPlatformEnabled()
+            ? [
+                `hirearchy-last-org=v1.${Buffer.from(organizationId, 'utf8').toString('base64url')}; Path=/; Max-Age=2592000; SameSite=Lax`,
+              ]
+            : []),
         ]);
       },
     );
@@ -1612,6 +1769,7 @@ export async function stagingLoadOrganizationSessionList(
   refresh: 'automatic' | 'defer' = 'automatic',
 ): Promise<
   AuthenticatedSessionListContext & {
+    isOwner: boolean;
     reviewers: StagingReviewerItem[];
     draft: R211AssessmentDraft | null;
     validatedVersions: R211ValidatedVersion[];
@@ -1688,6 +1846,7 @@ export async function stagingLoadOrganizationSessionList(
           slug: orgDisplay.slug,
           role: orgContext.role,
         },
+        isOwner: Boolean(orgContext.isOwner),
         reviewers: orgContext.reviewers ?? [],
         draft: orgContext.draft ?? null,
         validatedVersions: orgContext.validatedVersions ?? [],
@@ -1706,6 +1865,7 @@ export async function stagingLoadOrganizationSessionSummary(
   sessionId: string,
 ): Promise<
   AuthenticatedSessionSummaryContext & {
+    isOwner: boolean;
     refreshedSessionCookie: string | null;
   }
 > {
@@ -1783,6 +1943,7 @@ export async function stagingLoadOrganizationSessionSummary(
           slug: orgDisplay.slug,
           role: orgContext.role,
         },
+        isOwner: Boolean(orgContext.isOwner),
         reviewers: orgContext.reviewers ?? [],
         assignments: match?.assignments ?? [],
         refreshedSessionCookie,
@@ -1844,7 +2005,7 @@ export async function stagingOrganizationGet(
       const emptyExplanation = filtered
         ? 'Try a different search or clear the filters.'
         : isOrgManager || hiring
-          ? 'Choose a platform template or generate a role-tailored problem with Kimi K3.1 Pro.'
+          ? 'Start from a platform template, generate a task with AI, or reuse one from your library.'
           : 'When your team assigns a session to you, it will appear here.';
 
       sessionsHtml = `
@@ -1865,9 +2026,9 @@ export async function stagingOrganizationGet(
             s.status === 'SUBMITTED' && s.closureReason === 'timeout';
           const lifecycleLabel =
             s.status === 'CREATED'
-              ? 'Issued'
+              ? 'Invited'
               : s.status === 'ACTIVE'
-                ? 'Active'
+                ? 'In progress'
                 : 'Submitted';
           const reviewLabel =
             s.status !== 'SUBMITTED'
@@ -1897,6 +2058,28 @@ export async function stagingOrganizationGet(
                 ? s.activatedAt
                 : s.submittedAt;
           const inspectUrl = `/r23/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(s.sessionId)}`;
+          const reviewUrl = `/r27/organizations/${encodeURIComponent(organizationId.toLowerCase())}/sessions/${encodeURIComponent(s.sessionId)}`;
+          const actionLinkHtml =
+            hiring && s.status === 'SUBMITTED'
+              ? `<a href="${safeHtml(reviewUrl)}">Review submission →</a>`
+              : `<a href="${safeHtml(inspectUrl)}">Inspect session</a>`;
+
+          const sessionDetailsHtml = `<details${hiring ? ' class="team-session-details"' : ''}>
+                  <summary aria-label="Session details for ${safeHtml(s.scenarioTitle)}">Details</summary>
+                  <div>
+                    <dl>
+                      <dt>Full session reference</dt><dd><code>${safeHtml(
+                        s.sessionId,
+                      )}</code></dd>
+                      <dt>Scenario</dt><dd><code>${safeHtml(
+                        s.scenarioId,
+                      )}</code> (v${safeHtml(s.scenarioVersion)})</dd>
+                      <dt>Issued</dt><dd><time datetime="${safeHtml(
+                        s.createdAt,
+                      )}">${safeHtml(s.createdAt)}</time></dd>
+                    </dl>
+                  </div>
+                </details>`;
 
           return `
             <li class="software-session-row" data-session-id="${safeHtml(s.sessionId)}">
@@ -1914,24 +2097,10 @@ export async function stagingOrganizationGet(
                 <span>${safeHtml(reviewLabel)}</span>
               </div>
               <div class="software-session-actions">
-                <a href="${safeHtml(inspectUrl)}">Inspect session</a>
-                <details>
-                  <summary aria-label="Session details for ${safeHtml(s.scenarioTitle)}">Details</summary>
-                  <div>
-                    <dl>
-                      <dt>Full session reference</dt><dd><code>${safeHtml(
-                        s.sessionId,
-                      )}</code></dd>
-                      <dt>Scenario</dt><dd><code>${safeHtml(
-                        s.scenarioId,
-                      )}</code> (v${safeHtml(s.scenarioVersion)})</dd>
-                      <dt>Issued</dt><dd><time datetime="${safeHtml(
-                        s.createdAt,
-                      )}">${safeHtml(s.createdAt)}</time></dd>
-                    </dl>
-                  </div>
-                </details>
+                ${actionLinkHtml}
+                ${hiring ? '' : sessionDetailsHtml}
               </div>
+              ${hiring ? sessionDetailsHtml : ''}
             </li>
           `;
         })
@@ -1944,10 +2113,14 @@ export async function stagingOrganizationGet(
 
     const content = `
       <header class="software-page-heading">
-        <div><p class="software-eyebrow">${safeOrgName}</p><h1>${isOrgManager ? 'Assessments' : 'Assigned reviews'}</h1><p>${safeHtml(roleScopeText)}</p></div>
+        <div>${hiring ? '' : `<p class="software-eyebrow">${safeOrgName}</p>`}<h1>${isOrgManager ? 'Assessments' : 'Assigned reviews'}</h1>${hiring && isOrgManager ? '' : `<p>${safeHtml(roleScopeText)}</p>`}</div>
         ${
           hiring
-            ? `<a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>`
+            ? `<div class="hiring-header-actions">
+                <a class="hiring-btn hiring-btn-sm" href="/r23/organizations/${safeOrgId}/sample-review" data-testid="explore-sample-candidate-link">Explore sample candidate</a>
+                <a class="hiring-btn hiring-btn-sm" href="/r23/organizations/${safeOrgId}/builder/candidate-preview" data-testid="preview-as-candidate-link">Preview as Candidate</a>
+                <a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder?mode=new" data-testid="open-assessment-builder-link">Create assessment</a>
+              </div>`
             : membership.role === 'recruiter'
               ? `<div>
                 <a class="software-document-primary-link" href="/r23/organizations/${safeOrgId}/builder" data-testid="open-assessment-builder-link">Create assessment</a>
@@ -1967,16 +2140,16 @@ export async function stagingOrganizationGet(
           : ''
       }
 
-      <section class="software-work-list" aria-label="Assessment sessions">
+      <section class="software-work-list" aria-label="Assessments">
         <form class="software-session-filters" method="get" action="/r23/organizations/${safeOrgId}">
           <label>
             <span>Find an assessment</span>
             <input type="search" name="search" value="${safeHtml(search ?? '')}" placeholder="Assessment title or session reference" aria-label="Search by assessment title or session reference">
           </label>
           <label>
-            <span>Session lifecycle</span>
+            <span>Assessment status</span>
             <select name="lifecycle">
-              <option value="all" ${lifecycleFilter === 'all' || !lifecycleFilter ? 'selected' : ''}>All sessions</option>
+              <option value="all" ${lifecycleFilter === 'all' || !lifecycleFilter ? 'selected' : ''}>All assessments</option>
               <option value="issued" ${lifecycleFilter === 'issued' ? 'selected' : ''}>Issued</option>
               <option value="active" ${lifecycleFilter === 'active' ? 'selected' : ''}>Active</option>
               <option value="submitted" ${lifecycleFilter === 'submitted' ? 'selected' : ''}>Submitted</option>
@@ -1995,25 +2168,26 @@ export async function stagingOrganizationGet(
           <button type="submit">Apply filters</button>
         </form>
 
-        <div class="software-list-caption"><p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} sessions</p></div>
+        <div class="software-list-caption"><p role="status">Showing ${result.sessions.length} of ${result.totalAuthorizedCount} assessments</p></div>
 
         ${sessionsHtml}
       </section>
     `;
 
     const response = htmlResponse(
-      'Organization workspace',
+      isOrgManager ? 'Assessments' : 'Assigned reviews',
       content,
       200,
       securityHeaders(),
       {
         organizationId: organizationId.toLowerCase(),
         organizationName: organization.name,
-        role: membership.role,
+        role: context.isOwner ? 'cto' : membership.role,
         email: identity.email ?? '',
         csrf: csrfToken,
         active: 'assessments',
         planBadge: context.plan ? formatPlanBadge(context.plan) : undefined,
+        planTier: context.plan?.planTier,
         theme: readRequestTheme(request),
         currentPath: `/r23/organizations/${organizationId.toLowerCase()}`,
       },
@@ -2175,8 +2349,11 @@ export async function stagingOrganizationSessionPageGet(
       return attachRefreshedCookie(
         htmlResponse(
           'Session not found',
-          `<p role="alert">Session not available in your authorized organization scope.</p><p><a href="/r23/organizations/${safeHtml(organizationId.toLowerCase())}">Back to organization sessions</a></p>`,
+          `<p role="alert">We couldn&apos;t find that assessment in this workspace.</p><p><a href="/r23/organizations/${safeHtml(organizationId.toLowerCase())}">Back to Assessments</a></p>`,
           404,
+          securityHeaders(),
+          undefined,
+          readRequestTheme(request),
         ),
         context.refreshedSessionCookie,
       );
@@ -2185,15 +2362,14 @@ export async function stagingOrganizationSessionPageGet(
     const { organization, membership, identity, csrfToken } = context;
     const s = sessionRecord;
     const safeOrgId = safeHtml(organizationId.toLowerCase());
-    const safeOrgName = safeHtml(organization.name);
 
     const isTimedOut =
       s.status === 'SUBMITTED' && s.closureReason === 'timeout';
     const lifecycleLabel =
       s.status === 'CREATED'
-        ? 'Issued'
+        ? 'Invited'
         : s.status === 'ACTIVE'
-          ? 'Active'
+          ? 'In progress'
           : 'Submitted';
     const reviewLabel =
       s.status !== 'SUBMITTED'
@@ -2223,7 +2399,7 @@ export async function stagingOrganizationSessionPageGet(
     const content = `
       <header class="software-page-heading">
         <div><p class="software-eyebrow">Assessment overview</p><h1 id="session-summary-title">${safeHtml(s.scenarioTitle)}</h1><p>Session details, candidate access and the next step for your team.</p></div>
-        <a href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
+        <a href="/r23/organizations/${safeOrgId}">Back to Assessments</a>
       </header>
 
       <section class="software-settings-section software-session-overview" aria-labelledby="session-summary-title">
@@ -2252,11 +2428,9 @@ export async function stagingOrganizationSessionPageGet(
           <dt><strong>Scenario ID:</strong></dt><dd><code>${safeHtml(
             s.scenarioId,
           )}</code> (v${safeHtml(s.scenarioVersion.replace(/^v/i, ''))})</dd>
-          <dt><strong>Lifecycle status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(
+          <dt><strong>Status:</strong></dt><dd><span data-testid="session-lifecycle-status">${safeHtml(
             lifecycleLabel,
-          )} (${safeHtml(s.status)})</span> ${
-            isTimedOut ? '<span>(Timed out)</span>' : ''
-          }</dd>
+          )}</span> ${isTimedOut ? '<span>(Timed out)</span>' : ''}</dd>
           <dt><strong>Review progress:</strong></dt><dd>${safeHtml(
             reviewLabel,
           )}</dd>
@@ -2294,24 +2468,33 @@ export async function stagingOrganizationSessionPageGet(
           }</dd>
           
         </dl>
-        <details class="software-session-reference"><summary>Session reference</summary><p><code>${safeHtml(
+        <details class="software-session-reference"><summary>Technical details</summary><p>Session: <code>${safeHtml(
           s.sessionId,
-        )}</code></p><p>Visibility: ${safeHtml(
+        )}</code></p><p>Status key: <code>${safeHtml(s.status)}</code> · Visibility: <code>${safeHtml(
           s.visibilityScope ?? 'authorized_scope',
-        )}</p></details>
+        )}</code></p></details>
 
         <section aria-labelledby="reviewer-assignments-title">
           <h2 id="reviewer-assignments-title">Assigned reviewers</h2>
           ${
             context.assignments && context.assignments.length > 0
               ? `<ul class="software-reviewer-list" data-testid="assigned-reviewers-list">${context.assignments
-                  .map(
-                    (a) => `
+                  .map((a) => {
+                    const reviewerInfo = context.reviewers?.find(
+                      (r) => r.principalId === a.reviewerPrincipalId,
+                    );
+                    const reviewerRole =
+                      reviewerInfo?.role === 'cto'
+                        ? 'CTO / Owner'
+                        : reviewerInfo?.role === 'recruiter'
+                          ? 'Recruiter'
+                          : 'Evaluator';
+                    return `
                 <li>
-                  <span>Reviewer <code>${safeHtml(a.reviewerPrincipalId)}</code></span>
+                  <span>${safeHtml(reviewerRole)} (<code>${safeHtml(a.reviewerPrincipalId)}</code>)</span>
                   <span class="software-reviewer-status ${a.revokedAt ? 'is-revoked' : 'is-active'}">${a.revokedAt ? 'Revoked' : 'Active'}</span>
-                </li>`,
-                  )
+                </li>`;
+                  })
                   .join('')}</ul>`
               : '<p>No reviewers currently assigned.</p>'
           }
@@ -2338,10 +2521,12 @@ export async function stagingOrganizationSessionPageGet(
         {
           organizationId: organizationId.toLowerCase(),
           organizationName: organization.name,
-          role: membership.role,
+          role: context.isOwner ? 'cto' : membership.role,
           email: identity.email ?? '',
           csrf: csrfToken,
           active: 'assessments',
+          theme: readRequestTheme(request),
+          currentPath: `/r23/organizations/${organizationId.toLowerCase()}/sessions/${encodeURIComponent(s.sessionId)}`,
         },
       ),
       context.refreshedSessionCookie,
@@ -3698,6 +3883,7 @@ type RawStagingEvidencePayload = {
     recordedAt: string;
   }>;
   aiInteractions?: R27Evidence['aiInteractions'];
+  executions?: R27Evidence['executions'];
   captureLimitation?: string;
 };
 
@@ -3896,23 +4082,23 @@ function mapStagingEvidenceToR27(
       provenance: 'hirearchy.candidate_session_events',
     })),
     aiInteractions: Array.isArray(raw.aiInteractions) ? raw.aiInteractions : [],
-    executions: [],
+    executions: Array.isArray(raw.executions) ? raw.executions : [],
     pagination: {
       limit,
       nextAfterSequence,
     },
     availability: {
-      terminal: 'unavailable',
+      terminal:
+        Array.isArray(raw.executions) && raw.executions.length > 0
+          ? 'available'
+          : 'unavailable',
       ai:
         Array.isArray(raw.aiInteractions) && raw.aiInteractions.length > 0
           ? 'available'
           : 'unavailable',
       verification: 'unavailable',
       history: 'metadata_only',
-      limitations: [
-        raw.captureLimitation ??
-          'Candidate execution is disabled in this staging lane; no new candidate work is being captured.',
-      ],
+      limitations: raw.captureLimitation ? [raw.captureLimitation] : [],
     },
   };
 }
@@ -4102,7 +4288,7 @@ async function loadHiringAiReviewGuardAndContext(
                 requiredPlan: 'ultra',
                 currentPlan: plan.planTier,
                 message:
-                  'AI Candidate Review with Kimi K3.1 Pro requires the Ultra plan. Upgrade in Team & Plan settings.',
+                  'AI Candidate Review requires the Ultra plan. See Upgrade for plan options.',
               },
             },
             {
@@ -5193,15 +5379,17 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
       'Self-service registration disabled',
       `
         <section aria-labelledby="gated-signup-heading">
-        <h1 id="gated-signup-heading">Self-service registration disabled</h1>
-          <p>Public self-service signup is gated off in this environment. Registration will open when self-service release gates are met.</p>
-          <div role="note" aria-label="Environment restrictions">
-            <p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>).</p>
-          </div>
+          <h1 id="gated-signup-heading">Self-service registration disabled</h1>
+          <p>Account signup isn&apos;t open here yet. Ask your workspace admin for an invite link.</p>
+          <details class="software-tech-details"><summary>Environment details</summary><p>Automated email delivery is off (<code>emailDeliveryEnabled: false</code>).</p></details>
           <p><a href="/r23/login">Return to sign in</a></p>
         </section>
       `,
       403,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/signup',
     );
   }
 
@@ -5209,14 +5397,22 @@ export async function stagingSignupGet(request: Request): Promise<Response> {
   const emailParam = url.searchParams.get('email') ?? '';
   const deliveryNotice = isFounderUatEnabled()
     ? 'A confirmation message will appear in the local inbox after you sign up. No email leaves this machine.'
-    : '<p><strong>Environment notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). After registration, verify your email to activate your account.</p>';
+    : '<p>Email isn&apos;t connected here yet — verify your account directly after signing up.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details>';
 
   return htmlResponse(
     'Create your account',
     `
-      <section aria-labelledby="signup-heading">
+      <section class="software-bootstrap-card" aria-labelledby="signup-heading">
+        <ol class="software-bootstrap-steps" aria-label="Workspace setup progress">
+          <li data-step-state="active" aria-current="step"><span class="software-bootstrap-step-badge" aria-hidden="true">1</span><span>1. Account</span></li>
+          <li data-step-state="upcoming"><span class="software-bootstrap-step-badge" aria-hidden="true">2</span><span>2. Workspace</span></li>
+          <li data-step-state="upcoming"><span class="software-bootstrap-step-badge" aria-hidden="true">3</span><span>3. First Assessment</span></li>
+        </ol>
         <h1 id="signup-heading">Create your Hirearchy account</h1>
-        <div role="note" aria-label="Environment notice">${deliveryNotice}</div>
+        <div class="software-owner-note" role="note" aria-label="Environment notice">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 9h.01"></path><path d="M11 12h1v4h1"></path></svg>
+          <div>${deliveryNotice}</div>
+        </div>
         <form action="/r23/signup" method="post">
           <label for="email">Work email</label>
           <input id="email" name="email" type="email" autocomplete="email" required maxlength="320" value="${safeHtml(emailParam)}" placeholder="you@company.com">
@@ -5242,11 +5438,16 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
     process.env.HIREARCHY_SELF_SERVICE_ONBOARDING_ENABLED === 'true';
 
   if (!enabled) {
-    return htmlResponse(
-      'Self-service registration disabled',
+    const response = htmlResponse(
+      'Create your account',
       '<p role="alert">Self-service onboarding is disabled in this environment.</p><p><a href="/r23/login">Return to sign in</a></p>',
       403,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/signup',
     );
+    return response;
   }
 
   try {
@@ -5260,6 +5461,10 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
         'Create your account',
         '<p role="alert">Invalid email or password (password must be at least 6 characters).</p><p><a href="/r23/signup">Try again</a></p>',
         400,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        '/r23/signup',
       );
     }
 
@@ -5291,6 +5496,10 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
         'Create your account',
         `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Signup failed'))}</p><p><a href="/r23/signup">Try again</a></p>`,
         authResponse.status,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        '/r23/signup',
       );
     }
 
@@ -5299,7 +5508,7 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
       : null;
     const confirmation = inboxUrl
       ? `<p>Open the local inbox to confirm your email and finish setting up your account.</p><p><a href="${safeHtml(inboxUrl)}">Open local inbox for ${safeHtml(email)}</a></p>`
-      : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> We did not send an email because SMTP is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Do not wait for an inbox message.</p></div><p>Please proceed to verify your email address before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
+      : `<div role="note" aria-label="Email delivery notice"><p>Email isn&apos;t connected here, so we didn&apos;t send a confirmation message.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details></div><p>Verify your email below before signing in.</p><p><a href="/r23/verify-email?email=${encodeURIComponent(email)}">Verify email address now</a></p>`;
 
     return htmlResponse(
       'Confirm your email',
@@ -5313,6 +5522,11 @@ export async function stagingSignupPost(request: Request): Promise<Response> {
           </div>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/signup',
     );
   } catch (error) {
     return failureResponse(request, error);
@@ -5394,6 +5608,11 @@ export async function stagingVerifyEmailGet(
           <p><a href="/r23/login">Return to sign in</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      '/r23/verify-email',
     );
   }
 
@@ -5423,12 +5642,17 @@ export async function stagingVerifyEmailGet(
         return htmlResponse(
           'Email confirmed',
           `
-            <section aria-labelledby="confirmed-heading">
-              <h2 id="confirmed-heading">Email verified successfully</h2>
-              <p>Your identity has been confirmed. You may now sign in and set up your organization.</p>
-              <p><a href="/r23/login">Proceed to sign in</a></p>
-            </section>
-          `,
+          <section aria-labelledby="confirmed-heading">
+            <h2 id="confirmed-heading">Email verified successfully</h2>
+            <p>Your account is confirmed. Sign in below to continue.</p>
+            <p><a href="/r23/login">Proceed to sign in</a></p>
+          </section>
+        `,
+          200,
+          securityHeaders(),
+          undefined,
+          readRequestTheme(request),
+          '/r23/verify-email',
         );
       }
     } catch {
@@ -5442,17 +5666,22 @@ export async function stagingVerifyEmailGet(
       <section aria-labelledby="verify-heading">
         <h1 id="verify-heading">Confirm your email address</h1>
         <div role="note" aria-label="Verification instructions">
-          <p>Enter the verification token provided for your account to confirm your email.</p>
+          <p>Enter the verification code for your account to confirm your email.</p>
         </div>
         <form action="/r23/verify-email" method="post">
-          <label for="token">Verification token</label>
-          <input id="token" name="token" type="text" required placeholder="Verification token" value="${safeHtml(token ?? '')}">
+          <label for="token">Verification code</label>
+          <input id="token" name="token" type="text" required placeholder="Verification code" value="${safeHtml(token ?? '')}">
           <input type="hidden" name="type" value="${safeHtml(type)}">
           <button type="submit">Confirm email</button>
         </form>
         <p><a href="/r23/login">Return to sign in</a></p>
       </section>
     `,
+    200,
+    securityHeaders(),
+    undefined,
+    readRequestTheme(request),
+    '/r23/verify-email',
   );
 }
 
@@ -5558,10 +5787,53 @@ export async function stagingVerifyEmailPost(
   }
 }
 
+function resolveRecoveryDestination(
+  audienceValue: unknown,
+  nextValue: unknown,
+): Readonly<{
+  isCandidate: boolean;
+  next: string | null;
+  signInPath: string;
+  recoverPath: string;
+  resetPasswordPath: string;
+  mailPath: string;
+}> {
+  const isCandidate =
+    isHiringPlatformEnabled() &&
+    typeof audienceValue === 'string' &&
+    audienceValue.trim() === 'candidate';
+  const next = isCandidate ? candidateEntryPath(nextValue) : null;
+  const mailQuery = new URLSearchParams();
+  if (isCandidate) mailQuery.set('audience', 'candidate');
+  if (next) mailQuery.set('next', next);
+  return {
+    isCandidate,
+    next,
+    signInPath: isCandidate ? candidateSignInPath(next) : '/r23/login',
+    recoverPath: isCandidate ? candidateRecoveryPath(next) : '/r23/recover',
+    resetPasswordPath: isCandidate
+      ? candidateResetPasswordPath(next)
+      : '/r23/reset-password',
+    mailPath: mailQuery.size ? `/r23/mail?${mailQuery}` : '/r23/mail',
+  };
+}
+
 export function stagingRecoverGet(request?: Request): Response {
+  const url = request ? new URL(request.url) : null;
+  const dest = resolveRecoveryDestination(
+    url?.searchParams.get('audience'),
+    url?.searchParams.get('next'),
+  );
   const recoveryNotice = isFounderUatEnabled()
     ? '<p>Recovery messages for this local test appear in the local inbox. No email leaves this machine.</p>'
-    : '<p><strong>Notice:</strong> Automated email delivery is disabled in this environment (<code>emailDeliveryEnabled: false</code>). Recovery tokens are generated by the identity provider.</p>';
+    : '<p>Reset emails aren&apos;t sent automatically in this environment. Ask your admin for a reset code.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details>';
+  const hiddenInputs = dest.isCandidate
+    ? `<input type="hidden" name="audience" value="candidate">${
+        dest.next
+          ? `<input type="hidden" name="next" value="${safeHtml(dest.next)}">`
+          : ''
+      }`
+    : '';
   return htmlResponse(
     'Reset your password',
     `
@@ -5569,18 +5841,20 @@ export function stagingRecoverGet(request?: Request): Response {
         <h1 id="recover-heading">Request password recovery</h1>
         <div role="note" aria-label="Recovery instructions">${recoveryNotice}</div>
         <form action="/r23/recover" method="post">
+          ${hiddenInputs}
           <label for="email">Account email</label>
           <input id="email" name="email" type="email" autocomplete="email" required maxlength="320">
           <button type="submit">Request password recovery</button>
         </form>
-        <p><a href="/r23/login">Return to sign in</a></p>
+        <p><a href="${safeHtml(dest.signInPath)}">${dest.isCandidate ? 'Return to candidate sign in' : 'Return to sign in'}</a></p>
       </section>
     `,
     200,
     securityHeaders(),
     undefined,
     readRequestTheme(request),
-    '/r23/recover',
+    dest.recoverPath,
+    dest.signInPath,
   );
 }
 
@@ -5588,8 +5862,9 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
   try {
     const authConfig = resolveAuthAuthConfig();
     const body = await parseBody(request, false);
-    allowedFields(body, ['email']);
+    allowedFields(body, ['email', 'audience', 'next']);
     const email = requiredText(body, 'email', 320);
+    const dest = resolveRecoveryDestination(body.audience, body.next);
 
     const authResponse = await fetch(
       new URL('/recover', authConfig.authUrl).toString(),
@@ -5611,17 +5886,32 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
       > | null;
       return htmlResponse(
         'Reset your password',
-        `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Password recovery request failed'))}</p><p><a href="/r23/recover">Try again</a></p>`,
+        `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Password recovery request failed'))}</p><p><a href="${safeHtml(dest.recoverPath)}">Try again</a></p>`,
         authResponse.status,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        dest.recoverPath,
+        dest.signInPath,
       );
     }
 
-    const inboxUrl = isFounderUatEnabled()
+    const baseInboxUrl = isFounderUatEnabled()
       ? founderUatMailInboxUrl(email.trim().toLowerCase())
       : null;
+    const inboxUrl = (() => {
+      if (!baseInboxUrl) return null;
+      if (!dest.isCandidate) return baseInboxUrl;
+      const inboxQuery = new URLSearchParams({
+        email: email.trim().toLowerCase(),
+        audience: 'candidate',
+      });
+      if (dest.next) inboxQuery.set('next', dest.next);
+      return `/r23/mail?${inboxQuery}`;
+    })();
     const recoveryNextStep = inboxUrl
       ? `<p>Open the local inbox and choose the recovery message for this account.</p><p><a href="${safeHtml(inboxUrl)}">Open local inbox for ${safeHtml(email)}</a></p>`
-      : `<div role="note" aria-label="Email delivery notice"><p><strong>Automated email delivery is disabled:</strong> Automated recovery emails are not sent in this environment (<code>emailDeliveryEnabled: false</code>).</p></div><p>If you have received a recovery token, you can set your new password below:</p><p><a href="/r23/reset-password">Enter recovery token and set new password</a></p>`;
+      : `<div role="note" aria-label="Email delivery notice"><p>Reset emails aren&apos;t sent in this environment.</p><details class="software-tech-details"><summary>Environment details</summary><p><code>emailDeliveryEnabled: false</code></p></details></div><p>If you have a reset code, enter it below to set your new password:</p><p><a href="${safeHtml(dest.resetPasswordPath)}">Enter reset code and set new password</a></p>`;
 
     return htmlResponse(
       'Password recovery initiated',
@@ -5630,9 +5920,15 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
           <h1 id="recovery-receipt-title">Password recovery initiated</h1>
           <p>A password recovery request has been processed for <strong>${safeHtml(email)}</strong>.</p>
           ${recoveryNextStep}
-          <p><a href="/r23/login">Return to sign in</a></p>
+          <p><a href="${safeHtml(dest.signInPath)}">${dest.isCandidate ? 'Return to candidate sign in' : 'Return to sign in'}</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      dest.recoverPath,
+      dest.signInPath,
     );
   } catch (error) {
     return failureResponse(request, error);
@@ -5640,8 +5936,14 @@ export async function stagingRecoverPost(request: Request): Promise<Response> {
 }
 
 export function stagingResetPasswordGet(request: Request): Response {
+  const url = new URL(request.url);
   if (isFounderUatEnabled()) {
-    const error = new URL(request.url).searchParams.get('error');
+    const recoveryCookie = readFounderUatRecovery(request);
+    const dest = resolveRecoveryDestination(
+      url.searchParams.get('audience') ?? recoveryCookie?.audience,
+      url.searchParams.get('next') ?? recoveryCookie?.next,
+    );
+    const error = url.searchParams.get('error');
     const errorMessage =
       error === 'expired'
         ? '<p role="alert">This recovery message has expired or was already used. Request a new recovery message.</p>'
@@ -5650,6 +5952,13 @@ export function stagingResetPasswordGet(request: Request): Response {
           : error === 'password'
             ? '<p role="alert">Choose a different password that meets the account requirements.</p>'
             : '';
+    const hiddenInputs = dest.isCandidate
+      ? `<input type="hidden" name="audience" value="candidate">${
+          dest.next
+            ? `<input type="hidden" name="next" value="${safeHtml(dest.next)}">`
+            : ''
+        }`
+      : '';
     return htmlResponse(
       'Set new password',
       `
@@ -5658,50 +5967,64 @@ export function stagingResetPasswordGet(request: Request): Response {
           ${errorMessage}
           <p>Choose a new password, then sign in again.</p>
           <form action="/api/founder-uat/auth/reset-password" method="post">
+            ${hiddenInputs}
             <label for="password">New password</label>
             <input id="password" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="1024">
             <button type="submit">Update password</button>
           </form>
-          <p><a href="/r23/mail">Return to local inbox</a></p>
-          <p><a href="/r23/recover">Request another recovery message</a></p>
-          <p><a href="/r23/login">Cancel and return to sign in</a></p>
+          <p><a href="${safeHtml(dest.mailPath)}">Return to local inbox</a></p>
+          <p><a href="${safeHtml(dest.recoverPath)}">Request another recovery message</a></p>
+          <p><a href="${safeHtml(dest.signInPath)}">${dest.isCandidate ? 'Cancel and return to candidate sign in' : 'Cancel and return to sign in'}</a></p>
         </section>
       `,
       200,
       securityHeaders(),
       undefined,
       readRequestTheme(request),
-      '/r23/reset-password',
+      dest.resetPasswordPath,
+      dest.signInPath,
     );
   }
 
-  const url = new URL(request.url);
+  const dest = resolveRecoveryDestination(
+    url.searchParams.get('audience'),
+    url.searchParams.get('next'),
+  );
   const token =
     url.searchParams.get('token') ?? url.searchParams.get('access_token') ?? '';
+  const hiddenInputs = dest.isCandidate
+    ? `<input type="hidden" name="audience" value="candidate">${
+        dest.next
+          ? `<input type="hidden" name="next" value="${safeHtml(dest.next)}">`
+          : ''
+      }`
+    : '';
 
   return htmlResponse(
     'Set new password',
     `
       <section aria-labelledby="reset-password-heading">
         <h1 id="reset-password-heading">Set new password</h1>
-        <div role="note" aria-label="Quarantine notice">
-          <p><strong>Security notice:</strong> Password reset uses a dedicated recovery credential. After resetting your password, you will be directed to sign in with your standard credentials.</p>
+        <div role="note" aria-label="Reset note">
+          <p><strong>Security notice:</strong> Enter your reset code and choose a new password, then sign in again.</p>
         </div>
         <form action="/r23/reset-password" method="post">
-          <label for="token">Recovery token / access token</label>
+          ${hiddenInputs}
+          <label for="token">Reset code</label>
           <input id="token" name="token" type="password" required value="${safeHtml(token)}">
           <label for="password">New password</label>
           <input id="password" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="1024">
           <button type="submit">Update password</button>
         </form>
-        <p><a href="/r23/login">Cancel and return to sign in</a></p>
+        <p><a href="${safeHtml(dest.signInPath)}">${dest.isCandidate ? 'Cancel and return to candidate sign in' : 'Cancel and return to sign in'}</a></p>
       </section>
     `,
     200,
     securityHeaders(),
     undefined,
     readRequestTheme(request),
-    '/r23/reset-password',
+    dest.resetPasswordPath,
+    dest.signInPath,
   );
 }
 
@@ -5718,14 +6041,15 @@ export async function stagingResetPasswordPost(
     }
 
     const body = await parseBody(request, false);
-    allowedFields(body, ['token', 'password']);
+    allowedFields(body, ['token', 'password', 'audience', 'next']);
     const token = requiredText(body, 'token', 16384);
     const password = requiredText(body, 'password', 1024);
+    const dest = resolveRecoveryDestination(body.audience, body.next);
 
     if (password.length < 6) {
       return htmlResponse(
         'Set new password',
-        '<p role="alert">New password must be at least 6 characters.</p><p><a href="/r23/reset-password">Try again</a></p>',
+        `<p role="alert">New password must be at least 6 characters.</p><p><a href="${safeHtml(dest.resetPasswordPath)}">Try again</a></p>`,
         400,
       );
     }
@@ -5736,7 +6060,7 @@ export async function stagingResetPasswordPost(
     if (identity.isRecovery !== true) {
       return htmlResponse(
         'Recovery credential required',
-        '<p role="alert">A valid recovery credential is required for password reset.</p><p><a href="/r23/recover">Request recovery</a></p>',
+        `<p role="alert">A valid recovery credential is required for password reset.</p><p><a href="${safeHtml(dest.recoverPath)}">Request recovery</a></p>`,
         403,
       );
     }
@@ -5762,8 +6086,13 @@ export async function stagingResetPasswordPost(
       > | null;
       return htmlResponse(
         'Set new password',
-        `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Password update failed'))}</p><p><a href="/r23/reset-password">Try again</a></p>`,
+        `<p role="alert">${safeHtml(String(data?.msg ?? data?.error_description ?? 'Password update failed'))}</p><p><a href="${safeHtml(dest.resetPasswordPath)}">Try again</a></p>`,
         updateResponse.status,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
+        dest.resetPasswordPath,
+        dest.signInPath,
       );
     }
 
@@ -5773,9 +6102,15 @@ export async function stagingResetPasswordPost(
         <section aria-labelledby="reset-complete-heading">
           <h1 id="reset-complete-heading">Password Updated Successfully</h1>
           <p>Your password has been changed. Please sign in with your new credentials.</p>
-          <p><a href="/r23/login">Sign in now</a></p>
+          <p><a href="${safeHtml(dest.signInPath)}">Sign in now</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
+      dest.resetPasswordPath,
+      dest.signInPath,
     );
   } catch (error) {
     return failureResponse(request, error);
@@ -5813,18 +6148,708 @@ export async function stagingOrganizationBootstrapPost(
           { organizationId },
         );
 
+        const attr = readAttributionCookie(request);
+        recordServerTelemetryEvent({
+          eventName: 'acquisition.org_created',
+          category: 'acquisition',
+          actorType: 'team_member',
+          anonymousId: attr?.anonymousId,
+          attribution: attr,
+          organizationId,
+          principalId: identity.subjectId,
+          route: '/r23/organization/bootstrap',
+          properties: {
+            hiringPlatform: isHiringPlatformEnabled(),
+          },
+        });
+
         const updatedSession: StagingBrowserSessionPayload = Object.freeze({
           ...session,
           selectedOrganizationId: organizationId,
         });
 
-        return redirect(origin, `/r23/organizations/${organizationId}`, [
+        const landingPath = isHiringPlatformEnabled()
+          ? `/r23/organizations/${organizationId}/candidates`
+          : `/r23/organizations/${organizationId}`;
+
+        return redirect(origin, landingPath, [
           cookieHeader(
             R23_SESSION_COOKIE,
             encryptSessionPayload(updatedSession, sessionKey),
             true,
           ),
+          ...(isHiringPlatformEnabled()
+            ? [
+                `hirearchy-last-org=v1.${Buffer.from(organizationId, 'utf8').toString('base64url')}; Path=/; Max-Age=2592000; SameSite=Lax`,
+              ]
+            : []),
         ]);
+      },
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+const ACCOUNT_PATH = '/r23/account';
+const accountNotices = {
+  update_account_profile: 'Display name saved.',
+  update_avatar: 'Profile photo saved.',
+  remove_avatar: 'Profile photo removed.',
+  email_requested:
+    'Confirm the change from both email addresses. Your current email remains active until then.',
+  email_same: 'That is already your sign-in email.',
+  email_unavailable:
+    'The confirmation could not be sent. Check the address or try again in a minute.',
+  invalid_avatar: 'Choose a JPG, PNG or WebP under 2 MB.',
+} as const;
+
+export async function stagingAccountGet(request: Request): Promise<Response> {
+  try {
+    if (!isHiringPlatformEnabled()) throw new StagingBadRequest();
+    const csrf = requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({
+        session,
+        config,
+        identity,
+        csrfToken,
+        refreshedSessionCookie,
+      }) => {
+        const profile = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'account.profile.get',
+          {},
+        )) as AccountProfile;
+        const email = profile.email || identity.email || '';
+        const url = new URL(request.url);
+        const notice = url.searchParams.get('notice');
+        const message =
+          notice && Object.hasOwn(accountNotices, notice)
+            ? accountNotices[notice as keyof typeof accountNotices]
+            : null;
+        const needsAttention =
+          notice === 'invalid_avatar' ||
+          notice === 'email_unavailable' ||
+          notice === 'email_same';
+        const csrfField = `<input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">`;
+        const displayTitle = profile.displayName || email || 'Account';
+        const avatar = profile.avatarWebp
+          ? `<img width="72" height="72" alt="" src="data:image/webp;base64,${safeHtml(profile.avatarWebp)}">`
+          : `<span aria-hidden="true">${safeHtml(displayTitle.slice(0, 1).toUpperCase())}</span>`;
+
+        let workspace: SoftwareWorkspace | undefined;
+        const organizationId = session.selectedOrganizationId;
+        if (organizationId) {
+          try {
+            const org = await fetchOrganizationContext(
+              config,
+              identity,
+              organizationId,
+            );
+            const role = org.isOwner ? 'cto' : org.role;
+            const plan = (await dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              'hiring.plan.get',
+              { organizationId },
+            )) as OrganizationPlanSummary;
+            workspace = {
+              organizationId,
+              role,
+              email,
+              csrf: csrfToken,
+              active: 'account',
+              currentPath: ACCOUNT_PATH,
+              organizationName: resolveOrgDisplay(organizationId, {
+                role,
+                displayName: org.displayName,
+              }).name,
+              planTier: plan.planTier,
+              planBadge: formatPlanBadge(plan),
+              theme: readRequestTheme(request),
+            };
+          } catch (error) {
+            if (errorDetails(error).status !== 403) throw error;
+          }
+        }
+
+        const workspaceRolePill = workspace
+          ? `<span class="hiring-pill hiring-pill-plum">${safeHtml(workspace.organizationName)} · ${safeHtml(resolveWorkspaceRoleLabel(workspace.role, true))}</span>`
+          : '';
+        const workspaceSignInRow = workspace
+          ? `<div class="team-account-sign-in-row"><div><h3>Active workspace</h3><p>${safeHtml(workspace.organizationName)}</p></div><a class="hiring-btn" href="/r23/organizations">Switch workspace</a></div>`
+          : '';
+
+        const accountPhotoScript = `
+(function () {
+  var dropzone = document.getElementById('account-photo-dropzone');
+  var input = document.getElementById('account-photo');
+  var preview = document.getElementById('account-photo-preview');
+  var fileNameEl = document.getElementById('account-photo-filename');
+  if (!dropzone || !input) return;
+  function updatePreview(file) {
+    if (!file) return;
+    if (fileNameEl) fileNameEl.textContent = file.name;
+    dropzone.setAttribute('data-has-file', 'true');
+    if (preview && typeof FileReader !== 'undefined' && file.type && file.type.indexOf('image/') === 0) {
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        if (!ev.target || typeof ev.target.result !== 'string') return;
+        preview.textContent = '';
+        var img = document.createElement('img');
+        img.width = 52;
+        img.height = 52;
+        img.alt = '';
+        img.src = ev.target.result;
+        preview.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  input.addEventListener('change', function () {
+    updatePreview(input.files && input.files[0]);
+  });
+  dropzone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    dropzone.setAttribute('data-dragover', 'true');
+  });
+  dropzone.addEventListener('dragleave', function () {
+    dropzone.removeAttribute('data-dragover');
+  });
+  dropzone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropzone.removeAttribute('data-dragover');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      try {
+        input.files = e.dataTransfer.files;
+      } catch (err) {}
+      updatePreview(e.dataTransfer.files[0]);
+    }
+  });
+})();
+`;
+
+        const content = `<div class="team-account-page">
+        <header class="software-page-heading team-account-header">
+          <div>
+            <h1>My account</h1>
+            <p class="team-page-subtitle">Manage your profile identity, avatar, and sign-in security.</p>
+          </div>
+        </header>
+        ${message ? `<p class="hiring-banner ${needsAttention ? 'hiring-banner-warning' : 'hiring-banner-success'}" role="${needsAttention ? 'alert' : 'status'}">${message}</p>` : ''}
+        <section class="team-account-hero" aria-label="Account summary">
+          <div class="team-account-avatar">${avatar}</div>
+          <div class="team-account-hero-meta">
+            <strong>${safeHtml(displayTitle)}</strong>
+            <span>${safeHtml(email)}</span>
+            ${workspaceRolePill}
+          </div>
+        </section>
+        <div class="team-account-grid">
+          <section class="software-settings-section team-account-profile" aria-labelledby="team-account-profile-title">
+            <header class="software-section-intro">
+              <h2 id="team-account-profile-title">Profile</h2>
+              <p>How your name and avatar appear across reviews, comments, and the problem library.</p>
+            </header>
+            <div class="team-account-photo-block">
+              <form class="team-account-photo-form" action="${ACCOUNT_PATH}" method="post" enctype="multipart/form-data">
+                ${csrfField}<input type="hidden" name="action" value="update_avatar">
+                <div class="team-account-dropzone" id="account-photo-dropzone">
+                  <div class="team-account-dropzone-preview" id="account-photo-preview" aria-hidden="true">${avatar}</div>
+                  <div class="team-account-dropzone-body">
+                    <label for="account-photo" class="team-account-dropzone-label">Profile photo</label>
+                    <span id="account-photo-filename" class="team-account-dropzone-hint">Drop an image or choose a file</span>
+                    <input id="account-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required aria-describedby="photo-help">
+                  </div>
+                  <button type="submit" class="hiring-btn hiring-btn-primary">Save photo</button>
+                </div>
+              </form>
+              <div class="team-account-photo-meta">
+                <p class="software-field-help" id="photo-help">JPG, PNG or WebP, up to 2 MB.</p>
+                ${profile.avatarWebp ? `<form class="team-account-remove-photo" action="${ACCOUNT_PATH}" method="post">${csrfField}<input type="hidden" name="action" value="remove_avatar"><button type="submit">Remove photo</button></form>` : ''}
+              </div>
+            </div>
+            <form class="team-account-field-form" action="${ACCOUNT_PATH}" method="post">
+              ${csrfField}<input type="hidden" name="action" value="update_account_profile">
+              <div class="hiring-field"><label for="account-display-name">Display name</label><input id="account-display-name" name="displayName" value="${safeHtml(profile.displayName || '')}" maxlength="100" autocomplete="name" required></div>
+              <button type="submit" class="hiring-btn hiring-btn-primary">Save name</button>
+            </form>
+          </section>
+          <section class="software-settings-section team-account-security" aria-labelledby="team-account-security-title">
+            <header class="software-section-intro">
+              <h2 id="team-account-security-title">Sign-in details</h2>
+              <p>Credentials and workspace session controls.</p>
+            </header>
+            <div class="team-account-rows">
+              <div class="team-account-email-block">
+                <div class="team-account-sign-in-row"><div><h3>Email address</h3><p>${safeHtml(email)}</p></div></div>
+                <details class="hiring-disclosure team-account-email-change"${needsAttention && notice !== 'invalid_avatar' ? ' open' : ''}>
+                  <summary>Change email</summary>
+                  <p>Confirm the change at your current and new address.</p>
+                  <form class="team-account-field-form" action="${ACCOUNT_PATH}" method="post">
+                    ${csrfField}<input type="hidden" name="action" value="change_email">
+                    <div class="hiring-field"><label for="account-new-email">New email address</label><input id="account-new-email" name="email" type="email" autocomplete="email" maxlength="254" required></div>
+                    <button type="submit" class="hiring-btn hiring-btn-primary">Send confirmation</button>
+                  </form>
+                </details>
+              </div>
+              <div class="team-account-sign-in-row"><div><h3>Password</h3><p>Send a verification link to reset your password.</p></div><a class="hiring-btn" href="/r23/recover">Change password</a></div>
+              ${workspaceSignInRow}
+            </div>
+          </section>
+        </div>
+      </div><script>${accountPhotoScript}</script>`;
+        const headers = securityHeaders(
+          scriptCspDirectives(accountPhotoScript, false),
+        );
+        headers.set(
+          'Content-Security-Policy',
+          `${headers.get('Content-Security-Policy')}; img-src data:`,
+        );
+        return attachRefreshedCookie(
+          htmlResponse(
+            'My account',
+            content,
+            200,
+            headers,
+            workspace,
+            readRequestTheme(request),
+            ACCOUNT_PATH,
+          ),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+export async function stagingAccountPost(request: Request): Promise<Response> {
+  try {
+    if (!isHiringPlatformEnabled()) throw new StagingBadRequest();
+    const origin = requireSameOrigin(request);
+    const multipart =
+      request.headers
+        .get('content-type')
+        ?.startsWith('multipart/form-data;') === true;
+    const body = await parseBody(
+      request,
+      false,
+      multipart ? MAX_AVATAR_BYTES + 8192 : MAX_BODY_BYTES,
+      multipart,
+    );
+    const csrf = requiredText(body, 'csrf', 100);
+    const action = requiredText(body, 'action', 40);
+    if (multipart !== (action === 'update_avatar'))
+      throw new StagingBadRequest();
+
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ session, config, identity, refreshedSessionCookie }) => {
+        let notice: keyof typeof accountNotices;
+        if (action === 'update_account_profile') {
+          allowedFields(body, ['csrf', 'action', 'displayName']);
+          const displayName = requiredText(body, 'displayName', 100).trim();
+          if (!displayName) throw new StagingBadRequest();
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'account.profile.update',
+            { displayName },
+          );
+          notice = action;
+        } else if (action === 'update_avatar' || action === 'remove_avatar') {
+          allowedFields(
+            body,
+            action === 'update_avatar'
+              ? ['csrf', 'action', 'photo']
+              : ['csrf', 'action'],
+          );
+          const avatarWebp =
+            action === 'update_avatar'
+              ? await encodeAccountAvatar(body.photo)
+              : null;
+          if (action === 'update_avatar' && avatarWebp === null) {
+            notice = 'invalid_avatar';
+          } else {
+            await dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              'account.avatar.update',
+              { avatarWebp },
+            );
+            notice = action;
+          }
+        } else if (action === 'change_email') {
+          allowedFields(body, ['csrf', 'action', 'email']);
+          const email = requiredText(body, 'email', 254).trim().toLowerCase();
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+            throw new StagingBadRequest();
+          if (email === identity.email?.toLowerCase()) {
+            notice = 'email_same';
+          } else {
+            const sent = await requestR23EmailChange(
+              config.auth,
+              session.accessToken,
+              email,
+              new URL(ACCOUNT_PATH, origin).toString(),
+            );
+            notice = sent ? 'email_requested' : 'email_unavailable';
+          }
+        } else {
+          throw new StagingBadRequest();
+        }
+        return attachRefreshedCookie(
+          redirect(origin, `${ACCOUNT_PATH}?notice=${notice}`),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
+}
+
+export async function stagingOrganizationPlanGet(
+  request: Request,
+  targetOrganizationId: string,
+  surface: 'plan' | 'upgrade',
+): Promise<Response> {
+  try {
+    if (!isHiringPlatformEnabled() || !UUID.test(targetOrganizationId))
+      throw new StagingBadRequest();
+    const organizationId = targetOrganizationId.toLowerCase();
+    const orgBase = `/r23/organizations/${organizationId}`;
+    const csrf = requiredOpaqueCookie(request, R23_CSRF_COOKIE);
+
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({
+        session,
+        config,
+        identity,
+        csrfToken,
+        refreshedSessionCookie,
+      }) => {
+        if (session.selectedOrganizationId !== organizationId)
+          throw new StagingForbidden();
+        const org = await fetchOrganizationContext(
+          config,
+          identity,
+          organizationId,
+        );
+        const plan = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'hiring.plan.get',
+          { organizationId },
+        )) as OrganizationPlanSummary;
+        const url = new URL(request.url);
+        const isUltra = plan.planTier === 'ultra';
+        const page = isUltra ? 'plan' : 'upgrade';
+        const path = `${orgBase}/${page}`;
+        if (surface !== page) {
+          return attachRefreshedCookie(
+            redirect(resolvePublicOrigin(request), `${path}${url.search}`),
+            refreshedSessionCookie,
+          );
+        }
+
+        const canManage = org.role === 'cto' || org.isOwner === true;
+        const canChange = canManage && isFounderUatEnabled();
+        const current = getPlanDefinition(plan.planTier);
+        const currentRank = PAID_PLAN_ORDER.findIndex(
+          (tier) => tier === plan.planTier,
+        );
+        const hasSlots = plan.planTier === 'per_candidate';
+        const slotsPurchased = Math.max(0, plan.candidateCreditsPurchased ?? 0);
+        const slotsRemaining = Math.max(0, plan.candidateCreditsRemaining ?? 0);
+        const slotsUsed = Math.max(0, slotsPurchased - slotsRemaining);
+        const slotMax = slotsPurchased > 0 ? slotsPurchased : 100;
+        const slotProgressValue = hasSlots
+          ? Math.min(slotMax, slotsRemaining)
+          : plan.planTier === 'none'
+            ? 0
+            : 100;
+        const capacity = hasSlots
+          ? `${slotsRemaining} of ${slotsPurchased} candidate slots available`
+          : plan.planTier === 'none'
+            ? 'Activate a plan to issue assessments'
+            : 'Unlimited candidate assessments';
+        const capacityDetail = hasSlots
+          ? `${slotsUsed} used · ${slotsRemaining} remaining`
+          : plan.planTier === 'none'
+            ? '0 active assessment slots'
+            : 'Unlimited capacity included';
+        const actionFor = (tier: (typeof PAID_PLAN_ORDER)[number]) =>
+          currentRank < 0
+            ? 'Choose'
+            : PAID_PLAN_ORDER.indexOf(tier) < currentRank
+              ? 'Downgrade to'
+              : 'Upgrade to';
+        const cards = PAID_PLAN_ORDER.map((tier) => {
+          const definition = getPlanDefinition(tier);
+          const isCurrent = tier === plan.planTier;
+          const isDefaultRecommended = tier === 'pro' && !isCurrent;
+          const statusChip = isCurrent
+            ? '<span class="hiring-pill hiring-pill-plum">Current plan</span>'
+            : isDefaultRecommended
+              ? '<span class="hiring-pill hiring-pill-mint" data-roi-badge>Recommended</span>'
+              : '<span class="hiring-pill hiring-pill-mint" data-roi-badge hidden>Recommended</span>';
+          return `<article class="hiring-plan-card team-plan-card" data-tier="${tier}" data-current="${isCurrent}"${isDefaultRecommended ? ' data-recommended="true"' : ' data-recommended="false"'}>
+          <div class="team-plan-card-title"><h2>${safeHtml(definition.name)}</h2>${statusChip}</div>
+          <p class="team-plan-model">${safeHtml(definition.priceLabel)}</p>
+          <ul>${definition.highlights.map((item) => `<li>${safeHtml(item)}</li>`).join('')}</ul>
+          ${canChange && !isCurrent ? `<a class="hiring-btn ${tier === 'ultra' ? 'hiring-btn-primary' : ''}" href="${path}?target=${tier}#plan-review">${actionFor(tier)} ${safeHtml(definition.name)}</a>` : ''}
+        </article>`;
+        }).join('');
+        const postAction = `${orgBase}/plan`;
+        const csrfField = `<input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">`;
+        const target = url.searchParams.get('target');
+        const slotQuery = url.searchParams.get('slots');
+        const slots =
+          slotQuery && /^\d{1,5}$/.test(slotQuery) ? Number(slotQuery) : 0;
+        const validSlots = slots > 0 && slots <= 10000;
+        let changeReview = '';
+        if (
+          canChange &&
+          isPlanTier(target) &&
+          target !== 'none' &&
+          target !== plan.planTier
+        ) {
+          const nextPlan = getPlanDefinition(target);
+          const nextCapacity =
+            target === 'per_candidate'
+              ? `${Math.max(0, plan.candidateCreditsPurchased - plan.candidateCreditsUsed)} candidate slots available with your saved slot balance.`
+              : 'Unlimited candidate assessments.';
+          changeReview = `<section id="plan-review" class="software-settings-section team-plan-review" aria-labelledby="plan-review-title">
+          <h2 id="plan-review-title">${actionFor(target)} ${safeHtml(nextPlan.name)}</h2>
+          <p>${safeHtml(current.name)} → ${safeHtml(nextPlan.name)}. ${safeHtml(nextCapacity)}${isUltra ? ' AI review summaries and hiring manager fit reports are available on Ultra.' : ''}</p>
+          <form class="hiring-header-actions" action="${postAction}" method="post">
+            ${csrfField}<input type="hidden" name="action" value="save_plan"><input type="hidden" name="planTier" value="${target}">
+            <button type="submit" class="hiring-btn hiring-btn-primary">Confirm plan change</button><a class="hiring-btn" href="${path}">Cancel</a>
+          </form>
+        </section>`;
+        }
+
+        const slotReview =
+          hasSlots && canChange && validSlots
+            ? `<form class="team-plan-slot-review" action="${postAction}" method="post">${csrfField}
+            <input type="hidden" name="action" value="update_slots"><input type="hidden" name="slotMode" value="add"><input type="hidden" name="slotAmount" value="${slots}">
+            <p>Purchased slots will increase from <strong>${plan.candidateCreditsPurchased}</strong> to <strong>${plan.candidateCreditsPurchased + slots}</strong>.</p>
+            <div class="hiring-header-actions"><button type="submit" class="hiring-btn hiring-btn-primary">Add ${slots} ${slots === 1 ? 'slot' : 'slots'}</button><a class="hiring-btn" href="${path}#add-ons">Cancel</a></div>
+          </form>`
+            : '';
+        const slotForm =
+          hasSlots && canChange && !slotReview
+            ? `<form class="team-plan-slot-form hiring-header-actions" method="get" action="${path}#add-ons">
+            <div class="hiring-field"><label for="candidate-slots">Slots to add</label><input id="candidate-slots" name="slots" type="number" min="1" max="10000" required></div>
+            <button type="submit" class="hiring-btn hiring-btn-primary">Review add-on</button>
+          </form>`
+            : '';
+        const notice = url.searchParams.get('notice');
+        const noticeText =
+          notice === 'update_slots'
+            ? 'Candidate slots added.'
+            : notice === 'save_plan' || notice === 'update_plan'
+              ? 'Plan updated.'
+              : '';
+        const title = isUltra ? 'Plan & add-ons' : 'Upgrade';
+        recordServerTelemetryEvent({
+          eventName: 'monetization.upgrade_viewed',
+          category: 'monetization',
+          actorType: 'team_member',
+          organizationId,
+          principalId: org.principalId,
+          planTier: plan.planTier,
+          route: `/r23/organizations/:id/${page}`,
+          properties: {
+            surface: page,
+            canChange,
+          },
+        });
+        const planSubtitle = isUltra
+          ? 'Review your active Ultra subscription, compare tiers, or adjust workspace plan settings.'
+          : 'Protect senior engineering hours. Pay per distinct candidate or unlock unlimited evaluations and advisory AI synthesis.';
+        const roiCalculatorScript = `
+(function () {
+  var root = document.getElementById('team-roi-calculator');
+  if (!root) return;
+  var pairs = [
+    { num: document.getElementById('roi-hires'), range: document.getElementById('roi-hires-range'), min: 1, max: 200, def: 8 },
+    { num: document.getElementById('roi-candidates'), range: document.getElementById('roi-candidates-range'), min: 1, max: 50, def: 6 },
+    { num: document.getElementById('roi-hours'), range: document.getElementById('roi-hours-range'), min: 0.5, max: 8, def: 2.5 },
+    { num: document.getElementById('roi-rate'), range: document.getElementById('roi-rate-range'), min: 40, max: 400, def: 110 }
+  ];
+  var totalOut = document.getElementById('roi-total-assessments');
+  var hoursOut = document.getElementById('roi-hours-saved');
+  var valueOut = document.getElementById('roi-value-saved');
+  var onsiteOut = document.getElementById('roi-onsite-saved');
+  var tierOut = document.getElementById('roi-recommended-tier');
+  var tierNoteOut = document.getElementById('roi-recommended-note');
+  var planCards = document.querySelectorAll('.hiring-plan-card[data-tier]');
+  function clamp(num, min, max, fallback) {
+    if (!Number.isFinite(num)) return fallback;
+    return Math.min(max, Math.max(min, num));
+  }
+  function update() {
+    var hires = clamp(Number(pairs[0].num && pairs[0].num.value), 1, 200, 8);
+    var cands = clamp(Number(pairs[1].num && pairs[1].num.value), 1, 50, 6);
+    var hrs = clamp(Number(pairs[2].num && pairs[2].num.value), 0.5, 8, 2.5);
+    var rate = clamp(Number(pairs[3].num && pairs[3].num.value), 40, 400, 110);
+    var total = Math.round(hires * cands);
+    var savedHrs = Math.round(total * hrs);
+    var savedValue = Math.round(savedHrs * rate);
+    var onsiteHrs = Math.round(total * 0.4 * 3);
+    if (totalOut) totalOut.textContent = String(total);
+    if (hoursOut) hoursOut.textContent = savedHrs.toLocaleString('en-US') + ' hrs/yr';
+    if (valueOut) valueOut.textContent = '$' + savedValue.toLocaleString('en-US') + '/yr';
+    if (onsiteOut) onsiteOut.textContent = onsiteHrs.toLocaleString('en-US') + ' hrs/yr';
+    var recTier = total <= 15 ? 'per_candidate' : total <= 60 ? 'pro' : 'ultra';
+    if (tierOut && tierNoteOut) {
+      if (recTier === 'per_candidate') {
+        tierOut.textContent = 'Per Candidate';
+        tierNoteOut.textContent = 'Best fit for focused hiring (<= 15 distinct candidates/yr) — re-assessments reuse the same candidate slot.';
+      } else if (recTier === 'pro') {
+        tierOut.textContent = 'Pro';
+        tierNoteOut.textContent = 'Best fit for continuous hiring (16–60 candidates/yr) — unlimited assessments with zero per-invite surprises.';
+      } else {
+        tierOut.textContent = 'Ultra';
+        tierNoteOut.textContent = 'Best fit for high-velocity engineering teams (> 60 candidates/yr) — adds advisory AI reviews with timeline deltas and fit reports.';
+      }
+    }
+    planCards.forEach(function (card) {
+      var isRec = card.getAttribute('data-tier') === recTier && card.getAttribute('data-current') !== 'true';
+      card.setAttribute('data-recommended', isRec ? 'true' : 'false');
+      var badge = card.querySelector('[data-roi-badge]');
+      if (badge) badge.hidden = !isRec;
+    });
+  }
+  pairs.forEach(function (p) {
+    if (p.num) {
+      p.num.addEventListener('input', function () {
+        if (p.range) p.range.value = String(clamp(Number(p.num.value), p.min, p.max, p.def));
+        update();
+      });
+    }
+    if (p.range) {
+      p.range.addEventListener('input', function () {
+        if (p.num) p.num.value = p.range.value;
+        update();
+      });
+    }
+  });
+  update();
+})();
+`;
+        const content = `<div class="team-plan-page">
+        <header class="software-page-heading">
+          <div>
+            <h1>${safeHtml(title)}</h1>
+            <p class="team-page-subtitle">${safeHtml(planSubtitle)}</p>
+          </div>
+        </header>
+        ${noticeText ? `<p class="hiring-banner hiring-banner-success" role="status">${noticeText}</p>` : ''}
+        <div class="team-plan-above-fold">
+          <section class="team-plan-current" aria-labelledby="current-plan-title">
+            <div>
+              <p class="team-plan-kicker">Current plan</p>
+              <h2 id="current-plan-title">${safeHtml(current.name)}</h2>
+            </div>
+            <div class="team-plan-meter">
+              <div class="team-plan-capacity">${safeHtml(capacity)}</div>
+              <progress class="team-plan-progress" value="${slotProgressValue}" max="${slotMax}" aria-label="Candidate slot capacity"></progress>
+              <p class="team-plan-capacity-detail">${safeHtml(capacityDetail)}</p>
+            </div>
+            <p class="team-plan-trust-line">Human evaluators remain in full control of every hiring decision.</p>
+          </section>
+          <section class="team-compare-plans" aria-labelledby="compare-plans-title">
+            <h2 id="compare-plans-title">Compare plans</h2>
+            <div class="hiring-plan-grid">${cards}</div>
+            <p class="team-plan-trust-line">No automated candidate scoring. Every tier keeps human evaluators in full control of hiring verdicts.</p>
+            <p class="team-plan-help">${canChange ? 'Demo changes update this workspace without charging a payment method.' : canManage ? 'Plan changes and slot purchases are managed with Hirearchy.' : 'A workspace owner or CTO can change this plan.'}</p>
+          </section>
+        </div>
+        ${changeReview}
+        <section id="team-roi-calculator" class="software-settings-section team-roi-calculator" aria-labelledby="roi-calculator-title">
+          <div class="team-roi-head">
+            <div>
+              <p class="team-plan-kicker">Value &amp; engineering time</p>
+              <h2 id="roi-calculator-title">ROI &amp; Engineering Hours Saved Calculator</h2>
+              <p class="hiring-muted-copy">Estimate senior engineering hours reclaimed from live screening and unstructured code debriefs.</p>
+            </div>
+            <div class="team-roi-recommendation">
+              <span class="hiring-pill hiring-pill-mint">Recommended: <strong id="roi-recommended-tier">Pro</strong></span>
+            </div>
+          </div>
+          <div class="team-roi-inputs">
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-hires">Target hires / year</label><input id="roi-hires" class="team-roi-number" type="number" min="1" max="200" value="8"></div>
+              <input id="roi-hires-range" class="team-roi-slider" type="range" min="1" max="200" value="8" aria-label="Target hires per year">
+            </div>
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-candidates">Candidates / hire</label><input id="roi-candidates" class="team-roi-number" type="number" min="1" max="50" value="6"></div>
+              <input id="roi-candidates-range" class="team-roi-slider" type="range" min="1" max="50" value="6" aria-label="Candidates per hire">
+            </div>
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-hours">Hours saved / candidate</label><input id="roi-hours" class="team-roi-number" type="number" min="0.5" max="8" step="0.5" value="2.5"></div>
+              <input id="roi-hours-range" class="team-roi-slider" type="range" min="0.5" max="8" step="0.5" value="2.5" aria-label="Hours saved per candidate">
+            </div>
+            <div class="hiring-field team-roi-field">
+              <div class="team-roi-field-head"><label for="roi-rate">Senior eng hourly cost ($)</label><input id="roi-rate" class="team-roi-number" type="number" min="40" max="400" step="5" value="110"></div>
+              <input id="roi-rate-range" class="team-roi-slider" type="range" min="40" max="400" step="5" value="110" aria-label="Senior engineering hourly cost">
+            </div>
+          </div>
+          <div class="team-roi-outputs">
+            <div class="team-roi-stat"><span>Assessments / yr</span><strong id="roi-total-assessments">48</strong></div>
+            <div class="team-roi-stat"><span>Engineering hours reclaimed</span><strong id="roi-hours-saved">120 hrs/yr</strong></div>
+            <div class="team-roi-stat"><span>Reclaimed capacity value</span><strong id="roi-value-saved">$13,200/yr</strong></div>
+            <div class="team-roi-stat"><span>Onsite loop hours avoided (est.)</span><strong id="roi-onsite-saved">58 hrs/yr</strong></div>
+          </div>
+          <p id="roi-recommended-note" class="hiring-muted-copy">Best fit for continuous hiring (16–60 candidates/yr) — unlimited assessments with zero per-invite surprises.</p>
+          <p class="team-roi-formula">Formula: (Hires × Candidates) × Hours saved × Hourly cost; onsite avoidance assumes 40% early filter efficiency × 3 panel hrs.</p>
+        </section>
+        <section id="add-ons" class="software-settings-section team-plan-add-ons" aria-labelledby="add-ons-title">
+          <h2 id="add-ons-title">Add-ons</h2>
+          <h3>Candidate slots</h3>
+          <p>${hasSlots ? 'One slot per distinct candidate. Additional assessments for the same email reuse their slot.' : 'Available with Per Candidate. Pro and Ultra include unlimited candidate assessments.'}</p>
+          ${slotQuery && !validSlots && canChange && hasSlots ? '<p role="alert">Enter between 1 and 10,000 candidate slots.</p>' : ''}
+          ${slotForm}${slotReview}
+        </section>
+      </div><script>${roiCalculatorScript}</script>`;
+        const role = org.isOwner ? 'cto' : org.role;
+        const organizationName = resolveOrgDisplay(organizationId, {
+          role,
+          displayName: org.displayName,
+        }).name;
+        return attachRefreshedCookie(
+          htmlResponse(
+            title,
+            content,
+            200,
+            securityHeaders(scriptCspDirectives(roiCalculatorScript, false)),
+            {
+              organizationId,
+              organizationName,
+              role,
+              email: identity.email ?? '',
+              csrf: csrfToken,
+              active: 'plan',
+              planTier: plan.planTier,
+              planBadge: formatPlanBadge(plan),
+              theme: readRequestTheme(request),
+              currentPath: path,
+            },
+          ),
+          refreshedSessionCookie,
+        );
       },
     );
   } catch (error) {
@@ -5858,6 +6883,18 @@ export async function stagingOrganizationSettingsGet(
         identity,
         orgIdLower,
       );
+
+      const hiring = isHiringPlatformEnabled();
+      const isOrgAdmin =
+        orgContext.isOwner === true ||
+        orgContext.role === 'cto' ||
+        (!hiring && orgContext.role === 'recruiter');
+      if (hiring && !isOrgAdmin) {
+        return attachRefreshedCookie(
+          redirect(resolvePublicOrigin(request), '/r23/account'),
+          refreshedSessionCookie,
+        );
+      }
 
       const profile = (await dispatchVerifiedStagingOperation(
         config,
@@ -5896,51 +6933,59 @@ export async function stagingOrganizationSettingsGet(
       const safeEmail = safeHtml(profile.email || identity.email || '');
       const safeDisplayName = safeHtml(profile.displayName || '');
 
-      const hiring = isHiringPlatformEnabled();
-      const isOrgAdmin =
-        orgContext.role === 'cto' ||
-        orgContext.role === 'recruiter' ||
-        orgContext.isOwner === true;
       const planSummary = hiring
         ? ((await dispatchVerifiedStagingOperation(
             config,
             identity,
             'hiring.plan.get',
             { organizationId: orgIdLower },
-          ).catch(() => null)) as OrganizationPlanSummary | null)
+          )) as OrganizationPlanSummary)
         : null;
 
       const membersRows = members
         .map((m) => {
-          const ownerLabel = m.isOwner
-            ? '<span class="software-owner-badge">Owner</span>'
-            : '';
+          const displayLabel = m.displayName || 'No display name';
+          const memberInitial = (m.displayName || m.email || '?')
+            .trim()
+            .slice(0, 1)
+            .toUpperCase();
+          const ownerLabel =
+            !hiring && m.isOwner
+              ? '<span class="software-owner-badge">Owner</span>'
+              : '';
+          const roleKey = hiring && m.isOwner ? 'owner' : m.role;
           const roleDisplay =
-            m.role === 'cto'
-              ? 'CTO / Owner'
-              : m.role === 'reviewer'
-                ? 'Evaluator'
-                : m.role === 'recruiter'
-                  ? 'Recruiter'
-                  : m.role;
+            hiring && m.isOwner
+              ? 'Owner'
+              : m.role === 'cto'
+                ? 'CTO'
+                : m.role === 'reviewer'
+                  ? 'Evaluator'
+                  : m.role === 'recruiter'
+                    ? 'Recruiter'
+                    : m.role;
+          const statusClass =
+            m.status === 'active'
+              ? 'hiring-pill hiring-pill-success'
+              : 'software-state-badge';
           const removeButton =
             !m.isOwner && (isOrgAdmin || m.principalId === profile.principalId)
               ? `<form action="/r23/organizations/${safeOrgId}/settings" method="post">
                   <input type="hidden" name="csrf" value="${safeCsrf}">
                   <input type="hidden" name="action" value="remove_member">
                   <input type="hidden" name="principalId" value="${safeHtml(m.principalId)}">
-                  <button type="submit" aria-label="Remove member ${safeHtml(m.email || m.principalId)}">Remove member</button>
+                  <button type="submit" class="hiring-btn hiring-btn-sm team-danger-btn" aria-label="Remove member ${safeHtml(m.email || m.principalId)}">Remove member</button>
                 </form>`
-              : m.isOwner
+              : m.isOwner && !hiring
                 ? '<span class="software-field-help">Workspace owner</span>'
                 : '';
 
           return `
             <tr>
-              <td>${safeHtml(m.displayName || 'No display name')}</td>
+              <td>${hiring ? `<div class="team-member-cell"><span class="team-member-avatar" aria-hidden="true">${safeHtml(memberInitial)}</span><span>${safeHtml(displayLabel)}</span></div>` : safeHtml(displayLabel)}</td>
               <td>${safeHtml(m.email || 'Email unavailable')}</td>
-              <td><span class="software-role-badge">${safeHtml(roleDisplay)}</span></td>
-              <td>${safeHtml(m.status)} ${ownerLabel}</td>
+              <td><span class="${hiring && m.isOwner ? 'software-owner-badge' : 'software-role-badge'}" data-role="${safeHtml(roleKey)}">${safeHtml(roleDisplay)}</span></td>
+              <td><span class="${hiring ? statusClass : ''}">${safeHtml(m.status.charAt(0).toUpperCase() + m.status.slice(1))}</span> ${ownerLabel}</td>
               <td><time datetime="${safeHtml(m.joinedAt)}" title="${safeHtml(m.joinedAt)}">${safeHtml(new Date(m.joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time></td>
               <td>${removeButton}</td>
             </tr>
@@ -5949,6 +6994,9 @@ export async function stagingOrganizationSettingsGet(
         .join('');
 
       const candidateEncryptionKey = loadCandidateTokenEncryptionKey();
+      const pendingInviteCount = invitations.filter(
+        (inv) => inv.status === 'active',
+      ).length;
       const invitationsList = invitations
         .map((inv) => {
           let linkHtml = '';
@@ -5959,8 +7007,27 @@ export async function stagingOrganizationSettingsGet(
                 orgIdLower,
                 candidateEncryptionKey,
               );
-              const acceptUrl = `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`;
-              linkHtml = `<label class="software-invitation-share">Invitation link<input type="text" readonly value="${safeHtml(acceptUrl)}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}"><span>Copy this link and share it with your teammate.</span></label>`;
+              const acceptUrl = new URL(
+                `/r23/invitations/accept?token=${encodeURIComponent(rawToken)}`,
+                resolvePublicOrigin(request),
+              ).toString();
+              const safeUrl = safeHtml(acceptUrl);
+              const inviteInputId = `invite-link-${safeHtml(inv.id)}`;
+              linkHtml = `<div class="software-invitation-share">
+                <label class="software-invitation-share-label" for="${inviteInputId}">Invitation link</label>
+                <div class="software-invitation-share-row">
+                  <input id="${inviteInputId}" type="text" readonly value="${safeUrl}" aria-label="Invitation link for ${safeHtml(inv.targetEmail)}">
+                  <button type="button" class="ct-copy-btn ct-copy-btn--sm ct-copy-btn--secondary software-invite-copy-btn" data-copy-invite="${safeUrl}" data-copied="false" aria-label="Copy invite link for ${safeHtml(inv.targetEmail)}">
+                    <span class="ct-copy-icon-stack" aria-hidden="true">
+                      <svg class="ct-copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z"></path><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"></path></svg>
+                      <svg class="ct-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"></path></svg>
+                    </span>
+                    <span class="software-invite-copy-label">Copy invite link</span>
+                    <span class="ct-sr-only" aria-live="polite"></span>
+                  </button>
+                </div>
+                <span>Copy this full link and share it with your teammate.</span>
+              </div>`;
             } catch {
               // decryption fallback
             }
@@ -5972,7 +7039,7 @@ export async function stagingOrganizationSettingsGet(
                   <input type="hidden" name="csrf" value="${safeCsrf}">
                   <input type="hidden" name="action" value="revoke_invitation">
                   <input type="hidden" name="invitationId" value="${safeHtml(inv.id)}">
-                  <button type="submit" aria-label="Revoke invitation for ${safeHtml(inv.targetEmail)}">Revoke invitation</button>
+                  <button type="submit" class="hiring-btn hiring-btn-sm team-danger-btn" aria-label="Revoke invitation for ${safeHtml(inv.targetEmail)}">Revoke invitation</button>
                 </form>`
               : '';
 
@@ -5983,13 +7050,20 @@ export async function stagingOrganizationSettingsGet(
                 ? 'Recruiter invitation'
                 : 'Evaluator invitation';
 
+          const statusBadgeClass =
+            inv.status === 'active'
+              ? 'hiring-pill hiring-pill-warning'
+              : inv.status === 'accepted'
+                ? 'hiring-pill hiring-pill-success'
+                : 'software-role-badge';
+
           return `
-            <li class="software-invitation-row">
+            <li class="software-invitation-row" data-status="${safeHtml(inv.status)}">
               <div class="software-invitation-heading">
                 <div><strong>${safeHtml(inv.targetEmail)}</strong><span>${inviteRoleText}</span></div>
-                <span class="software-role-badge">${inv.status === 'active' ? 'Pending' : safeHtml(inv.status)}</span>
+                <span class="${hiring ? statusBadgeClass : 'software-role-badge'}">${inv.status === 'active' ? 'Pending' : safeHtml(inv.status)}</span>
               </div>
-              <p class="software-invitation-meta">Expires <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(new Date(inv.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>${inv.acceptedAt ? ` · Accepted <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(new Date(inv.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : ''}</p>
+              <p class="software-invitation-meta">Expires <time datetime="${safeHtml(inv.expiresAt)}">${safeHtml(formatUtcDateTime(inv.expiresAt))}</time>${inv.acceptedAt ? ` · Accepted <time datetime="${safeHtml(inv.acceptedAt)}">${safeHtml(new Date(inv.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))}</time>` : ''}</p>
               ${linkHtml}
               ${revokeButton}
             </li>
@@ -5997,89 +7071,28 @@ export async function stagingOrganizationSettingsGet(
         })
         .join('');
 
-      let planSectionHtml = '';
-      if (hiring && planSummary) {
-        const currentPlanDef = getPlanDefinition(planSummary.planTier);
-        const creditSummary =
-          planSummary.planTier === 'per_candidate'
-            ? `<p><strong>Candidate slots:</strong> ${planSummary.candidateCreditsUsed} used of ${planSummary.candidateCreditsPurchased} purchased (${planSummary.candidateCreditsRemaining ?? 0} remaining). Re-issuing to an already credited candidate email does not consume another slot.</p>`
-            : planSummary.planTier === 'none'
-              ? '<p><strong>Status:</strong> An active paid plan is required before issuing candidate assessments. There is no free plan.</p>'
-              : `<p><strong>Candidate capacity:</strong> Unlimited candidate assessments included (${planSummary.candidateCreditsUsed} distinct candidates assessed so far).</p>`;
-
-        const planCardsHtml = PAID_PLAN_ORDER.map((tierId) => {
-          const def = getPlanDefinition(tierId);
-          const isCurrent = planSummary.planTier === tierId;
-          const highlightsHtml = def.highlights
-            .map((item) => `<li>${safeHtml(item)}</li>`)
-            .join('');
-          return `
-            <article class="hiring-plan-card${isCurrent ? ' is-current' : ''}">
-              <div class="software-invitation-heading">
-                <strong>${safeHtml(def.name)}</strong>
-                <span class="software-role-badge">${isCurrent ? 'Current plan' : safeHtml(def.priceLabel)}</span>
-              </div>
-              <p>${safeHtml(def.tagline)}</p>
-              <ul>${highlightsHtml}</ul>
-            </article>
-          `;
-        }).join('');
-
-        const isCtoOrOwner =
-          orgContext.role === 'cto' || orgContext.isOwner === true;
-        const planManageFormHtml =
-          isCtoOrOwner && isFounderUatEnabled()
-            ? `<form action="/r23/organizations/${safeOrgId}/settings" method="post">
-              <input type="hidden" name="csrf" value="${safeCsrf}">
-              <input type="hidden" name="action" value="update_plan">
-              <div class="hiring-two-col">
-                <div class="hiring-field">
-                  <label for="planTier">Select organization plan</label>
-                  <select id="planTier" name="planTier">
-                    <option value="per_candidate"${planSummary.planTier === 'per_candidate' || planSummary.planTier === 'none' ? ' selected' : ''}>Per Candidate (pay per candidate slot)</option>
-                    <option value="pro"${planSummary.planTier === 'pro' ? ' selected' : ''}>Pro (unlimited candidates + AI builder)</option>
-                    <option value="ultra"${planSummary.planTier === 'ultra' ? ' selected' : ''}>Ultra (Pro + Kimi K3.1 Pro AI Review &amp; Fit Reports)</option>
-                  </select>
-                </div>
-                <div class="hiring-field">
-                  <label for="creditsMode">Candidate credit update</label>
-                  <select id="creditsMode" name="creditsMode">
-                    <option value="add">Add candidate slots</option>
-                    <option value="set">Set total purchased slots</option>
-                  </select>
-                </div>
-              </div>
-              <div class="hiring-field">
-                <label for="creditsAmount">Candidate slots (used when Per Candidate plan is active)</label>
-                <input id="creditsAmount" name="creditsAmount" type="number" min="0" max="10000" value="${planSummary.planTier === 'per_candidate' ? 5 : 10}">
-              </div>
-              <button type="submit">Save plan &amp; credits</button>
-            </form>`
-            : '<p class="software-field-help">Only a CTO / Owner can modify the organization plan and candidate credits.</p>';
-
-        planSectionHtml = `
-          <section class="software-settings-section software-team-section" aria-labelledby="plan-credits-heading">
-            <div class="software-section-intro"><div><h2 id="plan-credits-heading">Organization plan &amp; candidate credits</h2><p>Active tier: <strong>${safeHtml(currentPlanDef.name)}</strong> (${safeHtml(formatPlanBadge(planSummary))}).</p></div></div>
-            ${creditSummary}
-            <div class="hiring-plan-grid">${planCardsHtml}</div>
-            ${planManageFormHtml}
-          </section>
-        `;
-      }
+      const noticeParam = new URL(request.url).searchParams.get('notice');
 
       const inviteRoleFieldHtml = hiring
-        ? `<div><label for="inviteRole">Workspace role</label><select id="inviteRole" name="role"><option value="reviewer" selected>Evaluator (Reviews &amp; hiring decision)</option><option value="recruiter">Recruiter (Pipeline &amp; invitations)</option><option value="cto">CTO / Owner (Full workspace &amp; plan)</option></select></div>`
+        ? `<div><label for="inviteRole">Workspace role</label><select id="inviteRole" name="role"><option value="reviewer" selected>Evaluator</option><option value="recruiter">Recruiter</option><option value="cto">CTO (Workspace admin)</option></select></div>`
         : '';
 
-      const content = `
-        <header class="software-page-heading">
-          <div><p class="software-eyebrow">${safeOrgName}</p><h1>${hiring ? 'Team &amp; plan' : 'Team &amp; settings'}</h1></div>
-          <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to organization sessions</a>
-        </header>
+      const noticeBannerHtml =
+        noticeParam === 'update_plan'
+          ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Plan and candidate slots updated.</span></div>'
+          : noticeParam === 'update_account_profile'
+            ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Profile display name updated.</span></div>'
+            : noticeParam === 'update_organization_profile'
+              ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Workspace name updated.</span></div>'
+              : noticeParam === 'create_invitation'
+                ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Team invitation created — copy the link in the invitations list below.</span></div>'
+                : noticeParam === 'revoke_invitation'
+                  ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Invitation revoked.</span></div>'
+                  : noticeParam === 'remove_member'
+                    ? '<div class="hiring-banner hiring-banner-success" role="status"><span>Member removed from workspace.</span></div>'
+                    : '';
 
-        ${planSectionHtml}
-
-        <div class="software-settings-grid">
+      const legacyProfileHtml = `
           <section class="software-settings-section" aria-labelledby="account-profile-heading">
             <header class="software-section-intro"><h2 id="account-profile-heading">Your profile</h2><p>How your name appears to your team.</p></header>
             <p class="software-account-email">${safeEmail}</p>
@@ -6092,25 +7105,433 @@ export async function stagingOrganizationSettingsGet(
             </form>
           </section>
 
-          <section class="software-settings-section" aria-labelledby="org-profile-heading">
+      `;
+      const organizationDetailsHtml = `
+          <section id="organization-details" class="software-settings-section${hiring ? ' team-org-identity-card' : ''}" aria-labelledby="org-profile-heading">
             <header class="software-section-intro"><h2 id="org-profile-heading">Workspace details</h2><p>The name everyone on your team sees.</p></header>
             ${
               isOrgAdmin
                 ? `
-              <form action="/r23/organizations/${safeOrgId}/settings" method="post">
+              <form class="${hiring ? 'team-org-inline-form' : ''}" action="/r23/organizations/${safeOrgId}/settings" method="post">
                 <input type="hidden" name="csrf" value="${safeCsrf}">
                 <input type="hidden" name="action" value="update_organization_profile">
-                <label for="orgDisplayName">Organization display name</label>
-                <input id="orgDisplayName" name="organizationDisplayName" type="text" required maxlength="100" value="${safeOrgName}">
-                <button type="submit">Update organization name</button>
+                <div class="${hiring ? 'hiring-field' : ''}"><label for="orgDisplayName">Organization display name</label><input id="orgDisplayName" name="organizationDisplayName" type="text" required maxlength="100" value="${safeOrgName}"></div>
+                <button type="submit"${hiring ? ' class="hiring-btn hiring-btn-primary"' : ''}>Update organization name</button>
               </form>`
                 : `<p>${safeOrgName}</p>`
             }
-            <details class="software-reference-details"><summary>Workspace reference</summary><code>${safeOrgId}</code></details>
+            <details class="${hiring ? 'hiring-disclosure team-org-ref-details' : 'software-reference-details'}"><summary>${hiring ? 'Workspace ID' : 'Workspace reference'}</summary><code>${safeOrgId}</code></details>
           </section>
-        </div>
+      `;
 
-        <section class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
+      const hiringPlanCardHtml =
+        hiring && planSummary
+          ? (() => {
+              const planDef = getPlanDefinition(planSummary.planTier);
+              const isUltraPlan = planSummary.planTier === 'ultra';
+              const capacityText =
+                planSummary.planTier === 'per_candidate'
+                  ? `${planSummary.candidateCreditsRemaining ?? 0} of ${planSummary.candidateCreditsPurchased} candidate slots available`
+                  : planSummary.planTier === 'none'
+                    ? 'Activate a plan to issue assessments'
+                    : 'Unlimited candidate assessments';
+              const upgradeHook =
+                planSummary.planTier === 'pro'
+                  ? 'Upgrade to Ultra to unlock AI review summaries and hiring manager fit reports.'
+                  : planSummary.planTier === 'per_candidate'
+                    ? 'Add candidate slots or upgrade to Pro/Ultra for unlimited assessments.'
+                    : planSummary.planTier === 'none'
+                      ? 'Choose a plan to start inviting candidates.'
+                      : 'All Ultra AI evaluation and team workflows are active.';
+              const actionHtml = isUltraPlan
+                ? `<a class="hiring-btn" href="/r23/organizations/${safeOrgId}/plan">Manage plan &amp; add-ons</a>`
+                : `<a class="hiring-btn hiring-btn-primary" href="/r23/organizations/${safeOrgId}/upgrade">${planSummary.planTier === 'pro' ? 'Upgrade to Ultra' : 'Upgrade plan'}</a>`;
+              return `<section class="software-settings-section team-org-plan-card" data-tier="${safeHtml(planSummary.planTier)}" aria-labelledby="org-plan-heading">
+                <div class="team-org-plan-head">
+                  <span class="software-eyebrow">Subscription &amp; capacity</span>
+                  <span class="hiring-pill hiring-pill-plum">${safeHtml(formatPlanBadge(planSummary))}</span>
+                </div>
+                <h2 id="org-plan-heading">${safeHtml(planDef.name)}</h2>
+                <p class="team-org-plan-capacity">${safeHtml(capacityText)}</p>
+                <p class="team-org-plan-hook">${safeHtml(upgradeHook)}</p>
+                <div class="team-org-plan-actions">${actionHtml}</div>
+              </section>`;
+            })()
+          : '';
+
+      const webhooksScript =
+        hiring && isOrgAdmin
+          ? `
+(function () {
+  var root = document.getElementById('webhooks');
+  if (!root) return;
+  var orgId = root.getAttribute('data-org-id') || '';
+  var apiUrl = '/r23/api/organizations/' + encodeURIComponent(orgId) + '/hiring/webhooks';
+  var form = document.getElementById('org-webhook-create-form');
+  var listEl = document.getElementById('org-webhook-list');
+  var delivEl = document.getElementById('org-webhook-deliveries');
+  var statusEl = document.getElementById('org-webhook-status');
+  var secretBanner = document.getElementById('org-webhook-secret-banner');
+  var secretValue = document.getElementById('org-webhook-secret-value');
+  var secretDismiss = document.getElementById('org-webhook-secret-dismiss');
+
+  function readCsrf() {
+    var m = document.cookie.match(/(?:^|;\\s*)__Host-r23-csrf=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function showStatus(msg, isError) {
+    if (!statusEl) return;
+    statusEl.hidden = false;
+    statusEl.className = 'hiring-banner ' + (isError ? 'hiring-banner-danger' : 'hiring-banner-success');
+    statusEl.setAttribute('role', isError ? 'alert' : 'status');
+    statusEl.textContent = msg;
+  }
+
+  function renderWebhooks(webhooks) {
+    if (!listEl) return;
+    listEl.textContent = '';
+    if (!webhooks || webhooks.length === 0) {
+      var p = document.createElement('p');
+      p.className = 'hiring-muted-copy';
+      p.textContent = 'No webhooks configured yet. Add a Slack incoming webhook or JSON endpoint above.';
+      listEl.appendChild(p);
+      return;
+    }
+    webhooks.forEach(function (hook) {
+      var card = document.createElement('article');
+      card.className = 'hiring-card-subtle org-webhook-card';
+      var head = document.createElement('div');
+      head.className = 'org-webhook-card-head';
+
+      var info = document.createElement('div');
+      var titleRow = document.createElement('div');
+      titleRow.className = 'hiring-candidate-name';
+      var strong = document.createElement('strong');
+      strong.textContent = hook.label;
+      titleRow.appendChild(strong);
+      var statePill = document.createElement('span');
+      statePill.className = 'hiring-pill ' + (hook.isActive ? 'hiring-pill-success' : 'hiring-pill-warning');
+      statePill.textContent = hook.isActive ? 'Active' : 'Paused';
+      titleRow.appendChild(statePill);
+      var modePill = document.createElement('span');
+      modePill.className = 'hiring-pill hiring-pill-plum';
+      modePill.textContent = hook.payloadMode === 'slack_block_kit' ? 'Slack Block Kit' : 'JSON HMAC';
+      titleRow.appendChild(modePill);
+      info.appendChild(titleRow);
+
+      var urlP = document.createElement('p');
+      urlP.className = 'hiring-muted-copy org-webhook-url';
+      urlP.textContent = hook.targetUrl + ' · Secret ' + (hook.signingSecretPrefix || '');
+      info.appendChild(urlP);
+
+      var evP = document.createElement('p');
+      evP.className = 'hiring-muted-copy';
+      evP.textContent = 'Events: ' + (hook.eventTypes || []).join(', ') + (hook.disabledReason ? ' · Disabled: ' + hook.disabledReason : '');
+      info.appendChild(evP);
+
+      var actions = document.createElement('div');
+      actions.className = 'hiring-header-actions';
+      function mkBtn(label, extraClass, onClick) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'hiring-btn hiring-btn-sm' + (extraClass ? ' ' + extraClass : '');
+        b.textContent = label;
+        b.addEventListener('click', onClick);
+        return b;
+      }
+      actions.appendChild(mkBtn('Test ping', '', function () {
+        postAction({ action: 'ping', webhookId: hook.id });
+      }));
+      actions.appendChild(mkBtn(hook.isActive ? 'Pause' : 'Resume', '', function () {
+        postAction({ action: 'update', webhookId: hook.id, isActive: !hook.isActive });
+      }));
+      actions.appendChild(mkBtn('Rotate secret', '', function () {
+        postAction({ action: 'rotate', webhookId: hook.id });
+      }));
+      actions.appendChild(mkBtn('Delete', 'team-danger-btn', function () {
+        postAction({ action: 'delete', webhookId: hook.id });
+      }));
+
+      head.appendChild(info);
+      head.appendChild(actions);
+      card.appendChild(head);
+      listEl.appendChild(card);
+    });
+  }
+
+  function renderDeliveries(deliveries) {
+    if (!delivEl) return;
+    delivEl.textContent = '';
+    if (!deliveries || deliveries.length === 0) return;
+    var heading = document.createElement('h3');
+    heading.textContent = 'Recent deliveries';
+    delivEl.appendChild(heading);
+    var wrap = document.createElement('div');
+    wrap.className = 'software-overflow-region';
+    wrap.setAttribute('tabindex', '0');
+    var table = document.createElement('table');
+    table.className = 'software-members-table org-deliveries-table';
+    var thead = document.createElement('thead');
+    var htr = document.createElement('tr');
+    ['Event', 'Status', 'HTTP', 'Latency', 'Error'].forEach(function (col) {
+      var th = document.createElement('th');
+      th.textContent = col;
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    deliveries.slice(0, 15).forEach(function (d) {
+      var tr = document.createElement('tr');
+      var vals = [
+        d.eventType,
+        d.status,
+        d.httpStatus != null ? String(d.httpStatus) : '—',
+        d.latencyMs != null ? d.latencyMs + 'ms' : '—',
+        d.errorSummary || '—'
+      ];
+      vals.forEach(function (v, idx) {
+        var td = document.createElement('td');
+        if (idx === 1) {
+          var pill = document.createElement('span');
+          pill.className = 'hiring-pill ' + (v === 'delivered' ? 'hiring-pill-success' : (v === 'failed' || v === 'blocked_ssrf') ? 'hiring-pill-danger' : 'hiring-pill-warning');
+          pill.textContent = v;
+          td.appendChild(pill);
+        } else {
+          td.textContent = v;
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    delivEl.appendChild(wrap);
+  }
+
+  function loadAll() {
+    fetch(apiUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.d && res.d.error && res.d.error.message) || 'Unable to load webhooks.');
+        renderWebhooks(res.d.webhooks || []);
+        renderDeliveries(res.d.deliveries || []);
+      })
+      .catch(function (err) {
+        showStatus(err && err.message ? err.message : 'Unable to load webhooks.', true);
+      });
+  }
+
+  function postAction(payload) {
+    var csrf = readCsrf();
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-csrf-token': csrf
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.d && res.d.error && res.d.error.message) || 'Webhook operation failed.');
+        if (res.d && res.d.signingSecret && secretBanner && secretValue) {
+          secretValue.textContent = res.d.signingSecret;
+          secretBanner.hidden = false;
+        }
+        if (payload.action === 'ping' && res.d && res.d.delivery) {
+          var dlv = res.d.delivery;
+          showStatus('Test ping ' + dlv.status + (dlv.httpStatus ? ' (HTTP ' + dlv.httpStatus + ')' : '') + '.', dlv.status !== 'delivered');
+        } else if (payload.action === 'create') {
+          if (form) form.reset();
+          showStatus('Webhook endpoint created.', false);
+        } else if (payload.action === 'rotate') {
+          showStatus('Signing secret rotated.', false);
+        } else if (payload.action === 'delete') {
+          showStatus('Webhook removed.', false);
+        } else {
+          showStatus('Webhook updated.', false);
+        }
+        loadAll();
+      })
+      .catch(function (err) {
+        showStatus(err && err.message ? err.message : 'Webhook operation failed.', true);
+      });
+  }
+
+  if (secretDismiss && secretBanner) {
+    secretDismiss.addEventListener('click', function () {
+      secretBanner.hidden = true;
+    });
+  }
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var labelInput = document.getElementById('org-webhook-label');
+      var urlInput = document.getElementById('org-webhook-url');
+      var modeInput = document.getElementById('org-webhook-mode');
+      var checks = form.querySelectorAll('input[name="webhookEvent"]:checked');
+      var events = [];
+      checks.forEach(function (c) { events.push(c.value); });
+      postAction({
+        action: 'create',
+        label: labelInput ? labelInput.value.trim() : '',
+        targetUrl: urlInput ? urlInput.value.trim() : '',
+        payloadMode: modeInput ? modeInput.value : 'json',
+        eventTypes: events
+      });
+    });
+  }
+  loadAll();
+})();
+`
+          : '';
+
+      const webhooksSectionHtml =
+        hiring && isOrgAdmin
+          ? `<section id="webhooks" data-org-id="${safeOrgId}" class="software-settings-section org-webhooks-panel" aria-labelledby="org-webhooks-heading">
+            <header class="software-section-intro">
+              <h2 id="org-webhooks-heading">Integrations: Webhooks &amp; Slack</h2>
+              <p>Send HMAC-SHA256 JSON events or Slack Block Kit alerts when candidates start, submit, or receive a verdict.</p>
+            </header>
+            <div id="org-webhook-secret-banner" class="hiring-banner hiring-banner-success org-webhook-secret-banner" role="status" hidden>
+              <div>
+                <strong>Save your signing secret now (shown once)</strong>
+                <div><code id="org-webhook-secret-value" class="org-webhook-secret-value"></code></div>
+              </div>
+              <button type="button" id="org-webhook-secret-dismiss" class="hiring-btn hiring-btn-sm">Dismiss</button>
+            </div>
+            <div id="org-webhook-status" hidden></div>
+            <form id="org-webhook-create-form" class="org-webhook-create-form">
+              <div class="hiring-two-col">
+                <div class="hiring-field"><label for="org-webhook-label">Endpoint label</label><input id="org-webhook-label" type="text" required maxlength="80" placeholder="#hiring-alerts Slack"></div>
+                <div class="hiring-field"><label for="org-webhook-url">HTTPS endpoint URL</label><input id="org-webhook-url" type="url" required maxlength="500" placeholder="https://hooks.slack.com/services/..."></div>
+              </div>
+              <div class="hiring-two-col">
+                <div class="hiring-field"><label for="org-webhook-mode">Payload format</label><select id="org-webhook-mode"><option value="json">Standard JSON (HMAC-SHA256)</option><option value="slack_block_kit">Slack Incoming Webhook (Block Kit)</option></select></div>
+                <fieldset class="hiring-field org-webhook-events-fieldset"><legend>Subscribed events</legend><div class="org-webhook-event-checks">
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="candidate.started" checked><span>candidate.started</span></label>
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="candidate.submitted" checked><span>candidate.submitted</span></label>
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="verdict.published" checked><span>verdict.published</span></label>
+                  <label class="org-webhook-checkbox"><input type="checkbox" name="webhookEvent" value="handoff.updated" checked><span>handoff.updated</span></label>
+                </div></fieldset>
+              </div>
+              <div><button type="submit" class="hiring-btn hiring-btn-primary">Add webhook endpoint</button></div>
+            </form>
+            <div id="org-webhook-list" class="org-webhook-list"><p class="hiring-muted-copy">Loading webhooks…</p></div>
+            <div id="org-webhook-deliveries" class="org-deliveries-section"></div>
+          </section>`
+          : '';
+
+      const inviteCopyScript = `
+(function () {
+  var buttons = document.querySelectorAll('[data-copy-invite]');
+  if (!buttons.length) return;
+  buttons.forEach(function (btn) {
+    var timer = null;
+    btn.addEventListener('click', function () {
+      var val = btn.getAttribute('data-copy-invite') || '';
+      var labelEl = btn.querySelector('.software-invite-copy-label');
+      var liveEl = btn.querySelector('[aria-live="polite"]');
+      function markCopied() {
+        btn.setAttribute('data-copied', 'true');
+        if (labelEl) labelEl.textContent = 'Copied';
+        if (liveEl) liveEl.textContent = 'Invite link copied';
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () {
+          btn.setAttribute('data-copied', 'false');
+          if (labelEl) labelEl.textContent = 'Copy invite link';
+          if (liveEl) liveEl.textContent = '';
+          timer = null;
+        }, 2000);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(markCopied).catch(function () {
+          if (liveEl) liveEl.textContent = 'Copy the link from the input field.';
+        });
+      } else {
+        var row = btn.closest('.software-invitation-share-row');
+        var input = row ? row.querySelector('input') : null;
+        if (input) {
+          input.focus();
+          input.select();
+          try {
+            if (document.execCommand('copy')) markCopied();
+          } catch (e) {}
+        }
+      }
+    });
+  });
+})();
+`;
+      const combinedSettingsScript = `${webhooksScript}${inviteCopyScript}`;
+
+      const content = hiring
+        ? `<div class="team-org-page">
+          <header class="software-page-heading team-org-header">
+            <div>
+              <h1>Organization</h1>
+              <p class="team-page-subtitle">Manage workspace identity, team access, and plan capacity.</p>
+            </div>
+          </header>
+          ${noticeBannerHtml}
+          <nav class="software-settings-anchor-nav" aria-label="Organization settings sections">
+            <a href="#organization-overview" class="software-anchor-pill">Overview</a>
+            <a href="#team" class="software-anchor-pill">Team <span class="software-anchor-count">${members.length}</span></a>
+            <a href="#team-invitations" class="software-anchor-pill">Invitations${pendingInviteCount > 0 ? ` <span class="software-anchor-count">${pendingInviteCount}</span>` : ''}</a>
+            ${isOrgAdmin ? '<a href="#webhooks" class="software-anchor-pill">Webhooks &amp; Slack</a>' : ''}
+          </nav>
+          <div id="organization-overview" class="team-org-overview">${organizationDetailsHtml}${hiringPlanCardHtml}</div>
+          <section id="team" class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
+            <header class="software-section-intro team-section-header-row">
+              <div>
+                <h2 id="team-members-heading">Your team</h2>
+                <p>People with access to this workspace and its assigned reviews.</p>
+              </div>
+              <span class="hiring-pill">${members.length} ${members.length === 1 ? 'member' : 'members'}</span>
+            </header>
+            <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
+              <table class="software-members-table">
+                <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+                <tbody>${membersRows}</tbody>
+              </table>
+            </div>
+          </section>
+          <section id="team-invitations" class="software-settings-section team-org-invites-section" aria-labelledby="invitations-heading">
+            <header class="software-section-intro team-section-header-row">
+              <div>
+                <h2 id="invitations-heading">Invite a teammate</h2>
+                <p>Create an invitation link to share with your teammate.</p>
+              </div>
+              ${pendingInviteCount > 0 ? `<span class="hiring-pill hiring-pill-warning">${pendingInviteCount} pending</span>` : ''}
+            </header>
+            ${
+              isOrgAdmin
+                ? `<form class="software-invite-form team-org-invite-form" action="/r23/organizations/${safeOrgId}/settings" method="post">
+                    <input type="hidden" name="csrf" value="${safeCsrf}">
+                    <input type="hidden" name="action" value="create_invitation">
+                    <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
+                    <div class="hiring-field"><label for="targetEmail">Teammate email</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
+                    ${inviteRoleFieldHtml}
+                    <button type="submit" class="hiring-btn hiring-btn-primary">Create team invitation</button>
+                  </form>`
+                : ''
+            }
+            <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
+          </section>
+          ${webhooksSectionHtml}
+        </div><script>${combinedSettingsScript}</script>`
+        : `
+        <header class="software-page-heading">
+          <div><p class="software-eyebrow">${safeOrgName}</p><h1>Team &amp; settings</h1></div>
+          <a class="software-text-link" href="/r23/organizations/${safeOrgId}">Back to Assessments</a>
+        </header>
+
+        ${noticeBannerHtml}
+        <div class="software-settings-grid">${legacyProfileHtml}${organizationDetailsHtml}</div>
+        <section id="team" class="software-settings-section software-team-section" aria-labelledby="team-members-heading">
           <header class="software-section-intro"><h2 id="team-members-heading">Your team</h2><p>People with access to this workspace and its assigned reviews.</p></header>
           <p id="software-team-scroll-hint" class="software-table-hint">On smaller screens, scroll the table sideways to see all member details.</p><div tabindex="0" role="region" aria-label="Organization members" aria-describedby="software-team-scroll-hint" class="software-overflow-region">
             <table class="software-members-table">
@@ -6120,39 +7541,41 @@ export async function stagingOrganizationSettingsGet(
           </div>
         </section>
 
-        <section class="software-settings-section" aria-labelledby="invitations-heading">
-          <header class="software-section-intro"><h2 id="invitations-heading">${hiring ? 'Invite a teammate' : 'Invite an evaluator'}</h2></header>
+        <section id="team-invitations" class="software-settings-section" aria-labelledby="invitations-heading">
+          <header class="software-section-intro"><h2 id="invitations-heading">Invite an evaluator</h2></header>
           ${
             isOrgAdmin
               ? `
-            <p class="software-field-help">Create an invitation, then share its link with the invited teammate. Invitations are not emailed automatically.</p>
+            <p class="software-field-help">Create an invitation link to share with your teammate.</p>
             <form class="software-invite-form" action="/r23/organizations/${safeOrgId}/settings" method="post">
               <input type="hidden" name="csrf" value="${safeCsrf}">
               <input type="hidden" name="action" value="create_invitation">
               <input type="hidden" name="idempotencyKey" value="${safeHtml(randomUUID())}">
-              <div><label for="targetEmail">${hiring ? 'Teammate email' : 'Reviewer email'}</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
-              ${inviteRoleFieldHtml}
-              <button type="submit">${hiring ? 'Create team invitation' : 'Create reviewer invitation'}</button>
+              <div><label for="targetEmail">Reviewer email</label><input id="targetEmail" name="targetEmail" type="email" required maxlength="320" placeholder="name@company.com"></div>
+              <button type="submit">Create reviewer invitation</button>
             </form>`
               : ''
           }
-          <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet. Your next teammate starts here.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
+          <div class="software-invitation-history"><h3>Pending &amp; past invitations</h3>${invitations.length === 0 ? '<p class="software-field-help">No invitations yet.</p>' : `<ul class="software-invitation-list">${invitationsList}</ul>`}</div>
         </section>
-      `;
+      <script>${combinedSettingsScript}</script>`;
 
       const response = htmlResponse(
-        hiring ? 'Team & Plan' : 'Team & Settings',
+        hiring ? 'Organization' : 'Team & Settings',
         content,
         200,
-        securityHeaders(),
+        securityHeaders(
+          scriptCspDirectives(combinedSettingsScript, Boolean(webhooksScript)),
+        ),
         {
           organizationId: orgIdLower,
           organizationName: orgDisplay.name,
-          role: orgContext.role,
+          role: orgContext.isOwner ? 'cto' : orgContext.role,
           email: profile.email || identity.email || '',
           csrf: csrfToken,
           active: 'settings',
           planBadge: planSummary ? formatPlanBadge(planSummary) : undefined,
+          planTier: planSummary?.planTier,
           theme: readRequestTheme(request),
           currentPath: `/r23/organizations/${orgIdLower}/settings`,
         },
@@ -6165,130 +7588,216 @@ export async function stagingOrganizationSettingsGet(
 export async function stagingOrganizationSettingsPost(
   request: Request,
   targetOrganizationId: string,
+  surface: 'settings' | 'plan' = 'settings',
 ): Promise<Response> {
-  if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
-  const orgIdLower = targetOrganizationId.toLowerCase();
-  const origin = requireSameOrigin(request);
-  const body = await parseBody(request, false);
-  const action = String(body.action ?? '');
-  const csrf = requiredText(body, 'csrf', 100);
-  const csrfHash = digest(csrf);
+  try {
+    if (!UUID.test(targetOrganizationId)) throw new StagingBadRequest();
+    const orgIdLower = targetOrganizationId.toLowerCase();
+    const origin = requireSameOrigin(request);
+    const body = await parseBody(request, false);
+    const action = String(body.action ?? '');
+    const planAction = ['save_plan', 'update_plan', 'update_slots'].includes(
+      action,
+    );
+    if (surface === 'plan' && !planAction) throw new StagingBadRequest();
+    const csrf = requiredText(body, 'csrf', 100);
+    const csrfHash = digest(csrf);
 
-  return withStagingBrowserSession(
-    request,
-    csrfHash,
-    async ({ session, identity, config }) => {
-      if (session.selectedOrganizationId !== orgIdLower) {
-        throw new StagingForbidden();
-      }
+    return await withStagingBrowserSession(
+      request,
+      csrfHash,
+      async ({ session, identity, config, refreshedSessionCookie }) => {
+        if (session.selectedOrganizationId !== orgIdLower) {
+          throw new StagingForbidden();
+        }
 
-      if (action === 'update_plan' && isHiringPlatformEnabled()) {
-        if (!isFounderUatEnabled()) throw new StagingForbidden();
-        const planTier = requiredText(body, 'planTier', 32);
-        if (!isPlanTier(planTier)) throw new StagingBadRequest();
-        const creditsMode = body.creditsMode === 'set' ? 'set' : 'add';
-        const creditsRaw = Number(body.creditsAmount ?? 0);
-        const creditsAmount = Number.isFinite(creditsRaw)
-          ? Math.min(10000, Math.max(0, Math.trunc(creditsRaw)))
-          : 0;
-        await dispatchVerifiedStagingOperation(
-          config,
-          identity,
-          'hiring.plan.update',
-          {
-            organizationId: orgIdLower,
-            planTier,
-            creditsMode,
-            creditsAmount,
-          },
-        );
-      } else if (action === 'update_account_profile') {
-        const displayName = requiredText(body, 'displayName', 100);
-        await dispatchVerifiedStagingOperation(
-          config,
-          identity,
-          'account.profile.update',
-          { displayName },
-        );
-      } else if (action === 'update_organization_profile') {
-        const displayName = requiredText(body, 'organizationDisplayName', 100);
-        await dispatchVerifiedStagingOperation(
-          config,
-          identity,
-          'organization.update',
-          { organizationId: orgIdLower, displayName },
-        );
-      } else if (action === 'create_invitation') {
-        const targetEmail = requiredText(body, 'targetEmail', 320)
-          .trim()
-          .toLowerCase();
-        const idempotencyKey = requiredText(body, 'idempotencyKey', 128);
-        const rawToken = randomBytes(32).toString('base64url');
-        const tokenHash = invitationTokenHash(rawToken);
-        const ciphertext = encryptInvitationToken(
-          rawToken,
-          orgIdLower,
-          loadCandidateTokenEncryptionKey(),
-        );
-        const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
-        const requestedRole =
-          typeof body.role === 'string' &&
-          ['cto', 'recruiter', 'reviewer'].includes(body.role)
-            ? body.role
-            : null;
-        if (isHiringPlatformEnabled() && requestedRole) {
+        const hiring = isHiringPlatformEnabled();
+        if (hiring && action !== 'update_account_profile') {
+          const context = await fetchOrganizationContext(
+            config,
+            identity,
+            orgIdLower,
+          );
+          if (context.role !== 'cto' && context.isOwner !== true)
+            throw new StagingForbidden();
+        }
+
+        if (action === 'update_slots' && hiring) {
+          if (!isFounderUatEnabled()) throw new StagingForbidden();
+          const creditsMode = requiredText(body, 'slotMode', 8);
+          const amount = requiredText(body, 'slotAmount', 5);
+          const creditsAmount = Number(amount);
+          if (
+            (creditsMode !== 'set' && creditsMode !== 'add') ||
+            !/^\d{1,5}$/.test(amount) ||
+            creditsAmount > 10000 ||
+            (creditsMode === 'add' && creditsAmount === 0)
+          )
+            throw new StagingBadRequest();
           await dispatchVerifiedStagingOperation(
             config,
             identity,
-            'hiring.team.invitation.create',
+            'hiring.plan.update',
             {
               organizationId: orgIdLower,
-              targetEmail,
-              role: requestedRole,
-              expiresAt,
-              idempotencyKey,
-              invitationTokenHash: tokenHash,
-              invitationTokenCiphertext: ciphertext,
+              planTier: 'current',
+              creditsMode,
+              creditsAmount,
             },
+          );
+          recordServerTelemetryEvent({
+            eventName: 'monetization.slots_added',
+            category: 'monetization',
+            actorType: 'team_member',
+            organizationId: orgIdLower,
+            principalId: identity.subjectId,
+            planTier: 'per_candidate',
+            route: '/r23/organizations/:id/upgrade',
+            properties: { creditsAmount },
+          });
+        } else if (
+          (action === 'save_plan' || action === 'update_plan') &&
+          isHiringPlatformEnabled()
+        ) {
+          if (!isFounderUatEnabled()) throw new StagingForbidden();
+          const planTier = requiredText(body, 'planTier', 32);
+          if (!isPlanTier(planTier) || planTier === 'none')
+            throw new StagingBadRequest();
+          const legacySlotChange = action === 'update_plan';
+          const creditsMode =
+            legacySlotChange && body.creditsMode === 'set' ? 'set' : 'add';
+          const creditsRaw = legacySlotChange
+            ? Number(body.creditsAmount ?? 0)
+            : 0;
+          const creditsAmount = Number.isFinite(creditsRaw)
+            ? Math.min(10000, Math.max(0, Math.trunc(creditsRaw)))
+            : 0;
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'hiring.plan.update',
+            {
+              organizationId: orgIdLower,
+              planTier,
+              creditsMode,
+              creditsAmount,
+            },
+          );
+          recordServerTelemetryEvent({
+            eventName: 'monetization.plan_changed',
+            category: 'monetization',
+            actorType: 'team_member',
+            organizationId: orgIdLower,
+            principalId: identity.subjectId,
+            planTier,
+            route: '/r23/organizations/:id/upgrade',
+            properties: { planTier, creditsAmount },
+          });
+        } else if (action === 'update_account_profile') {
+          const displayName = requiredText(body, 'displayName', 100);
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'account.profile.update',
+            { displayName },
+          );
+        } else if (action === 'update_organization_profile') {
+          const displayName = requiredText(
+            body,
+            'organizationDisplayName',
+            100,
+          );
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'organization.update',
+            { organizationId: orgIdLower, displayName },
+          );
+        } else if (action === 'create_invitation') {
+          const targetEmail = requiredText(body, 'targetEmail', 320)
+            .trim()
+            .toLowerCase();
+          const idempotencyKey = requiredText(body, 'idempotencyKey', 128);
+          const rawToken = randomBytes(32).toString('base64url');
+          const tokenHash = invitationTokenHash(rawToken);
+          const ciphertext = encryptInvitationToken(
+            rawToken,
+            orgIdLower,
+            loadCandidateTokenEncryptionKey(),
+          );
+          const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
+          const requestedRole =
+            typeof body.role === 'string' &&
+            ['cto', 'recruiter', 'reviewer'].includes(body.role)
+              ? body.role
+              : null;
+          if (isHiringPlatformEnabled() && requestedRole) {
+            await dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              'hiring.team.invitation.create',
+              {
+                organizationId: orgIdLower,
+                targetEmail,
+                role: requestedRole,
+                expiresAt,
+                idempotencyKey,
+                invitationTokenHash: tokenHash,
+                invitationTokenCiphertext: ciphertext,
+              },
+            );
+          } else {
+            await dispatchVerifiedStagingOperation(
+              config,
+              identity,
+              'organization.invitation.create',
+              {
+                organizationId: orgIdLower,
+                targetEmail,
+                expiresAt,
+                idempotencyKey,
+                invitationTokenHash: tokenHash,
+                invitationTokenCiphertext: ciphertext,
+              },
+            );
+          }
+        } else if (action === 'revoke_invitation') {
+          const invitationId = requiredText(body, 'invitationId', 128);
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'organization.invitation.revoke',
+            { organizationId: orgIdLower, invitationId },
+          );
+        } else if (action === 'remove_member') {
+          const principalId = requiredText(body, 'principalId', 128);
+          await dispatchVerifiedStagingOperation(
+            config,
+            identity,
+            'organization.member.remove',
+            { organizationId: orgIdLower, targetPrincipalId: principalId },
           );
         } else {
-          await dispatchVerifiedStagingOperation(
-            config,
-            identity,
-            'organization.invitation.create',
-            {
-              organizationId: orgIdLower,
-              targetEmail,
-              expiresAt,
-              idempotencyKey,
-              invitationTokenHash: tokenHash,
-              invitationTokenCiphertext: ciphertext,
-            },
-          );
+          throw new StagingBadRequest();
         }
-      } else if (action === 'revoke_invitation') {
-        const invitationId = requiredText(body, 'invitationId', 128);
-        await dispatchVerifiedStagingOperation(
-          config,
-          identity,
-          'organization.invitation.revoke',
-          { organizationId: orgIdLower, invitationId },
-        );
-      } else if (action === 'remove_member') {
-        const principalId = requiredText(body, 'principalId', 128);
-        await dispatchVerifiedStagingOperation(
-          config,
-          identity,
-          'organization.member.remove',
-          { organizationId: orgIdLower, principalId },
-        );
-      } else {
-        throw new StagingBadRequest();
-      }
 
-      return redirect(origin, `/r23/organizations/${orgIdLower}/settings`);
-    },
-  );
+        const page = planAction
+          ? 'plan'
+          : action === 'update_account_profile' && hiring
+            ? null
+            : 'settings';
+        const path = page
+          ? `/r23/organizations/${orgIdLower}/${page}`
+          : '/r23/account';
+        return attachRefreshedCookie(
+          redirect(origin, `${path}?notice=${encodeURIComponent(action)}`),
+          refreshedSessionCookie,
+        );
+      },
+    );
+  } catch (error) {
+    return failureResponse(request, error);
+  }
 }
 
 export async function stagingInvitationAcceptGet(
@@ -6320,12 +7829,12 @@ export async function stagingInvitationAcceptGet(
           if (!invitation) throw new StagingForbidden();
 
           return htmlResponse(
-            'Accept reviewer invitation',
+            'Accept workspace invitation',
             `
               <section aria-labelledby="accept-invitation-title">
-                <h2 id="accept-invitation-title">Join as a reviewer</h2>
+                <h2 id="accept-invitation-title">Join this workspace</h2>
                 <p>You are signed in as <strong>${safeHtml(identity.email ?? '')}</strong>.</p>
-                <p>Accept the invitation to join the organization and review its assessments.</p>
+                <p>Accept the invitation to join the organization and collaborate with your team.</p>
                 <form action="/r23/invitations/accept" method="post">
                   <input type="hidden" name="csrf" value="${safeHtml(csrfToken)}">
                   <button type="submit">Accept invitation and join organization</button>
@@ -6333,6 +7842,10 @@ export async function stagingInvitationAcceptGet(
                 <p><a href="/r23/organizations">Cancel</a></p>
               </section>
             `,
+            200,
+            securityHeaders(),
+            undefined,
+            readRequestTheme(request),
           );
         },
       );
@@ -6341,6 +7854,9 @@ export async function stagingInvitationAcceptGet(
         'Invitation could not be opened',
         '<p role="alert">This invitation is unavailable for the signed-in account. Sign in with the invited email address or ask the inviter for a new link.</p><p><a href="/r23/login">Sign in</a></p>',
         403,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
       );
     }
   }
@@ -6351,6 +7867,9 @@ export async function stagingInvitationAcceptGet(
         'Reviewer invitation',
         '<p role="alert">An invitation link is required.</p><p><a href="/r23/login">Sign in</a></p>',
         400,
+        securityHeaders(),
+        undefined,
+        readRequestTheme(request),
       );
     }
 
@@ -6394,6 +7913,10 @@ export async function stagingInvitationAcceptGet(
           }
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 
@@ -6402,6 +7925,9 @@ export async function stagingInvitationAcceptGet(
       'Invitation link required',
       '<p role="alert">An invitation token is required in the link.</p><p><a href="/r23/login">Sign in</a></p>',
       400,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 
@@ -6410,18 +7936,22 @@ export async function stagingInvitationAcceptGet(
 
   if (!encodedSession || !csrf) {
     return htmlResponse(
-      'Reviewer Invitation',
+      'Team Invitation',
       `
         <section aria-labelledby="invitation-intro-title">
           <h2 id="invitation-intro-title">Join organization as reviewer</h2>
-          <p>You have been invited to join an engineering organization on Hirearchy as an active reviewer.</p>
+          <p>You have been invited to join an engineering organization on Hirearchy.</p>
           <div role="note" aria-label="Invitation instructions">
-            <p>Please sign in or create an account using the email address the invitation was issued to.</p>
+            <p>Sign in or create an account using the email address your invite was sent to.</p>
           </div>
-          <p><a href="/r23/login?redirect=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in with invited account</a></p>
+          <p><a href="/r23/login?next=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in with invited account</a></p>
           <p><a href="/r23/signup">Create new account</a></p>
         </section>
       `,
+      200,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 
@@ -6435,10 +7965,10 @@ export async function stagingInvitationAcceptGet(
         const safeCsrf = safeHtml(csrfToken);
 
         return htmlResponse(
-          'Accept Reviewer Invitation',
+          'Accept Team Invitation',
           `
             <section aria-labelledby="accept-invitation-title">
-              <h2 id="accept-invitation-title">Accept Reviewer Invitation</h2>
+              <h2 id="accept-invitation-title">Accept Team Invitation</h2>
               <p>You are signed in as <strong>${safeEmail}</strong>.</p>
               <form action="/r23/invitations/accept" method="post">
                 <input type="hidden" name="csrf" value="${safeCsrf}">
@@ -6448,17 +7978,24 @@ export async function stagingInvitationAcceptGet(
               <p><a href="/r23/organizations">Cancel</a></p>
             </section>
           `,
+          200,
+          securityHeaders(),
+          undefined,
+          readRequestTheme(request),
         );
       },
     );
   } catch {
     return htmlResponse(
-      'Reviewer Invitation',
+      'Team Invitation',
       `
-        <p>Your session has expired or is invalid. Please sign in to accept the invitation.</p>
-        <p><a href="/r23/login?redirect=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in</a></p>
+        <p>Your session has expired. Please sign in to accept the invitation.</p>
+        <p><a href="/r23/login?next=${encodeURIComponent(`/r23/invitations/accept?token=${token}`)}">Sign in</a></p>
       `,
       401,
+      securityHeaders(),
+      undefined,
+      readRequestTheme(request),
     );
   }
 }
@@ -6502,6 +8039,21 @@ export async function stagingInvitationAcceptPost(
           'session.open',
           { organizationId },
         );
+
+        const attr = readAttributionCookie(request);
+        recordServerTelemetryEvent({
+          eventName: 'acquisition.invite_accepted',
+          category: 'acquisition',
+          actorType: 'team_member',
+          anonymousId: attr?.anonymousId,
+          attribution: attr,
+          organizationId,
+          principalId: identity.subjectId,
+          route: '/r23/invitations/accept',
+          properties: {
+            hiringPlatform: isHiringPlatformEnabled(),
+          },
+        });
 
         const updatedSession: StagingBrowserSessionPayload = Object.freeze({
           ...session,
@@ -6791,6 +8343,50 @@ export async function withHiringCandidateSession(
     });
   } catch (error) {
     return hiringFailureJsonResponse(request, error);
+  }
+}
+
+export async function tryResolveSignedInLandingPath(
+  cookieHeaderValue: string,
+  requestedNextPath: string | null = null,
+): Promise<string | null> {
+  if (!isAuthenticatedStaging() || !isHiringPlatformEnabled()) return null;
+  const request = buildHiringSyntheticRequest(cookieHeaderValue);
+  const csrf = cookieValue(request, R23_CSRF_COOKIE);
+  if (!csrf || !RANDOM_VALUE.test(csrf)) return null;
+
+  try {
+    return await withStagingBrowserSession(
+      request,
+      digest(csrf),
+      async ({ session, config, identity }) => {
+        if (requestedNextPath) {
+          const targetOrgId = extractOrganizationIdFromPath(requestedNextPath);
+          if (
+            targetOrgId &&
+            session.selectedOrganizationId?.toLowerCase() === targetOrgId
+          ) {
+            return requestedNextPath;
+          }
+        }
+        if (session.selectedOrganizationId) {
+          return `/r23/organizations/${session.selectedOrganizationId.toLowerCase()}/candidates`;
+        }
+        const statusResult = (await dispatchVerifiedStagingOperation(
+          config,
+          identity,
+          'onboarding.status',
+          {},
+        )) as OnboardingStatusResponse | null;
+        if (statusResult?.status === 'has_active_membership') {
+          return '/r23/organizations';
+        }
+        return null;
+      },
+      'defer',
+    );
+  } catch {
+    return null;
   }
 }
 

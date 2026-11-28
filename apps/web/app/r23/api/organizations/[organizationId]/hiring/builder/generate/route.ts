@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import { generateHiringAssessmentWithKimi } from '../../../../../../../../src/hiring/ai-builder';
+import {
+  consumeBuilderGenerationJob,
+  getLatestBuilderGenerationJob,
+  startBuilderGenerationJob,
+} from '../../../../../../../../src/hiring/builder-generation-jobs';
 import type {
   ExperienceLevelId,
   ProblemStructureId,
@@ -12,10 +17,72 @@ import {
   StagingBadRequest,
   withHiringOrganizationSession,
 } from '../../../../../../../../src/staging/browser';
+import { recordServerTelemetryEvent } from '../../../../../../../../src/telemetry/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ organizationId: string }> },
+): Promise<Response> {
+  try {
+    const { organizationId } = await params;
+    const url = new URL(request.url);
+    const jobId = url.searchParams.get('jobId')?.trim() || undefined;
+    return await withHiringOrganizationSession(
+      request,
+      organizationId,
+      { requireOriginCsrf: false },
+      async ({ orgContext }) => {
+        const job = getLatestBuilderGenerationJob(
+          organizationId,
+          orgContext.principalId,
+          jobId,
+        );
+        return NextResponse.json(
+          { job },
+          { headers: { 'Cache-Control': 'private, no-store' } },
+        );
+      },
+    );
+  } catch (error) {
+    return hiringFailureJsonResponse(request, error);
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ organizationId: string }> },
+): Promise<Response> {
+  try {
+    const { organizationId } = await params;
+    const url = new URL(request.url);
+    const jobId = url.searchParams.get('jobId')?.trim() || '';
+    if (!jobId) {
+      throw new StagingBadRequest();
+    }
+    return await withHiringOrganizationSession(
+      request,
+      organizationId,
+      { requireOriginCsrf: true },
+      async ({ orgContext }) => {
+        const ok = consumeBuilderGenerationJob(
+          organizationId,
+          orgContext.principalId,
+          jobId,
+        );
+        return NextResponse.json(
+          { ok },
+          { headers: { 'Cache-Control': 'private, no-store' } },
+        );
+      },
+    );
+  } catch (error) {
+    return hiringFailureJsonResponse(request, error);
+  }
+}
 
 export async function POST(
   request: Request,
@@ -28,8 +95,19 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ plan }) => {
+      async ({ orgContext, plan }) => {
         if (!hasPlanFeature(plan.planTier, 'aiAssessmentBuilder')) {
+          recordServerTelemetryEvent({
+            eventName: 'monetization.plan_gate_hit',
+            category: 'monetization',
+            actorType: 'team_member',
+            organizationId,
+            principalId: orgContext.principalId,
+            planTier: plan.planTier,
+            status: 'blocked',
+            route: '/r23/organizations/:id/builder',
+            properties: { feature: 'aiAssessmentBuilder' },
+          });
           return NextResponse.json(
             {
               error: {
@@ -37,7 +115,7 @@ export async function POST(
                 requiredPlan: 'per_candidate',
                 currentPlan: plan.planTier,
                 message:
-                  'An active plan (Per Candidate, Pro, or Ultra) is required to generate assessments with Kimi K3.1 Pro.',
+                  'An active plan (Per Candidate, Pro, or Ultra) is required to generate assessments with AI.',
               },
             },
             { status: 402, headers: { 'Cache-Control': 'private, no-store' } },
@@ -83,20 +161,113 @@ export async function POST(
           typeof body.guidance === 'string' && body.guidance.trim()
             ? body.guidance.trim().slice(0, 600)
             : undefined;
+        const draftId =
+          typeof body.draftId === 'string' && body.draftId.trim()
+            ? body.draftId.trim().slice(0, 128)
+            : undefined;
+
+        const runTrackedGeneration = async () => {
+          const startedAt = Date.now();
+          recordServerTelemetryEvent({
+            eventName: 'builder.ai_generate.started',
+            category: 'ai_quality',
+            actorType: 'team_member',
+            organizationId,
+            principalId: orgContext.principalId,
+            planTier: plan.planTier,
+            route: '/r23/organizations/:id/builder',
+            properties: {
+              targetRole,
+              experienceLevel: expLevel,
+              problemStructure: structure,
+              workKind,
+              domain,
+              durationMinutes,
+              integratedAi,
+              asyncMode: body.async === true,
+            },
+          });
+          try {
+            const generated = await generateHiringAssessmentWithKimi({
+              targetRole,
+              experienceLevel: expLevel as ExperienceLevelId,
+              yearsExperience,
+              skills,
+              problemStructure: structure as ProblemStructureId,
+              workKind,
+              domain,
+              durationMinutes,
+              integratedAi,
+              guidance,
+            });
+            recordServerTelemetryEvent({
+              eventName: 'builder.ai_generate.completed',
+              category: 'ai_quality',
+              actorType: 'team_member',
+              organizationId,
+              principalId: orgContext.principalId,
+              planTier: plan.planTier,
+              durationMs: Date.now() - startedAt,
+              route: '/r23/organizations/:id/builder',
+              properties: {
+                modelId: generated.modelId,
+                targetRole,
+                experienceLevel: expLevel,
+                problemStructure: structure,
+                durationMinutes,
+                integratedAi,
+              },
+            });
+            return generated;
+          } catch (genErr) {
+            recordServerTelemetryEvent({
+              eventName: 'builder.ai_generate.failed',
+              category: 'ai_quality',
+              actorType: 'team_member',
+              organizationId,
+              principalId: orgContext.principalId,
+              planTier: plan.planTier,
+              status: 'error',
+              durationMs: Date.now() - startedAt,
+              route: '/r23/organizations/:id/builder',
+              properties: {
+                targetRole,
+                problemStructure: structure,
+                errorKind:
+                  genErr instanceof Error ? genErr.name : 'UnknownError',
+              },
+            });
+            throw genErr;
+          }
+        };
+
+        if (body.async === true) {
+          const job = startBuilderGenerationJob(
+            {
+              organizationId,
+              principalId: orgContext.principalId,
+              draftId,
+              targetRole,
+              experienceLevel: expLevel as ExperienceLevelId,
+              yearsExperience,
+              skills,
+              problemStructure: structure as ProblemStructureId,
+              workKind,
+              domain,
+              durationMinutes,
+              integratedAi,
+              guidance,
+            },
+            runTrackedGeneration,
+          );
+          return NextResponse.json(
+            { job },
+            { status: 202, headers: { 'Cache-Control': 'private, no-store' } },
+          );
+        }
 
         try {
-          const generated = await generateHiringAssessmentWithKimi({
-            targetRole,
-            experienceLevel: expLevel as ExperienceLevelId,
-            yearsExperience,
-            skills,
-            problemStructure: structure as ProblemStructureId,
-            workKind,
-            domain,
-            durationMinutes,
-            integratedAi,
-            guidance,
-          });
+          const generated = await runTrackedGeneration();
 
           return NextResponse.json(
             {
@@ -110,7 +281,7 @@ export async function POST(
           const message =
             err instanceof Error
               ? err.message
-              : 'Unable to generate assessment with Kimi K3.1 Pro.';
+              : 'Unable to generate assessment with AI.';
           return NextResponse.json(
             {
               error: {

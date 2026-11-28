@@ -1,4 +1,8 @@
-import { candidateSignInPath } from '../../../../../src/hiring/candidate-entry';
+import {
+  candidateEntryPath,
+  candidateResetPasswordPath,
+  candidateSignInPath,
+} from '../../../../../src/hiring/candidate-entry';
 import { isHiringPlatformEnabled } from '../../../../../src/runtime/profile';
 import { enforceRateLimit } from '../../../../../src/security/rate-limit';
 import {
@@ -89,20 +93,29 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    const isCandidate =
+      isHiringPlatformEnabled() && form.audience === 'candidate';
+    const candidateNext = isCandidate ? candidateEntryPath(form.next) : null;
+
     if (verificationType === 'signup') {
-      const signIn =
-        isHiringPlatformEnabled() && form.audience === 'candidate'
-          ? candidateSignInPath(form.next, true)
-          : '/r23/login?verified=1';
+      const signIn = isCandidate
+        ? candidateSignInPath(candidateNext, { verified: true })
+        : '/r23/login?verified=1';
       return founderUatRedirect(config, signIn, [clearFounderUatRecovery()]);
     }
 
-    return founderUatRedirect(config, '/r23/reset-password', [
+    const resetDestination = isCandidate
+      ? candidateResetPasswordPath(candidateNext)
+      : '/r23/reset-password';
+
+    return founderUatRedirect(config, resetDestination, [
       founderUatRecoveryCookie({
         subjectId: identity.subjectId,
         email,
         accessToken: grant.accessToken,
         expiresAt: identity.expiresAt,
+        ...(isCandidate ? { audience: 'candidate' as const } : {}),
+        ...(candidateNext ? { next: candidateNext } : {}),
       }),
     ]);
   } catch (error) {

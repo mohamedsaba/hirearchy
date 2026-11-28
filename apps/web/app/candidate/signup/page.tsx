@@ -1,4 +1,4 @@
-import { candidateAssessmentPath } from '../../../src/hiring/candidate-entry';
+import { candidateEntryPath } from '../../../src/hiring/candidate-entry';
 import { notFound } from 'next/navigation';
 
 import { isHiringPlatformEnabled } from '../../../src/runtime/profile';
@@ -18,7 +18,7 @@ export default async function CandidateSignupPage({
   return (
     <CandidateAuthClient
       mode="signup"
-      nextPath={candidateAssessmentPath(params.next) ?? '/candidate'}
+      nextPath={candidateEntryPath(params.next) ?? '/candidate'}
     />
   );
 }

@@ -11,6 +11,7 @@ import {
   StagingBadRequest,
   withHiringOrganizationSession,
 } from '../../../../../../../src/staging/browser';
+import { recordServerTelemetryEvent } from '../../../../../../../src/telemetry/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -27,7 +28,7 @@ export async function POST(
       request,
       organizationId,
       { requireOriginCsrf: true, body },
-      async ({ dispatch, organizationId: orgId }) => {
+      async ({ dispatch, organizationId: orgId, orgContext, plan }) => {
         const definitionId = String(body.definitionId ?? '').trim();
         const validatedVersionId = String(body.validatedVersionId ?? '').trim();
         const candidateEmail = String(body.candidateEmail ?? '')
@@ -94,6 +95,20 @@ export async function POST(
         })) as Record<string, unknown>;
 
         if (!res?.ok) {
+          recordServerTelemetryEvent({
+            eventName: 'monetization.plan_gate_hit',
+            category: 'monetization',
+            actorType: 'team_member',
+            organizationId: orgId,
+            principalId: orgContext.principalId,
+            planTier: plan.planTier,
+            status: 'blocked',
+            route: '/r23/organizations/:id/builder',
+            properties: {
+              feature: 'issue_assessment',
+              errorCode: String(res?.errorCode ?? 'PLAN_REQUIRED'),
+            },
+          });
           return NextResponse.json(
             {
               error: {
@@ -111,6 +126,22 @@ export async function POST(
         }
 
         const issuedSessionId = String(res.sessionId ?? sessionId);
+        recordServerTelemetryEvent({
+          eventName: 'hiring.assessment.issued',
+          category: 'team_funnel',
+          actorType: 'team_member',
+          organizationId: orgId,
+          principalId: orgContext.principalId,
+          sessionId: issuedSessionId,
+          planTier: plan.planTier,
+          route: '/r23/organizations/:id/builder',
+          properties: {
+            targetRole: targetRole || 'Software Engineer',
+            experienceLevel,
+            skillCount: skills.length,
+            replayed: Boolean(res.replayed),
+          },
+        });
         let tokenToShare = rawToken;
         if (res.replayed && typeof res.candidateTokenCiphertext === 'string') {
           tokenToShare = decryptCandidateLinkToken(

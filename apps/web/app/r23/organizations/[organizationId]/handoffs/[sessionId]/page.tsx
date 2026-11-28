@@ -75,7 +75,7 @@ export default async function HandoffDossierPage({
               className="hiring-btn hiring-btn-primary"
               href={`/r27/organizations/${encodeURIComponent(workspace.organizationId)}/sessions/${encodeURIComponent(dossier.sessionId)}`}
             >
-              Open Full Evidence Reconstruction
+              View full submission &amp; timeline
             </a>
           </div>
         </header>

@@ -554,7 +554,7 @@ describe('tenant-scoped evaluator assessment list', () => {
       '.lifecycle-load-more-button',
     ) as HTMLButtonElement;
     expect(loadMoreButton).not.toBeNull();
-    expect(loadMoreButton.textContent).toContain('Load more sessions');
+    expect(loadMoreButton.textContent).toContain('Load more assessments');
 
     await act(async () => loadMoreButton.click());
     await flush();
@@ -567,6 +567,79 @@ describe('tenant-scoped evaluator assessment list', () => {
     expect(container.textContent).toContain('Session Page 1');
     expect(container.textContent).toContain('Session Page 2');
     expect(container.querySelector('.lifecycle-load-more-button')).toBeNull();
+  });
+
+  it('shows an inline alert and Retry button when Load more fails while preserving loaded items', async () => {
+    const item1: AssessmentLifecycleItem = {
+      sessionId: 'sess-retry-1',
+      candidatePath: '/candidate/token-retry-1',
+      scenarioTitle: 'Existing Session 1',
+      status: 'SUBMITTED',
+      createdAt: '2026-10-25T12:00:00.000Z',
+      activatedAt: '2026-10-25T12:05:00.000Z',
+      submittedAt: '2026-10-25T12:30:00.000Z',
+      durationSeconds: 3600,
+      closureReason: 'candidate_submission',
+      reviewProcessStatus: 'not_started',
+    };
+    const item2: AssessmentLifecycleItem = {
+      ...item1,
+      sessionId: 'sess-retry-2',
+      candidatePath: '/candidate/token-retry-2',
+      scenarioTitle: 'Recovered Session 2',
+    };
+
+    let attempt = 0;
+    fetchMock.mockImplementation(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        return new Response(JSON.stringify({ error: 'Network hiccup' }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return Response.json({
+        assessments: [item2],
+        nextCursor: null,
+      });
+    });
+
+    await act(async () =>
+      root.render(
+        <EvaluatorAssessmentList
+          endpoint="/r23/api/organizations/org-test/sessions"
+          initialItems={[item1]}
+          initialTotalCount={2}
+          initialNextCursor="cursor-retry"
+          sessionSummaryHrefPrefix="/r23/organizations/org-test/sessions"
+          readOnlyMode={true}
+        />,
+      ),
+    );
+    await flush();
+
+    const loadMoreButton = container.querySelector(
+      '.lifecycle-load-more-button',
+    ) as HTMLButtonElement;
+    await act(async () => loadMoreButton.click());
+    await flush();
+
+    const alert = container.querySelector('.lifecycle-pagination-error');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(alert?.textContent).toContain('Could not load more assessments.');
+    expect(container.textContent).toContain('Existing Session 1');
+
+    const retryButton = container.querySelector(
+      '.lifecycle-retry-button',
+    ) as HTMLButtonElement;
+    expect(retryButton?.textContent).toBe('Retry');
+
+    await act(async () => retryButton.click());
+    await flush();
+
+    expect(container.querySelector('.lifecycle-pagination-error')).toBeNull();
+    expect(container.textContent).toContain('Existing Session 1');
+    expect(container.textContent).toContain('Recovered Session 2');
   });
 
   it('renders truthful status for unmigrated candidate bearer availability', async () => {

@@ -430,5 +430,9 @@ describe('Kimi K3.1 Pro AI Builder, Evidence Timing Deltas & Fit Report', () => 
       ),
     ).toBe(true);
     expect(offline.clearlyDemonstrated.length).toBeGreaterThan(0);
+    expect(offline.suggestedNextInterviewQuestions.length).toBeGreaterThan(0);
+    expect(offline.suggestedNextInterviewQuestions[0]).toContain(
+      'src/pipeline.py',
+    );
   });
 });

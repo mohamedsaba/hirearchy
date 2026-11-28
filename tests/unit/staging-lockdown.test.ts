@@ -121,6 +121,31 @@ describe('staging lockdown', () => {
     await expect(register()).resolves.toBeUndefined();
   });
 
+  it('allows GET, POST, and DELETE for hiring builder generate only when hiring platform is enabled', async () => {
+    vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', 'staging-authenticated');
+    const url =
+      'http://localhost/r23/api/organizations/11111111-1111-1111-1111-111111111111/hiring/builder/generate';
+
+    vi.stubEnv('HIREARCHY_HIRING_PLATFORM_ENABLED', 'true');
+    for (const method of ['GET', 'POST', 'DELETE'] as const) {
+      expect(
+        proxy(new NextRequest(url, { method })).headers.get(
+          'x-middleware-next',
+        ),
+        `${method} ${url} when enabled`,
+      ).toBe('1');
+    }
+
+    vi.stubEnv('HIREARCHY_HIRING_PLATFORM_ENABLED', 'false');
+    for (const method of ['GET', 'POST', 'DELETE'] as const) {
+      const blocked = proxy(new NextRequest(url, { method }));
+      expect(blocked.status, `${method} ${url} when disabled`).toBe(503);
+      expect((await blocked.json()).error.code).toBe(
+        'STAGING_CAPABILITY_DISABLED',
+      );
+    }
+  });
+
   it('leaves the existing runtime unchanged when not selected', () => {
     vi.stubEnv('HIREARCHY_RUNTIME_PROFILE', '');
     expect(

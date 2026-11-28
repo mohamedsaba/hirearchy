@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { LocalTime } from '../_components/local-time';
 import { formatEvaluatorClosureReason } from '../../src/evaluator/evaluator-review-presentation';
 import { useEffect, useState } from 'react';
 
@@ -32,13 +33,6 @@ const reviewStatusLabel: Record<
   waiting_for_response: 'Waiting for candidate response',
   next_step_recorded: 'Next step recorded',
 };
-
-const formatSubmissionTime = (submittedAt: string) =>
-  new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  }).format(new Date(submittedAt));
 
 const formatDuration = (durationSeconds: number | null) => {
   if (durationSeconds === null) return null;
@@ -123,10 +117,7 @@ const ReviewQueueList = ({
                 Session {session.sessionId}
               </span>
               <span>
-                Submitted{' '}
-                <time dateTime={session.submittedAt}>
-                  {formatSubmissionTime(session.submittedAt)} UTC
-                </time>
+                Submitted <LocalTime timestamp={session.submittedAt} absolute />
               </span>
               {formatDuration(session.durationSeconds) ? (
                 <span>

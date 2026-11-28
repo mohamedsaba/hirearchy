@@ -79,6 +79,7 @@ services:
       GOTRUE_DISABLE_SIGNUP: 'true'
       GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
       GOTRUE_MAILER_AUTOCONFIRM: 'false'
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: 'true'
       GOTRUE_LOG_LEVEL: info
     healthcheck:
       test:
